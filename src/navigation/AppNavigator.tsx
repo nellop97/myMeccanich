@@ -10,12 +10,13 @@ import LoginScreen from '../screens/LoginScreen';
 import CarsByDateScreen from '../screens/mechanic/CarsByDateScreen';
 import MechanicDashboard from '../screens/mechanic/MechanicDashboard';
 import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
-import RepairDetailsScreen from '../screens/mechanic/RepairDetailsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CarDetailScreen, { RouteParams } from '../screens/user/CarDetailScreen';
 import { useStore } from '../store';
+import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen';
+import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 
 // Definizione dei tipi per la navigazione
 export type RootStackParamList = {
@@ -153,9 +154,19 @@ export default function AppNavigator() {
               options={{ title: 'Auto in officina' }}
             />
             <Stack.Screen 
-              name="RepairDetails" 
-              component={RepairDetailsScreen}
-              options={{ title: 'Dettaglio riparazione' }}
+              name="AllCarsInWorkshop" 
+              component={AllCarsInWorkshopScreen}
+              options={{
+                title: 'Auto in Officina',
+                headerShown: false, // se usi header personalizzato
+              }}
+            />
+            <Stack.Screen 
+              name="RepairPartsManagement" 
+              component={RepairPartsManagementScreen}
+              options={{
+                headerShown: false, // se usi header personalizzato
+              }}
             />
             <Stack.Screen
               name="NewAppointment"

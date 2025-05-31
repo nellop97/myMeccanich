@@ -22,11 +22,13 @@ import {
 } from 'react-native';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
+import { useNavigation } from '@react-navigation/native';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const MechanicDashboardContent = () => {
   const { user, darkMode } = useStore();
+  const navigation = useNavigation();
   const { cars, updateRepairStatus, addCar } = useWorkshopStore();
   
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
@@ -206,9 +208,12 @@ const MechanicDashboardContent = () => {
         <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>Auto in Officina</Text>
-            <TouchableOpacity style={styles.cardLinkContainer}>
+            <TouchableOpacity style={styles.cardLinkContainer}
+            onPress={() => navigation.navigate('AllCarsInWorkshop' as never)}
+            >
               <Text style={styles.cardLink}>Visualizza tutte</Text>
               <ChevronRight size={16} color="#2563eb" />
+              
             </TouchableOpacity>
           </View>
           
