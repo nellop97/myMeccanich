@@ -17,6 +17,10 @@ import { useStore } from '../store';
 import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen';
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
+import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScreen';
+import CreateInvoiceScreen from '../screens/mechanic/CreateInvoiceScreen';
+import CustomersListScreen from '../screens/mechanic/CustomersListScreen';
+import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
 
 // Definizione dei tipi per la navigazione
 export type RootStackParamList = {
@@ -29,8 +33,22 @@ export type RootStackParamList = {
   RepairDetails: { carId: string; repairId: string };
   HomeMechanic: undefined;
   NewAppointment: undefined;
+  AllCarsInWorkshop: undefined;
+  RepairPartsManagement: { carId: string; repairId: string };
+  MechanicCalendar: undefined;
+  
+  // Nuove schermate di fatturazione
+  InvoicingDashboard: undefined;
+  CreateInvoice: { carId?: string; repairId?: string; customerId?: string; type?: 'customer' | 'supplier' | 'expense' | 'other' };
+  CustomersList: undefined;
+  AddCustomer: undefined;
+  EditCustomer: { customerId: string };
+  CustomerDetail: { customerId: string };
+  InvoiceDetail: { invoiceId: string };
+  InvoicesList: undefined;
+  InvoiceTemplates: undefined;
+  InvoiceReports: undefined;
 };
-
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -170,6 +188,41 @@ export default function AppNavigator() {
             <Stack.Screen 
               name="MechanicCalendar" 
               component={MechanicCalendarScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="InvoicingDashboard"
+              component={InvoicingDashboardScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="CreateInvoice"
+              component={CreateInvoiceScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="CustomersList"
+              component={CustomersListScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="AddCustomer"
+              component={AddCustomerScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="EditCustomer"
+              component={AddCustomerScreen}
               options={{
                 headerShown: false,
               }}

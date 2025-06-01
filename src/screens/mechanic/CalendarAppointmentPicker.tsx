@@ -1,3 +1,4 @@
+// src/components/CalendarAppointmentPicker.tsx
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -36,17 +37,17 @@ LocaleConfig.locales['it'] = {
 LocaleConfig.defaultLocale = 'it';
 
 interface CalendarAppointmentPickerProps {
-  selectedDates: string[];
-  onDatesChange: (dates: string[]) => void;
+  startDate: string | null;
+  endDate: string | null;
+  onPeriodChange: (startDate: string | null, endDate: string | null) => void;
   theme: any;
-  estimatedDays?: number;
 }
 
 const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
-  selectedDates,
-  onDatesChange,
-  theme,
-  estimatedDays = 1
+  startDate,
+  endDate,
+  onPeriodChange,
+  theme
 }) => {
   const { cars } = useWorkshopStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -100,17 +101,62 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
       };
     });
 
-    // Marca i giorni selezionati
-    selectedDates.forEach(date => {
-      if (marks[date]) {
-        // Se il giorno ha già appuntamenti, combina i marcatori
-        marks[date] = {
-          ...marks[date],
-          selected: true,
-          selectedColor: theme.accent,
+    // Marca il periodo selezionato
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const current = new Date(start);
+      
+      while (current <= end) {
+        const dateString = current.toISOString().split('T')[0];
+        const isStart = dateString === startDate;
+        const isEnd = dateString === endDate;
+        const isMiddle = dateString !== startDate && dateString !== endDate;
+        
+        if (marks[dateString]) {
+          // Combina con appuntamenti esistenti
+          marks[dateString] = {
+            ...marks[dateString],
+            customStyles: {
+              container: {
+                backgroundColor: isStart || isEnd ? theme.accent : theme.accent + '40',
+                borderRadius: isStart && isEnd ? 8 : isStart ? '8px 0 0 8px' : isEnd ? '0 8px 8px 0' : 0,
+              },
+              text: {
+                color: '#ffffff',
+                fontWeight: 'bold',
+              },
+              dot: {
+                backgroundColor: '#ffffff',
+              }
+            }
+          };
+        } else {
+          marks[dateString] = {
+            customStyles: {
+              container: {
+                backgroundColor: isStart || isEnd ? theme.accent : theme.accent + '40',
+                borderRadius: isStart && isEnd ? 8 : isStart ? '8px 0 0 8px' : isEnd ? '0 8px 8px 0' : 0,
+              },
+              text: {
+                color: '#ffffff',
+                fontWeight: isStart || isEnd ? 'bold' : 'normal',
+              },
+            }
+          };
+        }
+        
+        current.setDate(current.getDate() + 1);
+      }
+    } else if (startDate) {
+      // Solo data di inizio selezionata
+      if (marks[startDate]) {
+        marks[startDate] = {
+          ...marks[startDate],
           customStyles: {
             container: {
               backgroundColor: theme.accent,
+              borderRadius: 8,
             },
             text: {
               color: '#ffffff',
@@ -122,13 +168,13 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
           }
         };
       } else {
-        // Giorno selezionato senza appuntamenti esistenti
-        marks[date] = {
+        marks[startDate] = {
           selected: true,
           selectedColor: theme.accent,
           customStyles: {
             container: {
               backgroundColor: theme.accent,
+              borderRadius: 8,
             },
             text: {
               color: '#ffffff',
@@ -137,21 +183,35 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
           }
         };
       }
-    });
+    }
     
     return marks;
-  }, [existingAppointments, selectedDates, theme]);
+  }, [existingAppointments, startDate, endDate, theme]);
 
   const handleDayPress = (day: any) => {
     const dateString = day.dateString;
     
-    if (selectedDates.includes(dateString)) {
-      // Rimuovi la data se già selezionata
-      onDatesChange(selectedDates.filter(date => date !== dateString));
+    if (!startDate) {
+      // Nessuna data selezionata - seleziona come inizio
+      onPeriodChange(dateString, null);
+    } else if (!endDate) {
+      // Solo data di inizio selezionata - seleziona come fine
+      const start = new Date(startDate);
+      const selected = new Date(dateString);
+      
+      if (selected < start) {
+        // Se la data selezionata è prima dell'inizio, diventa il nuovo inizio
+        onPeriodChange(dateString, null);
+      } else if (selected.getTime() === start.getTime()) {
+        // Se è lo stesso giorno, mantieni solo l'inizio
+        onPeriodChange(dateString, null);
+      } else {
+        // Data di fine valida
+        onPeriodChange(startDate, dateString);
+      }
     } else {
-      // Aggiungi la data
-      const newDates = [...selectedDates, dateString].sort();
-      onDatesChange(newDates);
+      // Entrambe le date sono selezionate - inizia una nuova selezione
+      onPeriodChange(dateString, null);
     }
   };
 
@@ -192,110 +252,159 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
             const today = new Date();
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
-            onDatesChange([tomorrow.toISOString().split('T')[0]]);
+            onPeriodChange(tomorrow.toISOString().split('T')[0], tomorrow.toISOString().split('T')[0]);
           }}
         >
-          <Text style={[styles.quickSelectionText, { color: theme.text }]}>Domani</Text>
+          <Text style={[styles.quickSelectionText, { color: theme.text }]}>Domani (1 giorno)</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.quickSelectionButton, { borderColor: theme.border }]}
           onPress={() => {
             const today = new Date();
-            const nextWeek = new Date(today);
-            nextWeek.setDate(nextWeek.getDate() + 7);
-            onDatesChange([nextWeek.toISOString().split('T')[0]]);
+            const start = new Date(today);
+            start.setDate(start.getDate() + 1);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 2);
+            onPeriodChange(start.toISOString().split('T')[0], end.toISOString().split('T')[0]);
           }}
         >
-          <Text style={[styles.quickSelectionText, { color: theme.text }]}>Prossima settimana</Text>
+          <Text style={[styles.quickSelectionText, { color: theme.text }]}>3 giorni</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.quickSelectionButton, { borderColor: theme.border }]}
           onPress={() => {
-            // Suggerisci i prossimi giorni disponibili basati sul carico di lavoro
             const today = new Date();
-            const availableDates = [];
+            const start = new Date(today);
+            start.setDate(start.getDate() + 7);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 4);
+            onPeriodChange(start.toISOString().split('T')[0], end.toISOString().split('T')[0]);
+          }}
+        >
+          <Text style={[styles.quickSelectionText, { color: theme.text }]}>Prossima settimana (5 giorni)</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.quickSelectionButton, { borderColor: theme.border }]}
+          onPress={() => {
+            // Trova automaticamente il prossimo periodo disponibile di 2-3 giorni
+            const today = new Date();
+            let bestStart = null;
+            let consecutiveFree = 0;
             
-            for (let i = 1; i <= 14 && availableDates.length < estimatedDays; i++) {
+            for (let i = 1; i <= 21; i++) {
               const date = new Date(today);
               date.setDate(date.getDate() + i);
               const dateString = date.toISOString().split('T')[0];
               
-              // Salta i weekend (opzionale)
-              if (date.getDay() === 0 || date.getDay() === 6) continue;
+              // Salta i weekend
+              if (date.getDay() === 0 || date.getDay() === 6) {
+                consecutiveFree = 0;
+                continue;
+              }
               
               const workloadStatus = getWorkloadStatus(dateString);
               if (workloadStatus !== 'pieno') {
-                availableDates.push(dateString);
+                if (consecutiveFree === 0) {
+                  bestStart = dateString;
+                }
+                consecutiveFree++;
+                
+                if (consecutiveFree >= 3) {
+                  onPeriodChange(bestStart!, dateString);
+                  break;
+                }
+              } else {
+                consecutiveFree = 0;
+                bestStart = null;
               }
             }
-            
-            onDatesChange(availableDates);
           }}
         >
-          <Text style={[styles.quickSelectionText, { color: theme.text }]}>
-            Auto-suggerisci ({estimatedDays} {estimatedDays === 1 ? 'giorno' : 'giorni'})
-          </Text>
+          <Text style={[styles.quickSelectionText, { color: theme.text }]}>Auto-suggerisci</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.quickSelectionButton, { borderColor: theme.border }]}
-          onPress={() => onDatesChange([])}
+          onPress={() => {
+            onPeriodChange(null, null);
+          }}
         >
-          <Text style={[styles.quickSelectionText, { color: theme.error }]}>Cancella selezione</Text>
+          <Text style={[styles.quickSelectionText, { color: theme.error }]}>Cancella</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
   );
 
-  const renderSelectedDatesInfo = () => {
-    if (selectedDates.length === 0) return null;
+  const renderSelectedPeriodInfo = () => {
+    if (!startDate) return null;
+
+    const days = endDate ? 
+      Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 : 1;
 
     return (
       <View style={[styles.selectedDatesContainer, { backgroundColor: theme.accent + '20', borderColor: theme.accent }]}>
         <View style={styles.selectedDatesHeader}>
           <CheckCircle size={20} color={theme.accent} />
           <Text style={[styles.selectedDatesTitle, { color: theme.accent }]}>
-            {selectedDates.length} {selectedDates.length === 1 ? 'giorno selezionato' : 'giorni selezionati'}
+            Periodo Selezionato ({days} {days === 1 ? 'giorno' : 'giorni'})
           </Text>
         </View>
         
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {selectedDates.map((date, index) => {
-            const workloadStatus = getWorkloadStatus(date);
-            const existingCount = existingAppointments[date]?.length || 0;
-            
-            return (
-              <View
-                key={date}
-                style={[styles.selectedDateChip, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-              >
-                <Text style={[styles.selectedDateText, { color: theme.text }]}>
-                  {new Date(date).toLocaleDateString('it-IT', { 
-                    day: 'numeric', 
-                    month: 'short' 
-                  })}
-                </Text>
-                {existingCount > 0 && (
-                  <View style={styles.workloadIndicator}>
-                    <Car size={12} color={getWorkloadColor(workloadStatus)} />
-                    <Text style={[styles.workloadText, { color: getWorkloadColor(workloadStatus) }]}>
-                      {existingCount}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </ScrollView>
+        <View style={styles.periodInfo}>
+          <View style={styles.periodItem}>
+            <Text style={[styles.periodLabel, { color: theme.textSecondary }]}>Inizio:</Text>
+            <Text style={[styles.periodValue, { color: theme.text }]}>
+              {new Date(startDate).toLocaleDateString('it-IT', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long' 
+              })}
+            </Text>
+          </View>
+          
+          {endDate && (
+            <View style={styles.periodItem}>
+              <Text style={[styles.periodLabel, { color: theme.textSecondary }]}>Fine:</Text>
+              <Text style={[styles.periodValue, { color: theme.text }]}>
+                {new Date(endDate).toLocaleDateString('it-IT', { 
+                  weekday: 'long', 
+                  day: 'numeric', 
+                  month: 'long' 
+                })}
+              </Text>
+            </View>
+          )}
+        </View>
+        
+        <Text style={[styles.selectionHint, { color: theme.textSecondary }]}>
+          {!endDate ? 
+            'Tocca un altro giorno per selezionare la data di fine (opzionale)' : 
+            'Tocca un giorno per iniziare una nuova selezione'
+          }
+        </Text>
       </View>
     );
   };
 
   const renderDayAppointments = () => {
-    // Mostra gli appuntamenti per i giorni selezionati
-    const relevantDates = selectedDates.filter(date => existingAppointments[date]);
+    if (!startDate) return null;
+    
+    // Calcola tutti i giorni del periodo selezionato
+    const periodDates = [];
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+    const current = new Date(start);
+    
+    while (current <= end) {
+      periodDates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    // Filtra solo i giorni che hanno appuntamenti esistenti
+    const relevantDates = periodDates.filter(date => existingAppointments[date]);
     
     if (relevantDates.length === 0) return null;
 
@@ -304,7 +413,7 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
         <View style={styles.appointmentsHeader}>
           <AlertCircle size={20} color={theme.warning} />
           <Text style={[styles.appointmentsTitle, { color: theme.text }]}>
-            Appuntamenti Esistenti
+            Appuntamenti Esistenti nel Periodo
           </Text>
         </View>
         
@@ -364,7 +473,7 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
         <View style={styles.calendarHeader}>
           <CalendarIcon size={20} color={theme.accent} />
           <Text style={[styles.calendarTitle, { color: theme.text }]}>
-            Seleziona i giorni di lavorazione
+            Seleziona il periodo di lavorazione
           </Text>
         </View>
         
@@ -405,7 +514,7 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
         {renderLegend()}
       </View>
 
-      {renderSelectedDatesInfo()}
+      {renderSelectedPeriodInfo()}
       {renderDayAppointments()}
     </View>
   );
@@ -495,29 +604,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  selectedDateChip: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginRight: 8,
-    minWidth: 60,
+  periodInfo: {
+    marginTop: 8,
   },
-  selectedDateText: {
-    fontSize: 12,
+  periodItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  periodLabel: {
+    fontSize: 14,
     fontWeight: '500',
   },
-  workloadIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  workloadText: {
-    fontSize: 10,
+  periodValue: {
+    fontSize: 14,
     fontWeight: 'bold',
-    marginLeft: 2,
+    textTransform: 'capitalize',
+  },
+  selectionHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
   },
   appointmentsContainer: {
     borderRadius: 12,

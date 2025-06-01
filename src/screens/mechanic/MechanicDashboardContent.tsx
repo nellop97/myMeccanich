@@ -23,6 +23,7 @@ import {
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 import { useNavigation } from '@react-navigation/native';
+import { useInvoicingStore } from '@/src/store/invoicingStore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -30,7 +31,8 @@ const MechanicDashboardContent = () => {
   const { user, darkMode } = useStore();
   const navigation = useNavigation();
   const { cars, updateRepairStatus, addCar } = useWorkshopStore();
-  
+  const { getInvoicesByRepair } = useInvoicingStore();
+
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
   
   // Funzioni di utilità per estrarre i dati
@@ -82,7 +84,29 @@ const MechanicDashboardContent = () => {
   };
   
   const handleCompleteInvoice = (carId: string, repairId: string) => {
-    console.log(`Fattura emessa per riparazione ${repairId} dell'auto ${carId}`);
+    // Verifica se esiste già una fattura per questa riparazione
+    const existingInvoices = getInvoicesByRepair(carId, repairId);
+    
+    if (existingInvoices.length > 0) {
+      Alert.alert(
+        'Fattura esistente',
+        'Esiste già una fattura per questa riparazione. Vuoi visualizzarla?',
+        [
+          { text: 'Annulla', style: 'cancel' },
+          { 
+            text: 'Visualizza', 
+            onPress: () => navigation.navigate('InvoiceDetail', { invoiceId: existingInvoices[0].id })
+          }
+        ]
+      );
+    } else {
+      // Crea una nuova fattura
+      navigation.navigate('CreateInvoice', { carId, repairId });
+    }
+  };
+
+  const hasInvoice = (carId: string, repairId: string) => {
+    return getInvoicesByRepair(carId, repairId).length > 0;
   };
 
   const theme = {
@@ -275,26 +299,38 @@ const MechanicDashboardContent = () => {
                   <View key={`${car.id}-${repair.id}`} style={[styles.carCard, { borderColor: theme.border }]}>
                     <View style={styles.carCardHeader}>
                       <Text style={[styles.carPlate, { color: theme.text }]}>{car.licensePlate || 'N/A'}</Text>
-                      <View style={[
-                        styles.statusBadge,
-                        {
-                          backgroundColor: repair.status === 'in-progress' 
-                            ? (darkMode ? '#1e3a8a' : '#dbeafe')
-                            : (darkMode ? '#92400e' : '#fef3c7')
-                        }
-                      ]}>
-                        <Text style={[
-                          styles.statusText,
+                      <View style={styles.statusContainer}>
+                        <View style={[
+                          styles.statusBadge,
                           {
-                            color: repair.status === 'in-progress'
-                              ? (darkMode ? '#60a5fa' : '#2563eb')
-                              : (darkMode ? '#f59e0b' : '#d97706')
+                            backgroundColor: repair.status === 'in-progress' 
+                              ? (darkMode ? '#1e3a8a' : '#dbeafe')
+                              : (darkMode ? '#92400e' : '#fef3c7')
                           }
                         ]}>
-                          {repair.status === 'in-progress' ? 'In lavorazione' : 'In attesa'}
-                        </Text>
+                          <Text style={[
+                            styles.statusText,
+                            {
+                              color: repair.status === 'in-progress'
+                                ? (darkMode ? '#60a5fa' : '#2563eb')
+                                : (darkMode ? '#f59e0b' : '#d97706')
+                            }
+                          ]}>
+                            {repair.status === 'in-progress' ? 'In lavorazione' : 'In attesa'}
+                          </Text>
+                        </View>
+                        {/* Aggiungi indicatore fattura */}
+                        {repair.status === 'completed' && hasInvoice(car.id, repair.id) && (
+                          <View style={[styles.invoiceIndicator, { backgroundColor: darkMode ? '#065f46' : '#d1fae5' }]}>
+                            <FileText size={12} color={darkMode ? '#10b981' : '#059669'} />
+                            <Text style={[styles.invoiceIndicatorText, { color: darkMode ? '#10b981' : '#059669' }]}>
+                              Fatturata
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     </View>
+
                     
                     <Text style={[styles.carModel, { color: theme.text }]}>{car.model}</Text>
                     <Text style={[styles.carOwner, { color: theme.textSecondary }]}>{car.owner || 'N/A'}</Text>
@@ -383,9 +419,9 @@ const MechanicDashboardContent = () => {
                     <Text style={[styles.listItemAmount, { color: theme.text }]}>€{invoice.amount.toFixed(2)}</Text>
                     <TouchableOpacity
                       style={styles.invoiceButton}
-                      onPress={() => handleCompleteInvoice(invoice.carId, invoice.id)}
+                      onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
                     >
-                      <Text style={styles.invoiceButtonText}>Emetti</Text>
+                      <Text style={styles.invoiceButtonText}>Visualizza</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -755,6 +791,22 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontSize: 16,
     fontWeight: '500',
+  },
+  invoiceIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  invoiceIndicatorText: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginLeft: 2,
+  },
+  statusContainer: {
+    alignItems: 'flex-end',
   },
 });
 

@@ -28,6 +28,7 @@ import {
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 import CalendarAppointmentPicker from './CalendarAppointmentPicker';
+
 const { width: screenWidth } = Dimensions.get('window');
 
 export type FormData = {
@@ -45,8 +46,8 @@ const NewAppointmentScreen = () => {
   const { addAppointment } = useWorkshopStore();
   
   // Stati per il calendario integrato
-  const [selectedWorkDays, setSelectedWorkDays] = useState<string[]>([]);
-  const [estimatedWorkDays, setEstimatedWorkDays] = useState(1);
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
 
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
 
@@ -69,10 +70,12 @@ const NewAppointmentScreen = () => {
 
   const onSubmit = (data: FormData) => {
     try {
-      if (selectedWorkDays.length === 0) {
-        Alert.alert('Errore', 'Seleziona almeno un giorno di lavorazione');
+      if (!startDate) {
+        Alert.alert('Errore', 'Seleziona almeno la data di inizio dei lavori');
         return;
       }
+
+      const finalEndDate = endDate || startDate; // Se non c'è data di fine, usa quella di inizio
 
       const newAppointmentId = addAppointment({
         model: data.model,
@@ -81,14 +84,14 @@ const NewAppointmentScreen = () => {
         owner: data.owner,
         repairs: [{
           description: data.repairDescription,
-          scheduledDate: selectedWorkDays[0], // Primo giorno selezionato
-          deliveryDate: selectedWorkDays[selectedWorkDays.length - 1], // Ultimo giorno selezionato
+          scheduledDate: startDate,
+          deliveryDate: finalEndDate,
           totalCost: parseFloat(data.estimatedCost) || 0,
         }]
       });
 
       console.log('Nuovo appuntamento creato con ID:', newAppointmentId);
-      console.log('Giorni di lavorazione selezionati:', selectedWorkDays);
+      console.log('Periodo di lavorazione:', { startDate, endDate: finalEndDate });
       navigation.goBack();
     } catch (error) {
       console.error('Errore durante la creazione dell\'appuntamento:', error);
@@ -271,38 +274,14 @@ const NewAppointmentScreen = () => {
           {/* Pianificazione con Calendario */}
           <FormCard title="Pianificazione" icon={Calendar}>
             <CalendarAppointmentPicker
-              selectedDates={selectedWorkDays}
-              onDatesChange={setSelectedWorkDays}
+              startDate={startDate}
+              endDate={endDate}
+              onPeriodChange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+              }}
               theme={theme}
-              estimatedDays={estimatedWorkDays}
             />
-            
-            <View style={styles.estimationContainer}>
-              <Text style={[styles.inputLabel, { color: theme.text }]}>Giorni stimati di lavoro</Text>
-              <View style={styles.estimationButtons}>
-                {[1, 2, 3, 4, 5].map(days => (
-                  <TouchableOpacity
-                    key={days}
-                    style={[
-                      styles.estimationButton,
-                      { borderColor: theme.border },
-                      estimatedWorkDays === days && { backgroundColor: theme.accent }
-                    ]}
-                    onPress={() => setEstimatedWorkDays(days)}
-                  >
-                    <Text style={[
-                      styles.estimationButtonText,
-                      { color: estimatedWorkDays === days ? '#ffffff' : theme.text }
-                    ]}>
-                      {days}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={[styles.estimationHint, { color: theme.textSecondary }]}>
-                Indica quanti giorni pensi che richiederà l'intervento per suggerimenti automatici
-              </Text>
-            </View>
           </FormCard>
 
           {/* Riepilogo */}
@@ -314,10 +293,14 @@ const NewAppointmentScreen = () => {
               </Text>
             </View>
             <Text style={[styles.summaryText, { color: darkMode ? '#93c5fd' : '#1e40af' }]}>
-              {selectedWorkDays.length > 0 ? (
-                `Lavorazione programmata per ${selectedWorkDays.length} ${selectedWorkDays.length === 1 ? 'giorno' : 'giorni'}: dal ${new Date(selectedWorkDays[0]).toLocaleDateString('it-IT')} al ${new Date(selectedWorkDays[selectedWorkDays.length - 1]).toLocaleDateString('it-IT')}.`
+              {startDate ? (
+                endDate ? (
+                  `Lavorazione programmata dal ${new Date(startDate).toLocaleDateString('it-IT')} al ${new Date(endDate).toLocaleDateString('it-IT')} (${Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} giorni).`
+                ) : (
+                  `Lavorazione programmata per il ${new Date(startDate).toLocaleDateString('it-IT')} (1 giorno).`
+                )
               ) : (
-                'Seleziona i giorni di lavorazione nel calendario sopra.'
+                'Seleziona il periodo di lavorazione nel calendario sopra.'
               )}
               {' '}Verifica tutti i dati inseriti prima di salvare l'appuntamento.
             </Text>
@@ -335,10 +318,10 @@ const NewAppointmentScreen = () => {
             <TouchableOpacity
                 style={[
                   styles.saveButton,
-                  { backgroundColor: selectedWorkDays.length > 0 ? theme.accent : theme.textSecondary }
+                  { backgroundColor: startDate ? theme.accent : theme.textSecondary }
                 ]}
                 onPress={handleSubmit(onSubmit)}
-                disabled={selectedWorkDays.length === 0}
+                disabled={!startDate}
             >
               <Save size={18} color="#ffffff" />
               <Text style={styles.saveButtonText}>Salva Appuntamento</Text>
@@ -458,34 +441,6 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 12,
     marginTop: 4,
-  },
-  estimationContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  estimationButtons: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  estimationButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    flex: 1,
-  },
-  estimationButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  estimationHint: {
-    fontSize: 12,
-    marginTop: 8,
-    fontStyle: 'italic',
   },
   summaryCard: {
     borderRadius: 12,

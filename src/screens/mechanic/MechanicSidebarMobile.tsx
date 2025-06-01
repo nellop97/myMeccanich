@@ -80,7 +80,7 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
         navigation.navigate('NewAppointment' as never);
         break;
       case 'invoices':
-        console.log('Navigazione a Fatturazione');
+        navigation.navigate('InvoicingDashboard' as never);
         break;
       case 'archive':
         console.log('Navigazione ad Archivio Auto');
