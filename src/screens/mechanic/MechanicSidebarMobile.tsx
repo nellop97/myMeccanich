@@ -71,16 +71,6 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
     setSidebarVisible(false);
   };
 
-  const handleAddNewCar = () => {
-    const newCarId = addCar({
-      model: 'Nuova Auto',
-      vin: `VIN-${Date.now()}`,
-      licensePlate: `NUOVA-${Date.now().toString().slice(-4)}`,
-      owner: 'Nuovo Cliente'
-    });
-    console.log('Nuova auto aggiunta con ID:', newCarId);
-  };
-
   const handleNavigation = (screen: string) => {
     closeSidebar();
     onTabChange(screen);
@@ -227,7 +217,7 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
         
         <TouchableOpacity
           style={styles.addButtonMobile}
-          onPress={handleAddNewCar}
+          onPress={() => navigation.navigate('NewAppointment')}
         >
           <PlusCircle size={20} color="#ffffff" />
         </TouchableOpacity>

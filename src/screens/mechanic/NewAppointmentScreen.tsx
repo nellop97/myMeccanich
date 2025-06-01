@@ -1,6 +1,5 @@
 // src/screens/mechanic/NewAppointmentScreen.tsx
 import { useNavigation } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   ArrowLeft,
   Calendar,
@@ -14,6 +13,7 @@ import {
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
+  Alert,
   Dimensions,
   Platform,
   SafeAreaView,
@@ -27,7 +27,7 @@ import {
 } from 'react-native';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
-
+import CalendarAppointmentPicker from './CalendarAppointmentPicker';
 const { width: screenWidth } = Dimensions.get('window');
 
 export type FormData = {
@@ -36,8 +36,6 @@ export type FormData = {
   licensePlate: string;
   owner: string;
   repairDescription: string;
-  scheduledDate: Date;
-  deliveryDate: Date;
   estimatedCost: string;
 };
 
@@ -45,21 +43,18 @@ const NewAppointmentScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
   const { addAppointment } = useWorkshopStore();
-  const [showScheduledDatePicker, setShowScheduledDatePicker] = useState(false);
-  const [showDeliveryDatePicker, setShowDeliveryDatePicker] = useState(false);
+  
+  // Stati per il calendario integrato
+  const [selectedWorkDays, setSelectedWorkDays] = useState<string[]>([]);
+  const [estimatedWorkDays, setEstimatedWorkDays] = useState(1);
 
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
 
   const { control, handleSubmit, formState: { errors }, watch, setValue } = useForm<FormData>({
     defaultValues: {
-      scheduledDate: new Date(),
-      deliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // +7 giorni
       estimatedCost: '0'
     }
   });
-
-  const scheduledDate = watch('scheduledDate');
-  const deliveryDate = watch('deliveryDate');
 
   const theme = {
     background: darkMode ? '#111827' : '#f3f4f6',
@@ -69,10 +64,16 @@ const NewAppointmentScreen = () => {
     border: darkMode ? '#374151' : '#e5e7eb',
     inputBackground: darkMode ? '#374151' : '#ffffff',
     placeholderColor: darkMode ? '#9ca3af' : '#6b7280',
+    accent: '#2563eb',
   };
 
   const onSubmit = (data: FormData) => {
     try {
+      if (selectedWorkDays.length === 0) {
+        Alert.alert('Errore', 'Seleziona almeno un giorno di lavorazione');
+        return;
+      }
+
       const newAppointmentId = addAppointment({
         model: data.model,
         vin: data.vin,
@@ -80,35 +81,17 @@ const NewAppointmentScreen = () => {
         owner: data.owner,
         repairs: [{
           description: data.repairDescription,
-          scheduledDate: data.scheduledDate.toISOString().split('T')[0],
-          deliveryDate: data.deliveryDate.toISOString().split('T')[0],
+          scheduledDate: selectedWorkDays[0], // Primo giorno selezionato
+          deliveryDate: selectedWorkDays[selectedWorkDays.length - 1], // Ultimo giorno selezionato
           totalCost: parseFloat(data.estimatedCost) || 0,
         }]
       });
 
       console.log('Nuovo appuntamento creato con ID:', newAppointmentId);
+      console.log('Giorni di lavorazione selezionati:', selectedWorkDays);
       navigation.goBack();
     } catch (error) {
       console.error('Errore durante la creazione dell\'appuntamento:', error);
-    }
-  };
-
-  const handleScheduledDateChange = (event: any, selectedDate?: Date) => {
-    setShowScheduledDatePicker(false);
-    if (selectedDate) {
-      setValue('scheduledDate', selectedDate);
-      // Auto-aggiorna la data di consegna se è precedente alla data programmata
-      if (deliveryDate < selectedDate) {
-        const newDeliveryDate = new Date(selectedDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-        setValue('deliveryDate', newDeliveryDate);
-      }
-    }
-  };
-
-  const handleDeliveryDateChange = (event: any, selectedDate?: Date) => {
-    setShowDeliveryDatePicker(false);
-    if (selectedDate) {
-      setValue('deliveryDate', selectedDate);
     }
   };
 
@@ -152,31 +135,25 @@ const NewAppointmentScreen = () => {
       </View>
   );
 
-  const DatePickerButton = ({ label, date, onPress, error }: any) => (
-      <View style={styles.inputContainer}>
-        <Text style={[styles.inputLabel, { color: theme.text }]}>{label}</Text>
-        <TouchableOpacity
-            style={[
-              styles.datePickerButton,
-              {
-                backgroundColor: theme.inputBackground,
-                borderColor: error ? '#ef4444' : theme.border
-              }
-            ]}
-            onPress={onPress}
-        >
-          <Calendar size={20} color={theme.textSecondary} />
-          <Text style={[styles.datePickerText, { color: theme.text }]}>
-            {date.toLocaleDateString('it-IT')}
-          </Text>
-        </TouchableOpacity>
-        {error && <Text style={styles.errorText}>Questo campo è obbligatorio</Text>}
-      </View>
-  );
-
   return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <ArrowLeft size={24} color={theme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Nuovo Appuntamento</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+              Aggiungi una nuova auto in officina
+            </Text>
+          </View>
+        </View>
 
         <ScrollView
             style={styles.scrollContainer}
@@ -291,40 +268,40 @@ const NewAppointmentScreen = () => {
             />
           </FormCard>
 
-          {/* Pianificazione */}
+          {/* Pianificazione con Calendario */}
           <FormCard title="Pianificazione" icon={Calendar}>
-            <View style={isDesktop ? styles.rowDesktop : styles.rowMobile}>
-              <View style={isDesktop ? styles.halfWidth : styles.fullWidth}>
-                <Controller
-                    control={control}
-                    rules={{ required: true }}
-                    render={({ field: { value } }) => (
-                        <DatePickerButton
-                            label="Data Programmata *"
-                            date={value}
-                            onPress={() => setShowScheduledDatePicker(true)}
-                            error={errors.scheduledDate}
-                        />
-                    )}
-                    name="scheduledDate"
-                />
+            <CalendarAppointmentPicker
+              selectedDates={selectedWorkDays}
+              onDatesChange={setSelectedWorkDays}
+              theme={theme}
+              estimatedDays={estimatedWorkDays}
+            />
+            
+            <View style={styles.estimationContainer}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Giorni stimati di lavoro</Text>
+              <View style={styles.estimationButtons}>
+                {[1, 2, 3, 4, 5].map(days => (
+                  <TouchableOpacity
+                    key={days}
+                    style={[
+                      styles.estimationButton,
+                      { borderColor: theme.border },
+                      estimatedWorkDays === days && { backgroundColor: theme.accent }
+                    ]}
+                    onPress={() => setEstimatedWorkDays(days)}
+                  >
+                    <Text style={[
+                      styles.estimationButtonText,
+                      { color: estimatedWorkDays === days ? '#ffffff' : theme.text }
+                    ]}>
+                      {days}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-
-              <View style={isDesktop ? styles.halfWidth : styles.fullWidth}>
-                <Controller
-                    control={control}
-                    rules={{ required: true }}
-                    render={({ field: { value } }) => (
-                        <DatePickerButton
-                            label="Data Consegna Stimata *"
-                            date={value}
-                            onPress={() => setShowDeliveryDatePicker(true)}
-                            error={errors.deliveryDate}
-                        />
-                    )}
-                    name="deliveryDate"
-                />
-              </View>
+              <Text style={[styles.estimationHint, { color: theme.textSecondary }]}>
+                Indica quanti giorni pensi che richiederà l'intervento per suggerimenti automatici
+              </Text>
             </View>
           </FormCard>
 
@@ -337,8 +314,12 @@ const NewAppointmentScreen = () => {
               </Text>
             </View>
             <Text style={[styles.summaryText, { color: darkMode ? '#93c5fd' : '#1e40af' }]}>
-              Verifica tutti i dati inseriti prima di salvare l'appuntamento.
-              Una volta salvato, potrai modificare i dettagli dalla dashboard.
+              {selectedWorkDays.length > 0 ? (
+                `Lavorazione programmata per ${selectedWorkDays.length} ${selectedWorkDays.length === 1 ? 'giorno' : 'giorni'}: dal ${new Date(selectedWorkDays[0]).toLocaleDateString('it-IT')} al ${new Date(selectedWorkDays[selectedWorkDays.length - 1]).toLocaleDateString('it-IT')}.`
+              ) : (
+                'Seleziona i giorni di lavorazione nel calendario sopra.'
+              )}
+              {' '}Verifica tutti i dati inseriti prima di salvare l'appuntamento.
             </Text>
           </View>
 
@@ -352,35 +333,18 @@ const NewAppointmentScreen = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-                style={styles.saveButton}
+                style={[
+                  styles.saveButton,
+                  { backgroundColor: selectedWorkDays.length > 0 ? theme.accent : theme.textSecondary }
+                ]}
                 onPress={handleSubmit(onSubmit)}
+                disabled={selectedWorkDays.length === 0}
             >
               <Save size={18} color="#ffffff" />
               <Text style={styles.saveButtonText}>Salva Appuntamento</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
-
-        {/* Date Pickers */}
-        {showScheduledDatePicker && (
-            <DateTimePicker
-                value={scheduledDate}
-                mode="date"
-                display="default"
-                onChange={handleScheduledDateChange}
-                minimumDate={new Date()}
-            />
-        )}
-
-        {showDeliveryDatePicker && (
-            <DateTimePicker
-                value={deliveryDate}
-                mode="date"
-                display="default"
-                onChange={handleDeliveryDateChange}
-                minimumDate={scheduledDate}
-            />
-        )}
       </SafeAreaView>
   );
 };
@@ -490,22 +454,38 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
-  datePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  datePickerText: {
-    fontSize: 16,
-    marginLeft: 8,
-  },
   errorText: {
     color: '#ef4444',
     fontSize: 12,
     marginTop: 4,
+  },
+  estimationContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  estimationButtons: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
+  estimationButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    flex: 1,
+  },
+  estimationButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  estimationHint: {
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   summaryCard: {
     borderRadius: 12,
@@ -547,7 +527,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   saveButton: {
-    backgroundColor: '#2563eb',
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 24,

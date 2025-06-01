@@ -80,16 +80,6 @@ const MechanicDashboardContent = () => {
     overdueInvoices: 2,
     monthlyGrowth: 12
   };
-
-  const handleAddNewCar = () => {
-    const newCarId = addCar({
-      model: 'Nuova Auto',
-      vin: `VIN-${Date.now()}`,
-      licensePlate: `NUOVA-${Date.now().toString().slice(-4)}`,
-      owner: 'Nuovo Cliente'
-    });
-    console.log('Nuova auto aggiunta con ID:', newCarId);
-  };
   
   const handleCompleteInvoice = (carId: string, repairId: string) => {
     console.log(`Fattura emessa per riparazione ${repairId} dell'auto ${carId}`);
@@ -146,7 +136,7 @@ const MechanicDashboardContent = () => {
             </View>
             <TouchableOpacity
               style={styles.addButton}
-              onPress={handleAddNewCar}
+              onPress={() => navigation.navigate('NewAppointment')}
             >
               <PlusCircle size={18} color="#ffffff" />
               <Text style={styles.addButtonText}>Nuova Auto</Text>
@@ -336,7 +326,10 @@ const MechanicDashboardContent = () => {
           <View style={[styles.columnCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
             <View style={styles.columnCardHeader}>
               <Text style={[styles.columnCardTitle, { color: theme.text }]}>Prossimi Interventi</Text>
-              <TouchableOpacity style={styles.cardLinkContainer}>
+              <TouchableOpacity 
+                style={styles.cardLinkContainer}
+                onPress={() => navigation.navigate('MechanicCalendar' as never)}
+              >
                 <Text style={styles.cardLink}>Calendario</Text>
                 <ChevronRight size={16} color="#2563eb" />
               </TouchableOpacity>

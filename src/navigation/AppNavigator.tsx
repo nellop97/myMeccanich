@@ -7,7 +7,6 @@ import React, { useEffect, useState } from 'react';
 // Importa le schermate
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
-import CarsByDateScreen from '../screens/mechanic/CarsByDateScreen';
 import MechanicDashboard from '../screens/mechanic/MechanicDashboard';
 import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -17,6 +16,7 @@ import CarDetailScreen, { RouteParams } from '../screens/user/CarDetailScreen';
 import { useStore } from '../store';
 import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen';
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
+import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
 
 // Definizione dei tipi per la navigazione
 export type RootStackParamList = {
@@ -26,7 +26,6 @@ export type RootStackParamList = {
   CarDetail: RouteParams;
   Login: undefined;
   Register: undefined;
-  CarsByDateScreen: { date: string };
   RepairDetails: { carId: string; repairId: string };
   HomeMechanic: undefined;
   NewAppointment: undefined;
@@ -149,11 +148,6 @@ export default function AppNavigator() {
               }}
             />
             <Stack.Screen 
-              name="CarsByDate" 
-              component={CarsByDateScreen}
-              options={{ title: 'Auto in officina' }}
-            />
-            <Stack.Screen 
               name="AllCarsInWorkshop" 
               component={AllCarsInWorkshopScreen}
               options={{
@@ -172,6 +166,13 @@ export default function AppNavigator() {
               name="NewAppointment"
               component={NewAppointmentScreen}
               options={{ title: 'Nuovo Appuntamento' }}
+            />
+            <Stack.Screen 
+              name="MechanicCalendar" 
+              component={MechanicCalendarScreen}
+              options={{
+                headerShown: false,
+              }}
             />
           </Stack.Group>
         ) : (
