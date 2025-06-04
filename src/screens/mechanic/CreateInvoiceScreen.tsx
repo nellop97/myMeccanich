@@ -69,15 +69,15 @@ const CreateInvoiceScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const params = route.params as RouteParams | undefined;
-  
+
   const { darkMode } = useStore();
   const { cars, getCarById, getRepairDetails } = useWorkshopStore();
-  const { 
-    addInvoice, 
-    customers, 
-    addCustomer, 
-    templates, 
-    calculateInvoiceTotals 
+  const {
+    addInvoice,
+    customers,
+    addCustomer,
+    templates,
+    calculateInvoiceTotals
   } = useInvoicingStore();
 
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -127,7 +127,7 @@ const CreateInvoiceScreen = () => {
     if (params?.carId && params?.repairId) {
       const car = getCarById(params.carId);
       const repair = getRepairDetails(params.carId, params.repairId);
-      
+
       if (car && repair) {
         // Trova o crea cliente basato sui dati dell'auto
         let customer = customers.find(c => c.name === car.owner);
@@ -138,12 +138,12 @@ const CreateInvoiceScreen = () => {
             phone: car.ownerPhone,
             isCompany: false,
           });
-          customer = { 
-            id: newCustomerId, 
-            name: car.owner, 
+          customer = {
+            id: newCustomerId,
+            name: car.owner,
             email: car.ownerEmail,
             phone: car.ownerPhone,
-            isCompany: false 
+            isCompany: false
           };
         }
 
@@ -159,7 +159,7 @@ const CreateInvoiceScreen = () => {
 
         // Aggiungi elementi dalla riparazione
         const repairItems: InvoiceItem[] = [];
-        
+
         // Manodopera
         if (repair.laborCost && repair.laborCost > 0) {
           repairItems.push({
@@ -256,18 +256,18 @@ const CreateInvoiceScreen = () => {
     if (!currentItem) return;
 
     const updatedItem = { ...currentItem, [field]: value };
-    
+
     // Ricalcola totali
     if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
       const quantity = field === 'quantity' ? parseFloat(value) || 0 : updatedItem.quantity;
       const unitPrice = field === 'unitPrice' ? parseFloat(value) || 0 : updatedItem.unitPrice;
       const discount = field === 'discount' ? parseFloat(value) || 0 : (updatedItem.discount || 0);
-      
+
       const subtotal = quantity * unitPrice;
       const discountAmount = subtotal * discount / 100;
       const total = subtotal - discountAmount;
       const vatAmount = total * updatedItem.vatRate / 100;
-      
+
       updatedItem.total = total;
       updatedItem.vatAmount = vatAmount;
     }
@@ -490,7 +490,7 @@ const CreateInvoiceScreen = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-      
+
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
         <TouchableOpacity
@@ -513,7 +513,7 @@ const CreateInvoiceScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -657,14 +657,14 @@ const CreateInvoiceScreen = () => {
                     {formatCurrency(totals.subtotal)}
                   </Text>
                 </View>
-                
+
                 <View style={styles.totalRow}>
                   <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>IVA:</Text>
                   <Text style={[styles.totalValue, { color: theme.text }]}>
                     {formatCurrency(totals.totalVat)}
                   </Text>
                 </View>
-                
+
                 <View style={[styles.totalRow, styles.grandTotalRow, { borderColor: theme.border }]}>
                   <Text style={[styles.grandTotalLabel, { color: theme.text }]}>Totale:</Text>
                   <Text style={[styles.grandTotalValue, { color: theme.accent }]}>

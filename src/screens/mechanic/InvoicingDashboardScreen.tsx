@@ -37,11 +37,11 @@ const InvoicingDashboardScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
   const { invoices, customers, getInvoiceStats, updateInvoiceStatus } = useInvoicingStore();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
-  
+
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
 
   const theme = {
@@ -61,7 +61,7 @@ const InvoicingDashboardScreen = () => {
   // Filtra le fatture
   const filteredInvoices = useMemo(() => {
     return invoices.filter(invoice => {
-      const matchesSearch = 
+      const matchesSearch =
         invoice.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         invoice.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         invoice.notes?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -111,7 +111,7 @@ const InvoicingDashboardScreen = () => {
 
   const StatCard = ({ title, value, subtitle, icon: Icon, iconBg, iconColor, trend }: any) => (
     <View style={[
-      styles.statCard, 
+      styles.statCard,
       isDesktop && styles.statCardDesktop,
       { backgroundColor: theme.cardBackground, borderColor: theme.border }
     ]}>
@@ -131,7 +131,7 @@ const InvoicingDashboardScreen = () => {
         <View style={styles.trendContainer}>
           <TrendingUp size={16} color={trend > 0 ? theme.success : theme.error} />
           <Text style={[
-            styles.trendText, 
+            styles.trendText,
             { color: trend > 0 ? theme.success : theme.error }
           ]}>
             {trend > 0 ? '+' : ''}{trend.toFixed(1)}% vs mese scorso
@@ -144,7 +144,7 @@ const InvoicingDashboardScreen = () => {
   const renderInvoiceCard = ({ item: invoice }: { item: Invoice }) => {
     const customer = customers.find(c => c.id === invoice.customerId);
     const isOverdue = invoice.status === 'sent' && new Date(invoice.dueDate) < new Date();
-    
+
     return (
       <TouchableOpacity
         style={[styles.invoiceCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
@@ -163,7 +163,7 @@ const InvoicingDashboardScreen = () => {
               {formatDate(invoice.issueDate)}
             </Text>
           </View>
-          
+
           <View style={styles.invoiceAmountContainer}>
             <Text style={[styles.invoiceAmount, { color: theme.text }]}>
               {formatCurrency(invoice.totalAmount)}
@@ -201,7 +201,7 @@ const InvoicingDashboardScreen = () => {
               <Text style={styles.actionButtonText}>Segna come Pagata</Text>
             </TouchableOpacity>
           )}
-          
+
           <TouchableOpacity
             style={[styles.actionButton, styles.secondaryAction, { borderColor: theme.border }]}
             onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
@@ -246,14 +246,14 @@ const InvoicingDashboardScreen = () => {
     </View>
   );
 
-  const growthRate = stats.lastMonthRevenue > 0 
-    ? ((stats.thisMonthRevenue - stats.lastMonthRevenue) / stats.lastMonthRevenue) * 100 
+  const growthRate = stats.lastMonthRevenue > 0
+    ? ((stats.thisMonthRevenue - stats.lastMonthRevenue) / stats.lastMonthRevenue) * 100
     : 0;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-      
+
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
         <TouchableOpacity
@@ -364,7 +364,7 @@ const InvoicingDashboardScreen = () => {
               onChangeText={setSearchQuery}
             />
           </View>
-          
+
           <TouchableOpacity
             style={[styles.filterButton, { backgroundColor: showFilters ? theme.accent : 'transparent', borderColor: theme.border }]}
             onPress={() => setShowFilters(!showFilters)}
@@ -395,8 +395,8 @@ const InvoicingDashboardScreen = () => {
                 {searchQuery || filterStatus !== 'all' ? 'Nessuna fattura trovata' : 'Nessuna fattura creata'}
               </Text>
               <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-                {searchQuery || filterStatus !== 'all' 
-                  ? 'Prova a modificare i criteri di ricerca' 
+                {searchQuery || filterStatus !== 'all'
+                  ? 'Prova a modificare i criteri di ricerca'
                   : 'Crea la tua prima fattura per iniziare'
                 }
               </Text>

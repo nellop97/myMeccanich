@@ -4,8 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 
-// Importa le schermate
-import HomeScreen from '../screens/HomeScreen';
+// Importa le schermate esistenti
 import LoginScreen from '../screens/LoginScreen';
 import MechanicDashboard from '../screens/mechanic/MechanicDashboard';
 import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
@@ -13,16 +12,20 @@ import ProfileScreen from '../screens/ProfileScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CarDetailScreen, { RouteParams } from '../screens/user/CarDetailScreen';
-import { useStore } from '../store';
 import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen';
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
+
+// Importa le nuove schermate di fatturazione
 import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScreen';
 import CreateInvoiceScreen from '../screens/mechanic/CreateInvoiceScreen';
 import CustomersListScreen from '../screens/mechanic/CustomersListScreen';
 import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
 
-// Definizione dei tipi per la navigazione
+import { useStore } from '../store';
+import HomeScreen from '../screens/HomeScreen';
+
+// Definizione dei tipi per la navigazione - AGGIORNATA
 export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
@@ -37,7 +40,7 @@ export type RootStackParamList = {
   RepairPartsManagement: { carId: string; repairId: string };
   MechanicCalendar: undefined;
   
-  // Nuove schermate di fatturazione
+  // Schermate di fatturazione
   InvoicingDashboard: undefined;
   CreateInvoice: { carId?: string; repairId?: string; customerId?: string; type?: 'customer' | 'supplier' | 'expense' | 'other' };
   CustomersList: undefined;
@@ -49,6 +52,7 @@ export type RootStackParamList = {
   InvoiceTemplates: undefined;
   InvoiceReports: undefined;
 };
+
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -57,7 +61,6 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Settings: undefined;
-  // Aggiungi altri tab se necessario
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -107,7 +110,6 @@ function MainTabNavigator() {
             iconName = 'settings';
           }
 
-          // Puoi restituire qualsiasi componente qui
           return <Ionicons name={iconName as any} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#007AFF',
@@ -133,13 +135,11 @@ export default function AppNavigator() {
   const [isInitialRender, setIsInitialRender] = useState(true);
 
   useEffect(() => {
-    // Dopo il montaggio iniziale, disattiva lo stato iniziale
     if (isInitialRender) {
       setIsInitialRender(false);
     }
   }, []);
 
-  // Se è il render iniziale o l'utente non è loggato, mostra l'autenticazione
   const isAuthenticated = !isInitialRender && user?.isLoggedIn;
   const isMechanic = user?.isMechanic;
 
@@ -147,13 +147,13 @@ export default function AppNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: true }}>
       {isAuthenticated ? (
         isMechanic ? (
-          // Navigator per meccanici
+          // Navigator per meccanici - AGGIORNATO CON TUTTE LE SCHERMATE
           <Stack.Group>
             <Stack.Screen
               name="HomeMechanic"
               component={MechanicDashboard}
               options={{ 
-                headerShown: false  // Nasconde l'header perché ora è gestito internamente
+                headerShown: false
               }}
             />
             <Stack.Screen 
@@ -170,20 +170,23 @@ export default function AppNavigator() {
               component={AllCarsInWorkshopScreen}
               options={{
                 title: 'Auto in Officina',
-                headerShown: false, // se usi header personalizzato
+                headerShown: false,
               }}
             />
             <Stack.Screen 
               name="RepairPartsManagement" 
               component={RepairPartsManagementScreen}
               options={{
-                headerShown: false, // se usi header personalizzato
+                headerShown: false,
               }}
             />
             <Stack.Screen
               name="NewAppointment"
               component={NewAppointmentScreen}
-              options={{ title: 'Nuovo Appuntamento' }}
+              options={{ 
+                title: 'Nuovo Appuntamento',
+                headerShown: false
+              }}
             />
             <Stack.Screen 
               name="MechanicCalendar" 
@@ -192,6 +195,7 @@ export default function AppNavigator() {
                 headerShown: false,
               }}
             />
+            
             <Stack.Screen
               name="InvoicingDashboard"
               component={InvoicingDashboardScreen}
@@ -225,6 +229,48 @@ export default function AppNavigator() {
               component={AddCustomerScreen}
               options={{
                 headerShown: false,
+              }}
+            />
+            
+            {/* Schermate future - placeholder per ora */}
+            <Stack.Screen
+              name="CustomerDetail"
+              component={CustomersListScreen} // Temporaneo
+              options={{
+                title: 'Dettaglio Cliente',
+                headerShown: true,
+              }}
+            />
+            <Stack.Screen
+              name="InvoiceDetail"
+              component={InvoicingDashboardScreen} // Temporaneo
+              options={{
+                title: 'Dettaglio Fattura',
+                headerShown: true,
+              }}
+            />
+            <Stack.Screen
+              name="InvoicesList"
+              component={InvoicingDashboardScreen} // Temporaneo
+              options={{
+                title: 'Tutte le Fatture',
+                headerShown: true,
+              }}
+            />
+            <Stack.Screen
+              name="InvoiceTemplates"
+              component={InvoicingDashboardScreen} // Temporaneo
+              options={{
+                title: 'Template Fatture',
+                headerShown: true,
+              }}
+            />
+            <Stack.Screen
+              name="InvoiceReports"
+              component={InvoicingDashboardScreen} // Temporaneo
+              options={{
+                title: 'Report Fatturazione',
+                headerShown: true,
               }}
             />
           </Stack.Group>

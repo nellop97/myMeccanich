@@ -51,10 +51,10 @@ const AddCustomerScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const params = route.params as RouteParams | undefined;
-  
+
   const { darkMode } = useStore();
   const { addCustomer, updateCustomer, getCustomerById } = useInvoicingStore();
-  
+
   const isEditing = !!params?.customerId;
   const customer = isEditing ? getCustomerById(params!.customerId) : null;
 
@@ -135,15 +135,15 @@ const AddCustomerScreen = () => {
     </View>
   );
 
-  const FormInput = ({ 
-    label, 
-    placeholder, 
-    value, 
-    onChangeText, 
-    error, 
+  const FormInput = ({
+    label,
+    placeholder,
+    value,
+    onChangeText,
+    error,
     keyboardType = 'default',
     autoCapitalize = 'words',
-    required = false 
+    required = false
   }: any) => (
     <View style={styles.inputContainer}>
       <Text style={[styles.inputLabel, { color: theme.text }]}>
@@ -191,7 +191,7 @@ const AddCustomerScreen = () => {
         </View>
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -221,7 +221,7 @@ const AddCustomerScreen = () => {
               />
             </View>
             <Text style={[styles.switchDescription, { color: theme.textSecondary }]}>
-              {watchIsCompany 
+              {watchIsCompany
                 ? 'Selezionato per aziende, professionisti e attività commerciali'
                 : 'Selezionato per clienti privati e persone fisiche'
               }
@@ -358,7 +358,7 @@ const AddCustomerScreen = () => {
             )}
 
             <Text style={[styles.fiscalNote, { color: theme.textSecondary }]}>
-              {watchIsCompany 
+              {watchIsCompany
                 ? 'La Partita IVA è necessaria per le fatture B2B'
                 : 'Il Codice Fiscale è necessario per le fatture ai privati'
               }

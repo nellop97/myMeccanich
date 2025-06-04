@@ -35,9 +35,9 @@ const CustomersListScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
   const { customers, deleteCustomer, getInvoicesByCustomer } = useInvoicingStore();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
 
   const theme = {
@@ -54,7 +54,7 @@ const CustomersListScreen = () => {
 
   // Filtra i clienti in base alla ricerca
   const filteredCustomers = useMemo(() => {
-    return customers.filter(customer => 
+    return customers.filter(customer =>
       customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       customer.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       customer.vatNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -64,7 +64,7 @@ const CustomersListScreen = () => {
 
   const handleDeleteCustomer = (customerId: string, customerName: string) => {
     const customerInvoices = getInvoicesByCustomer(customerId);
-    
+
     if (customerInvoices.length > 0) {
       Alert.alert(
         'Impossibile eliminare',
@@ -79,8 +79,8 @@ const CustomersListScreen = () => {
       `Sei sicuro di voler eliminare il cliente ${customerName}?`,
       [
         { text: 'Annulla', style: 'cancel' },
-        { 
-          text: 'Elimina', 
+        {
+          text: 'Elimina',
           style: 'destructive',
           onPress: () => deleteCustomer(customerId)
         }
@@ -93,11 +93,11 @@ const CustomersListScreen = () => {
     const totalAmount = invoices
       .filter(inv => inv.status === 'paid')
       .reduce((sum, inv) => sum + inv.totalAmount, 0);
-    
+
     return {
       invoicesCount: invoices.length,
       totalAmount,
-      lastInvoiceDate: invoices.length > 0 
+      lastInvoiceDate: invoices.length > 0
         ? Math.max(...invoices.map(inv => new Date(inv.issueDate).getTime()))
         : null
     };
@@ -112,7 +112,7 @@ const CustomersListScreen = () => {
 
   const renderCustomerCard = ({ item: customer }: { item: Customer }) => {
     const stats = formatCustomerStats(customer);
-    
+
     return (
       <TouchableOpacity
         style={[styles.customerCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
@@ -142,7 +142,7 @@ const CustomersListScreen = () => {
               </View>
             </View>
           </View>
-          
+
           <View style={styles.customerActions}>
             <TouchableOpacity
               style={[styles.actionIconButton, { backgroundColor: theme.accent + '20' }]}
@@ -168,7 +168,7 @@ const CustomersListScreen = () => {
               </Text>
             </View>
           )}
-          
+
           {customer.phone && (
             <View style={styles.detailRow}>
               <Phone size={14} color={theme.textSecondary} />
@@ -250,7 +250,7 @@ const CustomersListScreen = () => {
             <FileText size={16} color="#ffffff" />
             <Text style={styles.actionButtonText}>Nuova Fattura</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.actionButton, styles.secondaryAction, { borderColor: theme.border }]}
             onPress={() => navigation.navigate('CustomerDetail', { customerId: customer.id })}
@@ -273,12 +273,12 @@ const CustomersListScreen = () => {
           <Text style={[styles.statNumber, { color: theme.text }]}>{totalCustomers}</Text>
           <Text style={[styles.statTitle, { color: theme.textSecondary }]}>Clienti Totali</Text>
         </View>
-        
+
         <View style={styles.statCard}>
           <Text style={[styles.statNumber, { color: theme.warning }]}>{companyCustomers}</Text>
           <Text style={[styles.statTitle, { color: theme.textSecondary }]}>Aziende</Text>
         </View>
-        
+
         <View style={styles.statCard}>
           <Text style={[styles.statNumber, { color: theme.accent }]}>{privateCustomers}</Text>
           <Text style={[styles.statTitle, { color: theme.textSecondary }]}>Privati</Text>
@@ -290,7 +290,7 @@ const CustomersListScreen = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-      
+
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
         <TouchableOpacity
@@ -342,8 +342,8 @@ const CustomersListScreen = () => {
               {searchQuery ? 'Nessun cliente trovato' : 'Nessun cliente registrato'}
             </Text>
             <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-              {searchQuery 
-                ? 'Prova a modificare i criteri di ricerca' 
+              {searchQuery
+                ? 'Prova a modificare i criteri di ricerca'
                 : 'Aggiungi il tuo primo cliente per iniziare'
               }
             </Text>

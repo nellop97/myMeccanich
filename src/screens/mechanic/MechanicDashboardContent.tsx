@@ -11,6 +11,7 @@ import {
 } from 'lucide-react-native';
 import React from 'react';
 import {
+    Alert,
     Dimensions,
     Platform,
     ScrollView,
@@ -23,7 +24,7 @@ import {
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 import { useNavigation } from '@react-navigation/native';
-import { useInvoicingStore } from '@/src/store/invoicingStore';
+import { useInvoicingStore } from '../../store/invoicingStore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -31,22 +32,22 @@ const MechanicDashboardContent = () => {
   const { user, darkMode } = useStore();
   const navigation = useNavigation();
   const { cars, updateRepairStatus, addCar } = useWorkshopStore();
-  const { getInvoicesByRepair } = useInvoicingStore();
+  const { getFatturesByRepair } = useInvoicingStore();
 
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
-  
+
   // Funzioni di utilità per estrarre i dati
-  const carsInWorkshop = cars.filter(car => 
+  const carsInWorkshop = cars.filter(car =>
     car.repairs.some(repair => repair.status === 'in-progress')
   );
-  
-  const pendingRepairs = cars.flatMap(car => 
+
+  const pendingRepairs = cars.flatMap(car =>
     car.repairs
       .filter(repair => repair.status === 'pending')
-      .map(repair => ({ 
-        carId: car.id, 
-        repairId: repair.id, 
-        car, 
+      .map(repair => ({
+        carId: car.id,
+        repairId: repair.id,
+        car,
         repair,
         plate: car.licensePlate || 'N/A',
         date: repair.scheduledDate,
@@ -54,10 +55,12 @@ const MechanicDashboardContent = () => {
         type: repair.description
       }))
   );
-  
-  const pendingInvoices = cars.flatMap(car => 
+
+  const pendingInvoices = cars.flatMap(car =>
     car.repairs
-      .filter(repair => repair.status === 'completed')
+      .filter(repair => repair.status === 'completed' 
+        //&& !hasInvoice(car.id, repair.id) TODO
+      )
       .map(repair => ({
         id: repair.id,
         carId: car.id,
@@ -68,7 +71,7 @@ const MechanicDashboardContent = () => {
         status: 'Da emettere'
       }))
   );
-  
+
   // Statistiche meccanico
   const mechanicStats = {
     carsInWorkshop: carsInWorkshop.length,
@@ -82,19 +85,19 @@ const MechanicDashboardContent = () => {
     overdueInvoices: 2,
     monthlyGrowth: 12
   };
-  
-  const handleCompleteInvoice = (carId: string, repairId: string) => {
+
+  const handleCreateInvoiceFromRepair = (carId: string, repairId: string) => {
     // Verifica se esiste già una fattura per questa riparazione
-    const existingInvoices = getInvoicesByRepair(carId, repairId);
-    
+    const existingInvoices = getFatturesByRepair(carId, repairId);
+
     if (existingInvoices.length > 0) {
       Alert.alert(
         'Fattura esistente',
         'Esiste già una fattura per questa riparazione. Vuoi visualizzarla?',
         [
           { text: 'Annulla', style: 'cancel' },
-          { 
-            text: 'Visualizza', 
+          {
+            text: 'Visualizza',
             onPress: () => navigation.navigate('InvoiceDetail', { invoiceId: existingInvoices[0].id })
           }
         ]
@@ -106,7 +109,7 @@ const MechanicDashboardContent = () => {
   };
 
   const hasInvoice = (carId: string, repairId: string) => {
-    return getInvoicesByRepair(carId, repairId).length > 0;
+    return getFatturesByRepair(carId, repairId).length > 0;
   };
 
   const theme = {
@@ -119,7 +122,7 @@ const MechanicDashboardContent = () => {
 
   const StatCard = ({ title, value, subtitle, icon: Icon, iconBg, iconColor }: any) => (
     <View style={[
-      styles.statCard, 
+      styles.statCard,
       isDesktop && styles.statCardDesktop,
       { backgroundColor: theme.cardBackground, borderColor: theme.border }
     ]}>
@@ -148,7 +151,7 @@ const MechanicDashboardContent = () => {
               <Text style={styles.notificationText}>3 notifiche</Text>
             </View>
           </View>
-          
+
           <View style={styles.headerRight}>
             <View style={styles.searchContainer}>
               <Search size={18} color={theme.textSecondary} style={styles.searchIcon} />
@@ -180,7 +183,7 @@ const MechanicDashboardContent = () => {
           />
         </View>
       )}
-      
+
       <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Stats Grid */}
         <View style={[styles.statsGrid, !isDesktop && styles.statsGridMobile]}>
@@ -217,20 +220,20 @@ const MechanicDashboardContent = () => {
             iconColor={darkMode ? '#10b981' : '#059669'}
           />
         </View>
-        
+
         {/* Cars in workshop */}
         <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>Auto in Officina</Text>
-            <TouchableOpacity style={styles.cardLinkContainer}
-            onPress={() => navigation.navigate('AllCarsInWorkshop' as never)}
+            <TouchableOpacity
+              style={styles.cardLinkContainer}
+              onPress={() => navigation.navigate('AllCarsInWorkshop' as never)}
             >
               <Text style={styles.cardLink}>Visualizza tutte</Text>
               <ChevronRight size={16} color="#2563eb" />
-              
             </TouchableOpacity>
           </View>
-          
+
           {isDesktop ? (
             // Tabella Desktop
             <>
@@ -243,7 +246,7 @@ const MechanicDashboardContent = () => {
                 <Text style={[styles.tableHeaderCell, { color: theme.textSecondary }]}>Stato</Text>
                 <Text style={[styles.tableHeaderCell, { color: theme.textSecondary }]}>Azioni</Text>
               </View>
-              
+
               {cars.map(car => (
                 car.repairs.filter(repair => repair.status === 'in-progress' || repair.status === 'pending').map(repair => (
                   <View key={`${car.id}-${repair.id}`} style={[styles.tableRow, { borderColor: theme.border }]}>
@@ -256,7 +259,7 @@ const MechanicDashboardContent = () => {
                       <View style={[
                         styles.statusBadgeDesktop,
                         {
-                          backgroundColor: repair.status === 'in-progress' 
+                          backgroundColor: repair.status === 'in-progress'
                             ? (darkMode ? '#1e3a8a' : '#dbeafe')
                             : (darkMode ? '#92400e' : '#fef3c7')
                         }
@@ -303,7 +306,7 @@ const MechanicDashboardContent = () => {
                         <View style={[
                           styles.statusBadge,
                           {
-                            backgroundColor: repair.status === 'in-progress' 
+                            backgroundColor: repair.status === 'in-progress'
                               ? (darkMode ? '#1e3a8a' : '#dbeafe')
                               : (darkMode ? '#92400e' : '#fef3c7')
                           }
@@ -319,7 +322,7 @@ const MechanicDashboardContent = () => {
                             {repair.status === 'in-progress' ? 'In lavorazione' : 'In attesa'}
                           </Text>
                         </View>
-                        {/* Aggiungi indicatore fattura */}
+                        {/* Indicatore fattura per riparazioni completate */}
                         {repair.status === 'completed' && hasInvoice(car.id, repair.id) && (
                           <View style={[styles.invoiceIndicator, { backgroundColor: darkMode ? '#065f46' : '#d1fae5' }]}>
                             <FileText size={12} color={darkMode ? '#10b981' : '#059669'} />
@@ -331,38 +334,49 @@ const MechanicDashboardContent = () => {
                       </View>
                     </View>
 
-                    
                     <Text style={[styles.carModel, { color: theme.text }]}>{car.model}</Text>
                     <Text style={[styles.carOwner, { color: theme.textSecondary }]}>{car.owner || 'N/A'}</Text>
                     <Text style={[styles.carDate, { color: theme.textSecondary }]}>{repair.scheduledDate}</Text>
                     <Text style={[styles.carDescription, { color: theme.textSecondary }]}>{repair.description}</Text>
-                    
-                    <TouchableOpacity
-                      style={styles.actionButtonMobile}
-                      onPress={() => updateRepairStatus(
-                        car.id,
-                        repair.id,
-                        repair.status === 'in-progress' ? 'completed' : 'in-progress'
+
+                    <View style={styles.repairActions}>
+                      <TouchableOpacity
+                        style={styles.actionButtonMobile}
+                        onPress={() => updateRepairStatus(
+                          car.id,
+                          repair.id,
+                          repair.status === 'in-progress' ? 'completed' : 'in-progress'
+                        )}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {repair.status === 'in-progress' ? 'Completa' : 'Inizia Lavoro'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Pulsante per creare fattura se la riparazione è completata e non ha ancora fattura */}
+                      {repair.status === 'completed' && !hasInvoice(car.id, repair.id) && (
+                        <TouchableOpacity
+                          style={[styles.actionButtonMobile, { backgroundColor: '#10b981', marginTop: 8 }]}
+                          onPress={() => handleCreateInvoiceFromRepair(car.id, repair.id)}
+                        >
+                          <Text style={styles.actionButtonText}>Crea Fattura</Text>
+                        </TouchableOpacity>
                       )}
-                    >
-                      <Text style={styles.actionButtonText}>
-                        {repair.status === 'in-progress' ? 'Completa' : 'Inizia Lavoro'}
-                      </Text>
-                    </TouchableOpacity>
+                    </View>
                   </View>
                 ))
               ))}
             </>
           )}
         </View>
-        
+
         {/* Two-column layout */}
         <View style={[styles.twoColumnLayout, !isDesktop && styles.twoColumnLayoutMobile]}>
           {/* Upcoming maintenance */}
           <View style={[styles.columnCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
             <View style={styles.columnCardHeader}>
               <Text style={[styles.columnCardTitle, { color: theme.text }]}>Prossimi Interventi</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cardLinkContainer}
                 onPress={() => navigation.navigate('MechanicCalendar' as never)}
               >
@@ -390,17 +404,20 @@ const MechanicDashboardContent = () => {
               ))}
             </View>
             <View style={styles.columnCardFooter}>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('NewAppointment' as never)}>
                 <Text style={styles.addItemButton}>+ Aggiungi Intervento</Text>
               </TouchableOpacity>
             </View>
           </View>
-          
-          {/* Pending invoices */}
+
+          {/* Pending Invoices */}
           <View style={[styles.columnCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
             <View style={styles.columnCardHeader}>
               <Text style={[styles.columnCardTitle, { color: theme.text }]}>Fatture in Sospeso</Text>
-              <TouchableOpacity style={styles.cardLinkContainer}>
+              <TouchableOpacity
+                style={styles.cardLinkContainer}
+                onPress={() => navigation.navigate('InvoicingDashboard' as never)}
+              >
                 <Text style={styles.cardLink}>Gestione Fatture</Text>
                 <ChevronRight size={16} color="#2563eb" />
               </TouchableOpacity>
@@ -419,16 +436,16 @@ const MechanicDashboardContent = () => {
                     <Text style={[styles.listItemAmount, { color: theme.text }]}>€{invoice.amount.toFixed(2)}</Text>
                     <TouchableOpacity
                       style={styles.invoiceButton}
-                      onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
+                      onPress={() => handleCreateInvoiceFromRepair(invoice.carId, invoice.id)}
                     >
-                      <Text style={styles.invoiceButtonText}>Visualizza</Text>
+                      <Text style={styles.invoiceButtonText}>Crea Fattura</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               ))}
             </View>
             <View style={styles.columnCardFooter}>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('CreateInvoice' as never)}>
                 <Text style={styles.addItemButton}>+ Nuova Fattura</Text>
               </TouchableOpacity>
             </View>
@@ -692,6 +709,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 12,
     fontStyle: 'italic',
+  },
+  repairActions: {
+    marginTop: 12,
   },
   actionButtonMobile: {
     backgroundColor: '#2563eb',
