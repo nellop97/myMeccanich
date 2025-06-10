@@ -1,5 +1,3 @@
-// src/screens/HomeScreen.tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   SafeAreaView,
@@ -109,44 +107,45 @@ const HomeScreen = () => {
     },
   ];
 
-  const quickActions = [
-    {
-      icon: Car,
-      title: 'Le Mie Auto',
-      subtitle: userVehicles.length + ' veicoli registrati',
-      color: theme.accent,
-      bgColor: darkMode ? '#1e3a8a' : '#dbeafe',
-      gradient: theme.accentGradient,
-      onPress: () => console.log('Navigate to My Cars'),
-    },
-    {
-      icon: Calendar,
-      title: 'Prossimi Servizi',
-      subtitle: '2 in programma',
-      color: theme.warning,
-      bgColor: darkMode ? '#92400e' : '#fef3c7',
-      gradient: theme.warningGradient,
-      onPress: () => console.log('Navigate to Upcoming Services'),
-    },
-    {
-      icon: FileText,
-      title: 'Storico Interventi',
-      subtitle: '15 interventi totali',
-      color: theme.success,
-      bgColor: darkMode ? '#065f46' : '#d1fae5',
-      gradient: theme.successGradient,
-      onPress: () => console.log('Navigate to Service History'),
-    },
-    {
-      icon: DollarSign,
-      title: 'Spese',
-      subtitle: '€2,450 quest\'anno',
-      color: theme.error,
-      bgColor: darkMode ? '#7f1d1d' : '#fee2e2',
-      gradient: theme.errorGradient,
-      onPress: () => console.log('Navigate to Expenses'),
-    },
-  ];
+const quickActions = [
+  {
+    icon: Car,
+    title: 'Le Mie Auto',
+    subtitle: userVehicles.length + ' veicoli registrati',
+    color: theme.accent,
+    bgColor: darkMode ? '#1e3a8a' : '#dbeafe',
+    gradient: theme.accentGradient,
+    onPress: () => navigation.navigate('MyCars'),
+  },
+  {
+    icon: Calendar,
+    title: 'Prossimi Servizi',
+    subtitle: '2 in programma',
+    color: theme.warning,
+    bgColor: darkMode ? '#92400e' : '#fef3c7',
+    gradient: theme.warningGradient,
+    onPress: () => navigation.navigate('MaintenanceCalendar'),
+  },
+  {
+    icon: FileText,
+    title: 'Storico Interventi',
+    subtitle: '15 interventi totali',
+    color: theme.success,
+    bgColor: darkMode ? '#065f46' : '#d1fae5',
+    gradient: theme.successGradient,
+    onPress: () => navigation.navigate('MaintenanceHistory'),
+  },
+  {
+    icon: DollarSign,
+    title: 'Spese',
+    subtitle: '€2,450 quest\'anno',
+    color: theme.error,
+    bgColor: darkMode ? '#7f1d1d' : '#fee2e2',
+    gradient: theme.errorGradient,
+    onPress: () => navigation.navigate('ExpenseTracker'),
+  },
+];
+
 
   const recentActivities = [
     {
@@ -190,19 +189,19 @@ const HomeScreen = () => {
   // Genera gli indicatori per il carousel
   const renderCarouselIndicators = () => {
     return (
-      <View style={styles.carouselIndicators}>
-        {userVehicles.map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.indicator,
-              {
-                backgroundColor: index === activeCarIndex ? theme.accent : theme.border,
-              },
-            ]}
-          />
-        ))}
-      </View>
+        <View style={styles.carouselIndicators}>
+          {userVehicles.map((_, index) => (
+              <View
+                  key={index}
+                  style={[
+                    styles.indicator,
+                    {
+                      backgroundColor: index === activeCarIndex ? theme.accent : theme.border,
+                    },
+                  ]}
+              />
+          ))}
+        </View>
     );
   };
 
@@ -242,362 +241,372 @@ const HomeScreen = () => {
           },
         ]}
       >
-        <View style={styles.carImageContainer}>
-          {/* Placeholder per l'immagine del veicolo - in produzione usare Image locale */}
-          <View 
-            style={[
-              styles.carImagePlaceholder, 
-              {backgroundColor: theme.cardBackgroundAlt}
-            ]}
+          <View style={styles.carImageContainer}>
+            <View
+              style={[
+                styles.carImagePlaceholder,
+                {backgroundColor: theme.cardBackgroundAlt}
+              ]}
+            >
+              <Car
+                width={60}
+                height={60}
+                color={theme.accent}
+                style={styles.carIcon}
+              />
+              <Text style={[styles.carModel, {color: theme.text}]}>
+                {item.model}
+              </Text>
+              <Text style={[styles.carPlate, {color: theme.textSecondary}]}>
+                {item.plate}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.carInfoContainer}>
+            <View style={styles.carInfoRow}>
+              <View style={styles.carInfoItem}>
+                <Calendar width={20} height={20} color={theme.accent} />
+                <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
+                  Prossimo servizio
+                </Text>
+                <Text style={[styles.carInfoValue, {color: theme.text}]}>
+                  {item.nextService}
+                </Text>
+              </View>
+              <View style={styles.carInfoItem}>
+                <Wrench width={20} height={20} color={theme.accent} />
+                <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
+                  Ultimo servizio
+                </Text>
+                <Text style={[styles.carInfoValue, {color: theme.text}]}>
+                  {item.lastService}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.carInfoRow}>
+              <View style={styles.carInfoItem}>
+                <Fuel width={20} height={20} color={theme.accent} />
+                <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
+                  Livello carburante
+                </Text>
+                <Text style={[styles.carInfoValue, {color: theme.text}]}>
+                  {item.fuelLevel}%
+                </Text>
+              </View>
+              <View style={styles.carInfoItem}>
+                <Activity width={20} height={20} color={theme.accent} />
+                <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
+                  Chilometraggio
+                </Text>
+                <Text style={[styles.carInfoValue, {color: theme.text}]}>
+                  {item.mileage.toLocaleString()} km
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.carStatusContainer}>
+              <Text style={[styles.carStatusLabel, {color: theme.textSecondary}]}>
+                Stato:
+              </Text>
+              <Text style={[styles.carStatusValue, {color: item.statusColor}]}>
+                {item.status}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.carDetailButton, {backgroundColor: theme.accent}]}
+            onPress={() => navigation.navigate('CarDetail', { carId: item.id })}
           >
-            <Car 
-              width={60} 
-              height={60} 
-              color={theme.accent} 
-              style={styles.carIcon}
-            />
-            <Text style={[styles.carModel, {color: theme.text}]}>
-              {item.model}
-            </Text>
-            <Text style={[styles.carPlate, {color: theme.textSecondary}]}>
-              {item.plate}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.carInfoContainer}>
-          <View style={styles.carInfoRow}>
-            <View style={styles.carInfoItem}>
-              <Calendar width={20} height={20} color={theme.accent} />
-              <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
-                Prossimo servizio
-              </Text>
-              <Text style={[styles.carInfoValue, {color: theme.text}]}>
-                {item.nextService}
-              </Text>
-            </View>
-            <View style={styles.carInfoItem}>
-              <Wrench width={20} height={20} color={theme.accent} />
-              <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
-                Ultimo servizio
-              </Text>
-              <Text style={[styles.carInfoValue, {color: theme.text}]}>
-                {item.lastService}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.carInfoRow}>
-            <View style={styles.carInfoItem}>
-              <Fuel width={20} height={20} color={theme.accent} />
-              <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
-                Livello carburante
-              </Text>
-              <Text style={[styles.carInfoValue, {color: theme.text}]}>
-                {item.fuelLevel}%
-              </Text>
-            </View>
-            <View style={styles.carInfoItem}>
-              <Activity width={20} height={20} color={theme.accent} />
-              <Text style={[styles.carInfoLabel, {color: theme.textSecondary}]}>
-                Chilometraggio
-              </Text>
-              <Text style={[styles.carInfoValue, {color: theme.text}]}>
-                {item.mileage.toLocaleString()} km
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.carStatusContainer}>
-            <Text style={[styles.carStatusLabel, {color: theme.textSecondary}]}>
-              Stato:
-            </Text>
-            <Text style={[styles.carStatusValue, {color: item.statusColor}]}>
-              {item.status}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity 
-          style={[styles.carDetailButton, {backgroundColor: theme.accent}]}
-          onPress={() => console.log(`View details for ${item.model}`)}
-        >
-          <Text style={styles.carDetailButtonText}>Dettagli</Text>
-          <ChevronRight width={16} height={16} color="#ffffff" />
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  };
+            <Text style={styles.carDetailButtonText}>Dettagli</Text>
+            <ChevronRight width={16} height={16} color="#ffffff" />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 
   // Card per azioni rapide
   const QuickActionCard = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.quickActionCard,
-        {
-          backgroundColor: theme.cardBackground,
-          borderColor: theme.border,
-          shadowColor: theme.shadow,
-        },
-      ]}
-      onPress={item.onPress}
-    >
-      <LinearGradient
-        colors={item.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.quickActionIcon}
-      >
-        <item.icon width={24} height={24} color="#ffffff" />
-      </LinearGradient>
-      <Text style={[styles.quickActionTitle, { color: theme.text }]}>
-        {item.title}
-      </Text>
-      <Text style={[styles.quickActionSubtitle, { color: theme.textSecondary }]}>
-        {item.subtitle}
-      </Text>
-      <ChevronRight
-        width={16}
-        height={16}
-        color={theme.textSecondary}
-        style={styles.quickActionArrow}
-      />
-    </TouchableOpacity>
-  );
-
-  // Card per attività recenti
-  const ActivityItem = ({ item, isLast }) => (
-    <View style={{ marginBottom: isLast ? 0 : 12 }}>
-      <View
-        style={[
-          styles.activityItem,
-          {
-            backgroundColor: theme.cardBackground,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <View
+      <TouchableOpacity
           style={[
-            styles.activityIcon,
-            {
-              backgroundColor: item.iconBg,
-            },
-          ]}
-        >
-          <item.icon width={20} height={20} color="#ffffff" />
-        </View>
-        <View style={styles.activityContent}>
-          <Text style={[styles.activityTitle, { color: theme.text }]}>
-            {item.title}
-          </Text>
-          <Text style={[styles.activitySubtitle, { color: theme.textSecondary }]}>
-            {item.subtitle}
-          </Text>
-        </View>
-        <Text style={[styles.activityDate, { color: theme.textSecondary }]}>
-          {item.date}
-        </Text>
-      </View>
-    </View>
-  );
-
-  return (
-    <SafeAreaView
-      style={[
-        styles.container,
-        { backgroundColor: theme.background },
-      ]}
-    >
-      <StatusBar
-        barStyle={darkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.background}
-      />
-
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { borderBottomColor: theme.border },
-        ]}
-      >
-        <View>
-          <Text style={[styles.greeting, { color: theme.textSecondary }]}>
-            Bentornato,
-          </Text>
-          <Text style={[styles.userName, { color: theme.text }]}>
-            {user.name || 'Utente'}
-          </Text>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.notificationButton}
-            onPress={() => console.log('Navigate to Notifications')}
-          >
-            <Bell width={24} height={24} color={theme.text} />
-            <View style={[styles.notificationBadge, { backgroundColor: theme.error }]} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => console.log('Navigate to Settings')}
-          >
-            <Settings width={24} height={24} color={theme.text} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
-      >
-        {/* Carousel dei veicoli */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              I Tuoi Veicoli
-            </Text>
-            <TouchableOpacity onPress={() => console.log('View all vehicles')}>
-              <Text style={[styles.seeAllText, { color: theme.accent }]}>
-                Vedi tutti
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.carouselContainer}>
-            <Animated.FlatList
-              data={userVehicles}
-              keyExtractor={(item) => item.id}
-              renderItem={renderCarCard}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={CARD_WIDTH + CARD_SPACING}
-              decelerationRate="fast"
-              contentContainerStyle={styles.carouselContent}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                { useNativeDriver: true }
-              )}
-              scrollEventThrottle={16}
-            />
-            {renderCarouselIndicators()}
-          </View>
-        </View>
-
-        {/* Aggiungi veicolo */}
-        <TouchableOpacity
-          style={[
-            styles.addVehicleButton,
-            { backgroundColor: theme.accent },
-          ]}
-          onPress={() => console.log('Add new vehicle')}
-        >
-          <Plus width={20} height={20} color="#ffffff" />
-          <Text style={styles.addVehicleText}>
-            Aggiungi Nuovo Veicolo
-          </Text>
-        </TouchableOpacity>
-
-        {/* Azioni Rapide */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Azioni Rapide
-            </Text>
-          </View>
-          <View style={styles.quickActionsGrid}>
-            {quickActions.map((action, index) => (
-              <QuickActionCard key={index} item={action} />
-            ))}
-          </View>
-        </View>
-
-        {/* Attività Recenti */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Attività Recenti
-            </Text>
-            <TouchableOpacity onPress={() => console.log('View all activities')}>
-              <Text style={[styles.seeAllText, { color: theme.accent }]}>
-                Vedi tutto
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View
-            style={[
-              styles.activityCard,
-              {
-                backgroundColor: theme.cardBackground,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            {recentActivities.map((activity, index) => (
-              <ActivityItem
-                key={activity.id}
-                item={activity}
-                isLast={index === recentActivities.length - 1}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* Riepilogo Annuale */}
-        <View
-          style={[
-            styles.statsCard,
+            styles.quickActionCard,
             {
               backgroundColor: theme.cardBackground,
               borderColor: theme.border,
+              shadowColor: theme.shadow,
             },
           ]}
+          onPress={item.onPress}
+      >
+        <LinearGradient
+            colors={item.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.quickActionIcon}
         >
-          <Text style={[styles.statsTitle, { color: theme.text }]}>
-            Riepilogo Annuale
-          </Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <BarChart2 width={24} height={24} color={theme.accent} style={{marginBottom: 8}} />
-              <Text style={[styles.statValue, { color: theme.text }]}>15</Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Interventi
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <DollarSign width={24} height={24} color={theme.warning} style={{marginBottom: 8}} />
-              <Text style={[styles.statValue, { color: theme.text }]}>€2,450</Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Spese Totali
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <MapPin width={24} height={24} color={theme.success} style={{marginBottom: 8}} />
-              <Text style={[styles.statValue, { color: theme.text }]}>32,500</Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Km Percorsi
-              </Text>
-            </View>
+          <item.icon width={24} height={24} color="#ffffff" />
+        </LinearGradient>
+        <Text style={[styles.quickActionTitle, { color: theme.text }]}>
+          {item.title}
+        </Text>
+        <Text style={[styles.quickActionSubtitle, { color: theme.textSecondary }]}>
+          {item.subtitle}
+        </Text>
+        <ChevronRight
+            width={16}
+            height={16}
+            color={theme.textSecondary}
+            style={styles.quickActionArrow}
+        />
+      </TouchableOpacity>
+  );
+
+  // Card per attività recenti
+const ActivityItem = ({ item, isLast }) => (
+  <TouchableOpacity 
+    style={{ marginBottom: isLast ? 0 : 12 }}
+    onPress={() => {
+      if (item.carId) {
+        navigation.navigate('CarDetail', { carId: item.carId });
+      }
+    }}
+  >
+    <View
+      style={[
+        styles.activityItem,
+        {
+          backgroundColor: theme.cardBackground,
+          borderColor: theme.border,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.activityIcon,
+          {
+            backgroundColor: item.iconBg,
+          },
+        ]}
+      >
+        <item.icon width={20} height={20} color="#ffffff" />
+      </View>
+      <View style={styles.activityContent}>
+        <Text style={[styles.activityTitle, { color: theme.text }]}>
+          {item.title}
+        </Text>
+        <Text style={[styles.activitySubtitle, { color: theme.textSecondary }]}>
+          {item.subtitle}
+        </Text>
+      </View>
+      <View style={styles.activityMeta}>
+        <Text style={[styles.activityDate, { color: theme.textSecondary }]}>
+          {item.date}
+        </Text>
+        <ChevronRight width={16} height={16} color={theme.textSecondary} />
+      </View>
+    </View>
+  </TouchableOpacity>
+);
+
+
+  return (
+      <SafeAreaView
+          style={[
+            styles.container,
+            { backgroundColor: theme.background },
+          ]}
+      >
+        <StatusBar
+            barStyle={darkMode ? 'light-content' : 'dark-content'}
+            backgroundColor={theme.background}
+        />
+
+        {/* Header */}
+        <View
+            style={[
+              styles.header,
+              { borderBottomColor: theme.border },
+            ]}
+        >
+          <View>
+            <Text style={[styles.greeting, { color: theme.textSecondary }]}>
+              Bentornato,
+            </Text>
+            <Text style={[styles.userName, { color: theme.text }]}>
+              {user.name || 'Utente'}
+            </Text>
+          </View>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+                style={styles.notificationButton}
+                onPress={() => console.log('Navigate to Notifications')}
+            >
+              <Bell width={24} height={24} color={theme.text} />
+              <View style={[styles.notificationBadge, { backgroundColor: theme.error }]} />
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={styles.settingsButton}
+                onPress={() => console.log('Navigate to Settings')}
+            >
+              <Settings width={24} height={24} color={theme.text} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Logout Button */}
-        <TouchableOpacity
-          style={[
-            styles.logoutButton,
-            {
-              borderColor: theme.border,
-            },
-          ]}
-          onPress={logout}
+        <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.contentContainer}
         >
-          <Text style={[styles.logoutButtonText, { color: theme.text }]}>
-            Logout
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+          {/* Carousel dei veicoli */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                I Tuoi Veicoli
+              </Text>
+              <TouchableOpacity onPress={() => console.log('View all vehicles')}>
+                <Text style={[styles.seeAllText, { color: theme.accent }]}>
+                  Vedi tutti
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.carouselContainer}>
+              <Animated.FlatList
+                  data={userVehicles}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderCarCard}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToInterval={CARD_WIDTH + CARD_SPACING}
+                  decelerationRate="fast"
+                  contentContainerStyle={styles.carouselContent}
+                  onScroll={Animated.event(
+                      [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                      { useNativeDriver: true }
+                  )}
+                  scrollEventThrottle={16}
+              />
+              {renderCarouselIndicators()}
+            </View>
+          </View>
+
+          {/* Aggiungi veicolo */}
+<TouchableOpacity
+  style={[
+    styles.addVehicleButton,
+    { backgroundColor: theme.accent },
+  ]}
+  onPress={() => navigation.navigate('AddCar')}
+>
+  <Plus width={20} height={20} color="#ffffff" />
+  <Text style={styles.addVehicleText}>
+    Aggiungi Nuovo Veicolo
+  </Text>
+</TouchableOpacity>
+
+
+          {/* Azioni Rapide */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Azioni Rapide
+              </Text>
+            </View>
+            <View style={styles.quickActionsGrid}>
+              {quickActions.map((action, index) => (
+                  <QuickActionCard key={index} item={action} />
+              ))}
+            </View>
+          </View>
+
+          {/* Attività Recenti */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Attività Recenti
+              </Text>
+              <TouchableOpacity onPress={() => console.log('View all activities')}>
+                <Text style={[styles.seeAllText, { color: theme.accent }]}>
+                  Vedi tutto
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View
+                style={[
+                  styles.activityCard,
+                  {
+                    backgroundColor: theme.cardBackground,
+                    borderColor: theme.border,
+                  },
+                ]}
+            >
+              {recentActivities.map((activity, index) => (
+                  <ActivityItem
+                      key={activity.id}
+                      item={activity}
+                      isLast={index === recentActivities.length - 1}
+                  />
+              ))}
+            </View>
+          </View>
+
+          {/* Riepilogo Annuale */}
+          <View
+              style={[
+                styles.statsCard,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.border,
+                },
+              ]}
+          >
+            <Text style={[styles.statsTitle, { color: theme.text }]}>
+              Riepilogo Annuale
+            </Text>
+            <View style={styles.statsGrid}>
+              <View style={styles.statItem}>
+                <BarChart2 width={24} height={24} color={theme.accent} style={{marginBottom: 8}} />
+                <Text style={[styles.statValue, { color: theme.text }]}>15</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Interventi
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <DollarSign width={24} height={24} color={theme.warning} style={{marginBottom: 8}} />
+                <Text style={[styles.statValue, { color: theme.text }]}>€2,450</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Spese Totali
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <MapPin width={24} height={24} color={theme.success} style={{marginBottom: 8}} />
+                <Text style={[styles.statValue, { color: theme.text }]}>32,500</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Km Percorsi
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Logout Button */}
+          <TouchableOpacity
+              style={[
+                styles.logoutButton,
+                {
+                  borderColor: theme.border,
+                },
+              ]}
+              onPress={logout}
+          >
+            <Text style={[styles.logoutButtonText, { color: theme.text }]}>
+              Logout
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
   );
 };
 

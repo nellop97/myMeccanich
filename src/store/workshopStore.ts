@@ -389,21 +389,32 @@ export const useWorkshopStore = create<WorkshopStore>()(
         }));
       },
 
-      updateRepair: (carId, repairId, repairData) => {
+      updateRepair: (carId: string, repairId: string, repairData: Partial<Omit<Repair, 'id'>>) => {
         set(state => ({
-          cars: state.cars.map(car => 
+          cars: state.cars.map(car =>
             car.id === carId ? {
               ...car,
-              repairs: car.repairs.map(repair =>
-                repair.id === repairId ? {
-                  ...repair,
-                  ...repairData
-                } : repair
-              )
+              repairs: car.repairs.map(repair => {
+                if (repair.id === repairId) {
+                  // Applica prima le modifiche parziali alla riparazione
+                  const tempUpdatedRepair = { ...repair, ...repairData };
+
+                  // Se laborCost o l'array parts stesso vengono aggiornati,
+                  // ricalcola totalCost.
+                  if (repairData.laborCost !== undefined || repairData.parts !== undefined) {
+                    const newLaborCost = tempUpdatedRepair.laborCost;
+                    const newParts = tempUpdatedRepair.parts;
+                    tempUpdatedRepair.totalCost = newLaborCost + newParts.reduce((sum, p) => sum + (p.quantity * p.unitCost), 0);
+                  }
+                  return tempUpdatedRepair;
+                }
+                return repair;
+              })
             } : car
           )
         }));
       },
+
 
       updatePartInRepair: (carId, repairId, partId, partData) => {
         set(state => ({

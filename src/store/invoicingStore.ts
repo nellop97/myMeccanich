@@ -334,11 +334,12 @@ export const useInvoicingStore = create<InvoicingStore>()(
 
       addInvoice: (invoiceData) => {
         const newId = Date.now().toString();
-        const invoiceNumber = `FAT-2025-${String(get().nextInvoiceNumber).padStart(3, '0')}`;
+        const currentYear = new Date().getFullYear(); // Ottieni l'anno corrente
+        const invoiceNumber = `FAT-<span class="math-inline">\{currentYear\}\-</span>{String(get().nextInvoiceNumber).padStart(3, '0')}`; // Usa l'anno corrente
         const now = new Date().toISOString();
-        
+
         const totals = get().calculateInvoiceTotals(invoiceData.items);
-        
+
         const newInvoice: Invoice = {
           id: newId,
           number: invoiceNumber,

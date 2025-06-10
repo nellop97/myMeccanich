@@ -35,46 +35,66 @@ import {
   BarChart3
 } from 'lucide-react-native';
 
-import {
-  PrimaryButton,
-  SecondaryButton,
-  StatusBadge,
-  ModernCard,
-  StatCard,
-  ListItem,
-  FloatingActionButton,
-  EmptyState,
-  theme
-} from '../../components/shared/GlobalComponents';
-
 import { useStore } from '../../store';
-import { useUserCarsStore } from '../../store/userCarsStore';
+import { useWorkshopStore } from '../../store/workshopStore'; // Changed from useUserCarsStore
 
 const { width: screenWidth } = Dimensions.get('window');
+
+
+// Esempio di come potresti dover definire un oggetto 'theme' di fallback o rimuovere i suoi usi:
+const fallbackTheme = {
+  background: '#ffffff',
+  text: '#000000',
+  primary: '#007bff',
+  border: '#cccccc',
+  cardBackground: '#f8f9fa',
+  textSecondary: '#6c757d',
+  error: '#dc3545',
+  accent: '#ffc107',
+  success: '#28a745',
+  info: '#17a2b8',
+  // ...aggiungi altre proprietà necessarie
+};
+// E poi usare fallbackTheme.background, fallbackTheme.primary, etc.
 
 const CarDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { darkMode } = useStore();
-  const { getCarById, getCarStats, getOverdueMaintenance, getUpcomingMaintenance } = useUserCarsStore();
+  // Changed from getCarById, getCarStats, getOverdueMaintenance, getUpcomingMaintenance
+  const { getCarById } = useWorkshopStore();
 
   const { carId } = route.params;
   const car = getCarById(carId);
-  const stats = getCarStats(carId);
+
+  // Placeholder for stats and maintenance details as useWorkshopStore doesn't have these methods directly
+  const stats = {
+    maintenanceCount: car?.repairs.length || 0,
+    totalExpenses: car?.repairs.reduce((sum, repair) => sum + repair.totalCost, 0) || 0,
+    avgConsumption: null, // No fuel data in workshopStore
+    nextMaintenanceDate: null, // Needs custom logic based on repairs
+    overdueMaintenance: 0 // Needs custom logic
+  };
+
+  // Placeholder for overdueMaintenance and upcomingMaintenance
+  const overdueMaintenance = [];
+  const upcomingMaintenance = [];
+  const hasIssues = overdueMaintenance.length > 0;
+
 
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // overview, maintenance, expenses, documents
 
   if (!car) {
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-          <EmptyState
-              icon={AlertTriangle}
-              title="Auto non trovata"
-              subtitle="L'auto richiesta non è stata trovata"
-              actionTitle="Torna alla lista"
-              onAction={() => navigation.goBack()}
-          />
+        <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
+          <View>
+            <Text>Auto non trovata</Text>
+            <Text>L'auto richiesta non è stata trovata</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Text>Torna alla lista</Text>
+            </TouchableOpacity>
+          </View>
         </SafeAreaView>
     );
   }
@@ -84,9 +104,6 @@ const CarDetailScreen = () => {
     setTimeout(() => setRefreshing(false), 1000);
   };
 
-  const overdueMaintenance = getOverdueMaintenance(carId);
-  const upcomingMaintenance = getUpcomingMaintenance(carId);
-  const hasIssues = overdueMaintenance.length > 0;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('it-IT', {
@@ -106,7 +123,7 @@ const CarDetailScreen = () => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${car.make} ${car.model} (${car.year}) - ${car.licensePlate}\nChilometraggio: ${car.currentMileage?.toLocaleString()} km\nManutenzioni: ${stats.maintenanceCount}\nSpese totali: ${formatCurrency(stats.totalExpenses)}`,
+        message: `${car.model} (${car.year}) - ${car.licensePlate}\nChilometraggio: ${car.mileage?.toLocaleString()} km\nManutenzioni: ${stats.maintenanceCount}\nSpese totali: ${formatCurrency(stats.totalExpenses)}`,
         title: 'Dettagli Auto'
       });
     } catch (error) {
@@ -127,14 +144,13 @@ const CarDetailScreen = () => {
 
   const OverviewTab = () => (
       <View style={styles.tabContent}>
-        {/* Car Info Card */}
-        <ModernCard style={styles.carInfoCard}>
+        <View style={styles.carInfoCard}>
           <View style={styles.carHeader}>
             <View style={styles.carMainInfo}>
-              <Text style={styles.carTitle}>{car.make} {car.model}</Text>
+              <Text style={styles.carTitle}>{car.model}</Text>
               <Text style={styles.carSubtitle}>{car.year} • {car.licensePlate}</Text>
               <Text style={styles.carMileage}>
-                {car.currentMileage?.toLocaleString()} km
+                {car.mileage?.toLocaleString()} km
               </Text>
             </View>
             <View style={styles.carActions}>
@@ -142,19 +158,18 @@ const CarDetailScreen = () => {
                   style={styles.actionButton}
                   onPress={() => navigation.navigate('EditCar', { carId })}
               >
-                <Edit3 size={20} color={theme.primary} />
+                <Edit3 size={20} color={fallbackTheme.primary} />
               </TouchableOpacity>
               <TouchableOpacity
                   style={styles.actionButton}
                   onPress={handleShare}
               >
-                <Share2 size={20} color={theme.textSecondary} />
+                <Share2 size={20} color={fallbackTheme.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Car Details */}
-          {(car.color || car.vin || car.purchaseDate) && (
+          {(car.color || car.vin || car.owner) && ( // Changed purchaseDate to owner as per workshopStore
               <View style={styles.carDetailsSection}>
                 <Text style={styles.sectionTitle}>Dettagli</Text>
                 <View style={styles.detailsGrid}>
@@ -170,75 +185,55 @@ const CarDetailScreen = () => {
                         <Text style={styles.detailValue}>{car.vin}</Text>
                       </View>
                   )}
-                  {car.purchaseDate && (
+                  {car.owner && ( // Changed purchaseDate to owner
                       <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Acquisto</Text>
-                        <Text style={styles.detailValue}>{formatDate(car.purchaseDate)}</Text>
+                        <Text style={styles.detailLabel}>Proprietario</Text>
+                        <Text style={styles.detailValue}>{car.owner}</Text>
                       </View>
                   )}
                 </View>
               </View>
           )}
-        </ModernCard>
+        </View>
 
-        {/* Alerts */}
+
         {hasIssues && (
-            <ModernCard style={styles.alertCard}>
+            <View style={styles.alertCard}>
               <View style={styles.alertHeader}>
-                <AlertTriangle size={24} color={theme.error} />
+                <AlertTriangle size={24} color={fallbackTheme.error} />
                 <Text style={styles.alertTitle}>Richiede Attenzione</Text>
               </View>
               <Text style={styles.alertText}>
                 {overdueMaintenance.length} manutenzioni scadute che necessitano attenzione immediata
               </Text>
-              <PrimaryButton
-                  title="Vedi Manutenzioni"
-                  variant="error"
-                  size="small"
-                  onPress={() => navigation.navigate('MaintenanceList', { carId })}
-              />
-            </ModernCard>
+              <TouchableOpacity onPress={() => navigation.navigate('MaintenanceList', { carId })}>
+                <Text>Vedi Manutenzioni</Text>
+              </TouchableOpacity>
+            </View>
         )}
 
         {/* Quick Stats */}
         <View style={styles.statsSection}>
           <View style={styles.statsGrid}>
-            <StatCard
-                title="Manutenzioni"
-                value={stats.maintenanceCount.toString()}
-                icon={Wrench}
-                iconColor={theme.accent}
-                onPress={() => navigation.navigate('MaintenanceList', { carId })}
-            />
-            <StatCard
-                title="Spese Totali"
-                value={formatCurrency(stats.totalExpenses)}
-                icon={DollarSign}
-                iconColor={theme.success}
-                onPress={() => navigation.navigate('ExpensesList', { carId })}
-            />
+             <View>
+                <Text>Manutenzioni: {stats.maintenanceCount.toString()}</Text>
+             </View>
+            <View>
+                <Text>Spese Totali: {formatCurrency(stats.totalExpenses)}</Text>
+            </View>
           </View>
           <View style={styles.statsGrid}>
-            <StatCard
-                title="Consumo Medio"
-                value={`${stats.avgConsumption?.toFixed(1) || '--'} L/100km`}
-                icon={Fuel}
-                iconColor={theme.info}
-                onPress={() => navigation.navigate('FuelLog', { carId })}
-            />
-            <StatCard
-                title="Prossimo Servizio"
-                value={stats.nextMaintenanceDate ? formatDate(stats.nextMaintenanceDate) : 'N/A'}
-                icon={Calendar}
-                iconColor={stats.overdueMaintenance > 0 ? theme.error : theme.primary}
-                alert={stats.overdueMaintenance > 0}
-                onPress={() => navigation.navigate('MaintenanceCalendar', { carId })}
-            />
+            <View>
+                <Text>Consumo Medio: {`${stats.avgConsumption?.toFixed(1) || '--'} L/100km`}</Text>
+            </View>
+            <View>
+                <Text>Prossimo Servizio: {stats.nextMaintenanceDate ? formatDate(stats.nextMaintenanceDate) : 'N/A'}</Text>
+            </View>
           </View>
-        </div>
+        </View>
 
         {/* Recent Activities */}
-        <ModernCard style={styles.activitiesCard}>
+        <View style={styles.activitiesCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Attività Recenti</Text>
             <TouchableOpacity onPress={() => setActiveTab('maintenance')}>
@@ -246,33 +241,26 @@ const CarDetailScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {car.maintenanceRecords.length === 0 ? (
-              <EmptyState
-                  icon={Activity}
-                  title="Nessuna attività"
-                  subtitle="Le attività recenti appariranno qui"
-                  actionTitle="Aggiungi Manutenzione"
-                  onAction={() => navigation.navigate('AddMaintenance', { carId })}
-              />
+          {car.repairs.length === 0 ? ( // Changed from maintenanceRecords
+             <View>
+                <Text>Nessuna attività</Text>
+                <Text>Le attività recenti appariranno qui</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('AddMaintenance', { carId })}>
+                    <Text>Aggiungi Manutenzione</Text>
+                </TouchableOpacity>
+             </View>
           ) : (
               <View style={styles.activitiesList}>
-                {car.maintenanceRecords.slice(0, 3).map((maintenance) => (
-                    <ListItem
-                        key={maintenance.id}
-                        title={maintenance.description}
-                        subtitle={`${formatDate(maintenance.date)} • ${formatCurrency(maintenance.cost || 0)}`}
-                        icon={Wrench}
-                        iconColor={theme.accent}
-                        onPress={() => navigation.navigate('MaintenanceDetail', {
-                          carId,
-                          maintenanceId: maintenance.id
-                        })}
-                        badge={maintenance.status === 'completed' ? 'Completato' : 'In corso'}
-                    />
+                {car.repairs.slice(0, 3).map((repair) => ( // Changed from maintenanceRecords
+                   <View key={repair.id}>
+                     <Text>{repair.description}</Text>
+                     <Text>{`${formatDate(repair.scheduledDate)} • ${formatCurrency(repair.totalCost || 0)}`}</Text>
+                     <Text>Status: {repair.status === 'completed' ? 'Completato' : repair.status === 'in-progress' ? 'In corso' : 'In attesa'}</Text>
+                   </View>
                 ))}
               </View>
           )}
-        </ModernCard>
+        </View>
       </View>
   );
 
@@ -305,19 +293,18 @@ const CarDetailScreen = () => {
   };
 
   return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
         <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
 
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
               style={styles.backButton}
               onPress={() => navigation.goBack()}
           >
-            <ArrowLeft size={24} color={theme.text} />
+            <ArrowLeft size={24} color={fallbackTheme.text} />
           </TouchableOpacity>
           <View style={styles.headerTitles}>
-            <Text style={styles.headerTitle}>{car.make} {car.model}</Text>
+            <Text style={styles.headerTitle}>{car.model}</Text>
             <Text style={styles.headerSubtitle}>{car.licensePlate}</Text>
           </View>
           <TouchableOpacity
@@ -326,11 +313,10 @@ const CarDetailScreen = () => {
                 // Show action sheet
               }}
           >
-            <MoreVertical size={24} color={theme.textSecondary} />
+            <MoreVertical size={24} color={fallbackTheme.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        {/* Tabs */}
         <View style={styles.tabsContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <TabButton id="overview" title="Panoramica" active={activeTab === 'overview'} />
@@ -340,14 +326,13 @@ const CarDetailScreen = () => {
           </ScrollView>
         </View>
 
-        {/* Content */}
         <ScrollView
             style={styles.content}
             refreshControl={
               <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor={theme.primary}
+                  tintColor={fallbackTheme.primary}
               />
             }
             showsVerticalScrollIndicator={false}
@@ -355,33 +340,33 @@ const CarDetailScreen = () => {
           {renderTabContent()}
         </ScrollView>
 
-        {/* Quick Actions */}
         <View style={styles.quickActions}>
           <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => navigation.navigate('AddMaintenance', { carId })}
           >
-            <Wrench size={24} color={theme.primary} />
+            <Wrench size={24} color={fallbackTheme.primary} />
           </TouchableOpacity>
           <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => navigation.navigate('AddExpense', { carId })}
           >
-            <DollarSign size={24} color={theme.primary} />
+            <DollarSign size={24} color={fallbackTheme.primary} />
           </TouchableOpacity>
           <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => navigation.navigate('AddFuel', { carId })}
           >
-            <Fuel size={24} color={theme.primary} />
+            <Fuel size={24} color={fallbackTheme.primary} />
           </TouchableOpacity>
         </View>
 
-        {/* Floating Action Button */}
-        <FloatingActionButton
-            onPress={() => navigation.navigate('AddMaintenance', { carId })}
-            icon={Plus}
-        />
+        <TouchableOpacity
+          style={{ position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: fallbackTheme.primary, justifyContent: 'center', alignItems: 'center' }}
+          onPress={() => navigation.navigate('AddMaintenance', { carId })}
+        >
+          <Plus size={24} color={'#ffffff'} />
+        </TouchableOpacity>
       </SafeAreaView>
   );
 };
@@ -389,6 +374,7 @@ const CarDetailScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: fallbackTheme.background,
   },
   header: {
     flexDirection: 'row',
@@ -396,8 +382,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-    backgroundColor: theme.cardBackground,
+    borderBottomColor: fallbackTheme.border,
+    backgroundColor: fallbackTheme.cardBackground,
   },
   backButton: {
     marginRight: 12,
@@ -408,20 +394,20 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: theme.text,
+    color: fallbackTheme.text,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: theme.textSecondary,
+    color: fallbackTheme.textSecondary,
     marginTop: 2,
   },
   moreButton: {
     padding: 4,
   },
   tabsContainer: {
-    backgroundColor: theme.cardBackground,
+    backgroundColor: fallbackTheme.cardBackground,
     borderBottomWidth: 1,
-    borderBottomColor: theme.border,
+    borderBottomColor: fallbackTheme.border,
   },
   tabButton: {
     paddingHorizontal: 20,
@@ -430,15 +416,15 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabButtonActive: {
-    borderBottomColor: theme.primary,
+    borderBottomColor: fallbackTheme.primary,
   },
   tabButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    color: theme.textSecondary,
+    color: fallbackTheme.textSecondary,
   },
   tabButtonTextActive: {
-    color: theme.primary,
+    color: fallbackTheme.primary,
     fontWeight: '600',
   },
   content: {
@@ -450,6 +436,9 @@ const styles = StyleSheet.create({
   },
   carInfoCard: {
     marginBottom: 16,
+    padding: 16,
+    backgroundColor: fallbackTheme.cardBackground,
+    borderRadius: 8,
   },
   carHeader: {
     flexDirection: 'row',
@@ -463,18 +452,18 @@ const styles = StyleSheet.create({
   carTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: theme.text,
+    color: fallbackTheme.text,
     marginBottom: 4,
   },
   carSubtitle: {
     fontSize: 16,
-    color: theme.textSecondary,
+    color: fallbackTheme.textSecondary,
     marginBottom: 8,
   },
   carMileage: {
     fontSize: 18,
     fontWeight: '600',
-    color: theme.primary,
+    color: fallbackTheme.primary,
   },
   carActions: {
     flexDirection: 'row',
@@ -483,18 +472,18 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: theme.border,
+    backgroundColor: fallbackTheme.border,
   },
   carDetailsSection: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: theme.border,
+    borderTopColor: fallbackTheme.border,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: theme.text,
+    color: fallbackTheme.text,
     marginBottom: 12,
   },
   detailsGrid: {
@@ -508,18 +497,21 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: theme.textSecondary,
+    color: fallbackTheme.textSecondary,
     marginBottom: 4,
   },
   detailValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.text,
+    color: fallbackTheme.text,
   },
   alertCard: {
     marginBottom: 16,
     borderWidth: 2,
-    borderColor: theme.error,
+    borderColor: fallbackTheme.error,
+    padding: 16,
+    backgroundColor: fallbackTheme.cardBackground,
+    borderRadius: 8,
   },
   alertHeader: {
     flexDirection: 'row',
@@ -529,12 +521,12 @@ const styles = StyleSheet.create({
   alertTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: theme.error,
+    color: fallbackTheme.error,
     marginLeft: 12,
   },
   alertText: {
     fontSize: 14,
-    color: theme.textSecondary,
+    color: fallbackTheme.textSecondary,
     marginBottom: 16,
     lineHeight: 20,
   },
@@ -548,6 +540,9 @@ const styles = StyleSheet.create({
   },
   activitiesCard: {
     marginBottom: 16,
+    padding: 16,
+    backgroundColor: fallbackTheme.cardBackground,
+    borderRadius: 8,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -558,7 +553,7 @@ const styles = StyleSheet.create({
   seeAllText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.primary,
+    color: fallbackTheme.primary,
   },
   activitiesList: {
     gap: 8,
@@ -569,21 +564,21 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    backgroundColor: theme.cardBackground,
+    backgroundColor: fallbackTheme.cardBackground,
     borderTopWidth: 1,
-    borderTopColor: theme.border,
+    borderTopColor: fallbackTheme.border,
   },
   quickActionButton: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: theme.primary + '20',
+    backgroundColor: fallbackTheme.primary + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
   comingSoonText: {
     fontSize: 16,
-    color: theme.textSecondary,
+    color: fallbackTheme.textSecondary,
     textAlign: 'center',
     marginTop: 60,
   },

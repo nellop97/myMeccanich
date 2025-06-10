@@ -30,7 +30,7 @@ export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
   Profile: { userId: string };
-  CarDetail: RouteParams;
+  CarDetail: { carId: string };
   Login: undefined;
   Register: undefined;
   RepairDetails: { carId: string; repairId: string };
