@@ -16,6 +16,11 @@ import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
 
+// Importa le schermate user
+import AddCarScreen from '../screens/user/AddCarScreen';
+import MaintenanceListScreen from '../screens/user/MaintenanceListScreen';
+import AddMaintenanceScreen from '../screens/user/AddMaintenanceScreen';
+
 // Importa le nuove schermate di fatturazione
 import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScreen';
 import CreateInvoiceScreen from '../screens/mechanic/CreateInvoiceScreen';
@@ -39,6 +44,13 @@ export type RootStackParamList = {
   AllCarsInWorkshop: undefined;
   RepairPartsManagement: { carId: string; repairId: string };
   MechanicCalendar: undefined;
+  
+  // Schermate user
+  AddCar: { carId?: string; mode?: 'add' | 'edit' };
+  MaintenanceList: { carId?: string; filter?: string };
+  AddMaintenance: { carId?: string; defaultCategory?: string };
+  AddExpense: { carId: string };
+  AddFuel: { carId: string };
   
   // Schermate di fatturazione
   InvoicingDashboard: undefined;
@@ -273,9 +285,26 @@ export default function AppNavigator() {
                 headerShown: true,
               }}
             />
+            {/* Placeholder per schermate future */}
+            <Stack.Screen
+              name="AddExpense"
+              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
+              options={{ 
+                title: 'Aggiungi Spesa',
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name="AddFuel"
+              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
+              options={{ 
+                title: 'Aggiungi Rifornimento',
+                headerShown: false
+              }}
+            />
           </Stack.Group>
         ) : (
-          // Navigator per utenti normali
+          // Navigator per utenti normali - AGGIORNATO CON SCHERMATE USER
           <Stack.Group>
             <Stack.Screen 
               name="Main" 
@@ -285,7 +314,51 @@ export default function AppNavigator() {
             <Stack.Screen
               name="CarDetail"
               component={CarDetailScreen}
-              options={{ title: 'Dettaglio Auto'}}
+              options={{ 
+                title: 'Dettaglio Auto',
+                headerShown: false // Gestito internamente dalla schermata
+              }}
+            />
+            <Stack.Screen
+              name="AddCar"
+              component={AddCarScreen}
+              options={({ route }) => ({ 
+                title: route.params?.mode === 'edit' ? 'Modifica Auto' : 'Aggiungi Auto',
+                headerShown: false // Gestito internamente dalla schermata
+              })}
+            />
+            <Stack.Screen
+              name="MaintenanceList"
+              component={MaintenanceListScreen}
+              options={{ 
+                title: 'Manutenzioni',
+                headerShown: false // Gestito internamente dalla schermata
+              }}
+            />
+            <Stack.Screen
+              name="AddMaintenance"
+              component={AddMaintenanceScreen}
+              options={{ 
+                title: 'Aggiungi Manutenzione',
+                headerShown: false // Gestito internamente dalla schermata
+              }}
+            />
+            {/* Placeholder per schermate future */}
+            <Stack.Screen
+              name="AddExpense"
+              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
+              options={{ 
+                title: 'Aggiungi Spesa',
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name="AddFuel"
+              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
+              options={{ 
+                title: 'Aggiungi Rifornimento',
+                headerShown: false
+              }}
             />
           </Stack.Group>
         )

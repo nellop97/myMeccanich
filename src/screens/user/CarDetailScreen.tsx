@@ -36,12 +36,10 @@ import {
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
-import { useWorkshopStore } from '../../store/workshopStore'; // Changed from useUserCarsStore
+import { useWorkshopStore } from '../../store/workshopStore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-
-// Esempio di come potresti dover definire un oggetto 'theme' di fallback o rimuovere i suoi usi:
 const fallbackTheme = {
   background: '#ffffff',
   text: '#000000',
@@ -53,49 +51,43 @@ const fallbackTheme = {
   accent: '#ffc107',
   success: '#28a745',
   info: '#17a2b8',
-  // ...aggiungi altre proprietà necessarie
 };
-// E poi usare fallbackTheme.background, fallbackTheme.primary, etc.
 
 const CarDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { darkMode } = useStore();
-  // Changed from getCarById, getCarStats, getOverdueMaintenance, getUpcomingMaintenance
   const { getCarById } = useWorkshopStore();
 
   const { carId } = route.params;
   const car = getCarById(carId);
 
-  // Placeholder for stats and maintenance details as useWorkshopStore doesn't have these methods directly
   const stats = {
     maintenanceCount: car?.repairs.length || 0,
     totalExpenses: car?.repairs.reduce((sum, repair) => sum + repair.totalCost, 0) || 0,
-    avgConsumption: null, // No fuel data in workshopStore
-    nextMaintenanceDate: null, // Needs custom logic based on repairs
-    overdueMaintenance: 0 // Needs custom logic
+    avgConsumption: null,
+    nextMaintenanceDate: null,
+    overdueMaintenance: 0
   };
 
-  // Placeholder for overdueMaintenance and upcomingMaintenance
   const overdueMaintenance = [];
   const upcomingMaintenance = [];
   const hasIssues = overdueMaintenance.length > 0;
 
-
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview'); // overview, maintenance, expenses, documents
+  const [activeTab, setActiveTab] = useState('overview');
 
   if (!car) {
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
-          <View>
-            <Text>Auto non trovata</Text>
-            <Text>L'auto richiesta non è stata trovata</Text>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text>Torna alla lista</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+      <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
+        <View>
+          <Text>Auto non trovata</Text>
+          <Text>L'auto richiesta non è stata trovata</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text>Torna alla lista</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -103,7 +95,6 @@ const CarDetailScreen = () => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
   };
-
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('it-IT', {
@@ -132,242 +123,253 @@ const CarDetailScreen = () => {
   };
 
   const TabButton = ({ id, title, active }: any) => (
-      <TouchableOpacity
-          style={[styles.tabButton, active && styles.tabButtonActive]}
-          onPress={() => setActiveTab(id)}
-      >
-        <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>
-          {title}
-        </Text>
-      </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.tabButton, active && styles.tabButtonActive]}
+      onPress={() => setActiveTab(id)}
+    >
+      <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>
+        {title}
+      </Text>
+    </TouchableOpacity>
   );
 
   const OverviewTab = () => (
-      <View style={styles.tabContent}>
-        <View style={styles.carInfoCard}>
-          <View style={styles.carHeader}>
-            <View style={styles.carMainInfo}>
-              <Text style={styles.carTitle}>{car.model}</Text>
-              <Text style={styles.carSubtitle}>{car.year} • {car.licensePlate}</Text>
-              <Text style={styles.carMileage}>
-                {car.mileage?.toLocaleString()} km
-              </Text>
-            </View>
-            <View style={styles.carActions}>
-              <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => navigation.navigate('EditCar', { carId })}
-              >
-                <Edit3 size={20} color={fallbackTheme.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={handleShare}
-              >
-                <Share2 size={20} color={fallbackTheme.textSecondary} />
-              </TouchableOpacity>
-            </View>
+    <View style={styles.tabContent}>
+      <View style={styles.carInfoCard}>
+        <View style={styles.carHeader}>
+          <View style={styles.carMainInfo}>
+            <Text style={styles.carTitle}>{car.model}</Text>
+            <Text style={styles.carSubtitle}>{car.year} • {car.licensePlate}</Text>
+            <Text style={styles.carMileage}>
+              {car.mileage?.toLocaleString()} km
+            </Text>
           </View>
-
-          {(car.color || car.vin || car.owner) && ( // Changed purchaseDate to owner as per workshopStore
-              <View style={styles.carDetailsSection}>
-                <Text style={styles.sectionTitle}>Dettagli</Text>
-                <View style={styles.detailsGrid}>
-                  {car.color && (
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Colore</Text>
-                        <Text style={styles.detailValue}>{car.color}</Text>
-                      </View>
-                  )}
-                  {car.vin && (
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Telaio</Text>
-                        <Text style={styles.detailValue}>{car.vin}</Text>
-                      </View>
-                  )}
-                  {car.owner && ( // Changed purchaseDate to owner
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Proprietario</Text>
-                        <Text style={styles.detailValue}>{car.owner}</Text>
-                      </View>
-                  )}
-                </View>
-              </View>
-          )}
-        </View>
-
-
-        {hasIssues && (
-            <View style={styles.alertCard}>
-              <View style={styles.alertHeader}>
-                <AlertTriangle size={24} color={fallbackTheme.error} />
-                <Text style={styles.alertTitle}>Richiede Attenzione</Text>
-              </View>
-              <Text style={styles.alertText}>
-                {overdueMaintenance.length} manutenzioni scadute che necessitano attenzione immediata
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('MaintenanceList', { carId })}>
-                <Text>Vedi Manutenzioni</Text>
-              </TouchableOpacity>
-            </View>
-        )}
-
-        {/* Quick Stats */}
-        <View style={styles.statsSection}>
-          <View style={styles.statsGrid}>
-             <View>
-                <Text>Manutenzioni: {stats.maintenanceCount.toString()}</Text>
-             </View>
-            <View>
-                <Text>Spese Totali: {formatCurrency(stats.totalExpenses)}</Text>
-            </View>
-          </View>
-          <View style={styles.statsGrid}>
-            <View>
-                <Text>Consumo Medio: {`${stats.avgConsumption?.toFixed(1) || '--'} L/100km`}</Text>
-            </View>
-            <View>
-                <Text>Prossimo Servizio: {stats.nextMaintenanceDate ? formatDate(stats.nextMaintenanceDate) : 'N/A'}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Recent Activities */}
-        <View style={styles.activitiesCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Attività Recenti</Text>
-            <TouchableOpacity onPress={() => setActiveTab('maintenance')}>
-              <Text style={styles.seeAllText}>Vedi tutto</Text>
+          <View style={styles.carActions}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('AddCar', { carId, mode: 'edit' })}
+            >
+              <Edit3 size={20} color={fallbackTheme.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleShare}
+            >
+              <Share2 size={20} color={fallbackTheme.textSecondary} />
             </TouchableOpacity>
           </View>
+        </View>
 
-          {car.repairs.length === 0 ? ( // Changed from maintenanceRecords
-             <View>
-                <Text>Nessuna attività</Text>
-                <Text>Le attività recenti appariranno qui</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('AddMaintenance', { carId })}>
-                    <Text>Aggiungi Manutenzione</Text>
-                </TouchableOpacity>
-             </View>
-          ) : (
-              <View style={styles.activitiesList}>
-                {car.repairs.slice(0, 3).map((repair) => ( // Changed from maintenanceRecords
-                   <View key={repair.id}>
-                     <Text>{repair.description}</Text>
-                     <Text>{`${formatDate(repair.scheduledDate)} • ${formatCurrency(repair.totalCost || 0)}`}</Text>
-                     <Text>Status: {repair.status === 'completed' ? 'Completato' : repair.status === 'in-progress' ? 'In corso' : 'In attesa'}</Text>
-                   </View>
-                ))}
-              </View>
-          )}
+        {(car.color || car.vin || car.owner) && (
+          <View style={styles.carDetailsSection}>
+            <Text style={styles.sectionTitle}>Dettagli</Text>
+            <View style={styles.detailsGrid}>
+              {car.color && (
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Colore</Text>
+                  <Text style={styles.detailValue}>{car.color}</Text>
+                </View>
+              )}
+              {car.vin && (
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Telaio</Text>
+                  <Text style={styles.detailValue}>{car.vin}</Text>
+                </View>
+              )}
+              {car.owner && (
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Proprietario</Text>
+                  <Text style={styles.detailValue}>{car.owner}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+      </View>
+
+      {hasIssues && (
+        <TouchableOpacity 
+          style={styles.alertCard}
+          onPress={() => navigation.navigate('MaintenanceList', { carId, filter: 'overdue' })}
+        >
+          <View style={styles.alertHeader}>
+            <AlertTriangle size={24} color={fallbackTheme.error} />
+            <Text style={styles.alertTitle}>Attenzione Richiesta</Text>
+          </View>
+          <Text style={styles.alertText}>
+            Hai {overdueMaintenance.length} manutenzioni scadute che richiedono la tua attenzione.
+          </Text>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('MaintenanceList', { carId, filter: 'overdue' })}
+            style={[styles.actionButton, { backgroundColor: fallbackTheme.error }]}
+          >
+            <Text style={[styles.actionButtonText, { color: '#ffffff' }]}>
+              Vedi Manutenzioni
+            </Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.statsSection}>
+        <Text style={styles.sectionTitle}>Statistiche</Text>
+        <View style={styles.statsGrid}>
+          <View style={[styles.statCard, { backgroundColor: fallbackTheme.primary + '20' }]}>
+            <Wrench size={20} color={fallbackTheme.primary} />
+            <Text style={styles.statValue}>{stats.maintenanceCount}</Text>
+            <Text style={styles.statLabel}>Manutenzioni</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: fallbackTheme.accent + '20' }]}>
+            <DollarSign size={20} color={fallbackTheme.accent} />
+            <Text style={styles.statValue}>{formatCurrency(stats.totalExpenses)}</Text>
+            <Text style={styles.statLabel}>Spese Totali</Text>
+          </View>
         </View>
       </View>
+
+      <View style={styles.activitiesCard}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Attività Recenti</Text>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('MaintenanceList', { carId })}
+          >
+            <Text style={styles.seeAllText}>Vedi tutte</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.activitiesList}>
+          <Text style={styles.comingSoonText}>Nessuna attività recente</Text>
+        </View>
+      </View>
+    </View>
   );
 
   const MaintenanceTab = () => (
-      <View style={styles.tabContent}>
-        <Text style={styles.comingSoonText}>Sezione Manutenzioni - In arrivo...</Text>
-      </View>
+    <View style={styles.tabContent}>
+      <TouchableOpacity 
+        style={[styles.actionButton, { backgroundColor: fallbackTheme.primary, marginBottom: 16, padding: 16, borderRadius: 12 }]}
+        onPress={() => navigation.navigate('AddMaintenance', { carId })}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          <Plus size={20} color="#ffffff" />
+          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
+            Aggiungi Manutenzione
+          </Text>
+        </View>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        onPress={() => navigation.navigate('MaintenanceList', { carId })}
+      >
+        <Text style={styles.comingSoonText}>Vai alla lista completa delle manutenzioni →</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   const ExpensesTab = () => (
-      <View style={styles.tabContent}>
-        <Text style={styles.comingSoonText}>Sezione Spese - In arrivo...</Text>
-      </View>
+    <View style={styles.tabContent}>
+      <TouchableOpacity 
+        style={[styles.actionButton, { backgroundColor: fallbackTheme.primary, marginBottom: 16, padding: 16, borderRadius: 12 }]}
+        onPress={() => navigation.navigate('AddMaintenance', { carId, defaultCategory: 'expense' })}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          <Plus size={20} color="#ffffff" />
+          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
+            Aggiungi Spesa
+          </Text>
+        </View>
+      </TouchableOpacity>
+      
+      <Text style={styles.comingSoonText}>Gestione spese in arrivo...</Text>
+    </View>
   );
 
   const DocumentsTab = () => (
-      <View style={styles.tabContent}>
-        <Text style={styles.comingSoonText}>Sezione Documenti - In arrivo...</Text>
-      </View>
+    <View style={styles.tabContent}>
+      <TouchableOpacity 
+        style={[styles.actionButton, { backgroundColor: fallbackTheme.primary, marginBottom: 16, padding: 16, borderRadius: 12 }]}
+        onPress={() => Alert.alert('Documenti', 'Funzionalità in arrivo nella prossima versione')}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          <Plus size={20} color="#ffffff" />
+          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
+            Aggiungi Documento
+          </Text>
+        </View>
+      </TouchableOpacity>
+      
+      <Text style={styles.comingSoonText}>Gestione documenti in arrivo...</Text>
+    </View>
   );
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'overview': return <OverviewTab />;
-      case 'maintenance': return <MaintenanceTab />;
-      case 'expenses': return <ExpensesTab />;
-      case 'documents': return <DocumentsTab />;
-      default: return <OverviewTab />;
-    }
-  };
-
   return (
-      <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
-        <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-
-        <View style={styles.header}>
-          <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-          >
-            <ArrowLeft size={24} color={fallbackTheme.text} />
-          </TouchableOpacity>
-          <View style={styles.headerTitles}>
-            <Text style={styles.headerTitle}>{car.model}</Text>
-            <Text style={styles.headerSubtitle}>{car.licensePlate}</Text>
-          </View>
-          <TouchableOpacity
-              style={styles.moreButton}
-              onPress={() => {
-                // Show action sheet
-              }}
-          >
-            <MoreVertical size={24} color={fallbackTheme.textSecondary} />
-          </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
+      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+      
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <ArrowLeft size={24} color={fallbackTheme.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={styles.headerTitle}>Dettagli Auto</Text>
+          <Text style={styles.headerSubtitle}>{car.licensePlate}</Text>
         </View>
-
-        <View style={styles.tabsContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TabButton id="overview" title="Panoramica" active={activeTab === 'overview'} />
-            <TabButton id="maintenance" title="Manutenzioni" active={activeTab === 'maintenance'} />
-            <TabButton id="expenses" title="Spese" active={activeTab === 'expenses'} />
-            <TabButton id="documents" title="Documenti" active={activeTab === 'documents'} />
-          </ScrollView>
-        </View>
-
-        <ScrollView
-            style={styles.content}
-            refreshControl={
-              <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor={fallbackTheme.primary}
-              />
-            }
-            showsVerticalScrollIndicator={false}
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => Alert.alert('Info', 'Le altre funzionalità saranno disponibili a breve!')}
         >
-          {renderTabContent()}
+          <MoreVertical size={20} color={fallbackTheme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.tabsContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <TabButton id="overview" title="Panoramica" active={activeTab === 'overview'} />
+          <TabButton id="maintenance" title="Manutenzioni" active={activeTab === 'maintenance'} />
+          <TabButton id="expenses" title="Spese" active={activeTab === 'expenses'} />
+          <TabButton id="documents" title="Documenti" active={activeTab === 'documents'} />
         </ScrollView>
+      </View>
 
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => navigation.navigate('AddMaintenance', { carId })}
-          >
-            <Wrench size={24} color={fallbackTheme.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => navigation.navigate('AddExpense', { carId })}
-          >
-            <DollarSign size={24} color={fallbackTheme.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => navigation.navigate('AddFuel', { carId })}
-          >
-            <Fuel size={24} color={fallbackTheme.primary} />
-          </TouchableOpacity>
-        </View>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {activeTab === 'overview' && <OverviewTab />}
+        {activeTab === 'maintenance' && <MaintenanceTab />}
+        {activeTab === 'expenses' && <ExpensesTab />}
+        {activeTab === 'documents' && <DocumentsTab />}
+      </ScrollView>
 
+      <View style={styles.quickActions}>
         <TouchableOpacity
-          style={{ position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: fallbackTheme.primary, justifyContent: 'center', alignItems: 'center' }}
+          style={styles.quickActionButton}
           onPress={() => navigation.navigate('AddMaintenance', { carId })}
         >
-          <Plus size={24} color={'#ffffff'} />
+          <Wrench size={24} color={fallbackTheme.primary} />
         </TouchableOpacity>
-      </SafeAreaView>
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => navigation.navigate('AddExpense', { carId })}
+        >
+          <DollarSign size={24} color={fallbackTheme.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => navigation.navigate('AddFuel', { carId })}
+        >
+          <Fuel size={24} color={fallbackTheme.primary} />
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        style={{ position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: fallbackTheme.primary, justifyContent: 'center', alignItems: 'center' }}
+        onPress={() => navigation.navigate('AddMaintenance', { carId })}
+      >
+        <Plus size={24} color={'#ffffff'} />
+      </TouchableOpacity>
+    </SafeAreaView>
   );
 };
 
@@ -474,6 +476,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: fallbackTheme.border,
   },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   carDetailsSection: {
     marginTop: 16,
     paddingTop: 16,
@@ -537,6 +543,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: 12,
+  },
+  statCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: fallbackTheme.text,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: fallbackTheme.textSecondary,
   },
   activitiesCard: {
     marginBottom: 16,
