@@ -805,14 +805,7 @@ const CarDetailScreen = () => {
         {renderTabContent()}
       </View>
 
-      <View style={[styles.quickActions, { backgroundColor: fallbackTheme.cardBackground, borderTopColor: fallbackTheme.border }]}>
-        <TouchableOpacity
-          style={[styles.quickActionButton, { backgroundColor: fallbackTheme.primary + '20' }]}
-          onPress={() => navigation.navigate('AddMaintenance', { carId })}
-        >
-          <Plus size={24} color={fallbackTheme.primary} />
-        </TouchableOpacity>
-      </View>
+     
     </SafeAreaView>
   );
 };
