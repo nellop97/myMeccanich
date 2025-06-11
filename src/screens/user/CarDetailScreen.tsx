@@ -10,10 +10,10 @@ import {
   StatusBar,
   StyleSheet,
   Alert,
-  Share
+  Share,
+  Modal // Importato Modal
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
   Edit3,
@@ -32,11 +32,12 @@ import {
   Plus,
   Activity,
   Book,
-  BarChart3
+  BarChart3,
+  X // Icona per chiudere il modal
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
-import { useWorkshopStore } from '../../store/workshopStore';
+import { useUserCarsStore } from '@/src/store/useCarsStore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -57,14 +58,18 @@ const CarDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { darkMode } = useStore();
-  const { getCarById } = useWorkshopStore();
+  // Usa il hook corretto dallo store
+  const { getCarById } = useUserCarsStore();
 
   const { carId } = route.params;
   const car = getCarById(carId);
+  
+  // Stato per gestire la visibilità del nuovo menu
+  const [isActionMenuVisible, setActionMenuVisible] = useState(false);
 
   const stats = {
-    maintenanceCount: car?.repairs.length || 0,
-    totalExpenses: car?.repairs.reduce((sum, repair) => sum + repair.totalCost, 0) || 0,
+    maintenanceCount: car?.maintenanceRecords.length || 0,
+    totalExpenses: car?.expenses.reduce((sum, expense) => sum + expense.amount, 0) || 0,
     avgConsumption: null,
     nextMaintenanceDate: null,
     overdueMaintenance: 0
@@ -80,11 +85,11 @@ const CarDetailScreen = () => {
   if (!car) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
-        <View>
-          <Text>Auto non trovata</Text>
-          <Text>L'auto richiesta non è stata trovata</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text>Torna alla lista</Text>
+        <View style={styles.centered}>
+          <Text style={styles.headerTitle}>Auto non trovata</Text>
+          <Text style={styles.headerSubtitle}>L'auto richiesta non è stata trovata.</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>Torna alla lista</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -97,18 +102,11 @@ const CarDetailScreen = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('it-IT', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
+    return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('it-IT', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
+    return new Date(dateString).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
   const handleShare = async () => {
@@ -122,6 +120,13 @@ const CarDetailScreen = () => {
     }
   };
 
+  // Funzione per gestire la navigazione dal menu di azioni
+  const handleActionNavigation = (screenName) => {
+    setActionMenuVisible(false); // Chiude il menu
+    navigation.navigate(screenName, { carId });
+  };
+
+  // ... (Componenti Tab non modificati)
   const TabButton = ({ id, title, active }: any) => (
     <TouchableOpacity
       style={[styles.tabButton, active && styles.tabButtonActive]}
@@ -245,59 +250,36 @@ const CarDetailScreen = () => {
   const MaintenanceTab = () => (
     <View style={styles.tabContent}>
       <TouchableOpacity 
-        style={[styles.actionButton, { backgroundColor: fallbackTheme.primary, marginBottom: 16, padding: 16, borderRadius: 12 }]}
+        style={[styles.primaryButton, { marginBottom: 16 }]}
         onPress={() => navigation.navigate('AddMaintenance', { carId })}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          <Plus size={20} color="#ffffff" />
-          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
-            Aggiungi Manutenzione
-          </Text>
-        </View>
+        <Plus size={20} color="#ffffff" />
+        <Text style={styles.primaryButtonText}>Aggiungi Manutenzione</Text>
       </TouchableOpacity>
       
-      <TouchableOpacity
-        onPress={() => navigation.navigate('MaintenanceList', { carId })}
-      >
-        <Text style={styles.comingSoonText}>Vai alla lista completa delle manutenzioni →</Text>
+      <TouchableOpacity onPress={() => navigation.navigate('MaintenanceList', { carId })}>
+        <Text style={styles.seeAllText}>Vai alla lista completa delle manutenzioni →</Text>
       </TouchableOpacity>
     </View>
   );
 
   const ExpensesTab = () => (
     <View style={styles.tabContent}>
-      <TouchableOpacity 
-        style={[styles.actionButton, { backgroundColor: fallbackTheme.primary, marginBottom: 16, padding: 16, borderRadius: 12 }]}
-        onPress={() => navigation.navigate('AddMaintenance', { carId, defaultCategory: 'expense' })}
+       <TouchableOpacity 
+        style={[styles.primaryButton, { marginBottom: 16 }]}
+        onPress={() => navigation.navigate('AddExpense', { carId })}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          <Plus size={20} color="#ffffff" />
-          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
-            Aggiungi Spesa
-          </Text>
-        </View>
+        <Plus size={20} color="#ffffff" />
+        <Text style={styles.primaryButtonText}>Aggiungi Spesa</Text>
       </TouchableOpacity>
-      
       <Text style={styles.comingSoonText}>Gestione spese in arrivo...</Text>
     </View>
   );
-
+  
   const DocumentsTab = () => (
-    <View style={styles.tabContent}>
-      <TouchableOpacity 
-        style={[styles.actionButton, { backgroundColor: fallbackTheme.primary, marginBottom: 16, padding: 16, borderRadius: 12 }]}
-        onPress={() => Alert.alert('Documenti', 'Funzionalità in arrivo nella prossima versione')}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          <Plus size={20} color="#ffffff" />
-          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600', marginLeft: 8 }}>
-            Aggiungi Documento
-          </Text>
-        </View>
-      </TouchableOpacity>
-      
-      <Text style={styles.comingSoonText}>Gestione documenti in arrivo...</Text>
-    </View>
+      <View style={styles.tabContent}>
+          {/* ... */}
+      </View>
   );
 
   return (
@@ -341,31 +323,45 @@ const CarDetailScreen = () => {
         {activeTab === 'expenses' && <ExpensesTab />}
         {activeTab === 'documents' && <DocumentsTab />}
       </ScrollView>
+      
+      {/* Menu Modal */}
+      <Modal
+        transparent={true}
+        visible={isActionMenuVisible}
+        animationType="fade"
+        onRequestClose={() => setActionMenuVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPressOut={() => setActionMenuVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Aggiungi nuovo...</Text>
+            
+            <TouchableOpacity style={styles.modalButton} onPress={() => handleActionNavigation('AddMaintenance')}>
+              <Wrench size={22} color={fallbackTheme.primary} />
+              <Text style={styles.modalButtonText}>Aggiungi Manutenzione</Text>
+            </TouchableOpacity>
 
-      <View style={styles.quickActions}>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={() => navigation.navigate('AddMaintenance', { carId })}
-        >
-          <Wrench size={24} color={fallbackTheme.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={() => navigation.navigate('AddExpense', { carId })}
-        >
-          <DollarSign size={24} color={fallbackTheme.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={() => navigation.navigate('AddFuel', { carId })}
-        >
-          <Fuel size={24} color={fallbackTheme.primary} />
-        </TouchableOpacity>
-      </View>
+            <TouchableOpacity style={styles.modalButton} onPress={() => handleActionNavigation('AddExpense')}>
+              <DollarSign size={22} color={fallbackTheme.primary} />
+              <Text style={styles.modalButtonText}>Aggiungi Spesa</Text>
+            </TouchableOpacity>
 
+            <TouchableOpacity style={styles.modalButton} onPress={() => handleActionNavigation('AddFuel')}>
+              <Fuel size={22} color={fallbackTheme.primary} />
+              <Text style={styles.modalButtonText}>Aggiungi Rifornimento</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setActionMenuVisible(false)}>
+              <X size={20} color={fallbackTheme.textSecondary} />
+              <Text style={styles.modalCloseButtonText}>Chiudi</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Pulsante Flottante (FAB) che ora apre il menu */}
       <TouchableOpacity
-        style={{ position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: fallbackTheme.primary, justifyContent: 'center', alignItems: 'center' }}
-        onPress={() => navigation.navigate('AddMaintenance', { carId })}
+        style={styles.fab}
+        onPress={() => setActionMenuVisible(true)}
       >
         <Plus size={24} color={'#ffffff'} />
       </TouchableOpacity>
@@ -376,7 +372,28 @@ const CarDetailScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: fallbackTheme.background,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: fallbackTheme.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 20
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8
   },
   header: {
     flexDirection: 'row',
@@ -402,9 +419,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: fallbackTheme.textSecondary,
     marginTop: 2,
-  },
-  moreButton: {
-    padding: 4,
   },
   tabsContainer: {
     backgroundColor: fallbackTheme.cardBackground,
@@ -581,29 +595,73 @@ const styles = StyleSheet.create({
   activitiesList: {
     gap: 8,
   },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: fallbackTheme.cardBackground,
-    borderTopWidth: 1,
-    borderTopColor: fallbackTheme.border,
-  },
-  quickActionButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: fallbackTheme.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   comingSoonText: {
     fontSize: 16,
     color: fallbackTheme.textSecondary,
     textAlign: 'center',
     marginTop: 60,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 30,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: fallbackTheme.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  // Stili per il Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: fallbackTheme.cardBackground,
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: fallbackTheme.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: fallbackTheme.background,
+    marginBottom: 10,
+  },
+  modalButtonText: {
+    fontSize: 18,
+    color: fallbackTheme.text,
+    marginLeft: 15,
+    fontWeight: '500',
+  },
+  modalCloseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    marginTop: 10,
+  },
+  modalCloseButtonText: {
+    fontSize: 16,
+    color: fallbackTheme.textSecondary,
+    marginLeft: 8,
   },
 });
 

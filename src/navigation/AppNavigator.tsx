@@ -11,7 +11,7 @@ import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import CarDetailScreen, { RouteParams } from '../screens/user/CarDetailScreen';
+import CarDetailScreen from '../screens/user/CarDetailScreen';
 import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen';
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
@@ -29,6 +29,7 @@ import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
 
 import { useStore } from '../store';
 import HomeScreen from '../screens/HomeScreen';
+import AddFuelScreen from '../screens/user/AddFuelScreen';
 
 // Definizione dei tipi per la navigazione - AGGIORNATA
 export type RootStackParamList = {
@@ -296,7 +297,7 @@ export default function AppNavigator() {
             />
             <Stack.Screen
               name="AddFuel"
-              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
+              component={AddFuelScreen} // Temporaneo - usa AddMaintenanceScreen
               options={{ 
                 title: 'Aggiungi Rifornimento',
                 headerShown: false
@@ -354,7 +355,7 @@ export default function AppNavigator() {
             />
             <Stack.Screen
               name="AddFuel"
-              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
+              component={AddFuelScreen} // Temporaneo - usa AddMaintenanceScreen
               options={{ 
                 title: 'Aggiungi Rifornimento',
                 headerShown: false

@@ -36,6 +36,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useStore } from '../store';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useUserCarsStore } from '../store/useCarsStore';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const CARD_WIDTH = screenWidth * 0.8;
@@ -44,6 +45,7 @@ const CARD_SPACING = screenWidth * 0.05;
 const HomeScreen = () => {
   const navigation = useNavigation();
   const { user, darkMode, logout } = useStore();
+  const { cars } = useUserCarsStore(); // Usa i dati dallo store
   const scrollX = useRef(new Animated.Value(0)).current;
   const [activeCarIndex, setActiveCarIndex] = useState(0);
 
@@ -65,54 +67,12 @@ const HomeScreen = () => {
     shadow: darkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
   };
 
-  // Dati di esempio per più veicoli
-  const userVehicles = [
-    {
-      id: '1',
-      model: 'Fiat 500',
-      year: '2019',
-      plate: 'AB123CD',
-      image: 'https://example.com/fiat500.png', // Placeholder, verranno usate immagini locali in produzione
-      nextService: '10/08/2025',
-      lastService: '10/02/2025',
-      fuelLevel: 65,
-      mileage: 45000,
-      status: 'Ottimo',
-      statusColor: theme.success,
-    },
-    {
-      id: '2',
-      model: 'Tesla Model 3',
-      year: '2021',
-      plate: 'CD456EF',
-      image: 'https://example.com/tesla3.png',
-      nextService: '15/09/2025',
-      lastService: '15/03/2025',
-      fuelLevel: 42, // In questo caso è la batteria
-      mileage: 28000,
-      status: 'Buono',
-      statusColor: theme.success,
-    },
-    {
-      id: '3',
-      model: 'Audi A4',
-      year: '2018',
-      plate: 'EF789GH',
-      image: 'https://example.com/audia4.png',
-      nextService: '20/06/2025',
-      lastService: '20/12/2024',
-      fuelLevel: 32,
-      mileage: 68000,
-      status: 'Richiede attenzione',
-      statusColor: theme.warning,
-    },
-  ];
 
   const quickActions = [
     {
       icon: Car,
       title: 'Le Mie Auto',
-      subtitle: userVehicles.length + ' veicoli registrati',
+      subtitle: `${cars.length} veicoli registrati`,
       color: theme.accent,
       bgColor: darkMode ? '#1e3a8a' : '#dbeafe',
       gradient: theme.accentGradient,
@@ -121,7 +81,7 @@ const HomeScreen = () => {
     {
       icon: Calendar,
       title: 'Prossimi Servizi',
-      subtitle: '2 in programma',
+      subtitle: `${cars.length} veicoli registrati`,
       color: theme.warning,
       bgColor: darkMode ? '#92400e' : '#fef3c7',
       gradient: theme.warningGradient,
@@ -130,7 +90,7 @@ const HomeScreen = () => {
     {
       icon: FileText,
       title: 'Storico Interventi',
-      subtitle: '15 interventi totali',
+      subtitle: `${cars.length} veicoli registrati`,
       color: theme.success,
       bgColor: darkMode ? '#065f46' : '#d1fae5',
       gradient: theme.successGradient,
@@ -139,7 +99,7 @@ const HomeScreen = () => {
     {
       icon: DollarSign,
       title: 'Spese',
-      subtitle: '€2,450 quest\'anno',
+      subtitle: `${cars.length} veicoli registrati`,
       color: theme.error,
       bgColor: darkMode ? '#7f1d1d' : '#fee2e2',
       gradient: theme.errorGradient,
@@ -223,7 +183,7 @@ const HomeScreen = () => {
   const renderCarouselIndicators = () => {
     return (
       <View style={styles.carouselIndicators}>
-        {userVehicles.map((_, index) => (
+        {cars.map((_, index) => (
           <View
             key={index}
             style={[
@@ -240,6 +200,7 @@ const HomeScreen = () => {
 
   // Card per veicolo nel carousel
   const renderCarCard = ({ item, index }) => {
+    const car = item;
     // Calcola l'input range basato sulla posizione della card
     const inputRange = [
       (index - 1) * (CARD_WIDTH + CARD_SPACING),
@@ -275,7 +236,7 @@ const HomeScreen = () => {
         ]}
       >
         <TouchableOpacity
-          onPress={() => handleCarNavigation(item.id)}
+          onPress={() => handleCarNavigation(car.id)}
           style={styles.carCardTouchable}
         >
           <View style={styles.carImageContainer}>
@@ -293,12 +254,12 @@ const HomeScreen = () => {
                 style={styles.carIcon}
               />
               <Text style={[styles.carModel, {color: theme.text}]}>
-                {item.model}
-              </Text>
+              {car.make} {car.model} 
+            </Text>
               <Text style={[styles.carPlate, {color: theme.textSecondary}]}>
-                {item.plate}
-              </Text>
-            </View>
+              {car.licensePlate} 
+            </Text>
+          </View>
           </View>
 
           <View style={styles.carInfoContainer}>
@@ -339,7 +300,7 @@ const HomeScreen = () => {
                   Chilometraggio
                 </Text>
                 <Text style={[styles.carInfoValue, {color: theme.text}]}>
-                  {item.mileage.toLocaleString()} km
+                  {car.currentMileage.toLocaleString()} km
                 </Text>
               </View>
             </View>
@@ -511,7 +472,7 @@ const HomeScreen = () => {
 
           <View style={styles.carouselContainer}>
             <Animated.FlatList
-              data={userVehicles}
+              data={cars}
               keyExtractor={(item) => item.id}
               renderItem={renderCarCard}
               horizontal

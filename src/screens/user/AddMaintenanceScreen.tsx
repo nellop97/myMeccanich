@@ -42,7 +42,7 @@ const theme = {
     shadow: 'rgba(0, 0, 0, 0.1)',
 };
 
-// Local FormInput component to replace the one from GlobalComponents
+// Local FormInput component
 const FormInput = ({ label, icon: Icon, error, required, ...props }) => (
     <View style={styles.inputContainer}>
         {label && (
@@ -95,8 +95,8 @@ const MAINTENANCE_CATEGORIES = [
 const AddMaintenanceScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
-    const { darkMode } = useStore(); // Assuming darkMode is still managed by a store
-    const { cars, getCarById, addMaintenanceRecord } = useUserCarsStore();
+    const { darkMode } = useStore();
+    const { cars, getCarById, addMaintenance, addReminder, updateMileage } = useUserCarsStore();
 
     // Adjust theme for dark mode if needed
     if (darkMode) {
@@ -139,6 +139,27 @@ const AddMaintenanceScreen = () => {
 
     const selectedCar = selectedCarId ? getCarById(selectedCarId) : null;
 
+    // Function to map category to maintenance type
+    const getMaintenanceType = (category: string) => {
+        switch (category) {
+            case 'oil':
+            case 'filters':
+                return 'routine';
+            case 'inspection':
+                return 'inspection';
+            case 'engine':
+            case 'brakes':
+            case 'transmission':
+            case 'electrical':
+            case 'cooling':
+            case 'battery':
+            case 'tires':
+                return 'repair';
+            default:
+                return 'other';
+        }
+    };
+
     const onSubmit = (data: MaintenanceFormData) => {
         if (!data.carId) {
             Alert.alert('Errore', 'Seleziona un veicolo');
@@ -154,23 +175,52 @@ const AddMaintenanceScreen = () => {
         }
 
         try {
+            // Create maintenance record according to MaintenanceRecord interface
             const maintenanceData = {
-                category: data.category,
                 description: data.description.trim(),
                 date: data.date,
-                cost: parseFloat(data.cost) || 0,
                 mileage: parseInt(data.mileage) || selectedCar?.currentMileage || 0,
-                workshop: data.workshop.trim() || undefined,
+                cost: parseFloat(data.cost) || 0,
+                type: getMaintenanceType(data.category),
                 notes: data.notes.trim() || undefined,
                 nextDueDate: data.nextDueDate || undefined,
                 nextDueMileage: parseInt(data.nextDueMileage) || undefined,
-                reminder: data.reminder,
-                reminderDays: parseInt(data.reminderDays) || 7,
+                workshopName: data.workshop.trim() || undefined,
                 status: 'completed' as const
             };
-            addMaintenanceRecord(data.carId, maintenanceData);
-            Alert.alert('Successo', 'Manutenzione aggiunta con successo!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+
+            // Add maintenance record using the correct method
+            const maintenanceId = addMaintenance(data.carId, maintenanceData);
+
+            // Update car mileage if provided
+            if (data.mileage && parseInt(data.mileage) > 0) {
+                updateMileage(data.carId, parseInt(data.mileage));
+            }
+
+            // Create reminder if requested and future dates/mileage are provided
+            if (data.reminder && (data.nextDueDate || data.nextDueMileage)) {
+                const reminderData = {
+                    title: `Prossima manutenzione: ${data.description}`,
+                    description: `Prossimo intervento programmato per ${selectedCar?.make} ${selectedCar?.model}`,
+                    type: 'maintenance' as const,
+                    dueDate: data.nextDueDate || undefined,
+                    dueMileage: parseInt(data.nextDueMileage) || undefined,
+                    isActive: true
+                };
+
+                addReminder(data.carId, reminderData);
+            }
+
+            Alert.alert(
+                'Successo', 
+                'Manutenzione aggiunta con successo!', 
+                [{ 
+                    text: 'OK', 
+                    onPress: () => navigation.goBack() 
+                }]
+            );
         } catch (error) {
+            console.error('Errore durante il salvataggio:', error);
             Alert.alert('Errore', 'Si è verificato un errore durante il salvataggio');
         }
     };
@@ -191,7 +241,6 @@ const AddMaintenanceScreen = () => {
         }
     };
 
-    // Components are now defined within the file or are standard RN components
     const CategorySelector = () => (
         <View style={styles.categoryContainer}>
             <Text style={styles.sectionTitle}>Categoria Manutenzione</Text>
@@ -222,8 +271,15 @@ const AddMaintenanceScreen = () => {
                             style={[styles.carChip, selectedCarId === car.id && styles.carChipActive]}
                             onPress={() => setValue('carId', car.id)}
                         >
-                            <Text style={[styles.carChipText, selectedCarId === car.id && styles.carChipTextActive]}>{car.make} {car.model}</Text>
-                            <Text style={[styles.carChipPlate, selectedCarId === car.id && styles.carChipPlateActive]}>{car.licensePlate}</Text>
+                            <Text style={[styles.carChipText, selectedCarId === car.id && styles.carChipTextActive]}>
+                                {car.make} {car.model}
+                            </Text>
+                            <Text style={[styles.carChipPlate, selectedCarId === car.id && styles.carChipPlateActive]}>
+                                {car.licensePlate}
+                            </Text>
+                            <Text style={[styles.carChipMileage, selectedCarId === car.id && styles.carChipMileageActive]}>
+                                {car.currentMileage.toLocaleString()} km
+                            </Text>
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -241,7 +297,9 @@ const AddMaintenanceScreen = () => {
                 </TouchableOpacity>
                 <View style={styles.headerTitles}>
                     <Text style={styles.headerTitle}>Nuova Manutenzione</Text>
-                    <Text style={styles.headerSubtitle}>{selectedCar ? `${selectedCar.make} ${selectedCar.model}` : 'Registra un intervento'}</Text>
+                    <Text style={styles.headerSubtitle}>
+                        {selectedCar ? `${selectedCar.make} ${selectedCar.model}` : 'Registra un intervento'}
+                    </Text>
                 </View>
             </View>
 
@@ -273,7 +331,9 @@ const AddMaintenanceScreen = () => {
                                 <Text style={styles.inputLabel}>Data Intervento *</Text>
                                 <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
                                     <Calendar size={20} color={theme.primary} />
-                                    <Text style={styles.dateButtonText}>{new Date(watch('date')).toLocaleDateString('it-IT')}</Text>
+                                    <Text style={styles.dateButtonText}>
+                                        {new Date(watch('date')).toLocaleDateString('it-IT')}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                             <View style={styles.halfWidth}>
@@ -281,7 +341,14 @@ const AddMaintenanceScreen = () => {
                                     control={control}
                                     name="cost"
                                     render={({ field: { onChange, value } }) => (
-                                        <FormInput label="Costo" placeholder="0.00" value={value} onChangeText={onChange} keyboardType="decimal-pad" icon={DollarSign} />
+                                        <FormInput 
+                                            label="Costo (€)" 
+                                            placeholder="0.00" 
+                                            value={value} 
+                                            onChangeText={onChange} 
+                                            keyboardType="decimal-pad" 
+                                            icon={DollarSign} 
+                                        />
                                     )}
                                 />
                             </View>
@@ -292,7 +359,13 @@ const AddMaintenanceScreen = () => {
                                     control={control}
                                     name="mileage"
                                     render={({ field: { onChange, value } }) => (
-                                        <FormInput label="Chilometraggio" placeholder={selectedCar?.currentMileage?.toString() || "0"} value={value} onChangeText={onChange} keyboardType="numeric" />
+                                        <FormInput 
+                                            label="Chilometraggio" 
+                                            placeholder={selectedCar?.currentMileage?.toString() || "0"} 
+                                            value={value} 
+                                            onChangeText={onChange} 
+                                            keyboardType="numeric" 
+                                        />
                                     )}
                                 />
                             </View>
@@ -301,7 +374,13 @@ const AddMaintenanceScreen = () => {
                                     control={control}
                                     name="workshop"
                                     render={({ field: { onChange, value } }) => (
-                                        <FormInput label="Officina" placeholder="Nome officina" value={value} onChangeText={onChange} icon={MapPin} />
+                                        <FormInput 
+                                            label="Officina" 
+                                            placeholder="Nome officina" 
+                                            value={value} 
+                                            onChangeText={onChange} 
+                                            icon={MapPin} 
+                                        />
                                     )}
                                 />
                             </View>
@@ -310,7 +389,14 @@ const AddMaintenanceScreen = () => {
                             control={control}
                             name="notes"
                             render={({ field: { onChange, value } }) => (
-                                <FormInput label="Note" placeholder="Note aggiuntive sull'intervento..." value={value} onChangeText={onChange} multiline />
+                                <FormInput 
+                                    label="Note" 
+                                    placeholder="Note aggiuntive sull'intervento..." 
+                                    value={value} 
+                                    onChangeText={onChange} 
+                                    multiline 
+                                    style={styles.notesInput}
+                                />
                             )}
                         />
                     </View>
@@ -322,7 +408,12 @@ const AddMaintenanceScreen = () => {
                                 <Text style={styles.inputLabel}>Data Scadenza</Text>
                                 <TouchableOpacity style={styles.dateButton} onPress={() => setShowNextDuePicker(true)}>
                                     <Calendar size={20} color={theme.textSecondary} />
-                                    <Text style={styles.dateButtonText}>{watch('nextDueDate') ? new Date(watch('nextDueDate')).toLocaleDateString('it-IT') : 'Seleziona data'}</Text>
+                                    <Text style={styles.dateButtonText}>
+                                        {watch('nextDueDate') 
+                                            ? new Date(watch('nextDueDate')).toLocaleDateString('it-IT') 
+                                            : 'Seleziona data'
+                                        }
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                             <View style={styles.halfWidth}>
@@ -330,7 +421,13 @@ const AddMaintenanceScreen = () => {
                                     control={control}
                                     name="nextDueMileage"
                                     render={({ field: { onChange, value } }) => (
-                                        <FormInput label="Chilometraggio Scadenza" placeholder="Es: 15000" value={value} onChangeText={onChange} keyboardType="numeric" />
+                                        <FormInput 
+                                            label="Chilometraggio Scadenza" 
+                                            placeholder="Es: 15000" 
+                                            value={value} 
+                                            onChangeText={onChange} 
+                                            keyboardType="numeric" 
+                                        />
                                     )}
                                 />
                             </View>
@@ -348,7 +445,12 @@ const AddMaintenanceScreen = () => {
                                 control={control}
                                 name="reminder"
                                 render={({ field: { onChange, value } }) => (
-                                    <Switch value={value} onValueChange={onChange} trackColor={{ false: theme.border, true: theme.primary + '40' }} thumbColor={value ? theme.primary : '#f4f3f4'} />
+                                    <Switch 
+                                        value={value} 
+                                        onValueChange={onChange} 
+                                        trackColor={{ false: theme.border, true: theme.primary + '40' }} 
+                                        thumbColor={value ? theme.primary : '#f4f3f4'} 
+                                    />
                                 )}
                             />
                         </View>
@@ -357,7 +459,14 @@ const AddMaintenanceScreen = () => {
                                 control={control}
                                 name="reminderDays"
                                 render={({ field: { onChange, value } }) => (
-                                    <FormInput label="Giorni di Anticipo" placeholder="7" value={value} onChangeText={onChange} keyboardType="numeric" icon={Clock} />
+                                    <FormInput 
+                                        label="Giorni di Anticipo" 
+                                        placeholder="7" 
+                                        value={value} 
+                                        onChangeText={onChange} 
+                                        keyboardType="numeric" 
+                                        icon={Clock} 
+                                    />
                                 )}
                             />
                         )}
@@ -375,8 +484,24 @@ const AddMaintenanceScreen = () => {
                 </ScrollView>
             </KeyboardAvoidingView>
 
-            {showDatePicker && <DateTimePicker value={selectedDate} mode="date" display="default" onChange={handleDateChange} maximumDate={new Date()} />}
-            {showNextDuePicker && <DateTimePicker value={selectedNextDueDate} mode="date" display="default" onChange={handleNextDueDateChange} minimumDate={new Date()} />}
+            {showDatePicker && (
+                <DateTimePicker 
+                    value={selectedDate} 
+                    mode="date" 
+                    display="default" 
+                    onChange={handleDateChange} 
+                    maximumDate={new Date()} 
+                />
+            )}
+            {showNextDuePicker && (
+                <DateTimePicker 
+                    value={selectedNextDueDate} 
+                    mode="date" 
+                    display="default" 
+                    onChange={handleNextDueDateChange} 
+                    minimumDate={new Date()} 
+                />
+            )}
         </SafeAreaView>
     );
 };
@@ -384,49 +509,132 @@ const AddMaintenanceScreen = () => {
 // Styles are now self-contained, using the local theme object
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.border, backgroundColor: theme.cardBackground },
+    header: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        paddingHorizontal: 20, 
+        paddingVertical: 16, 
+        borderBottomWidth: 1, 
+        borderBottomColor: theme.border, 
+        backgroundColor: theme.cardBackground 
+    },
     backButton: { marginRight: 12 },
     headerTitles: { flex: 1 },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: theme.text },
     headerSubtitle: { fontSize: 14, color: theme.textSecondary, marginTop: 2 },
     content: { flex: 1 },
     scrollContainer: { flex: 1, padding: 16 },
-    sectionCard: { backgroundColor: theme.cardBackground, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: theme.border, shadowColor: theme.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+    sectionCard: { 
+        backgroundColor: theme.cardBackground, 
+        borderRadius: 16, 
+        padding: 16, 
+        marginBottom: 16, 
+        borderWidth: 1, 
+        borderColor: theme.border, 
+        shadowColor: theme.shadow, 
+        shadowOffset: { width: 0, height: 2 }, 
+        shadowOpacity: 0.1, 
+        shadowRadius: 8, 
+        elevation: 4 
+    },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text, marginBottom: 16 },
     categoryContainer: { marginBottom: 16 },
     categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    categoryChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.cardBackground, marginBottom: 8 },
+    categoryChip: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        paddingHorizontal: 12, 
+        paddingVertical: 8, 
+        borderRadius: 20, 
+        borderWidth: 1, 
+        borderColor: theme.border, 
+        backgroundColor: theme.cardBackground, 
+        marginBottom: 8 
+    },
     categoryChipActive: { backgroundColor: theme.primary, borderColor: theme.primary },
     categoryEmoji: { fontSize: 16, marginRight: 6 },
     categoryText: { fontSize: 14, fontWeight: '500', color: theme.text },
     categoryTextActive: { color: '#ffffff' },
     carSelectorContainer: { marginBottom: 16 },
     carsGrid: { gap: 8 },
-    carChip: { padding: 16, borderRadius: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.cardBackground },
+    carChip: { 
+        padding: 16, 
+        borderRadius: 12, 
+        borderWidth: 1, 
+        borderColor: theme.border, 
+        backgroundColor: theme.cardBackground 
+    },
     carChipActive: { backgroundColor: theme.primary, borderColor: theme.primary },
     carChipText: { fontSize: 16, fontWeight: 'bold', color: theme.text, marginBottom: 2 },
     carChipTextActive: { color: '#ffffff' },
     carChipPlate: { fontSize: 14, color: theme.textSecondary },
     carChipPlateActive: { color: '#ffffff' },
+    carChipMileage: { fontSize: 12, color: theme.textSecondary, marginTop: 2 },
+    carChipMileageActive: { color: '#ffffff' },
     row: { flexDirection: 'row', gap: 12, marginBottom: 16 },
     halfWidth: { flex: 1 },
     inputContainer: { width: '100%', marginBottom: 8 },
     inputLabel: { fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 8 },
-    inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingHorizontal: 12 },
+    inputWrapper: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        backgroundColor: theme.background, 
+        borderWidth: 1, 
+        borderColor: theme.border, 
+        borderRadius: 12, 
+        paddingHorizontal: 12 
+    },
     inputWrapperError: { borderColor: theme.error },
     inputIcon: { marginRight: 8 },
     input: { flex: 1, height: 50, color: theme.text, fontSize: 16 },
+    notesInput: { height: 80, textAlignVertical: 'top' },
     errorText: { color: theme.error, marginTop: 4, fontSize: 12 },
-    dateButton: { flexDirection: 'row', alignItems: 'center', height: 52, paddingHorizontal: 16, borderWidth: 1, borderColor: theme.border, borderRadius: 12, backgroundColor: theme.background },
+    dateButton: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        height: 52, 
+        paddingHorizontal: 16, 
+        borderWidth: 1, 
+        borderColor: theme.border, 
+        borderRadius: 12, 
+        backgroundColor: theme.background 
+    },
     dateButtonText: { fontSize: 16, color: theme.text, marginLeft: 8 },
-    switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    switchRow: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: 16 
+    },
     switchInfo: { flex: 1, marginRight: 16 },
     switchLabel: { fontSize: 16, fontWeight: '600', color: theme.text, marginBottom: 2 },
     switchDescription: { fontSize: 14, color: theme.textSecondary },
     actionsContainer: { flexDirection: 'row', gap: 12, marginTop: 24, marginBottom: 32 },
-    primaryButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primary, paddingVertical: 16, borderRadius: 12, shadowColor: theme.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 2 },
+    primaryButton: { 
+        flex: 1, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        backgroundColor: theme.primary, 
+        paddingVertical: 16, 
+        borderRadius: 12, 
+        shadowColor: theme.shadow, 
+        shadowOffset: { width: 0, height: 2 }, 
+        shadowOpacity: 0.2, 
+        shadowRadius: 4, 
+        elevation: 2 
+    },
     primaryButtonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
-    secondaryButton: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.cardBackground, paddingVertical: 16, borderRadius: 12, borderWidth: 1, borderColor: theme.border },
+    secondaryButton: { 
+        flex: 1, 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        backgroundColor: theme.cardBackground, 
+        paddingVertical: 16, 
+        borderRadius: 12, 
+        borderWidth: 1, 
+        borderColor: theme.border 
+    },
     secondaryButtonText: { color: theme.text, fontSize: 16, fontWeight: 'bold' }
 });
 
