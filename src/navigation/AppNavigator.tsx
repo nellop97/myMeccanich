@@ -30,6 +30,12 @@ import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
 import { useStore } from '../store';
 import HomeScreen from '../screens/HomeScreen';
 import AddFuelScreen from '../screens/user/AddFuelScreen';
+import CarOverviewScreen from '../screens/user/CarOverviewScreen';
+import CarMaintenanceScreen from '../screens/user/CarMaintenanceScreen';
+import CarExpensesScreen from '../screens/user/CarExpensesScreen';
+import CarDocumentsScreen from '../screens/user/CarDocumentsScreen';
+import AddExpenseScreen from '../screens/user/AddExpenseScreen';
+import AddDocumentScreen from '../screens/user/AddDocumentScreen';
 
 // Definizione dei tipi per la navigazione - AGGIORNATA
 export type RootStackParamList = {
@@ -49,9 +55,24 @@ export type RootStackParamList = {
   // Schermate user
   AddCar: { carId?: string; mode?: 'add' | 'edit' };
   MaintenanceList: { carId?: string; filter?: string };
-  AddMaintenance: { carId?: string; defaultCategory?: string };
-  AddExpense: { carId: string };
   AddFuel: { carId: string };
+    CarOverview: { carId: string };
+  CarMaintenance: { carId: string };
+  CarExpenses: { carId: string };
+  CarDocuments: { carId: string };
+  
+  // Rotte per aggiungere contenuti
+  AddMaintenance: { carId: string };
+  AddExpense: { carId: string };
+  AddDocument: { carId: string };
+  
+  // Rotte per visualizzare dettagli
+  MaintenanceDetail: { carId: string; maintenanceId: string };
+  ExpenseDetail: { expenseId: string };
+  DocumentViewer: { documentId: string };
+  
+  // Rotte per modifica
+  EditCar: { carId: string };
   
   // Schermate di fatturazione
   InvoicingDashboard: undefined;
@@ -286,23 +307,6 @@ export default function AppNavigator() {
                 headerShown: true,
               }}
             />
-            {/* Placeholder per schermate future */}
-            <Stack.Screen
-              name="AddExpense"
-              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
-              options={{ 
-                title: 'Aggiungi Spesa',
-                headerShown: false
-              }}
-            />
-            <Stack.Screen
-              name="AddFuel"
-              component={AddFuelScreen} // Temporaneo - usa AddMaintenanceScreen
-              options={{ 
-                title: 'Aggiungi Rifornimento',
-                headerShown: false
-              }}
-            />
           </Stack.Group>
         ) : (
           // Navigator per utenti normali - AGGIORNATO CON SCHERMATE USER
@@ -318,6 +322,43 @@ export default function AppNavigator() {
               options={{ 
                 title: 'Dettaglio Auto',
                 headerShown: false // Gestito internamente dalla schermata
+              }}
+            />
+            <Stack.Screen 
+              name="CarOverview" 
+              component={CarOverviewScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="CarMaintenance" 
+              component={CarMaintenanceScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="CarExpenses" 
+              component={CarExpensesScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="CarDocuments" 
+              component={CarDocumentsScreen}
+              options={{ headerShown: false }}
+            />
+           
+            {/**<Stack.Screen 
+              name="AddExpense" 
+              component={AddExpenseScreen}
+              options={{ 
+                title: 'Aggiungi Spesa',
+                presentation: 'modal'
+              }}
+            />*/}
+             <Stack.Screen 
+              name="AddDocument" 
+              component={AddDocumentScreen}
+              options={{ 
+                title: 'Aggiungi Documento',
+                presentation: 'modal'
               }}
             />
             <Stack.Screen
@@ -342,23 +383,6 @@ export default function AppNavigator() {
               options={{ 
                 title: 'Aggiungi Manutenzione',
                 headerShown: false // Gestito internamente dalla schermata
-              }}
-            />
-            {/* Placeholder per schermate future */}
-            <Stack.Screen
-              name="AddExpense"
-              component={AddMaintenanceScreen} // Temporaneo - usa AddMaintenanceScreen
-              options={{ 
-                title: 'Aggiungi Spesa',
-                headerShown: false
-              }}
-            />
-            <Stack.Screen
-              name="AddFuel"
-              component={AddFuelScreen} // Temporaneo - usa AddMaintenanceScreen
-              options={{ 
-                title: 'Aggiungi Rifornimento',
-                headerShown: false
               }}
             />
           </Stack.Group>
