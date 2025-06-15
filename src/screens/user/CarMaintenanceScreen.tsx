@@ -9,6 +9,7 @@ import {
   RefreshControl,
   StatusBar,
   StyleSheet,
+  TextInput,
   Dimensions
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -16,7 +17,6 @@ import {
   ArrowLeft,
   Plus,
   Search,
-  Filter,
   Calendar,
   DollarSign,
   Clock,
@@ -24,7 +24,8 @@ import {
   AlertTriangle,
   FileText,
   MapPin,
-  Wrench
+  Wrench,
+  Filter
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
@@ -105,7 +106,7 @@ const CarMaintenanceScreen = () => {
     }
   };
 
-  const maintenanceRecords = car.repairs || [];
+  const maintenanceRecords = car.maintenanceRecords || [];
   
   const filteredRecords = maintenanceRecords.filter(record => {
     const matchesSearch = record.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -118,47 +119,113 @@ const CarMaintenanceScreen = () => {
     completedCount: maintenanceRecords.filter(r => r.status === 'completed').length,
     inProgressCount: maintenanceRecords.filter(r => r.status === 'in-progress').length,
     scheduledCount: maintenanceRecords.filter(r => r.status === 'scheduled').length,
-    totalCost: maintenanceRecords.reduce((sum, r) => sum + (r.totalCost || 0), 0)
+    totalCost: maintenanceRecords.reduce((sum, r) => sum + (r.cost || 0), 0)
   };
 
-  const StatusBadge = ({ status, size = 'normal' }: { status: string; size?: 'small' | 'normal' }) => {
-    const statusColor = getStatusColor(status);
-    const statusText = getStatusText(status);
-    
-    return (
-      <View style={[
-        styles.statusBadge, 
-        { backgroundColor: statusColor + '20' },
-        size === 'small' && styles.statusBadgeSmall
-      ]}>
-        <Text style={[
-          styles.statusText,
-          { color: statusColor },
-          size === 'small' && styles.statusTextSmall
-        ]}>
-          {statusText}
+  // Modern Filter Component using Segmented Control style
+  const FilterSegmentedControl = () => (
+    <View style={[styles.segmentedControl, { backgroundColor: fallbackTheme.border }]}>
+      {[
+        { key: 'all', label: 'Tutte', count: maintenanceStats.totalCount },
+        { key: 'completed', label: 'Completate', count: maintenanceStats.completedCount },
+        { key: 'scheduled', label: 'Programmate', count: maintenanceStats.scheduledCount }
+      ].map((filter) => (
+        <TouchableOpacity
+          key={filter.key}
+          style={[
+            styles.segmentedOption,
+            selectedFilter === filter.key && [
+              styles.segmentedOptionActive,
+              { backgroundColor: fallbackTheme.primary }
+            ]
+          ]}
+          onPress={() => setSelectedFilter(filter.key)}
+        >
+          <Text style={[
+            styles.segmentedOptionText,
+            { color: selectedFilter === filter.key ? '#ffffff' : fallbackTheme.textSecondary }
+          ]}>
+            {filter.label}
+          </Text>
+          {filter.count > 0 && (
+            <View style={[
+              styles.segmentedBadge,
+              { backgroundColor: selectedFilter === filter.key ? 'rgba(255,255,255,0.3)' : fallbackTheme.textSecondary + '20' }
+            ]}>
+              <Text style={[
+                styles.segmentedBadgeText,
+                { color: selectedFilter === filter.key ? '#ffffff' : fallbackTheme.textSecondary }
+              ]}>
+                {filter.count}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const StatsCards = () => (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      style={styles.statsContainer}
+      contentContainerStyle={styles.statsContent}
+    >
+      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
+        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.success + '20' }]}>
+          <DollarSign size={20} color={fallbackTheme.success} />
+        </View>
+        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
+          {formatCurrency(maintenanceStats.totalCost)}
+        </Text>
+        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
+          Costo Totale
         </Text>
       </View>
-    );
-  };
+
+      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
+        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.info + '20' }]}>
+          <CheckCircle size={20} color={fallbackTheme.info} />
+        </View>
+        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
+          {maintenanceStats.completedCount}
+        </Text>
+        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
+          Completate
+        </Text>
+      </View>
+
+      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
+        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.warning + '20' }]}>
+          <Clock size={20} color={fallbackTheme.warning} />
+        </View>
+        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
+          {maintenanceStats.scheduledCount}
+        </Text>
+        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
+          Programmate
+        </Text>
+      </View>
+    </ScrollView>
+  );
 
   const MaintenanceCard = ({ record }: { record: any }) => {
     const statusColor = getStatusColor(record.status);
-    const isOverdue = record.status === 'scheduled' && new Date(record.scheduledDate) < new Date();
+    const isOverdue = record.status === 'scheduled' && new Date(record.date) < new Date();
 
     return (
       <TouchableOpacity
         style={[
           styles.maintenanceCard,
           { backgroundColor: fallbackTheme.cardBackground },
-          isOverdue && { borderColor: fallbackTheme.error, borderWidth: 2 }
+          isOverdue && { borderLeftColor: fallbackTheme.error, borderLeftWidth: 4 }
         ]}
         onPress={() => navigation.navigate('MaintenanceDetail', {
           carId: record.carId || carId,
           maintenanceId: record.id
         })}
       >
-        {/* Header */}
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <View style={[styles.categoryIcon, { backgroundColor: statusColor + '20' }]}>
@@ -169,113 +236,39 @@ const CarMaintenanceScreen = () => {
                 {record.description}
               </Text>
               <Text style={[styles.carInfo, { color: fallbackTheme.textSecondary }]}>
-                {car.make} {car.model} • {car.licensePlate}
+                {formatDate(record.date)}
               </Text>
             </View>
           </View>
           <View style={styles.cardHeaderRight}>
-            <StatusBadge status={record.status} size="small" />
+            <Text style={[styles.costText, { color: fallbackTheme.text }]}>
+              {formatCurrency(record.cost || 0)}
+            </Text>
+            <View style={[styles.statusChip, { backgroundColor: statusColor + '20' }]}>
+              <Text style={[styles.statusText, { color: statusColor }]}>
+                {getStatusText(record.status)}
+              </Text>
+            </View>
           </View>
         </View>
 
-        {/* Details */}
-        <View style={styles.cardDetails}>
-          <View style={styles.detailRow}>
-            <Calendar size={16} color={fallbackTheme.textSecondary} />
-            <Text style={[styles.detailText, { color: fallbackTheme.textSecondary }]}>
-              {record.status === 'completed' ? 'Eseguito' : 'Programmato'}: {formatDate(record.scheduledDate)}
+        {record.notes && (
+          <Text style={[styles.notesText, { color: fallbackTheme.textSecondary }]}>
+            {record.notes}
+          </Text>
+        )}
+
+        {record.workshopName && (
+          <View style={styles.workshopInfo}>
+            <MapPin size={14} color={fallbackTheme.textSecondary} />
+            <Text style={[styles.workshopText, { color: fallbackTheme.textSecondary }]}>
+              {record.workshopName}
             </Text>
           </View>
-
-          {record.workshop && (
-            <View style={styles.detailRow}>
-              <MapPin size={16} color={fallbackTheme.textSecondary} />
-              <Text style={[styles.detailText, { color: fallbackTheme.textSecondary }]}>
-                {record.workshop}
-              </Text>
-            </View>
-          )}
-
-          {record.totalCost && (
-            <View style={styles.detailRow}>
-              <DollarSign size={16} color={fallbackTheme.textSecondary} />
-              <Text style={[styles.detailText, { color: fallbackTheme.textSecondary }]}>
-                {formatCurrency(record.totalCost)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Actions */}
-        <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: fallbackTheme.primary + '20' }]}
-            onPress={() => navigation.navigate('MaintenanceDetail', {
-              carId: record.carId || carId,
-              maintenanceId: record.id
-            })}
-          >
-            <FileText size={16} color={fallbackTheme.primary} />
-            <Text style={[styles.actionButtonText, { color: fallbackTheme.primary }]}>
-              Dettagli
-            </Text>
-          </TouchableOpacity>
-          
-          {record.status !== 'completed' && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: fallbackTheme.success + '20' }]}
-              onPress={() => {
-                // Logica per completare la manutenzione
-              }}
-            >
-              <CheckCircle size={16} color={fallbackTheme.success} />
-              <Text style={[styles.actionButtonText, { color: fallbackTheme.success }]}>
-                Completa
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        )}
       </TouchableOpacity>
     );
   };
-
-  const FilterChip = ({ title, value, active, count }: any) => (
-    <TouchableOpacity
-      style={[
-        styles.filterChip,
-        { backgroundColor: active ? fallbackTheme.primary : fallbackTheme.border },
-        active && styles.filterChipActive
-      ]}
-      onPress={() => setSelectedFilter(value)}
-    >
-      <Text style={[
-        styles.filterChipText,
-        { color: active ? '#ffffff' : fallbackTheme.textSecondary }
-      ]}>
-        {title}
-        {count !== undefined && (
-          <Text style={[styles.filterChipCount]}>
-            {' '}({count})
-          </Text>
-        )}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const StatCard = ({ title, value, icon: Icon, iconColor, alert }: any) => (
-    <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-      <View style={[styles.statIcon, { backgroundColor: iconColor + '20' }]}>
-        <Icon size={20} color={iconColor} />
-      </View>
-      <View style={styles.statInfo}>
-        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>{value}</Text>
-        <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>{title}</Text>
-      </View>
-      {alert && (
-        <View style={[styles.alertDot, { backgroundColor: fallbackTheme.error }]} />
-      )}
-    </View>
-  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
@@ -283,21 +276,19 @@ const CarMaintenanceScreen = () => {
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <ArrowLeft size={24} color={fallbackTheme.text} />
-          </TouchableOpacity>
-          <View style={styles.headerTitles}>
-            <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>
-              Manutenzioni
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>
-              {car.make} {car.model}
-            </Text>
-          </View>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <ArrowLeft size={24} color={fallbackTheme.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>
+            Manutenzioni
+          </Text>
+          <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>
+            {car.make} {car.model}
+          </Text>
         </View>
       </View>
 
@@ -305,7 +296,7 @@ const CarMaintenanceScreen = () => {
       <View style={[styles.searchContainer, { backgroundColor: fallbackTheme.cardBackground }]}>
         <View style={[styles.searchInputContainer, { backgroundColor: fallbackTheme.background, borderColor: fallbackTheme.border }]}>
           <Search size={20} color={fallbackTheme.textSecondary} />
-          <Text
+          <TextInput
             style={[styles.searchInput, { color: fallbackTheme.text }]}
             placeholder="Cerca manutenzioni..."
             placeholderTextColor={fallbackTheme.textSecondary}
@@ -315,66 +306,12 @@ const CarMaintenanceScreen = () => {
         </View>
       </View>
 
-      {/* Stats */}
-      <View style={styles.statsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll}>
-          <StatCard
-            title="Costo Totale"
-            value={formatCurrency(maintenanceStats.totalCost)}
-            icon={DollarSign}
-            iconColor={fallbackTheme.success}
-          />
-          <StatCard
-            title="Completate"
-            value={maintenanceStats.completedCount.toString()}
-            icon={CheckCircle}
-            iconColor={fallbackTheme.success}
-          />
-          <StatCard
-            title="In Corso"
-            value={maintenanceStats.inProgressCount.toString()}
-            icon={Clock}
-            iconColor={fallbackTheme.info}
-            alert={maintenanceStats.inProgressCount > 0}
-          />
-          <StatCard
-            title="Programmate"
-            value={maintenanceStats.scheduledCount.toString()}
-            icon={AlertTriangle}
-            iconColor={fallbackTheme.warning}
-            alert={maintenanceStats.scheduledCount > 0}
-          />
-        </ScrollView>
-      </View>
+      {/* Stats Cards */}
+      <StatsCards />
 
-      {/* Filters */}
-      <View style={[styles.filtersContainer, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <FilterChip
-            title="Tutte"
-            value="all"
-            active={selectedFilter === 'all'}
-            count={maintenanceStats.totalCount}
-          />
-          <FilterChip
-            title="Completate"
-            value="completed"
-            active={selectedFilter === 'completed'}
-            count={maintenanceStats.completedCount}
-          />
-          <FilterChip
-            title="In Corso"
-            value="in-progress"
-            active={selectedFilter === 'in-progress'}
-            count={maintenanceStats.inProgressCount}
-          />
-          <FilterChip
-            title="Programmate"
-            value="scheduled"
-            active={selectedFilter === 'scheduled'}
-            count={maintenanceStats.scheduledCount}
-          />
-        </ScrollView>
+      {/* Modern Segmented Filter */}
+      <View style={styles.filterContainer}>
+        <FilterSegmentedControl />
       </View>
 
       {/* Maintenance List */}
@@ -437,16 +374,10 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
   },
   backButton: {
     marginRight: 12,
@@ -479,78 +410,102 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
   },
+  
+  // Stats Cards
   statsContainer: {
     paddingVertical: 8,
   },
-  statsScroll: {
+  statsContent: {
     paddingHorizontal: 16,
+    gap: 12,
   },
   statCard: {
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
+    padding: 16,
     borderRadius: 12,
-    minWidth: 140,
-    position: 'relative',
+    minWidth: 120,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
-  statInfo: {
-    flex: 1,
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  statTitle: {
+  statLabel: {
     fontSize: 12,
+    textAlign: 'center',
   },
-  alertDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  filtersContainer: {
-    paddingVertical: 12,
+  
+  // Modern Segmented Control
+  filterContainer: {
     paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  filterChip: {
+  segmentedControl: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: 12,
+  },
+  segmentedOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderRadius: 20,
+    borderRadius: 8,
+    gap: 6,
   },
-  filterChipActive: {},
-  filterChipText: {
+  segmentedOptionActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentedOptionText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  filterChipCount: {
+  segmentedBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  segmentedBadgeText: {
     fontSize: 12,
+    fontWeight: 'bold',
   },
+  
   content: {
     flex: 1,
     padding: 16,
   },
   maintenanceList: {
-    gap: 16,
+    gap: 12,
   },
   maintenanceCard: {
     padding: 16,
     borderRadius: 12,
-    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -583,52 +538,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   cardHeaderRight: {
+    alignItems: 'flex-end',
     marginLeft: 12,
   },
-  statusBadge: {
+  costText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  statusChip: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-  },
-  statusBadgeSmall: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  statusTextSmall: {
-    fontSize: 10,
-  },
-  cardDetails: {
-    marginBottom: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  notesText: {
+    fontSize: 14,
+    lineHeight: 18,
     marginBottom: 8,
   },
-  detailText: {
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
+  workshopInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
     gap: 6,
   },
-  actionButtonText: {
+  workshopText: {
     fontSize: 14,
-    fontWeight: '600',
   },
+  
+  // Empty State
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -659,6 +600,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  
+  // FAB
   fab: {
     position: 'absolute',
     bottom: 24,
@@ -668,11 +611,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+    elevation: 8,
   },
 });
 

@@ -9,6 +9,7 @@ import {
   RefreshControl,
   StatusBar,
   StyleSheet,
+  TextInput,
   Dimensions
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -16,7 +17,6 @@ import {
   ArrowLeft,
   Plus,
   Search,
-  Filter,
   Calendar,
   DollarSign,
   TrendingUp,
@@ -25,7 +25,9 @@ import {
   Wrench,
   Car,
   CreditCard,
-  PieChart
+  PieChart,
+  BarChart3,
+  MapPin
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
@@ -57,7 +59,6 @@ const CarExpensesScreen = () => {
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('all');
   const [selectedPeriod, setSelectedPeriod] = useState('month');
 
   const car = getCarById(carId);
@@ -170,8 +171,7 @@ const CarExpensesScreen = () => {
 
   const filteredExpenses = mockExpenses.filter(expense => {
     const matchesSearch = expense.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = selectedFilter === 'all' || expense.category === selectedFilter;
-    return matchesSearch && matchesFilter;
+    return matchesSearch;
   });
 
   const expenseStats = {
@@ -183,6 +183,151 @@ const CarExpensesScreen = () => {
     avgPerMonth: mockExpenses.reduce((sum, exp) => sum + exp.amount, 0) / 3 // Mock: ultimi 3 mesi
   };
 
+  // Period Selector Component
+  const PeriodSelector = () => (
+    <View style={[styles.periodSelector, { backgroundColor: fallbackTheme.border }]}>
+      {[
+        { key: 'week', label: 'Settimana' },
+        { key: 'month', label: 'Mese' },
+        { key: 'year', label: 'Anno' }
+      ].map((period) => (
+        <TouchableOpacity
+          key={period.key}
+          style={[
+            styles.periodOption,
+            selectedPeriod === period.key && [
+              styles.periodOptionActive,
+              { backgroundColor: fallbackTheme.primary }
+            ]
+          ]}
+          onPress={() => setSelectedPeriod(period.key)}
+        >
+          <Text style={[
+            styles.periodOptionText,
+            { color: selectedPeriod === period.key ? '#ffffff' : fallbackTheme.textSecondary }
+          ]}>
+            {period.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  // Stats Overview Card
+  const StatsOverviewCard = () => (
+    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+      <View style={styles.cardHeader}>
+        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Panoramica Spese</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('ExpenseAnalytics', { carId })}>
+          <BarChart3 size={20} color={fallbackTheme.primary} />
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.mainStat}>
+        <Text style={[styles.mainStatValue, { color: fallbackTheme.primary }]}>
+          {formatCurrency(expenseStats.totalAmount)}
+        </Text>
+        <View style={styles.trendIndicator}>
+          <TrendingUp size={16} color={fallbackTheme.success} />
+          <Text style={[styles.trendText, { color: fallbackTheme.success }]}>+5%</Text>
+        </View>
+      </View>
+      
+      <Text style={[styles.mainStatLabel, { color: fallbackTheme.textSecondary }]}>
+        Totale questo mese
+      </Text>
+    </View>
+  );
+
+  // Category Breakdown Card
+  const CategoryBreakdownCard = () => (
+    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+      <View style={styles.cardHeader}>
+        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Per Categoria</Text>
+        <TouchableOpacity>
+          <PieChart size={20} color={fallbackTheme.primary} />
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.categoryBreakdown}>
+        {[
+          { category: 'fuel', amount: expenseStats.fuelTotal, label: 'Carburante' },
+          { category: 'maintenance', amount: expenseStats.maintenanceTotal, label: 'Manutenzione' },
+          { category: 'insurance', amount: expenseStats.insuranceTotal, label: 'Assicurazione' },
+          { category: 'other', amount: expenseStats.otherTotal, label: 'Altro' }
+        ].filter(item => item.amount > 0).map((item) => {
+          const percentage = (item.amount / expenseStats.totalAmount) * 100;
+          const categoryColor = getCategoryColor(item.category);
+          
+          return (
+            <View key={item.category} style={styles.categoryRow}>
+              <View style={styles.categoryInfo}>
+                <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
+                <Text style={[styles.categoryLabel, { color: fallbackTheme.text }]}>
+                  {item.label}
+                </Text>
+              </View>
+              <View style={styles.categoryAmountInfo}>
+                <Text style={[styles.categoryAmount, { color: fallbackTheme.text }]}>
+                  {formatCurrency(item.amount)}
+                </Text>
+                <Text style={[styles.categoryPercentage, { color: fallbackTheme.textSecondary }]}>
+                  {percentage.toFixed(1)}%
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  // Quick Stats Grid
+  const QuickStatsGrid = () => (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      style={styles.statsContainer}
+      contentContainerStyle={styles.statsContent}
+    >
+      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
+        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.warning + '20' }]}>
+          <Fuel size={20} color={fallbackTheme.warning} />
+        </View>
+        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
+          {formatCurrency(expenseStats.fuelTotal)}
+        </Text>
+        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
+          Carburante
+        </Text>
+      </View>
+
+      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
+        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.info + '20' }]}>
+          <Wrench size={20} color={fallbackTheme.info} />
+        </View>
+        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
+          {formatCurrency(expenseStats.maintenanceTotal)}
+        </Text>
+        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
+          Manutenzione
+        </Text>
+      </View>
+
+      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
+        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.success + '20' }]}>
+          <TrendingUp size={20} color={fallbackTheme.success} />
+        </View>
+        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
+          {formatCurrency(expenseStats.avgPerMonth)}
+        </Text>
+        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
+          Media Mensile
+        </Text>
+      </View>
+    </ScrollView>
+  );
+
   const ExpenseCard = ({ expense }: { expense: Expense }) => {
     const CategoryIcon = getCategoryIcon(expense.category);
     const categoryColor = getCategoryColor(expense.category);
@@ -192,7 +337,7 @@ const CarExpensesScreen = () => {
         style={[styles.expenseCard, { backgroundColor: fallbackTheme.cardBackground }]}
         onPress={() => navigation.navigate('ExpenseDetail', { expenseId: expense.id })}
       >
-        <View style={styles.cardHeader}>
+        <View style={styles.cardHeaderRow}>
           <View style={styles.cardHeaderLeft}>
             <View style={[styles.categoryIcon, { backgroundColor: categoryColor + '20' }]}>
               <CategoryIcon size={20} color={categoryColor} />
@@ -218,8 +363,9 @@ const CarExpensesScreen = () => {
 
         {expense.location && (
           <View style={styles.expenseDetails}>
+            <MapPin size={12} color={fallbackTheme.textSecondary} />
             <Text style={[styles.locationText, { color: fallbackTheme.textSecondary }]}>
-              📍 {expense.location}
+              {expense.location}
             </Text>
           </View>
         )}
@@ -227,74 +373,25 @@ const CarExpensesScreen = () => {
     );
   };
 
-  const StatCard = ({ title, value, icon: Icon, iconColor, trend }: any) => (
-    <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-      <View style={[styles.statIcon, { backgroundColor: iconColor + '20' }]}>
-        <Icon size={20} color={iconColor} />
-      </View>
-      <View style={styles.statInfo}>
-        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>{value}</Text>
-        <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>{title}</Text>
-        {trend && (
-          <View style={styles.trendContainer}>
-            {trend > 0 ? (
-              <TrendingUp size={12} color={fallbackTheme.error} />
-            ) : (
-              <TrendingDown size={12} color={fallbackTheme.success} />
-            )}
-            <Text style={[
-              styles.trendText,
-              { color: trend > 0 ? fallbackTheme.error : fallbackTheme.success }
-            ]}>
-              {Math.abs(trend)}%
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
+  const groupExpensesByMonth = (expenses: Expense[]) => {
+    const groups: { [key: string]: Expense[] } = {};
+    
+    expenses.forEach(expense => {
+      const monthKey = new Date(expense.date).toLocaleDateString('it-IT', { 
+        month: 'long', 
+        year: 'numeric' 
+      });
+      
+      if (!groups[monthKey]) {
+        groups[monthKey] = [];
+      }
+      groups[monthKey].push(expense);
+    });
+    
+    return groups;
+  };
 
-  const FilterChip = ({ title, value, active, count }: any) => (
-    <TouchableOpacity
-      style={[
-        styles.filterChip,
-        { backgroundColor: active ? fallbackTheme.primary : fallbackTheme.border }
-      ]}
-      onPress={() => setSelectedFilter(value)}
-    >
-      <Text style={[
-        styles.filterChipText,
-        { color: active ? '#ffffff' : fallbackTheme.textSecondary }
-      ]}>
-        {title}
-        {count !== undefined && (
-          <Text style={styles.filterChipCount}>
-            {' '}({count})
-          </Text>
-        )}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const PeriodButton = ({ title, value, active }: any) => (
-    <TouchableOpacity
-      style={[
-        styles.periodButton,
-        { 
-          backgroundColor: active ? fallbackTheme.primary : 'transparent',
-          borderColor: fallbackTheme.border
-        }
-      ]}
-      onPress={() => setSelectedPeriod(value)}
-    >
-      <Text style={[
-        styles.periodButtonText,
-        { color: active ? '#ffffff' : fallbackTheme.textSecondary }
-      ]}>
-        {title}
-      </Text>
-    </TouchableOpacity>
-  );
+  const groupedExpenses = groupExpensesByMonth(filteredExpenses);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
@@ -302,21 +399,19 @@ const CarExpensesScreen = () => {
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <ArrowLeft size={24} color={fallbackTheme.text} />
-          </TouchableOpacity>
-          <View style={styles.headerTitles}>
-            <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>
-              Spese
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>
-              {car.make} {car.model}
-            </Text>
-          </View>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <ArrowLeft size={24} color={fallbackTheme.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>
+            Spese
+          </Text>
+          <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>
+            {car.make} {car.model}
+          </Text>
         </View>
       </View>
 
@@ -324,7 +419,7 @@ const CarExpensesScreen = () => {
       <View style={[styles.searchContainer, { backgroundColor: fallbackTheme.cardBackground }]}>
         <View style={[styles.searchInputContainer, { backgroundColor: fallbackTheme.background, borderColor: fallbackTheme.border }]}>
           <Search size={20} color={fallbackTheme.textSecondary} />
-          <Text
+          <TextInput
             style={[styles.searchInput, { color: fallbackTheme.text }]}
             placeholder="Cerca spese..."
             placeholderTextColor={fallbackTheme.textSecondary}
@@ -334,101 +429,11 @@ const CarExpensesScreen = () => {
         </View>
       </View>
 
-      {/* Period Selection */}
-      <View style={[styles.periodContainer, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <PeriodButton title="Settimana" value="week" active={selectedPeriod === 'week'} />
-          <PeriodButton title="Mese" value="month" active={selectedPeriod === 'month'} />
-          <PeriodButton title="Trimestre" value="quarter" active={selectedPeriod === 'quarter'} />
-          <PeriodButton title="Anno" value="year" active={selectedPeriod === 'year'} />
-        </ScrollView>
+      {/* Period Selector */}
+      <View style={styles.periodContainer}>
+        <PeriodSelector />
       </View>
 
-      {/* Stats */}
-      <View style={styles.statsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll}>
-          <StatCard
-            title="Totale Spese"
-            value={formatCurrency(expenseStats.totalAmount)}
-            icon={DollarSign}
-            iconColor={fallbackTheme.primary}
-            trend={5}
-          />
-          <StatCard
-            title="Carburante"
-            value={formatCurrency(expenseStats.fuelTotal)}
-            icon={Fuel}
-            iconColor={fallbackTheme.warning}
-            trend={-2}
-          />
-          <StatCard
-            title="Manutenzione"
-            value={formatCurrency(expenseStats.maintenanceTotal)}
-            icon={Wrench}
-            iconColor={fallbackTheme.info}
-            trend={10}
-          />
-          <StatCard
-            title="Media Mensile"
-            value={formatCurrency(expenseStats.avgPerMonth)}
-            icon={TrendingUp}
-            iconColor={fallbackTheme.success}
-          />
-        </ScrollView>
-      </View>
-
-      {/* Category Chart Summary */}
-      <View style={[styles.chartContainer, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <View style={styles.chartHeader}>
-          <Text style={[styles.chartTitle, { color: fallbackTheme.text }]}>Distribuzione per Categoria</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('ExpenseAnalytics', { carId })}>
-            <PieChart size={20} color={fallbackTheme.primary} />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.categoryBreakdown}>
-          <View style={styles.categoryRow}>
-            <View style={styles.categoryInfo}>
-              <View style={[styles.categoryDot, { backgroundColor: fallbackTheme.warning }]} />
-              <Text style={[styles.categoryLabel, { color: fallbackTheme.textSecondary }]}>Carburante</Text>
-            </View>
-            <Text style={[styles.categoryAmount, { color: fallbackTheme.text }]}>
-              {formatCurrency(expenseStats.fuelTotal)}
-            </Text>
-          </View>
-          <View style={styles.categoryRow}>
-            <View style={styles.categoryInfo}>
-              <View style={[styles.categoryDot, { backgroundColor: fallbackTheme.info }]} />
-              <Text style={[styles.categoryLabel, { color: fallbackTheme.textSecondary }]}>Manutenzione</Text>
-            </View>
-            <Text style={[styles.categoryAmount, { color: fallbackTheme.text }]}>
-              {formatCurrency(expenseStats.maintenanceTotal)}
-            </Text>
-          </View>
-          <View style={styles.categoryRow}>
-            <View style={styles.categoryInfo}>
-              <View style={[styles.categoryDot, { backgroundColor: fallbackTheme.success }]} />
-              <Text style={[styles.categoryLabel, { color: fallbackTheme.textSecondary }]}>Assicurazione</Text>
-            </View>
-            <Text style={[styles.categoryAmount, { color: fallbackTheme.text }]}>
-              {formatCurrency(expenseStats.insuranceTotal)}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Filters */}
-      <View style={[styles.filtersContainer, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <FilterChip title="Tutte" value="all" active={selectedFilter === 'all'} />
-          <FilterChip title="Carburante" value="fuel" active={selectedFilter === 'fuel'} />
-          <FilterChip title="Manutenzione" value="maintenance" active={selectedFilter === 'maintenance'} />
-          <FilterChip title="Assicurazione" value="insurance" active={selectedFilter === 'insurance'} />
-          <FilterChip title="Parcheggio" value="parking" active={selectedFilter === 'parking'} />
-          <FilterChip title="Altro" value="other" active={selectedFilter === 'other'} />
-        </ScrollView>
-      </View>
-
-      {/* Expenses List */}
       <ScrollView
         style={styles.content}
         refreshControl={
@@ -440,6 +445,16 @@ const CarExpensesScreen = () => {
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Stats Cards */}
+        <StatsOverviewCard />
+        
+        {/* Quick Stats Grid */}
+        <QuickStatsGrid />
+        
+        {/* Category Breakdown */}
+        <CategoryBreakdownCard />
+
+        {/* Expenses List */}
         {filteredExpenses.length === 0 ? (
           <View style={styles.emptyState}>
             <DollarSign size={64} color={fallbackTheme.textSecondary} />
@@ -464,8 +479,20 @@ const CarExpensesScreen = () => {
           </View>
         ) : (
           <View style={styles.expensesList}>
-            {filteredExpenses.map((expense) => (
-              <ExpenseCard key={expense.id} expense={expense} />
+            {Object.entries(groupedExpenses).map(([month, expenses]) => (
+              <View key={month} style={styles.monthGroup}>
+                <View style={styles.monthHeader}>
+                  <Text style={[styles.monthTitle, { color: fallbackTheme.text }]}>
+                    {month}
+                  </Text>
+                  <Text style={[styles.monthTotal, { color: fallbackTheme.primary }]}>
+                    {formatCurrency(expenses.reduce((sum, exp) => sum + exp.amount, 0))}
+                  </Text>
+                </View>
+                {expenses.map(expense => (
+                  <ExpenseCard key={expense.id} expense={expense} />
+                ))}
+              </View>
             ))}
           </View>
         )}
@@ -488,16 +515,10 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
   },
   backButton: {
     marginRight: 12,
@@ -530,81 +551,92 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
   },
+  
+  // Period Selector
   periodContainer: {
-    paddingVertical: 8,
     paddingHorizontal: 20,
+    paddingBottom: 12,
   },
-  periodButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  periodButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  statsContainer: {
-    paddingVertical: 8,
-  },
-  statsScroll: {
-    paddingHorizontal: 16,
-  },
-  statCard: {
+  periodSelector: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
+    padding: 4,
     borderRadius: 12,
-    minWidth: 140,
   },
-  statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  statInfo: {
+  periodOption: {
     flex: 1,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  statTitle: {
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  trendContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
-  trendText: {
-    fontSize: 10,
-    marginLeft: 2,
+  periodOptionActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  periodOptionText: {
+    fontSize: 14,
     fontWeight: '600',
   },
-  chartContainer: {
-    marginHorizontal: 16,
-    marginVertical: 8,
+  
+  content: {
+    flex: 1,
     padding: 16,
-    borderRadius: 12,
   },
-  chartHeader: {
+  
+  // Cards
+  card: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  chartTitle: {
-    fontSize: 16,
+  cardTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
   },
+  
+  // Main Stat
+  mainStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  mainStatValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginRight: 12,
+  },
+  trendIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  trendText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  mainStatLabel: {
+    fontSize: 14,
+  },
+  
+  // Category Breakdown
   categoryBreakdown: {
     gap: 12,
   },
@@ -618,48 +650,95 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
   },
   categoryLabel: {
     fontSize: 14,
-  },
-  categoryAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  filtersContainer: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderRadius: 20,
-  },
-  filterChipText: {
-    fontSize: 14,
     fontWeight: '500',
   },
-  filterChipCount: {
+  categoryAmountInfo: {
+    alignItems: 'flex-end',
+  },
+  categoryAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  categoryPercentage: {
     fontSize: 12,
   },
-  content: {
-    flex: 1,
-    padding: 16,
+  
+  // Stats Grid
+  statsContainer: {
+    marginBottom: 16,
   },
-  expensesList: {
+  statsContent: {
+    paddingHorizontal: 0,
     gap: 12,
+  },
+  statCard: {
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    minWidth: 120,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  
+  // Expenses List
+  expensesList: {
+    gap: 24,
+  },
+  monthGroup: {
+    gap: 12,
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  monthTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textTransform: 'capitalize',
+  },
+  monthTotal: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   expenseCard: {
     padding: 16,
     borderRadius: 12,
-    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  cardHeader: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
@@ -700,6 +779,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   expenseDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
@@ -707,7 +788,10 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 14,
+    marginLeft: 6,
   },
+  
+  // Empty State
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -738,6 +822,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  
+  // FAB
   fab: {
     position: 'absolute',
     bottom: 24,
@@ -747,11 +833,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+    elevation: 8,
   },
 });
 

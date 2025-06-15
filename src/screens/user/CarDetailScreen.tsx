@@ -1,5 +1,5 @@
 // src/screens/user/CarDetailScreen.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -10,12 +10,14 @@ import {
   StatusBar,
   StyleSheet,
   Share,
-  Alert
+  Alert,
+  Animated,
+  Dimensions,
+  PanResponder
 } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft,
-  MoreVertical,
   Plus,
   Share as ShareIcon,
   Settings,
@@ -30,16 +32,19 @@ import {
   Shield,
   Clipboard,
   Image,
-  Film,
-  Eye,
-  Download,
-  CheckCircle,
   AlertTriangle,
-  Clock
+  CheckCircle,
+  Clock,
+  TrendingUp,
+  ChevronRight,
+  Eye,
+  Edit
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
 import { useUserCarsStore } from '@/src/store/useCarsStore';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export interface RouteParams {
   carId: string;
@@ -52,8 +57,9 @@ const CarDetailScreen = () => {
   const { darkMode } = useStore();
   const { getCarById, getCarStats } = useUserCarsStore();
 
-  const [activeTab, setActiveTab] = useState('overview');
   const [refreshing, setRefreshing] = useState(false);
+  const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
+  const bottomSheetAnim = useRef(new Animated.Value(screenHeight)).current;
 
   const car = getCarById(carId);
   const stats = getCarStats(carId);
@@ -108,7 +114,7 @@ const CarDetailScreen = () => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${car.model} (${car.year}) - ${car.licensePlate}\nChilometraggio: ${car.mileage?.toLocaleString()} km\nManutenzioni: ${stats.maintenanceCount}\nSpese totali: ${formatCurrency(stats.totalExpenses)}`,
+        message: `${car.model} (${car.year}) - ${car.licensePlate}\nChilometraggio: ${car.currentMileage?.toLocaleString()} km\nManutenzioni: ${stats.maintenanceCount}\nSpese totali: ${formatCurrency(stats.totalExpenses)}`,
         title: 'Dettagli Auto'
       });
     } catch (error) {
@@ -116,12 +122,30 @@ const CarDetailScreen = () => {
     }
   };
 
-  // Mock data per i tab (da sostituire con dati reali dal tuo store)
-  const mockMaintenanceRecords = car.repairs || [];
-  const mockExpenses = [
+  const showBottomSheet = () => {
+    setBottomSheetVisible(true);
+    Animated.spring(bottomSheetAnim, {
+      toValue: screenHeight * 0.3,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8
+    }).start();
+  };
+
+  const hideBottomSheet = () => {
+    Animated.spring(bottomSheetAnim, {
+      toValue: screenHeight,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8
+    }).start(() => setBottomSheetVisible(false));
+  };
+
+  // Mock data for recent activities
+  const recentMaintenanceRecords = car.maintenanceRecords?.slice(0, 3) || [];
+  const recentExpenses = [
     {
       id: '1',
-      carId,
       description: 'Rifornimento',
       amount: 65.50,
       category: 'fuel',
@@ -130,632 +154,309 @@ const CarDetailScreen = () => {
     },
     {
       id: '2',
-      carId,
       description: 'Cambio olio motore',
       amount: 120.00,
       category: 'maintenance',
       date: '2024-11-10',
       location: 'Autofficina Rossi'
-    },
-    {
-      id: '3',
-      carId,
-      description: 'Assicurazione mensile',
-      amount: 85.00,
-      category: 'insurance',
-      date: '2024-11-01'
-    },
-    {
-      id: '4',
-      carId,
-      description: 'Parcheggio centro',
-      amount: 12.50,
-      category: 'parking',
-      date: '2024-11-14',
-      location: 'Piazza Duomo'
     }
   ];
 
-  const mockDocuments = [
+  const recentDocuments = [
     {
       id: '1',
-      carId,
       name: 'Assicurazione Auto',
       type: 'insurance',
-      fileName: 'assicurazione_2024.pdf',
-      fileSize: 245760,
-      mimeType: 'application/pdf',
-      uploadDate: '2024-01-15',
-      expiryDate: '2024-12-31',
-      description: 'Polizza assicurativa RCA'
+      expiryDate: '2024-12-31'
     },
     {
       id: '2',
-      carId,
-      name: 'Libretto di Circolazione',
-      type: 'registration',
-      fileName: 'libretto_circolazione.pdf',
-      fileSize: 189440,
-      mimeType: 'application/pdf',
-      uploadDate: '2024-01-10',
-      description: 'Documento di circolazione del veicolo'
-    },
-    {
-      id: '3',
-      carId,
       name: 'Revisione Auto',
       type: 'inspection',
-      fileName: 'revisione_2024.pdf',
-      fileSize: 156720,
-      mimeType: 'application/pdf',
-      uploadDate: '2024-03-20',
-      expiryDate: '2026-03-20',
-      description: 'Certificato di revisione periodica'
+      expiryDate: '2026-03-20'
     }
   ];
 
-  const TabButton = ({ id, title, active }: { id: string; title: string; active: boolean }) => (
-    <TouchableOpacity
-      style={[styles.tabButton, active && styles.tabButtonActive]}
-      onPress={() => setActiveTab(id)}
-    >
-      <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>
-        {title}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  // Helper functions
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'fuel': return Fuel;
-      case 'maintenance': return Wrench;
-      case 'insurance': return CreditCard;
-      case 'parking': return Car;
-      default: return DollarSign;
-    }
-  };
-
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'fuel': return fallbackTheme.warning;
-      case 'maintenance': return fallbackTheme.info;
-      case 'insurance': return fallbackTheme.success;
-      case 'parking': return fallbackTheme.primary;
-      default: return fallbackTheme.textSecondary;
-    }
-  };
-
-  const getCategoryName = (category: string) => {
-    switch (category) {
-      case 'fuel': return 'Carburante';
-      case 'maintenance': return 'Manutenzione';
-      case 'insurance': return 'Assicurazione';
-      case 'parking': return 'Parcheggio';
-      default: return 'Altro';
-    }
-  };
-
-  const getDocumentIcon = (type: string, mimeType: string) => {
-    if (mimeType.startsWith('image/')) return Image;
-    if (mimeType.startsWith('video/')) return Film;
-    
-    switch (type) {
-      case 'insurance': return Shield;
-      case 'registration': return Car;
-      case 'inspection': return CheckCircle;
-      case 'maintenance': return Clipboard;
-      case 'receipt': return CreditCard;
-      default: return FileText;
-    }
-  };
-
-  const getDocumentColor = (type: string) => {
-    switch (type) {
-      case 'insurance': return fallbackTheme.success;
-      case 'registration': return fallbackTheme.primary;
-      case 'inspection': return fallbackTheme.info;
-      case 'maintenance': return fallbackTheme.warning;
-      case 'receipt': return '#9B59B6';
-      case 'photo': return '#E67E22';
-      case 'video': return '#E74C3C';
-      default: return fallbackTheme.textSecondary;
-    }
-  };
-
-  const getDocumentTypeName = (type: string) => {
-    switch (type) {
-      case 'insurance': return 'Assicurazione';
-      case 'registration': return 'Documenti Auto';
-      case 'inspection': return 'Revisione';
-      case 'maintenance': return 'Manutenzione';
-      case 'receipt': return 'Ricevute';
-      case 'photo': return 'Foto';
-      case 'video': return 'Video';
-      default: return 'Altro';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return fallbackTheme.success;
-      case 'in-progress': return fallbackTheme.info;
-      case 'scheduled': return fallbackTheme.warning;
-      default: return fallbackTheme.textSecondary;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'completed': return 'Completato';
-      case 'in-progress': return 'In corso';
-      case 'scheduled': return 'Programmato';
-      default: return 'Sconosciuto';
-    }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  // Componente Overview Tab
-  const OverviewTab = () => (
-    <ScrollView
-      style={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={fallbackTheme.primary}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Car Info Card */}
-      <View style={[styles.carInfoCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <View style={styles.carHeader}>
-          <View style={styles.carMainInfo}>
-            <Text style={[styles.carTitle, { color: fallbackTheme.text }]}>{car.model}</Text>
-            <Text style={[styles.carSubtitle, { color: fallbackTheme.textSecondary }]}>
-              {car.year} • {car.licensePlate}
-            </Text>
-            <Text style={[styles.carMileage, { color: fallbackTheme.primary }]}>
-              {car.mileage?.toLocaleString() || 0} km
-            </Text>
-          </View>
-        </View>
-
-        {/* Car Details */}
-        <View style={[styles.carDetailsSection, { borderTopColor: fallbackTheme.border }]}>
-          <Text style={[styles.sectionTitle, { color: fallbackTheme.text }]}>Dettagli Veicolo</Text>
-          <View style={styles.detailsGrid}>
-            <View style={styles.detailItem}>
-              <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Marca</Text>
-              <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.make}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Modello</Text>
-              <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.model}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Anno</Text>
-              <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.year}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Carburante</Text>
-              <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.fuelType || 'Non specificato'}</Text>
-            </View>
-          </View>
-        </View>
+  // Card Components
+  const QuickStatsCard = () => (
+    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+      <View style={styles.cardHeader}>
+        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Panoramica Rapida</Text>
+        <TouchableOpacity onPress={showBottomSheet}>
+          <Eye size={20} color={fallbackTheme.primary} />
+        </TouchableOpacity>
       </View>
-
-      {/* Quick Stats */}
-      <View style={[styles.statsSection, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <Text style={[styles.sectionTitle, { color: fallbackTheme.text }]}>Statistiche</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: fallbackTheme.primary }]}>
-              {stats.maintenanceCount.toString()}
-            </Text>
-            <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>Manutenzioni</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: fallbackTheme.primary }]}>
-              {formatCurrency(stats.totalExpenses)}
-            </Text>
-            <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>Spese Totali</Text>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
-  );
-
-  // Componente Maintenance Tab - Ora con contenuto reale
-  const MaintenanceTab = () => (
-    <ScrollView
-      style={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={fallbackTheme.primary}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Stats Cards */}
-      <View style={styles.quickStatsContainer}>
-        <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <View style={[styles.statIcon, { backgroundColor: fallbackTheme.success + '20' }]}>
-            <CheckCircle size={20} color={fallbackTheme.success} />
-          </View>
-          <View style={styles.statInfo}>
-            <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-              {mockMaintenanceRecords.filter(r => r.status === 'completed').length}
-            </Text>
-            <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>Completate</Text>
-          </View>
+      
+      <View style={styles.statsGrid}>
+        <View style={styles.statItem}>
+          <Text style={[styles.statValue, { color: fallbackTheme.primary }]}>
+            {car.currentMileage?.toLocaleString() || '0'} km
+          </Text>
+          <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>Chilometraggio</Text>
         </View>
         
-        <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <View style={[styles.statIcon, { backgroundColor: fallbackTheme.warning + '20' }]}>
-            <Clock size={20} color={fallbackTheme.warning} />
-          </View>
-          <View style={styles.statInfo}>
-            <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-              {mockMaintenanceRecords.filter(r => r.status === 'scheduled').length}
-            </Text>
-            <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>Programmate</Text>
-          </View>
+        <View style={styles.statItem}>
+          <Text style={[styles.statValue, { color: fallbackTheme.success }]}>
+            {stats.maintenanceCount}
+          </Text>
+          <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>Manutenzioni</Text>
+        </View>
+        
+        <View style={styles.statItem}>
+          <Text style={[styles.statValue, { color: fallbackTheme.warning }]}>
+            {formatCurrency(stats.totalExpenses)}
+          </Text>
+          <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>Spese Totali</Text>
         </View>
       </View>
+    </View>
+  );
 
-      {/* Maintenance List */}
-      {mockMaintenanceRecords.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <Wrench size={48} color={fallbackTheme.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: fallbackTheme.text }]}>Nessuna manutenzione</Text>
-          <Text style={[styles.emptySubtitle, { color: fallbackTheme.textSecondary }]}>
-            Non ci sono ancora manutenzioni registrate per questo veicolo
+  const MaintenanceCard = () => (
+    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardHeaderLeft}>
+          <View style={[styles.cardIcon, { backgroundColor: fallbackTheme.info + '20' }]}>
+            <Wrench size={20} color={fallbackTheme.info} />
+          </View>
+          <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Manutenzioni</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.cardAction}
+          onPress={() => navigation.navigate('CarMaintenance', { carId })}
+        >
+          <ChevronRight size={20} color={fallbackTheme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {recentMaintenanceRecords.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyText, { color: fallbackTheme.textSecondary }]}>
+            Nessuna manutenzione registrata
           </Text>
-          <TouchableOpacity
-            style={[styles.emptyButton, { backgroundColor: fallbackTheme.primary }]}
+          <TouchableOpacity 
+            style={[styles.emptyButton, { backgroundColor: fallbackTheme.info }]}
             onPress={() => navigation.navigate('AddMaintenance', { carId })}
           >
             <Plus size={16} color="#ffffff" />
-            <Text style={styles.emptyButtonText}>Aggiungi Manutenzione</Text>
+            <Text style={styles.emptyButtonText}>Aggiungi</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.itemsList}>
-          {mockMaintenanceRecords.slice(0, 3).map((record) => (
-            <TouchableOpacity
-              key={record.id}
-              style={[styles.itemCard, { backgroundColor: fallbackTheme.cardBackground }]}
-              onPress={() => navigation.navigate('MaintenanceDetail', { carId, maintenanceId: record.id })}
-            >
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderLeft}>
-                  <View style={[styles.itemIcon, { backgroundColor: getStatusColor(record.status) + '20' }]}>
-                    <Wrench size={20} color={getStatusColor(record.status)} />
-                  </View>
-                  <View style={styles.cardInfo}>
-                    <Text style={[styles.itemTitle, { color: fallbackTheme.text }]}>
-                      {record.description}
-                    </Text>
-                    <Text style={[styles.itemSubtitle, { color: fallbackTheme.textSecondary }]}>
-                      {getStatusText(record.status)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.cardHeaderRight}>
-                  <Text style={[styles.itemAmount, { color: fallbackTheme.text }]}>
-                    {formatCurrency(record.totalCost || 0)}
-                  </Text>
-                  <Text style={[styles.itemDate, { color: fallbackTheme.textSecondary }]}>
-                    {formatDate(record.scheduledDate)}
-                  </Text>
-                </View>
+        <View style={styles.cardContent}>
+          {recentMaintenanceRecords.map((record) => (
+            <View key={record.id} style={styles.listItem}>
+              <View style={styles.listItemContent}>
+                <Text style={[styles.listItemTitle, { color: fallbackTheme.text }]}>
+                  {record.description}
+                </Text>
+                <Text style={[styles.listItemSubtitle, { color: fallbackTheme.textSecondary }]}>
+                  {formatDate(record.date)} • {formatCurrency(record.cost || 0)}
+                </Text>
               </View>
-
-              {record.workshop && (
-                <View style={styles.itemDetails}>
-                  <MapPin size={12} color={fallbackTheme.textSecondary} />
-                  <Text style={[styles.itemDetailText, { color: fallbackTheme.textSecondary }]}>
-                    {record.workshop}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              <View style={[
+                styles.statusDot, 
+                { backgroundColor: record.status === 'completed' ? fallbackTheme.success : fallbackTheme.warning }
+              ]} />
+            </View>
           ))}
+          
+          <TouchableOpacity 
+            style={styles.viewAllButton}
+            onPress={() => navigation.navigate('CarMaintenance', { carId })}
+          >
+            <Text style={[styles.viewAllText, { color: fallbackTheme.primary }]}>
+              Vedi tutte le manutenzioni
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
-
-      <TouchableOpacity
-        style={[styles.viewAllButton, { backgroundColor: fallbackTheme.primary }]}
-        onPress={() => navigation.navigate('CarMaintenance', { carId })}
-      >
-        <Text style={styles.viewAllButtonText}>Vedi tutte le manutenzioni</Text>
-      </TouchableOpacity>
-    </ScrollView>
+    </View>
   );
 
-  // Componente Expenses Tab - Ora con contenuto reale
-  const ExpensesTab = () => (
-    <ScrollView
-      style={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={fallbackTheme.primary}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Stats Cards */}
-      <View style={styles.quickStatsContainer}>
-        <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <View style={[styles.statIcon, { backgroundColor: fallbackTheme.primary + '20' }]}>
-            <DollarSign size={20} color={fallbackTheme.primary} />
+  const ExpensesCard = () => (
+    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardHeaderLeft}>
+          <View style={[styles.cardIcon, { backgroundColor: fallbackTheme.warning + '20' }]}>
+            <DollarSign size={20} color={fallbackTheme.warning} />
           </View>
-          <View style={styles.statInfo}>
-            <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-              {formatCurrency(mockExpenses.reduce((sum, exp) => sum + exp.amount, 0))}
+          <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Spese Recenti</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.cardAction}
+          onPress={() => navigation.navigate('CarExpenses', { carId })}
+        >
+          <ChevronRight size={20} color={fallbackTheme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.cardContent}>
+        {recentExpenses.map((expense) => (
+          <View key={expense.id} style={styles.listItem}>
+            <View style={styles.listItemContent}>
+              <Text style={[styles.listItemTitle, { color: fallbackTheme.text }]}>
+                {expense.description}
+              </Text>
+              <Text style={[styles.listItemSubtitle, { color: fallbackTheme.textSecondary }]}>
+                {formatDate(expense.date)} • {expense.location}
+              </Text>
+            </View>
+            <Text style={[styles.listItemAmount, { color: fallbackTheme.text }]}>
+              {formatCurrency(expense.amount)}
             </Text>
-            <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>Totale</Text>
+          </View>
+        ))}
+        
+        <TouchableOpacity 
+          style={styles.viewAllButton}
+          onPress={() => navigation.navigate('CarExpenses', { carId })}
+        >
+          <Text style={[styles.viewAllText, { color: fallbackTheme.primary }]}>
+            Vedi tutte le spese
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const DocumentsCard = () => (
+    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardHeaderLeft}>
+          <View style={[styles.cardIcon, { backgroundColor: fallbackTheme.success + '20' }]}>
+            <FileText size={20} color={fallbackTheme.success} />
+          </View>
+          <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Documenti</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.cardAction}
+          onPress={() => navigation.navigate('CarDocuments', { carId })}
+        >
+          <ChevronRight size={20} color={fallbackTheme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.cardContent}>
+        {recentDocuments.map((document) => (
+          <View key={document.id} style={styles.listItem}>
+            <View style={styles.listItemContent}>
+              <Text style={[styles.listItemTitle, { color: fallbackTheme.text }]}>
+                {document.name}
+              </Text>
+              <Text style={[styles.listItemSubtitle, { color: fallbackTheme.textSecondary }]}>
+                Scadenza: {formatDate(document.expiryDate)}
+              </Text>
+            </View>
+            <View style={[
+              styles.statusDot, 
+              { backgroundColor: new Date(document.expiryDate) > new Date() ? fallbackTheme.success : fallbackTheme.error }
+            ]} />
+          </View>
+        ))}
+        
+        <TouchableOpacity 
+          style={styles.viewAllButton}
+          onPress={() => navigation.navigate('CarDocuments', { carId })}
+        >
+          <Text style={[styles.viewAllText, { color: fallbackTheme.primary }]}>
+            Vedi tutti i documenti
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const AlertsCard = () => {
+    const hasAlerts = stats.maintenanceCount > 0; // Mock condition
+    
+    if (!hasAlerts) return null;
+
+    return (
+      <View style={[styles.card, styles.alertCard, { 
+        backgroundColor: fallbackTheme.cardBackground,
+        borderLeftColor: fallbackTheme.warning
+      }]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <View style={[styles.cardIcon, { backgroundColor: fallbackTheme.warning + '20' }]}>
+              <AlertTriangle size={20} color={fallbackTheme.warning} />
+            </View>
+            <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Richiede Attenzione</Text>
           </View>
         </View>
         
-        <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <View style={[styles.statIcon, { backgroundColor: fallbackTheme.warning + '20' }]}>
-            <Fuel size={20} color={fallbackTheme.warning} />
-          </View>
-          <View style={styles.statInfo}>
-            <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-              {formatCurrency(mockExpenses.filter(e => e.category === 'fuel').reduce((sum, e) => sum + e.amount, 0))}
-            </Text>
-            <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>Carburante</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Expenses List */}
-      {mockExpenses.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <DollarSign size={48} color={fallbackTheme.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: fallbackTheme.text }]}>Nessuna spesa</Text>
-          <Text style={[styles.emptySubtitle, { color: fallbackTheme.textSecondary }]}>
-            Non ci sono ancora spese registrate per questo veicolo
+        <View style={styles.cardContent}>
+          <Text style={[styles.alertText, { color: fallbackTheme.textSecondary }]}>
+            2 manutenzioni in scadenza nei prossimi 30 giorni
           </Text>
-          <TouchableOpacity
-            style={[styles.emptyButton, { backgroundColor: fallbackTheme.primary }]}
-            onPress={() => navigation.navigate('AddExpense', { carId })}
+          <TouchableOpacity 
+            style={[styles.alertButton, { backgroundColor: fallbackTheme.warning }]}
+            onPress={() => navigation.navigate('CarMaintenance', { carId })}
           >
-            <Plus size={16} color="#ffffff" />
-            <Text style={styles.emptyButtonText}>Aggiungi Spesa</Text>
+            <Text style={styles.alertButtonText}>Vedi Dettagli</Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <View style={styles.itemsList}>
-          {mockExpenses.slice(0, 5).map((expense) => {
-            const CategoryIcon = getCategoryIcon(expense.category);
-            const categoryColor = getCategoryColor(expense.category);
-
-            return (
-              <TouchableOpacity
-                key={expense.id}
-                style={[styles.itemCard, { backgroundColor: fallbackTheme.cardBackground }]}
-                onPress={() => navigation.navigate('ExpenseDetail', { expenseId: expense.id })}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderLeft}>
-                    <View style={[styles.itemIcon, { backgroundColor: categoryColor + '20' }]}>
-                      <CategoryIcon size={20} color={categoryColor} />
-                    </View>
-                    <View style={styles.cardInfo}>
-                      <Text style={[styles.itemTitle, { color: fallbackTheme.text }]}>
-                        {expense.description}
-                      </Text>
-                      <Text style={[styles.itemSubtitle, { color: fallbackTheme.textSecondary }]}>
-                        {getCategoryName(expense.category)}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.cardHeaderRight}>
-                    <Text style={[styles.itemAmount, { color: fallbackTheme.text }]}>
-                      {formatCurrency(expense.amount)}
-                    </Text>
-                    <Text style={[styles.itemDate, { color: fallbackTheme.textSecondary }]}>
-                      {formatDate(expense.date)}
-                    </Text>
-                  </View>
-                </View>
-
-                {expense.location && (
-                  <View style={styles.itemDetails}>
-                    <MapPin size={12} color={fallbackTheme.textSecondary} />
-                    <Text style={[styles.itemDetailText, { color: fallbackTheme.textSecondary }]}>
-                      {expense.location}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
-      <TouchableOpacity
-        style={[styles.viewAllButton, { backgroundColor: fallbackTheme.primary }]}
-        onPress={() => navigation.navigate('CarExpenses', { carId })}
-      >
-        <Text style={styles.viewAllButtonText}>Vedi tutte le spese</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-
-  // Componente Documents Tab - Ora con contenuto reale
-  const DocumentsTab = () => (
-    <ScrollView
-      style={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={fallbackTheme.primary}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Stats Cards */}
-      <View style={styles.quickStatsContainer}>
-        <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <View style={[styles.statIcon, { backgroundColor: fallbackTheme.primary + '20' }]}>
-            <FileText size={20} color={fallbackTheme.primary} />
-          </View>
-          <View style={styles.statInfo}>
-            <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-              {mockDocuments.length}
-            </Text>
-            <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>Documenti</Text>
-          </View>
-        </View>
-        
-        <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <View style={[styles.statIcon, { backgroundColor: fallbackTheme.info + '20' }]}>
-            <Image size={20} color={fallbackTheme.info} />
-          </View>
-          <View style={styles.statInfo}>
-            <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-              {mockDocuments.filter(d => d.mimeType.startsWith('image/')).length}
-            </Text>
-            <Text style={[styles.statTitle, { color: fallbackTheme.textSecondary }]}>Foto</Text>
-          </View>
-        </View>
       </View>
-
-      {/* Documents List */}
-      {mockDocuments.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: fallbackTheme.cardBackground }]}>
-          <FileText size={48} color={fallbackTheme.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: fallbackTheme.text }]}>Nessun documento</Text>
-          <Text style={[styles.emptySubtitle, { color: fallbackTheme.textSecondary }]}>
-            Non ci sono ancora documenti caricati per questo veicolo
-          </Text>
-          <TouchableOpacity
-            style={[styles.emptyButton, { backgroundColor: fallbackTheme.primary }]}
-            onPress={() => navigation.navigate('AddDocument', { carId })}
-          >
-            <Plus size={16} color="#ffffff" />
-            <Text style={styles.emptyButtonText}>Aggiungi Documento</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={styles.itemsList}>
-          {mockDocuments.map((document) => {
-            const DocumentIcon = getDocumentIcon(document.type, document.mimeType);
-            const documentColor = getDocumentColor(document.type);
-
-            return (
-              <TouchableOpacity
-                key={document.id}
-                style={[styles.itemCard, { backgroundColor: fallbackTheme.cardBackground }]}
-                onPress={() => navigation.navigate('DocumentViewer', { documentId: document.id })}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderLeft}>
-                    <View style={[styles.itemIcon, { backgroundColor: documentColor + '20' }]}>
-                      <DocumentIcon size={20} color={documentColor} />
-                    </View>
-                    <View style={styles.cardInfo}>
-                      <Text style={[styles.itemTitle, { color: fallbackTheme.text }]}>
-                        {document.name}
-                      </Text>
-                      <Text style={[styles.itemSubtitle, { color: fallbackTheme.textSecondary }]}>
-                        {getDocumentTypeName(document.type)}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.cardHeaderRight}>
-                    <Text style={[styles.itemAmount, { color: fallbackTheme.text }]}>
-                      {formatFileSize(document.fileSize)}
-                    </Text>
-                    <Text style={[styles.itemDate, { color: fallbackTheme.textSecondary }]}>
-                      {formatDate(document.uploadDate)}
-                    </Text>
-                  </View>
-                </View>
-
-                {document.expiryDate && (
-                  <View style={styles.itemDetails}>
-                    <Calendar size={12} color={fallbackTheme.textSecondary} />
-                    <Text style={[styles.itemDetailText, { color: fallbackTheme.textSecondary }]}>
-                      Scadenza: {formatDate(document.expiryDate)}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: fallbackTheme.primary + '20' }]}
-                    onPress={() => navigation.navigate('DocumentViewer', { documentId: document.id })}
-                  >
-                    <Eye size={14} color={fallbackTheme.primary} />
-                    <Text style={[styles.actionButtonText, { color: fallbackTheme.primary }]}>
-                      Visualizza
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: fallbackTheme.info + '20' }]}
-                    onPress={() => {
-                      // Logica per scaricare il documento
-                      Alert.alert('Download', 'Funzione di download non ancora implementata');
-                    }}
-                  >
-                    <Download size={14} color={fallbackTheme.info} />
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
-      <TouchableOpacity
-        style={[styles.viewAllButton, { backgroundColor: fallbackTheme.primary }]}
-        onPress={() => navigation.navigate('CarDocuments', { carId })}
-      >
-        <Text style={styles.viewAllButtonText}>Vedi tutti i documenti</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-
-  // Rendering del contenuto del tab attivo
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'overview':
-        return <OverviewTab />;
-      case 'maintenance':
-        return <MaintenanceTab />;
-      case 'expenses':
-        return <ExpensesTab />;
-      case 'documents':
-        return <DocumentsTab />;
-      default:
-        return <OverviewTab />;
-    }
+    );
   };
+
+  // Bottom Sheet Component
+  const BottomSheet = () => (
+    <Animated.View 
+      style={[
+        styles.bottomSheet,
+        {
+          backgroundColor: fallbackTheme.cardBackground,
+          transform: [{ translateY: bottomSheetAnim }]
+        }
+      ]}
+    >
+      <View style={styles.bottomSheetHandle} />
+      
+      <View style={styles.bottomSheetHeader}>
+        <Text style={[styles.bottomSheetTitle, { color: fallbackTheme.text }]}>
+          Dettagli Completi
+        </Text>
+        <TouchableOpacity onPress={hideBottomSheet}>
+          <Text style={[styles.bottomSheetClose, { color: fallbackTheme.primary }]}>
+            Chiudi
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.bottomSheetContent}>
+        <View style={styles.detailRow}>
+          <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Marca</Text>
+          <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.make}</Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Modello</Text>
+          <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.model}</Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Anno</Text>
+          <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.year}</Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Targa</Text>
+          <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.licensePlate}</Text>
+        </View>
+        {car.vin && (
+          <View style={styles.detailRow}>
+            <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>VIN</Text>
+            <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.vin}</Text>
+          </View>
+        )}
+      </ScrollView>
+    </Animated.View>
+  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
 
+      {/* Header */}
       <View style={[styles.header, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>
         <TouchableOpacity
           style={styles.backButton}
@@ -764,48 +465,65 @@ const CarDetailScreen = () => {
           <ArrowLeft size={24} color={fallbackTheme.text} />
         </TouchableOpacity>
         <View style={styles.headerTitles}>
-          <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>{car.model}</Text>
+          <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>{car.make} {car.model}</Text>
           <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>{car.licensePlate}</Text>
         </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerAction}
+            onPress={() => navigation.navigate('EditCar', { carId })}
+          >
+            <Edit size={20} color={fallbackTheme.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerAction}
+            onPress={handleShare}
+          >
+            <ShareIcon size={20} color={fallbackTheme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={fallbackTheme.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        <QuickStatsCard />
+        <AlertsCard />
+        <MaintenanceCard />
+        <ExpensesCard />
+        <DocumentsCard />
+      </ScrollView>
+
+      {/* Floating Action Button */}
+      <View style={styles.fabContainer}>
         <TouchableOpacity
-          style={styles.moreButton}
-          onPress={handleShare}
+          style={[styles.fab, { backgroundColor: fallbackTheme.primary }]}
+          onPress={() => navigation.navigate('AddMaintenance', { carId })}
         >
-          <ShareIcon size={24} color={fallbackTheme.textSecondary} />
+          <Plus size={24} color="#ffffff" />
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.tabsContainer, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TabButton 
-            id="overview" 
-            title="Panoramica" 
-            active={activeTab === 'overview'} 
+      {/* Bottom Sheet */}
+      {bottomSheetVisible && (
+        <>
+          <TouchableOpacity 
+            style={styles.bottomSheetOverlay}
+            onPress={hideBottomSheet}
+            activeOpacity={1}
           />
-          <TabButton 
-            id="maintenance" 
-            title="Manutenzioni" 
-            active={activeTab === 'maintenance'} 
-          />
-          <TabButton 
-            id="expenses" 
-            title="Spese" 
-            active={activeTab === 'expenses'} 
-          />
-          <TabButton 
-            id="documents" 
-            title="Documenti" 
-            active={activeTab === 'documents'} 
-          />
-        </ScrollView>
-      </View>
-
-      {/* Contenuto del tab attivo */}
-      <View style={styles.tabContentContainer}>
-        {renderTabContent()}
-      </View>
-
-     
+          <BottomSheet />
+        </>
+      )}
     </SafeAreaView>
   );
 };
@@ -817,8 +535,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
   },
   backButton: {
@@ -828,110 +546,73 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   headerSubtitle: {
     fontSize: 14,
     marginTop: 2,
   },
-  moreButton: {
-    marginLeft: 16,
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  tabsContainer: {
-    borderBottomWidth: 1,
-  },
-  tabButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabButtonActive: {
-    borderBottomColor: '#007AFF',
-  },
-  tabButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#666666',
-  },
-  tabButtonTextActive: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  tabContentContainer: {
-    flex: 1,
+  headerAction: {
+    padding: 8,
   },
   content: {
     flex: 1,
     padding: 16,
   },
   
-  // Overview tab styles
-  carInfoCard: {
+  // Card Styles
+  card: {
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  carHeader: {
-    marginBottom: 16,
-  },
-  carMainInfo: {
-    flex: 1,
-  },
-  carTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  carSubtitle: {
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  carMileage: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  carDetailsSection: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  detailsGrid: {
+  cardHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  detailItem: {
-    flex: 1,
-    minWidth: '45%',
-  },
-  detailLabel: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  statsSection: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
   },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  cardAction: {
+    padding: 4,
+  },
+  cardContent: {
+    gap: 12,
+  },
+  
+  // Stats Grid
   statsGrid: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    justifyContent: 'space-between',
   },
   statItem: {
-    flex: 1,
     alignItems: 'center',
+    flex: 1,
   },
   statValue: {
     fontSize: 20,
@@ -942,137 +623,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-
-  // Common tab styles
-  quickStatsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
+  
+  // List Items
+  listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
+    paddingVertical: 12,
   },
-  statIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  statInfo: {
+  listItemContent: {
     flex: 1,
   },
-  statTitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-
-  // Item card styles
-  itemsList: {
-    gap: 12,
-  },
-  itemCard: {
-    padding: 16,
-    borderRadius: 12,
+  listItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 4,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  itemIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  cardInfo: {
-    flex: 1,
-  },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  itemSubtitle: {
+  listItemSubtitle: {
     fontSize: 14,
   },
-  cardHeaderRight: {
-    alignItems: 'flex-end',
-  },
-  itemAmount: {
+  listItemAmount: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 2,
   },
-  itemDate: {
-    fontSize: 12,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 12,
   },
-  itemDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  itemDetailText: {
-    fontSize: 12,
-    marginLeft: 6,
-  },
-
-  // Action buttons
-  cardActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-    gap: 4,
-  },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Empty state
+  
+  // Empty State
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    marginBottom: 16,
+    paddingVertical: 20,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
+  emptyText: {
     fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emptyButton: {
     flexDirection: 'row',
@@ -1087,36 +674,122 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-
-  // View all button
+  
+  // View All Button
   viewAllButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 16,
+    paddingVertical: 8,
+    marginTop: 8,
   },
-  viewAllButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
+  viewAllText: {
+    fontSize: 14,
     fontWeight: '600',
   },
-
-  // Quick actions
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
+  
+  // Alert Card
+  alertCard: {
+    borderLeftWidth: 4,
   },
-  quickActionButton: {
+  alertText: {
+    fontSize: 14,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  alertButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  alertButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // FAB
+  fabContainer: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+  },
+  fab: {
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  
+  // Bottom Sheet
+  bottomSheetOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  bottomSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: screenHeight * 0.7,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  bottomSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  bottomSheetTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  bottomSheetClose: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  bottomSheetContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailLabel: {
+    fontSize: 14,
+  },
+  detailValue: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -11,7 +11,8 @@ import {
   StyleSheet,
   Alert,
   Dimensions,
-  TextInput
+  TextInput,
+  Animated
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
@@ -23,13 +24,14 @@ import {
   DollarSign,
   FileText,
   Save,
-  Zap,
   Info,
   Key,
   Hash,
-  Ruler,
   Palette,
-  Check
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  Gauge
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
@@ -55,7 +57,7 @@ const theme = {
 
 // Car colors
 const CAR_COLORS = [
-  { name: 'Bianco', value: '#FFFFFF' },
+  { name: 'Bianco', value: '#FFFFFF', border: '#E5E5EA' },
   { name: 'Nero', value: '#000000' },
   { name: 'Argento', value: '#C0C0C0' },
   { name: 'Grigio', value: '#808080' },
@@ -87,14 +89,24 @@ const AddCarScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
   const { addCar } = useUserCarsStore();
-  const isDesktop = Platform.OS === 'web' && screenWidth > 768;
 
+  const [currentStep, setCurrentStep] = useState(0);
   const [showPurchaseDatePicker, setShowPurchaseDatePicker] = useState(false);
   const [showInsuranceDatePicker, setShowInsuranceDatePicker] = useState(false);
   const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined);
   const [insuranceDate, setInsuranceDate] = useState<Date | undefined>(undefined);
 
-  const { control, handleSubmit, formState: { errors }, watch, setValue, getValues } = useForm<CarFormData>({
+  const currentTheme = darkMode ? {
+    ...theme,
+    background: '#121212',
+    cardBackground: '#1e1e1e',
+    text: '#ffffff',
+    textSecondary: '#a0a0a0',
+    border: '#333333',
+    placeholder: '#666666'
+  } : theme;
+
+  const { control, handleSubmit, formState: { errors }, watch, setValue, getValues, trigger } = useForm<CarFormData>({
     defaultValues: {
       make: '',
       model: '',
@@ -114,22 +126,30 @@ const AddCarScreen = () => {
 
   const selectedColor = watch('color');
 
+  const steps = [
+    {
+      title: 'Informazioni Base',
+      subtitle: 'Marca, modello e identificazione',
+      fields: ['make', 'model', 'year', 'licensePlate']
+    },
+    {
+      title: 'Personalizzazione',
+      subtitle: 'Colore e dettagli aggiuntivi',
+      fields: ['color', 'vin', 'currentMileage']
+    },
+    {
+      title: 'Acquisto',
+      subtitle: 'Dati di acquisto (opzionali)',
+      fields: ['purchaseDate', 'purchasePrice', 'purchaseMileage']
+    },
+    {
+      title: 'Assicurazione',
+      subtitle: 'Informazioni assicurative (opzionali)',
+      fields: ['insuranceCompany', 'insuranceExpiry', 'notes']
+    }
+  ];
+
   const onSubmit = (data: CarFormData) => {
-    if (!data.make.trim()) {
-      Alert.alert('Errore', 'Inserisci la marca del veicolo');
-      return;
-    }
-
-    if (!data.model.trim()) {
-      Alert.alert('Errore', 'Inserisci il modello del veicolo');
-      return;
-    }
-
-    if (!data.licensePlate.trim()) {
-      Alert.alert('Errore', 'Inserisci la targa del veicolo');
-      return;
-    }
-
     try {
       const carData = {
         make: data.make.trim(),
@@ -164,6 +184,26 @@ const AddCarScreen = () => {
     }
   };
 
+  const nextStep = async () => {
+    const currentStepFields = steps[currentStep].fields;
+    const requiredFields = currentStep === 0 ? ['make', 'model', 'licensePlate'] : [];
+    
+    // Validate required fields for current step
+    const isValid = await trigger(requiredFields as any);
+    
+    if (isValid) {
+      if (currentStep < steps.length - 1) {
+        setCurrentStep(currentStep + 1);
+      }
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
   const handlePurchaseDateChange = (event: any, date?: Date) => {
     setShowPurchaseDatePicker(false);
     if (date) {
@@ -181,67 +221,116 @@ const AddCarScreen = () => {
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return '';
+    if (!dateString) return 'Seleziona data';
     const date = new Date(dateString);
     return date.toLocaleDateString('it-IT');
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle={darkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.background}
-      />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <ArrowLeft size={24} color={theme.text} />
-        </TouchableOpacity>
-        <View style={styles.headerTitles}>
-          <Text style={styles.headerTitle}>Aggiungi Veicolo</Text>
-          <Text style={styles.headerSubtitle}>Inserisci i dati del tuo veicolo</Text>
-        </View>
+  // Modern Input Component
+  const ModernInput = ({ 
+    label, 
+    placeholder, 
+    value, 
+    onChangeText, 
+    error, 
+    required = false, 
+    keyboardType = 'default',
+    icon: Icon,
+    suffix,
+    autoCapitalize = 'none'
+  }: any) => (
+    <View style={styles.inputContainer}>
+      <Text style={[styles.inputLabel, { color: currentTheme.text }]}>
+        {label} {required && <Text style={{ color: currentTheme.error }}>*</Text>}
+      </Text>
+      <View style={[
+        styles.inputWrapper, 
+        { 
+          backgroundColor: currentTheme.cardBackground, 
+          borderColor: error ? currentTheme.error : currentTheme.border 
+        }
+      ]}>
+        {Icon && (
+          <View style={styles.inputIconContainer}>
+            <Icon size={20} color={currentTheme.textSecondary} />
+          </View>
+        )}
+        <TextInput
+          style={[styles.input, { color: currentTheme.text }]}
+          placeholder={placeholder}
+          placeholderTextColor={currentTheme.placeholder}
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+        />
+        {suffix && (
+          <Text style={[styles.inputSuffix, { color: currentTheme.textSecondary }]}>
+            {suffix}
+          </Text>
+        )}
       </View>
+      {error && (
+        <Text style={[styles.errorText, { color: currentTheme.error }]}>
+          {error}
+        </Text>
+      )}
+    </View>
+  );
 
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <ScrollView
-          style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Basic Information Card */}
-          <View style={styles.formCard}>
-            <Text style={styles.sectionTitle}>Informazioni Base</Text>
+  // Progress Indicator
+  const ProgressIndicator = () => (
+    <View style={[styles.progressContainer, { backgroundColor: currentTheme.cardBackground }]}>
+      <View style={styles.progressHeader}>
+        <Text style={[styles.progressTitle, { color: currentTheme.text }]}>
+          {steps[currentStep].title}
+        </Text>
+        <Text style={[styles.progressSubtitle, { color: currentTheme.textSecondary }]}>
+          {steps[currentStep].subtitle}
+        </Text>
+      </View>
+      
+      <View style={styles.progressBar}>
+        {steps.map((_, index) => (
+          <View 
+            key={index}
+            style={[
+              styles.progressDot,
+              { 
+                backgroundColor: index <= currentStep ? currentTheme.primary : currentTheme.border 
+              }
+            ]} 
+          />
+        ))}
+      </View>
+      
+      <Text style={[styles.progressText, { color: currentTheme.textSecondary }]}>
+        Passo {currentStep + 1} di {steps.length}
+      </Text>
+    </View>
+  );
 
+  // Step Content Renderer
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 0:
+        return (
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
             <Controller
               control={control}
               name="make"
               rules={{ required: 'Marca richiesta' }}
               render={({ field: { onChange, onBlur, value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>
-                    Marca <Text style={styles.requiredStar}>*</Text>
-                  </Text>
-                  <TextInput
-                    style={[styles.input, errors.make && styles.inputError]}
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    placeholder="es. Toyota, BMW, Volkswagen"
-                    placeholderTextColor={theme.placeholder}
-                  />
-                  {errors.make && (
-                    <Text style={styles.errorText}>{errors.make.message}</Text>
-                  )}
-                </View>
+                <ModernInput
+                  label="Marca"
+                  placeholder="es. Toyota, BMW, Volkswagen"
+                  value={value}
+                  onChangeText={onChange}
+                  error={errors.make?.message}
+                  required
+                  icon={Car}
+                  autoCapitalize="words"
+                />
               )}
             />
 
@@ -250,132 +339,148 @@ const AddCarScreen = () => {
               name="model"
               rules={{ required: 'Modello richiesto' }}
               render={({ field: { onChange, onBlur, value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>
-                    Modello <Text style={styles.requiredStar}>*</Text>
-                  </Text>
-                  <TextInput
-                    style={[styles.input, errors.model && styles.inputError]}
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    placeholder="es. Corolla, Serie 3, Golf"
-                    placeholderTextColor={theme.placeholder}
-                  />
-                  {errors.model && (
-                    <Text style={styles.errorText}>{errors.model.message}</Text>
-                  )}
-                </View>
+                <ModernInput
+                  label="Modello"
+                  placeholder="es. Corolla, Serie 3, Golf"
+                  value={value}
+                  onChangeText={onChange}
+                  error={errors.model?.message}
+                  required
+                  icon={Car}
+                  autoCapitalize="words"
+                />
               )}
             />
 
             <View style={styles.row}>
-              <Controller
-                control={control}
-                name="year"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <View style={[styles.halfWidth, { marginBottom: 16 }]}>
-                    <Text style={styles.inputLabel}>Anno</Text>
-                    <TextInput
-                      style={styles.input}
+              <View style={styles.halfWidth}>
+                <Controller
+                  control={control}
+                  name="year"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <ModernInput
+                      label="Anno"
+                      placeholder="2024"
                       value={value}
                       onChangeText={onChange}
-                      onBlur={onBlur}
-                      placeholder="2024"
                       keyboardType="numeric"
-                      placeholderTextColor={theme.placeholder}
+                      icon={Calendar}
                     />
-                  </View>
-                )}
-              />
+                  )}
+                />
+              </View>
 
-              <Controller
-                control={control}
-                name="licensePlate"
-                rules={{ required: 'Targa richiesta' }}
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <View style={[styles.halfWidth, { marginBottom: 16 }]}>
-                    <Text style={styles.inputLabel}>
-                      Targa <Text style={styles.requiredStar}>*</Text>
-                    </Text>
-                    <TextInput
-                      style={[styles.input, errors.licensePlate && styles.inputError]}
+              <View style={styles.halfWidth}>
+                <Controller
+                  control={control}
+                  name="licensePlate"
+                  rules={{ required: 'Targa richiesta' }}
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <ModernInput
+                      label="Targa"
+                      placeholder="AB123CD"
                       value={value}
                       onChangeText={(text) => onChange(text.toUpperCase())}
-                      onBlur={onBlur}
-                      placeholder="AB123CD"
+                      error={errors.licensePlate?.message}
+                      required
+                      icon={Hash}
                       autoCapitalize="characters"
-                      placeholderTextColor={theme.placeholder}
                     />
-                    {errors.licensePlate && (
-                      <Text style={styles.errorText}>{errors.licensePlate.message}</Text>
-                    )}
-                  </View>
-                )}
-              />
+                  )}
+                />
+              </View>
             </View>
+          </View>
+        );
 
+      case 1:
+        return (
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
             {/* Color Selector */}
             <View style={styles.colorSelector}>
-              <Text style={styles.colorLabel}>Colore</Text>
+              <Text style={[styles.colorLabel, { color: currentTheme.text }]}>Colore</Text>
               <View style={styles.colorGrid}>
                 {CAR_COLORS.map((color) => (
                   <TouchableOpacity
                     key={color.value}
                     style={[
                       styles.colorOption,
-                      { backgroundColor: color.value },
-                      selectedColor === color.name && styles.colorOptionSelected
+                      { 
+                        backgroundColor: color.value,
+                        borderColor: color.border || currentTheme.border,
+                        borderWidth: selectedColor === color.name ? 3 : 1
+                      },
+                      selectedColor === color.name && { borderColor: currentTheme.primary, borderWidth: 3 }
                     ]}
                     onPress={() => setValue('color', color.name)}
                   >
                     {selectedColor === color.name && (
-                      <View style={styles.colorCheckmark}>
-                        <Check size={16} color="#ffffff" />
+                      <View style={[
+                        styles.colorCheckmark,
+                        { backgroundColor: color.value === '#FFFFFF' ? '#000000' : '#ffffff' }
+                      ]}>
+                        <Check size={16} color={color.value === '#FFFFFF' ? '#ffffff' : '#000000'} />
                       </View>
                     )}
                   </TouchableOpacity>
                 ))}
               </View>
+              {selectedColor && (
+                <Text style={[styles.selectedColorText, { color: currentTheme.textSecondary }]}>
+                  Colore selezionato: {selectedColor}
+                </Text>
+              )}
             </View>
 
             <Controller
               control={control}
               name="vin"
               render={({ field: { onChange, onBlur, value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>Numero di Telaio (VIN)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={value}
-                    onChangeText={(text) => onChange(text.toUpperCase())}
-                    onBlur={onBlur}
-                    placeholder="Codice VIN (opzionale)"
-                    autoCapitalize="characters"
-                    placeholderTextColor={theme.placeholder}
-                  />
-                </View>
+                <ModernInput
+                  label="Numero di Telaio (VIN)"
+                  placeholder="Codice VIN (opzionale)"
+                  value={value}
+                  onChangeText={(text) => onChange(text.toUpperCase())}
+                  icon={Key}
+                  autoCapitalize="characters"
+                />
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="currentMileage"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <ModernInput
+                  label="Chilometraggio Attuale"
+                  placeholder="55000"
+                  value={value}
+                  onChangeText={onChange}
+                  keyboardType="numeric"
+                  icon={Gauge}
+                  suffix="km"
+                />
               )}
             />
           </View>
+        );
 
-          {/* Purchase Information Card */}
-          <View style={styles.formCard}>
-            <Text style={styles.sectionTitle}>Informazioni di Acquisto</Text>
-
+      case 2:
+        return (
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
             <Controller
               control={control}
               name="purchaseDate"
               render={({ field: { value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>Data di Acquisto</Text>
+                <View style={styles.inputContainer}>
+                  <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Data di Acquisto</Text>
                   <TouchableOpacity
-                    style={styles.dateButton}
+                    style={[styles.dateButton, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
                     onPress={() => setShowPurchaseDatePicker(true)}
                   >
-                    <Calendar size={20} color={theme.textSecondary} />
-                    <Text style={styles.dateButtonText}>
-                      {value ? formatDate(value) : 'Seleziona data'}
+                    <Calendar size={20} color={currentTheme.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: currentTheme.text }]}>
+                      {formatDate(value)}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -383,84 +488,60 @@ const AddCarScreen = () => {
             />
 
             <View style={styles.row}>
-              <Controller
-                control={control}
-                name="purchasePrice"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <View style={[styles.halfWidth, { marginBottom: 16 }]}>
-                    <Text style={styles.inputLabel}>Prezzo di Acquisto (€)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
+              <View style={styles.halfWidth}>
+                <Controller
+                  control={control}
+                  name="purchasePrice"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <ModernInput
+                      label="Prezzo di Acquisto"
                       placeholder="15000"
-                      keyboardType="numeric"
-                      placeholderTextColor={theme.placeholder}
-                    />
-                  </View>
-                )}
-              />
-
-              <Controller
-                control={control}
-                name="purchaseMileage"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <View style={[styles.halfWidth, { marginBottom: 16 }]}>
-                    <Text style={styles.inputLabel}>Km all'Acquisto</Text>
-                    <TextInput
-                      style={styles.input}
                       value={value}
                       onChangeText={onChange}
-                      onBlur={onBlur}
-                      placeholder="50000"
                       keyboardType="numeric"
-                      placeholderTextColor={theme.placeholder}
+                      icon={DollarSign}
+                      suffix="€"
                     />
-                  </View>
-                )}
-              />
+                  )}
+                />
+              </View>
+
+              <View style={styles.halfWidth}>
+                <Controller
+                  control={control}
+                  name="purchaseMileage"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <ModernInput
+                      label="Km all'Acquisto"
+                      placeholder="50000"
+                      value={value}
+                      onChangeText={onChange}
+                      keyboardType="numeric"
+                      icon={Gauge}
+                      suffix="km"
+                    />
+                  )}
+                />
+              </View>
             </View>
-
-            <Controller
-              control={control}
-              name="currentMileage"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>Chilometraggio Attuale</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    placeholder="55000"
-                    keyboardType="numeric"
-                    placeholderTextColor={theme.placeholder}
-                  />
-                </View>
-              )}
-            />
           </View>
+        );
 
-          {/* Insurance Information Card */}
-          <View style={styles.formCard}>
-            <Text style={styles.sectionTitle}>Informazioni Assicurazione</Text>
-
+      case 3:
+        return (
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground }]}>
             <Controller
               control={control}
               name="insuranceCompany"
               render={({ field: { onChange, onBlur, value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>Compagnia Assicurativa</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    placeholder="es. Generali, Allianz"
-                    placeholderTextColor={theme.placeholder}
-                  />
-                </View>
+                <ModernInput
+                  label="Compagnia Assicurativa"
+                  placeholder="es. Generali, Allianz"
+                  value={value}
+                  onChangeText={onChange}
+                  icon={FileText}
+                  autoCapitalize="words"
+                />
               )}
             />
 
@@ -468,77 +549,141 @@ const AddCarScreen = () => {
               control={control}
               name="insuranceExpiry"
               render={({ field: { value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>Scadenza Assicurazione</Text>
+                <View style={styles.inputContainer}>
+                  <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Scadenza Assicurazione</Text>
                   <TouchableOpacity
-                    style={styles.dateButton}
+                    style={[styles.dateButton, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
                     onPress={() => setShowInsuranceDatePicker(true)}
                   >
-                    <Calendar size={20} color={theme.textSecondary} />
-                    <Text style={styles.dateButtonText}>
-                      {value ? formatDate(value) : 'Seleziona data'}
+                    <Calendar size={20} color={currentTheme.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: currentTheme.text }]}>
+                      {formatDate(value)}
                     </Text>
                   </TouchableOpacity>
                 </View>
               )}
             />
-          </View>
-
-          {/* Notes Card */}
-          <View style={styles.formCard}>
-            <Text style={styles.sectionTitle}>Note Aggiuntive</Text>
 
             <Controller
               control={control}
               name="notes"
               render={({ field: { onChange, onBlur, value } }) => (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={styles.inputLabel}>Note</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    placeholder="Note aggiuntive sul veicolo..."
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    placeholderTextColor={theme.placeholder}
-                  />
+                <View style={styles.inputContainer}>
+                  <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Note Aggiuntive</Text>
+                  <View style={[
+                    styles.inputWrapper, 
+                    styles.textAreaWrapper,
+                    { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }
+                  ]}>
+                    <TextInput
+                      style={[styles.input, styles.textAreaInput, { color: currentTheme.text }]}
+                      placeholder="Note aggiuntive sul veicolo..."
+                      placeholderTextColor={currentTheme.placeholder}
+                      value={value}
+                      onChangeText={onChange}
+                      multiline
+                      numberOfLines={4}
+                      textAlignVertical="top"
+                    />
+                  </View>
                 </View>
               )}
             />
           </View>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
+      <StatusBar
+        barStyle={darkMode ? 'light-content' : 'dark-content'}
+        backgroundColor={currentTheme.background}
+      />
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: currentTheme.cardBackground, borderBottomColor: currentTheme.border }]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <ArrowLeft size={24} color={currentTheme.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={[styles.headerTitle, { color: currentTheme.text }]}>Aggiungi Veicolo</Text>
+          <Text style={[styles.headerSubtitle, { color: currentTheme.textSecondary }]}>
+            Crea il profilo del tuo veicolo
+          </Text>
+        </View>
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.content}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <ProgressIndicator />
+          {renderStepContent()}
 
           {/* Info Card */}
-          <View style={styles.infoCard}>
-            <View style={styles.infoHeader}>
-              <Info size={20} color={theme.info} />
-              <Text style={styles.infoTitle}>Informazioni</Text>
+          {currentStep === 0 && (
+            <View style={[styles.infoCard, { backgroundColor: currentTheme.info + '10' }]}>
+              <View style={styles.infoHeader}>
+                <Info size={20} color={currentTheme.info} />
+                <Text style={[styles.infoTitle, { color: currentTheme.info }]}>Informazioni</Text>
+              </View>
+              <Text style={[styles.infoText, { color: currentTheme.text }]}>
+                I campi contrassegnati con * sono obbligatori. Le altre informazioni possono essere aggiunte successivamente modificando il veicolo.
+              </Text>
             </View>
-            <Text style={styles.infoText}>
-              I campi contrassegnati con * sono obbligatori. Le altre informazioni possono essere aggiunte successivamente modificando il veicolo.
-            </Text>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.button, styles.secondaryButton]}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.secondaryButtonText}>Annulla</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.primaryButton]}
-              onPress={handleSubmit(onSubmit)}
-            >
-              <Save size={20} color="#ffffff" />
-              <Text style={styles.primaryButtonText}>Salva Veicolo</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </ScrollView>
+
+        {/* Navigation Buttons */}
+        <View style={[styles.navigationContainer, { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border }]}>
+          <View style={styles.navigationButtons}>
+            {currentStep > 0 && (
+              <TouchableOpacity
+                style={[styles.navButton, styles.prevButton, { backgroundColor: currentTheme.border }]}
+                onPress={prevStep}
+              >
+                <ChevronLeft size={20} color={currentTheme.textSecondary} />
+                <Text style={[styles.navButtonText, { color: currentTheme.textSecondary }]}>
+                  Indietro
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.navButton, 
+                styles.nextButton, 
+                { backgroundColor: currentTheme.primary },
+                currentStep === 0 && { flex: 1 }
+              ]}
+              onPress={currentStep === steps.length - 1 ? handleSubmit(onSubmit) : nextStep}
+            >
+              {currentStep === steps.length - 1 ? (
+                <>
+                  <Save size={20} color="#ffffff" />
+                  <Text style={styles.nextButtonText}>Salva Veicolo</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.nextButtonText}>Avanti</Text>
+                  <ChevronRight size={20} color="#ffffff" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
       </KeyboardAvoidingView>
 
       {/* Date Pickers */}
@@ -567,7 +712,6 @@ const AddCarScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.background,
   },
   header: {
     flexDirection: 'row',
@@ -575,8 +719,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-    backgroundColor: theme.cardBackground,
   },
   backButton: {
     marginRight: 12,
@@ -587,11 +729,9 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: theme.text,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: theme.textSecondary,
     marginTop: 2,
   },
   content: {
@@ -604,20 +744,100 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
   },
-  formCard: {
-    backgroundColor: theme.cardBackground,
+
+  // Progress Indicator
+  progressContainer: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  progressHeader: {
+    marginBottom: 16,
+  },
+  progressTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  progressSubtitle: {
+    fontSize: 14,
+  },
+  progressBar: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flex: 1,
+  },
+  progressText: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+
+  // Card
+  card: {
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.text,
+
+  // Input Styles
+  inputContainer: {
     marginBottom: 16,
   },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  textAreaWrapper: {
+    alignItems: 'flex-start',
+    paddingVertical: 16,
+  },
+  inputIconContainer: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    minHeight: 20,
+  },
+  textAreaInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  inputSuffix: {
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  // Layout
   row: {
     flexDirection: 'row',
     gap: 12,
@@ -625,91 +845,64 @@ const styles = StyleSheet.create({
   halfWidth: {
     flex: 1,
   },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 8,
-  },
-  requiredStar: {
-    color: theme.error,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: theme.text,
-    backgroundColor: theme.background,
-  },
-  inputError: {
-    borderColor: theme.error,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  errorText: {
-    color: theme.error,
-    fontSize: 14,
-    marginTop: 4,
-  },
+
+  // Date Button
   dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     borderWidth: 1,
-    borderColor: theme.border,
     borderRadius: 12,
-    backgroundColor: theme.background,
+    gap: 12,
   },
   dateButtonText: {
     fontSize: 16,
-    color: theme.text,
-    marginLeft: 8,
   },
+
+  // Color Selector
   colorSelector: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   colorLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.text,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   colorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   colorOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: theme.border,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  colorOptionSelected: {
-    borderColor: theme.primary,
-    borderWidth: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   colorCheckmark: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  selectedColorText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+
+  // Info Card
   infoCard: {
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
-    backgroundColor: theme.info + '10',
   },
   infoHeader: {
     flexDirection: 'row',
@@ -719,43 +912,49 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: theme.info,
     marginLeft: 8,
   },
   infoText: {
     fontSize: 14,
-    color: theme.text,
     lineHeight: 20,
   },
-  actionButtons: {
+
+  // Navigation
+  navigationContainer: {
+    borderTopWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  navigationButtons: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
   },
-  button: {
-    flex: 1,
+  navButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
+    paddingHorizontal: 20,
     borderRadius: 12,
     gap: 8,
   },
-  primaryButton: {
-    backgroundColor: theme.primary,
+  prevButton: {
+    flex: 1,
   },
-  secondaryButton: {
-    backgroundColor: theme.cardBackground,
-    borderWidth: 1,
-    borderColor: theme.border,
+  nextButton: {
+    flex: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  primaryButtonText: {
-    color: '#ffffff',
+  navButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },
-  secondaryButtonText: {
-    color: theme.text,
+  nextButtonText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },

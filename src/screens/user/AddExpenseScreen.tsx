@@ -9,7 +9,9 @@ import {
     Platform,
     StatusBar,
     StyleSheet,
-    Alert
+    Alert,
+    TextInput,
+    Animated
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
@@ -19,25 +21,20 @@ import {
     Calendar,
     DollarSign,
     FileText,
+    Save,
     Fuel,
     Wrench,
-    Save,
     CreditCard,
-    AlertTriangle,
+    Car,
+    MapPin,
+    Gauge,
     Camera,
-    Paperclip
+    Paperclip,
+    Plus
 } from 'lucide-react-native';
 
-import {
-    PrimaryButton,
-    SecondaryButton,
-    ModernCard,
-    FormInput,
-    theme
-} from '../../components/shared/GlobalComponents';
-
 import { useStore } from '../../store';
-import { useUserCarsStore } from '../../store/userCarsStore';
+import { useUserCarsStore } from '../../store/useCarsStore';
 
 interface ExpenseFormData {
     carId: string;
@@ -51,13 +48,62 @@ interface ExpenseFormData {
 }
 
 const EXPENSE_CATEGORIES = [
-    { id: 'fuel', name: 'Carburante', icon: '⛽' },
-    { id: 'maintenance', name: 'Manutenzione', icon: '🔧' },
-    { id: 'insurance', name: 'Assicurazione', icon: '📄' },
-    { id: 'tax', name: 'Tasse', icon: '💳' },
-    { id: 'parking', name: 'Parcheggio', icon: '🅿️' },
-    { id: 'tolls', name: 'Pedaggi', icon: '🛣️' },
-    { id: 'other', name: 'Altro', icon: '💰' }
+    { 
+        id: 'fuel', 
+        name: 'Carburante', 
+        icon: Fuel, 
+        color: '#FF9500',
+        description: 'Benzina, diesel, GPL',
+        suggestions: ['Rifornimento Benzina', 'Rifornimento Diesel', 'Rifornimento GPL', 'Ricarica Elettrica']
+    },
+    { 
+        id: 'maintenance', 
+        name: 'Manutenzione', 
+        icon: Wrench, 
+        color: '#5AC8FA',
+        description: 'Riparazioni e servizi',
+        suggestions: ['Cambio olio', 'Tagliando', 'Riparazione']
+    },
+    { 
+        id: 'insurance', 
+        name: 'Assicurazione', 
+        icon: CreditCard, 
+        color: '#34C759',
+        description: 'Polizze e coperture',
+        suggestions: ['Assicurazione RCA', 'Kasko', 'Furto e incendio']
+    },
+    { 
+        id: 'tax', 
+        name: 'Tasse', 
+        icon: FileText, 
+        color: '#FF3B30',
+        description: 'Bollo e imposte',
+        suggestions: ['Bollo auto', 'Tassa di circolazione']
+    },
+    { 
+        id: 'parking', 
+        name: 'Parcheggio', 
+        icon: Car, 
+        color: '#007AFF',
+        description: 'Sosta e garage',
+        suggestions: ['Parcheggio a pagamento', 'Garage mensile', 'ZTL']
+    },
+    { 
+        id: 'tolls', 
+        name: 'Pedaggi', 
+        icon: MapPin, 
+        color: '#8E8E93',
+        description: 'Autostrade e tunnel',
+        suggestions: ['Pedaggio autostradale', 'Telepass']
+    },
+    { 
+        id: 'other', 
+        name: 'Altro', 
+        icon: DollarSign, 
+        color: '#8E8E93',
+        description: 'Altre spese',
+        suggestions: []
+    }
 ];
 
 const AddExpenseScreen = () => {
@@ -66,13 +112,27 @@ const AddExpenseScreen = () => {
     const { darkMode } = useStore();
     const { cars, getCarById, addExpense } = useUserCarsStore();
 
+    const fallbackTheme = {
+        background: darkMode ? '#121212' : '#f5f5f5',
+        cardBackground: darkMode ? '#1e1e1e' : '#ffffff',
+        text: darkMode ? '#ffffff' : '#000000',
+        textSecondary: darkMode ? '#a0a0a0' : '#666666',
+        border: darkMode ? '#333333' : '#e0e0e0',
+        primary: '#007AFF',
+        error: '#FF3B30',
+        success: '#34C759',
+        warning: '#FF9500',
+        info: '#5AC8FA',
+        placeholder: darkMode ? '#666666' : '#999999'
+    };
+
     const preselectedCarId = route.params?.carId;
     const preselectedCategory = route.params?.category || '';
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
 
-    const { control, handleSubmit, formState: { errors }, watch, setValue, getValues } = useForm<ExpenseFormData>({
+    const { control, handleSubmit, formState: { errors }, watch, setValue } = useForm<ExpenseFormData>({
         defaultValues: {
             carId: preselectedCarId || (cars.length === 1 ? cars[0].id : ''),
             category: preselectedCategory,
@@ -89,6 +149,7 @@ const AddExpenseScreen = () => {
     const selectedCategory = watch('category');
 
     const selectedCar = selectedCarId ? getCarById(selectedCarId) : null;
+    const selectedCategoryData = EXPENSE_CATEGORIES.find(cat => cat.id === selectedCategory);
 
     const onSubmit = (data: ExpenseFormData) => {
         if (!data.carId) {
@@ -147,59 +208,185 @@ const AddExpenseScreen = () => {
         }
     };
 
+    const formatDate = (dateString: string) => {
+        if (!dateString) return 'Seleziona data';
+        return new Date(dateString).toLocaleDateString('it-IT');
+    };
+
+    // Modern Input Component
+    const ModernInput = ({ 
+        label, 
+        placeholder, 
+        value, 
+        onChangeText, 
+        error, 
+        required = false, 
+        keyboardType = 'default',
+        multiline = false,
+        icon: Icon,
+        suffix
+    }: any) => (
+        <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { color: fallbackTheme.text }]}>
+                {label} {required && <Text style={{ color: fallbackTheme.error }}>*</Text>}
+            </Text>
+            <View style={[
+                styles.inputWrapper, 
+                { 
+                    backgroundColor: fallbackTheme.cardBackground, 
+                    borderColor: error ? fallbackTheme.error : fallbackTheme.border 
+                },
+                multiline && styles.textAreaWrapper
+            ]}>
+                {Icon && (
+                    <View style={styles.inputIconContainer}>
+                        <Icon size={20} color={fallbackTheme.textSecondary} />
+                    </View>
+                )}
+                <TextInput
+                    style={[
+                        styles.input, 
+                        { color: fallbackTheme.text },
+                        multiline && styles.textAreaInput
+                    ]}
+                    placeholder={placeholder}
+                    placeholderTextColor={fallbackTheme.placeholder}
+                    value={value}
+                    onChangeText={onChangeText}
+                    keyboardType={keyboardType}
+                    multiline={multiline}
+                    numberOfLines={multiline ? 4 : 1}
+                    textAlignVertical={multiline ? 'top' : 'center'}
+                />
+                {suffix && (
+                    <Text style={[styles.inputSuffix, { color: fallbackTheme.textSecondary }]}>
+                        {suffix}
+                    </Text>
+                )}
+            </View>
+            {error && (
+                <Text style={[styles.errorText, { color: fallbackTheme.error }]}>
+                    {error}
+                </Text>
+            )}
+        </View>
+    );
+
+    // Category Selector Component
     const CategorySelector = () => (
-        <View style={styles.categoryContainer}>
-            <Text style={styles.sectionTitle}>Categoria Spesa</Text>
+        <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+            <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
+                Categoria Spesa
+            </Text>
             <View style={styles.categoryGrid}>
-                {EXPENSE_CATEGORIES.map((cat) => (
-                    <TouchableOpacity
-                        key={cat.id}
-                        style={[
-                            styles.categoryChip,
-                            selectedCategory === cat.id && styles.categoryChipActive
-                        ]}
-                        onPress={() => setValue('category', cat.id)}
-                    >
-                        <Text style={styles.categoryEmoji}>{cat.icon}</Text>
-                        <Text style={[
-                            styles.categoryText,
-                            selectedCategory === cat.id && styles.categoryTextActive
-                        ]}>
-                            {cat.name}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
+                {EXPENSE_CATEGORIES.map((category) => {
+                    const isSelected = selectedCategory === category.id;
+                    const IconComponent = category.icon;
+                    
+                    return (
+                        <TouchableOpacity
+                            key={category.id}
+                            style={[
+                                styles.categoryCard,
+                                { 
+                                    backgroundColor: isSelected ? category.color + '20' : fallbackTheme.background,
+                                    borderColor: isSelected ? category.color : fallbackTheme.border
+                                }
+                            ]}
+                            onPress={() => setValue('category', category.id)}
+                        >
+                            <View style={[
+                                styles.categoryIcon,
+                                { backgroundColor: isSelected ? category.color : fallbackTheme.border }
+                            ]}>
+                                <IconComponent size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />
+                            </View>
+                            <Text style={[
+                                styles.categoryName,
+                                { color: isSelected ? category.color : fallbackTheme.text }
+                            ]}>
+                                {category.name}
+                            </Text>
+                            <Text style={[
+                                styles.categoryDescription,
+                                { color: isSelected ? category.color : fallbackTheme.textSecondary }
+                            ]}>
+                                {category.description}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
         </View>
     );
 
+    // Car Selector Component
     const CarSelector = () => {
         if (preselectedCarId) return null;
 
         return (
-            <View style={styles.carSelectorContainer}>
-                <Text style={styles.sectionTitle}>Seleziona Veicolo</Text>
-                <View style={styles.carsGrid}>
+            <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+                <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
+                    Seleziona Veicolo
+                </Text>
+                <View style={styles.carGrid}>
                     {cars.filter(car => car.isActive).map((car) => (
                         <TouchableOpacity
                             key={car.id}
                             style={[
-                                styles.carChip,
-                                selectedCarId === car.id && styles.carChipActive
+                                styles.carCard,
+                                { 
+                                    backgroundColor: selectedCarId === car.id ? fallbackTheme.primary + '20' : fallbackTheme.background,
+                                    borderColor: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.border
+                                }
                             ]}
                             onPress={() => setValue('carId', car.id)}
                         >
+                            <View style={styles.carCardHeader}>
+                                <Text style={[
+                                    styles.carCardTitle,
+                                    { color: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.text }
+                                ]}>
+                                    {car.make} {car.model}
+                                </Text>
+                                <Text style={[
+                                    styles.carCardPlate,
+                                    { color: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.textSecondary }
+                                ]}>
+                                    {car.licensePlate}
+                                </Text>
+                            </View>
                             <Text style={[
-                                styles.carChipText,
-                                selectedCarId === car.id && styles.carChipTextActive
+                                styles.carCardMileage,
+                                { color: fallbackTheme.textSecondary }
                             ]}>
-                                {car.make} {car.model}
+                                {car.currentMileage.toLocaleString()} km
                             </Text>
-                            <Text style={[
-                                styles.carChipPlate,
-                                selectedCarId === car.id && styles.carChipPlateActive
-                            ]}>
-                                {car.licensePlate}
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </View>
+        );
+    };
+
+    // Quick Suggestions for selected category
+    const QuickSuggestions = () => {
+        if (!selectedCategoryData || selectedCategoryData.suggestions.length === 0) return null;
+
+        return (
+            <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+                <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
+                    Suggerimenti Rapidi
+                </Text>
+                <View style={styles.suggestionsGrid}>
+                    {selectedCategoryData.suggestions.map((suggestion, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            style={[styles.suggestionChip, { backgroundColor: selectedCategoryData.color + '20' }]}
+                            onPress={() => setValue('description', suggestion)}
+                        >
+                            <Text style={[styles.suggestionText, { color: selectedCategoryData.color }]}>
+                                {suggestion}
                             </Text>
                         </TouchableOpacity>
                     ))}
@@ -209,20 +396,20 @@ const AddExpenseScreen = () => {
     };
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
             <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
 
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>
                 <TouchableOpacity
                     style={styles.backButton}
                     onPress={() => navigation.goBack()}
                 >
-                    <ArrowLeft size={24} color={theme.text} />
+                    <ArrowLeft size={24} color={fallbackTheme.text} />
                 </TouchableOpacity>
                 <View style={styles.headerTitles}>
-                    <Text style={styles.headerTitle}>Nuova Spesa</Text>
-                    <Text style={styles.headerSubtitle}>
+                    <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>Nuova Spesa</Text>
+                    <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>
                         {selectedCar ? `${selectedCar.make} ${selectedCar.model}` : 'Registra una spesa'}
                     </Text>
                 </View>
@@ -237,22 +424,22 @@ const AddExpenseScreen = () => {
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* Car Selector */}
                     <CarSelector />
-
-                    {/* Category Selector */}
                     <CategorySelector />
+                    <QuickSuggestions />
 
                     {/* Basic Information */}
-                    <ModernCard style={styles.sectionCard}>
-                        <Text style={styles.sectionTitle}>Informazioni Spesa</Text>
+                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+                        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
+                            Dettagli Spesa
+                        </Text>
 
                         <Controller
                             control={control}
                             name="description"
                             rules={{ required: 'Descrizione obbligatoria' }}
                             render={({ field: { onChange, value } }) => (
-                                <FormInput
+                                <ModernInput
                                     label="Descrizione"
                                     placeholder="Es: Rifornimento benzina"
                                     value={value}
@@ -266,14 +453,16 @@ const AddExpenseScreen = () => {
 
                         <View style={styles.row}>
                             <View style={styles.halfWidth}>
-                                <Text style={styles.inputLabel}>Data <Text style={styles.requiredStar}>*</Text></Text>
+                                <Text style={[styles.inputLabel, { color: fallbackTheme.text }]}>
+                                    Data <Text style={{ color: fallbackTheme.error }}>*</Text>
+                                </Text>
                                 <TouchableOpacity
-                                    style={styles.dateButton}
+                                    style={[styles.dateButton, { backgroundColor: fallbackTheme.cardBackground, borderColor: fallbackTheme.border }]}
                                     onPress={() => setShowDatePicker(true)}
                                 >
-                                    <Calendar size={20} color={theme.primary} />
-                                    <Text style={styles.dateButtonText}>
-                                        {new Date(watch('date')).toLocaleDateString('it-IT')}
+                                    <Calendar size={20} color={fallbackTheme.primary} />
+                                    <Text style={[styles.dateButtonText, { color: fallbackTheme.text }]}>
+                                        {formatDate(watch('date'))}
                                     </Text>
                                 </TouchableOpacity>
                             </View>
@@ -287,7 +476,7 @@ const AddExpenseScreen = () => {
                                         validate: value => parseFloat(value) > 0 || 'Importo deve essere maggiore di 0'
                                     }}
                                     render={({ field: { onChange, value } }) => (
-                                        <FormInput
+                                        <ModernInput
                                             label="Importo"
                                             placeholder="0.00"
                                             value={value}
@@ -296,6 +485,7 @@ const AddExpenseScreen = () => {
                                             error={errors.amount?.message}
                                             required
                                             icon={DollarSign}
+                                            suffix="€"
                                         />
                                     )}
                                 />
@@ -306,12 +496,14 @@ const AddExpenseScreen = () => {
                             control={control}
                             name="mileage"
                             render={({ field: { onChange, value } }) => (
-                                <FormInput
+                                <ModernInput
                                     label="Chilometraggio"
                                     placeholder={selectedCar?.currentMileage?.toString() || "0"}
                                     value={value}
                                     onChangeText={onChange}
                                     keyboardType="numeric"
+                                    icon={Gauge}
+                                    suffix="km"
                                 />
                             )}
                         />
@@ -320,7 +512,7 @@ const AddExpenseScreen = () => {
                             control={control}
                             name="notes"
                             render={({ field: { onChange, value } }) => (
-                                <FormInput
+                                <ModernInput
                                     label="Note"
                                     placeholder="Note aggiuntive sulla spesa..."
                                     value={value}
@@ -329,81 +521,53 @@ const AddExpenseScreen = () => {
                                 />
                             )}
                         />
-                    </ModernCard>
+                    </View>
 
-                    {/* Quick Fill Buttons for Fuel */}
-                    {selectedCategory === 'fuel' && (
-                        <ModernCard style={styles.sectionCard}>
-                            <Text style={styles.sectionTitle}>Riempimento Rapido</Text>
-                            <View style={styles.quickFillButtons}>
-                                <TouchableOpacity
-                                    style={styles.quickFillButton}
-                                    onPress={() => {
-                                        setValue('description', 'Rifornimento Benzina');
-                                    }}
-                                >
-                                    <Text style={styles.quickFillButtonText}>Benzina</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.quickFillButton}
-                                    onPress={() => {
-                                        setValue('description', 'Rifornimento Diesel');
-                                    }}
-                                >
-                                    <Text style={styles.quickFillButtonText}>Diesel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.quickFillButton}
-                                    onPress={() => {
-                                        setValue('description', 'Rifornimento GPL');
-                                    }}
-                                >
-                                    <Text style={styles.quickFillButtonText}>GPL</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.quickFillButton}
-                                    onPress={() => {
-                                        setValue('description', 'Rifornimento Metano');
-                                    }}
-                                >
-                                    <Text style={styles.quickFillButtonText}>Metano</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.quickFillButton}
-                                    onPress={() => {
-                                        setValue('description', 'Ricarica Elettrica');
-                                    }}
-                                >
-                                    <Text style={styles.quickFillButtonText}>Elettrica</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </ModernCard>
-                    )}
+                    {/* Receipt Upload */}
+                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
+                        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
+                            Scontrino/Ricevuta
+                        </Text>
+                        
+                        <View style={styles.uploadButtons}>
+                            <TouchableOpacity 
+                                style={[styles.uploadButton, { backgroundColor: fallbackTheme.primary + '20', borderColor: fallbackTheme.primary }]}
+                            >
+                                <Camera size={24} color={fallbackTheme.primary} />
+                                <Text style={[styles.uploadButtonText, { color: fallbackTheme.primary }]}>
+                                    Scatta Foto
+                                </Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity 
+                                style={[styles.uploadButton, { backgroundColor: fallbackTheme.border + '20', borderColor: fallbackTheme.border }]}
+                            >
+                                <Paperclip size={24} color={fallbackTheme.textSecondary} />
+                                <Text style={[styles.uploadButtonText, { color: fallbackTheme.textSecondary }]}>
+                                    Allega File
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
-                    {/* Upload Receipt Option */}
-                    <ModernCard style={styles.sectionCard}>
-                        <Text style={styles.sectionTitle}>Scontrino/Ricevuta</Text>
-                        <TouchableOpacity style={styles.uploadButton}>
-                            <Camera size={24} color={theme.primary} />
-                            <Text style={styles.uploadButtonText}>Scatta Foto Scontrino</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.uploadButton, styles.uploadButtonSecondary]}>
-                            <Paperclip size={24} color={theme.text} />
-                            <Text style={styles.uploadButtonTextSecondary}>Allega File</Text>
-                        </TouchableOpacity>
-                    </ModernCard>
-
-                    {/* Actions */}
+                    {/* Action Buttons */}
                     <View style={styles.actionsContainer}>
-                        <SecondaryButton
-                            title="Annulla"
+                        <TouchableOpacity
+                            style={[styles.secondaryButton, { backgroundColor: fallbackTheme.border }]}
                             onPress={() => navigation.goBack()}
-                        />
-                        <PrimaryButton
-                            title="Salva Spesa"
-                            icon={Save}
+                        >
+                            <Text style={[styles.secondaryButtonText, { color: fallbackTheme.textSecondary }]}>
+                                Annulla
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.primaryButton, { backgroundColor: fallbackTheme.primary }]}
                             onPress={handleSubmit(onSubmit)}
-                        />
+                        >
+                            <Save size={20} color="#ffffff" />
+                            <Text style={styles.primaryButtonText}>Salva Spesa</Text>
+                        </TouchableOpacity>
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -432,8 +596,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingVertical: 16,
         borderBottomWidth: 1,
-        borderBottomColor: theme.border,
-        backgroundColor: theme.cardBackground,
     },
     backButton: {
         marginRight: 12,
@@ -444,11 +606,9 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: theme.text,
     },
     headerSubtitle: {
         fontSize: 14,
-        color: theme.textSecondary,
         marginTop: 2,
     },
     content: {
@@ -458,161 +618,219 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 16,
     },
-    sectionCard: {
+
+    // Card Styles
+    card: {
+        borderRadius: 16,
+        padding: 20,
         marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    sectionTitle: {
+    cardTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: theme.text,
         marginBottom: 16,
     },
-    categoryContainer: {
-        marginBottom: 16,
-    },
+
+    // Category Grid
     categoryGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+    },
+    categoryCard: {
+        width: '47%',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 2,
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    categoryIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+    },
+    categoryName: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginBottom: 4,
+        textAlign: 'center',
+    },
+    categoryDescription: {
+        fontSize: 12,
+        textAlign: 'center',
+    },
+
+    // Car Grid
+    carGrid: {
+        gap: 12,
+    },
+    carCard: {
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 2,
+    },
+    carCardHeader: {
+        marginBottom: 8,
+    },
+    carCardTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 2,
+    },
+    carCardPlate: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    carCardMileage: {
+        fontSize: 12,
+    },
+
+    // Suggestions
+    suggestionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
     },
-    categoryChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
+    suggestionChip: {
+        paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
-        borderWidth: 1,
-        borderColor: theme.border,
-        backgroundColor: theme.cardBackground,
-        marginBottom: 8,
     },
-    categoryChipActive: {
-        backgroundColor: theme.primary,
-        borderColor: theme.primary,
-    },
-    categoryEmoji: {
-        fontSize: 16,
-        marginRight: 6,
-    },
-    categoryText: {
+    suggestionText: {
         fontSize: 14,
-        fontWeight: '500',
-        color: theme.text,
+        fontWeight: '600',
     },
-    categoryTextActive: {
-        color: '#ffffff',
-    },
-    carSelectorContainer: {
+
+    // Input Styles
+    inputContainer: {
         marginBottom: 16,
     },
-    carsGrid: {
-        gap: 8,
-    },
-    carChip: {
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: theme.border,
-        backgroundColor: theme.cardBackground,
-    },
-    carChipActive: {
-        backgroundColor: theme.primary,
-        borderColor: theme.primary,
-    },
-    carChipText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: theme.text,
-        marginBottom: 2,
-    },
-    carChipTextActive: {
-        color: '#ffffff',
-    },
-    carChipPlate: {
+    inputLabel: {
         fontSize: 14,
-        color: theme.textSecondary,
+        fontWeight: '600',
+        marginBottom: 8,
     },
-    carChipPlateActive: {
-        color: '#ffffff',
+    inputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
     },
+    textAreaWrapper: {
+        alignItems: 'flex-start',
+        paddingVertical: 16,
+    },
+    inputIconContainer: {
+        marginRight: 12,
+    },
+    input: {
+        flex: 1,
+        fontSize: 16,
+        minHeight: 20,
+    },
+    textAreaInput: {
+        minHeight: 80,
+        textAlignVertical: 'top',
+    },
+    inputSuffix: {
+        fontSize: 16,
+        marginLeft: 8,
+    },
+    errorText: {
+        fontSize: 12,
+        marginTop: 4,
+    },
+
+    // Layout
     row: {
         flexDirection: 'row',
         gap: 12,
-        marginBottom: 16,
     },
     halfWidth: {
         flex: 1,
     },
-    inputLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.text,
-        marginBottom: 8,
-    },
-    requiredStar: {
-        color: theme.error,
-    },
+
+    // Date Button
     dateButton: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
         borderWidth: 1,
-        borderColor: theme.border,
         borderRadius: 12,
-        backgroundColor: theme.cardBackground,
+        gap: 12,
     },
     dateButtonText: {
         fontSize: 16,
-        color: theme.text,
-        marginLeft: 8,
     },
-    quickFillButtons: {
+
+    // Upload Buttons
+    uploadButtons: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    quickFillButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
-        backgroundColor: theme.primary + '20',
-    },
-    quickFillButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.primary,
+        gap: 12,
     },
     uploadButton: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         padding: 16,
         borderWidth: 2,
-        borderColor: theme.primary,
         borderRadius: 12,
         borderStyle: 'dashed',
-        marginBottom: 12,
-    },
-    uploadButtonSecondary: {
-        borderColor: theme.border,
+        gap: 8,
     },
     uploadButtonText: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
-        color: theme.primary,
-        marginLeft: 12,
     },
-    uploadButtonTextSecondary: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.text,
-        marginLeft: 12,
-    },
+
+    // Action Buttons
     actionsContainer: {
         flexDirection: 'row',
         gap: 12,
         marginTop: 24,
         marginBottom: 32,
+    },
+    primaryButton: {
+        flex: 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        borderRadius: 12,
+        gap: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    primaryButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    secondaryButton: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        borderRadius: 12,
+    },
+    secondaryButtonText: {
+        fontSize: 16,
+        fontWeight: 'bold',
     },
 });
 
