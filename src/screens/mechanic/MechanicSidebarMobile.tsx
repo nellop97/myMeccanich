@@ -206,11 +206,15 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
           </TouchableOpacity>
           <View>
             <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Buongiorno, {user.name?.split(' ')[0] || 'Mario'}!
+              Buongiorno, {user.name?.split(' ')[0] || 'Nello'}!
             </Text>
             <View style={styles.notificationBadge}>
               <Bell size={14} color="#d97706" />
-              <Text style={styles.notificationText}>3 notifiche</Text>
+              <TouchableOpacity
+              onPress={alert("ci stiamo lavorando ")}>
+                <Text style={styles.notificationText}>3 notifiche</Text>
+              </TouchableOpacity>
+              
             </View>
           </View>
         </View>
@@ -255,7 +259,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: 40, // Per lo status bar
+    paddingTop: 60, // Per lo status bar
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

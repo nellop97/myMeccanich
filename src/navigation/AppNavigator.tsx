@@ -1,4 +1,4 @@
-// src/navigation/AppNavigator.tsx
+// src/navigation/AppNavigator.tsx - VERSIONE CORRETTA
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -11,15 +11,10 @@ import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import CarDetailScreen from '../screens/user/CarDetailScreen';
+import CarDetailScreen, { RouteParams } from '../screens/user/CarDetailScreen';
 import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen';
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
-
-// Importa le schermate user
-import AddCarScreen from '../screens/user/AddCarScreen';
-import MaintenanceListScreen from '../screens/user/MaintenanceListScreen';
-import AddMaintenanceScreen from '../screens/user/AddMaintenanceScreen';
 
 // Importa le nuove schermate di fatturazione
 import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScreen';
@@ -27,52 +22,67 @@ import CreateInvoiceScreen from '../screens/mechanic/CreateInvoiceScreen';
 import CustomersListScreen from '../screens/mechanic/CustomersListScreen';
 import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
 
-import { useStore } from '../store';
+// Importa le nuove schermate utente
 import HomeScreen from '../screens/HomeScreen';
-import AddFuelScreen from '../screens/user/AddFuelScreen';
+import AddCarScreen from '../screens/user/AddCarScreen';
 import CarOverviewScreen from '../screens/user/CarOverviewScreen';
-import CarMaintenanceScreen from '../screens/user/CarMaintenanceScreen';
+import CarMaintenanceAllScreen from '../screens/user/CarMaintenanceAllScreen';
 import CarExpensesScreen from '../screens/user/CarExpensesScreen';
 import CarDocumentsScreen from '../screens/user/CarDocumentsScreen';
+import AddMaintenanceScreen from '../screens/user/AddMaintenanceScreen';
 import AddExpenseScreen from '../screens/user/AddExpenseScreen';
 import AddDocumentScreen from '../screens/user/AddDocumentScreen';
+import MaintenanceListScreen from '../screens/user/MaintenanceListScreen';
+import AddFuelScreen from '../screens/user/AddFuelScreen';
+import MaintenanceHistoryScreen from '../screens/user/MaintenanceHistoryScreen';
+import ExpenseTrackerScreen from '../screens/user/ExpenseTrackerScreen';
 
-// Definizione dei tipi per la navigazione - AGGIORNATA
+
+import { useStore } from '../store';
+import CustomerDetailScreen from '../screens/mechanic/CustomerDetailScreen';
+
+// Definizione dei tipi per la navigazione - COMPLETA
 export type RootStackParamList = {
+  // Auth
   Auth: undefined;
-  Main: undefined;
-  Profile: { userId: string };
-  CarDetail: { carId: string };
   Login: undefined;
   Register: undefined;
-  RepairDetails: { carId: string; repairId: string };
+  
+  // Main navigation
+  Main: undefined;
+  Profile: { userId: string };
+  
+  // Schermate Utente
+  Home: undefined;
+  Settings: undefined;
+  MyCars: undefined;
+  CarDetail: { carId: string };
+  CarOverview: { carId: string };
+  CarMaintenance: { carId: string };
+  CarExpenses: { carId: string };
+  CarDocuments: { carId: string };
+  AddCar: { carId?: string; mode?: 'add' | 'edit' };
+  EditCar: { carId: string };
+  AddMaintenance: { carId: string; category?: string };
+  AddExpense: { carId?: string };
+  AddDocument: { carId: string };
+  AddFuel: { carId: string };
+  MaintenanceList: { carId?: string; filter?: string };
+  MaintenanceDetail: { carId: string; maintenanceId: string };
+  MaintenanceCalendar: undefined;
+  MaintenanceHistory: undefined;
+  ExpenseTracker: undefined;
+  ExpenseDetail: { expenseId: string };
+  DocumentViewer: { documentId: string };
+  Notifications: undefined;
+  
+  // Schermate Meccanico
   HomeMechanic: undefined;
   NewAppointment: undefined;
   AllCarsInWorkshop: undefined;
   RepairPartsManagement: { carId: string; repairId: string };
+  RepairDetails: { carId: string; repairId: string };
   MechanicCalendar: undefined;
-  
-  // Schermate user
-  AddCar: { carId?: string; mode?: 'add' | 'edit' };
-  MaintenanceList: { carId?: string; filter?: string };
-  AddFuel: { carId: string };
-    CarOverview: { carId: string };
-  CarMaintenance: { carId: string };
-  CarExpenses: { carId: string };
-  CarDocuments: { carId: string };
-  
-  // Rotte per aggiungere contenuti
-  AddMaintenance: { carId: string };
-  AddExpense: { carId: string };
-  AddDocument: { carId: string };
-  
-  // Rotte per visualizzare dettagli
-  MaintenanceDetail: { carId: string; maintenanceId: string };
-  ExpenseDetail: { expenseId: string };
-  DocumentViewer: { documentId: string };
-  
-  // Rotte per modifica
-  EditCar: { carId: string };
   
   // Schermate di fatturazione
   InvoicingDashboard: undefined;
@@ -181,7 +191,7 @@ export default function AppNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: true }}>
       {isAuthenticated ? (
         isMechanic ? (
-          // Navigator per meccanici - AGGIORNATO CON TUTTE LE SCHERMATE
+          // Navigator per meccanici - COMPLETO
           <Stack.Group>
             <Stack.Screen
               name="HomeMechanic"
@@ -230,6 +240,7 @@ export default function AppNavigator() {
               }}
             />
             
+            {/* Schermate Fatturazione */}
             <Stack.Screen
               name="InvoicingDashboard"
               component={InvoicingDashboardScreen}
@@ -248,68 +259,30 @@ export default function AppNavigator() {
               name="CustomersList"
               component={CustomersListScreen}
               options={{
-                headerShown: false,
+                title: 'Lista Clienti',
+                headerShown: true,
               }}
             />
             <Stack.Screen
               name="AddCustomer"
               component={AddCustomerScreen}
               options={{
-                headerShown: false,
+                title: 'Nuovo Cliente',
+                presentation: 'modal',
               }}
             />
-            <Stack.Screen
-              name="EditCustomer"
-              component={AddCustomerScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
-            
-            {/* Schermate future - placeholder per ora */}
             <Stack.Screen
               name="CustomerDetail"
-              component={CustomersListScreen} // Temporaneo
+              component={CustomerDetailScreen}
               options={{
                 title: 'Dettaglio Cliente',
                 headerShown: true,
               }}
             />
-            <Stack.Screen
-              name="InvoiceDetail"
-              component={InvoicingDashboardScreen} // Temporaneo
-              options={{
-                title: 'Dettaglio Fattura',
-                headerShown: true,
-              }}
-            />
-            <Stack.Screen
-              name="InvoicesList"
-              component={InvoicingDashboardScreen} // Temporaneo
-              options={{
-                title: 'Tutte le Fatture',
-                headerShown: true,
-              }}
-            />
-            <Stack.Screen
-              name="InvoiceTemplates"
-              component={InvoicingDashboardScreen} // Temporaneo
-              options={{
-                title: 'Template Fatture',
-                headerShown: true,
-              }}
-            />
-            <Stack.Screen
-              name="InvoiceReports"
-              component={InvoicingDashboardScreen} // Temporaneo
-              options={{
-                title: 'Report Fatturazione',
-                headerShown: true,
-              }}
-            />
+           
           </Stack.Group>
         ) : (
-          // Navigator per utenti normali - AGGIORNATO CON SCHERMATE USER
+          // Navigator per utenti normali - COMPLETO
           <Stack.Group>
             <Stack.Screen 
               name="Main" 
@@ -321,7 +294,7 @@ export default function AppNavigator() {
               component={CarDetailScreen}
               options={{ 
                 title: 'Dettaglio Auto',
-                headerShown: false // Gestito internamente dalla schermata
+                headerShown: false
               }}
             />
             <Stack.Screen 
@@ -331,7 +304,7 @@ export default function AppNavigator() {
             />
             <Stack.Screen 
               name="CarMaintenance" 
-              component={CarMaintenanceScreen}
+              component={CarMaintenanceAllScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen 
@@ -344,16 +317,23 @@ export default function AppNavigator() {
               component={CarDocumentsScreen}
               options={{ headerShown: false }}
             />
-           
-            {/**<Stack.Screen 
+            <Stack.Screen
+              name="AddCar"
+              component={AddCarScreen}
+              options={({ route }) => ({ 
+                title: route.params?.mode === 'edit' ? 'Modifica Auto' : 'Aggiungi Auto',
+                headerShown: false
+              })}
+            />
+            <Stack.Screen 
               name="AddExpense" 
               component={AddExpenseScreen}
               options={{ 
                 title: 'Aggiungi Spesa',
                 presentation: 'modal'
               }}
-            />*/}
-             <Stack.Screen 
+            />
+            <Stack.Screen 
               name="AddDocument" 
               component={AddDocumentScreen}
               options={{ 
@@ -362,27 +342,43 @@ export default function AppNavigator() {
               }}
             />
             <Stack.Screen
-              name="AddCar"
-              component={AddCarScreen}
-              options={({ route }) => ({ 
-                title: route.params?.mode === 'edit' ? 'Modifica Auto' : 'Aggiungi Auto',
-                headerShown: false // Gestito internamente dalla schermata
-              })}
+              name="AddMaintenance"
+              component={AddMaintenanceScreen}
+              options={{ 
+                title: 'Aggiungi Manutenzione',
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name="AddFuel"
+              component={AddFuelScreen}
+              options={{ 
+                title: 'Aggiungi Rifornimento',
+                presentation: 'modal'
+              }}
             />
             <Stack.Screen
               name="MaintenanceList"
               component={MaintenanceListScreen}
               options={{ 
                 title: 'Manutenzioni',
-                headerShown: false // Gestito internamente dalla schermata
+                headerShown: false
               }}
             />
             <Stack.Screen
-              name="AddMaintenance"
-              component={AddMaintenanceScreen}
+              name="MaintenanceHistory"
+              component={MaintenanceHistoryScreen}
               options={{ 
-                title: 'Aggiungi Manutenzione',
-                headerShown: false // Gestito internamente dalla schermata
+                title: 'Storico Manutenzioni',
+                headerShown: false
+              }}
+            />
+            <Stack.Screen
+              name="ExpenseTracker"
+              component={ExpenseTrackerScreen}
+              options={{ 
+                title: 'Gestione Spese',
+                headerShown: false
               }}
             />
           </Stack.Group>

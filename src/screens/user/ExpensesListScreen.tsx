@@ -224,8 +224,8 @@ const ExpensesListScreen = () => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-            <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-            
+            <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} translucent={false} />
+        
             <View style={styles.header}>
                  {/* Header content here */}
             </View>

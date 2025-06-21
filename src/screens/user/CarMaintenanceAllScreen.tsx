@@ -37,7 +37,7 @@ interface RouteParams {
   carId: string;
 }
 
-const CarMaintenanceScreen = () => {
+const CarMaintenanceAllScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { carId } = route.params as RouteParams;
@@ -165,51 +165,6 @@ const CarMaintenanceScreen = () => {
     </View>
   );
 
-  const StatsCards = () => (
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      style={styles.statsContainer}
-      contentContainerStyle={styles.statsContent}
-    >
-      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.success + '20' }]}>
-          <DollarSign size={20} color={fallbackTheme.success} />
-        </View>
-        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-          {formatCurrency(maintenanceStats.totalCost)}
-        </Text>
-        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
-          Costo Totale
-        </Text>
-      </View>
-
-      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.info + '20' }]}>
-          <CheckCircle size={20} color={fallbackTheme.info} />
-        </View>
-        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-          {maintenanceStats.completedCount}
-        </Text>
-        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
-          Completate
-        </Text>
-      </View>
-
-      <View style={[styles.statCard, { backgroundColor: fallbackTheme.cardBackground }]}>
-        <View style={[styles.statIcon, { backgroundColor: fallbackTheme.warning + '20' }]}>
-          <Clock size={20} color={fallbackTheme.warning} />
-        </View>
-        <Text style={[styles.statValue, { color: fallbackTheme.text }]}>
-          {maintenanceStats.scheduledCount}
-        </Text>
-        <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>
-          Programmate
-        </Text>
-      </View>
-    </ScrollView>
-  );
-
   const MaintenanceCard = ({ record }: { record: any }) => {
     const statusColor = getStatusColor(record.status);
     const isOverdue = record.status === 'scheduled' && new Date(record.date) < new Date();
@@ -306,8 +261,6 @@ const CarMaintenanceScreen = () => {
         </View>
       </View>
 
-      {/* Stats Cards */}
-      <StatsCards />
 
       {/* Modern Segmented Filter */}
       <View style={styles.filterContainer}>
@@ -414,9 +367,10 @@ const styles = StyleSheet.create({
   // Stats Cards
   statsContainer: {
     paddingVertical: 8,
+    height: 20
   },
   statsContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     gap: 12,
   },
   statCard: {
@@ -619,4 +573,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default CarMaintenanceScreen;
+export default CarMaintenanceAllScreen;

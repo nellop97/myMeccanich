@@ -395,7 +395,7 @@ const CarExpensesScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
-      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} translucent={false}/>
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>

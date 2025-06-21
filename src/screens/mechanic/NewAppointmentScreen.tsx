@@ -140,7 +140,7 @@ const NewAppointmentScreen = () => {
 
   return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} translucent={false}/>
 
         {/* Header */}
         <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>

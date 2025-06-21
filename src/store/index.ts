@@ -37,7 +37,7 @@ export const useStore = create<AppState>((set) => ({
     name: null,
     email: null,
     isLoggedIn: true,
-    isMechanic: false,
+    isMechanic: true,
   },
   setUser: (userData) => set((state) => ({ 
     user: { ...state.user, ...userData }
