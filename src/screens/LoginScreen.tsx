@@ -1,23 +1,47 @@
 // src/screens/LoginScreen.tsx
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
 import {
   Button,
   Checkbox,
   Divider,
   HelperText,
-  IconButton,
   Text,
   TextInput,
   useTheme
 } from 'react-native-paper';
 import { AuthStackParamList } from '../navigation/AppNavigator';
 import { useStore } from '../store';
-import appleAuth, { AppleButton } from '@invertase/react-native-apple-authentication';
-import { AppleAuthProvider, getAuth, GoogleAuthProvider, signInWithCredential } from '@react-native-firebase/auth';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+
+// Expo imports
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
+
+// Firebase imports
+import { 
+  signInWithEmailAndPassword, 
+  GoogleAuthProvider, 
+  signInWithCredential,
+  onAuthStateChanged,
+  User as FirebaseUser,
+  OAuthProvider
+} from 'firebase/auth';
+import { auth } from '../services/firebase';
+
+WebBrowser.maybeCompleteAuthSession();
+
+// Configurazione Google OAuth
+const googleConfig = {
+  clientId: 'YOUR_GOOGLE_CLIENT_ID', // Sostituisci con il tuo Client ID
+  scopes: ['openid', 'profile', 'email'],
+  additionalParameters: {},
+  customParameters: {},
+};
+
 type NavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
@@ -32,6 +56,71 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Configurazione OAuth per Google
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: googleConfig.clientId,
+      scopes: googleConfig.scopes,
+      redirectUri: AuthSession.makeRedirectUri({
+        scheme: 'your-app-scheme', // Sostituisci con il tuo scheme
+        useProxy: true,
+      }),
+    },
+    { authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth' }
+  );
+
+  useEffect(() => {
+    // Listener per cambio stato autenticazione
+    const unsubscribe = onAuthStateChanged(auth, handleAuthStateChanged);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      handleGoogleResponse(response);
+    }
+  }, [response]);
+
+  const handleAuthStateChanged = (user: FirebaseUser | null) => {
+    if (user) {
+      // Utente autenticato con successo
+      setUser({
+        id: user.uid,
+        name: user.displayName || 'Utente',
+        email: user.email || '',
+        isLoggedIn: true,
+        photoURL: user.photoURL,
+        emailVerified: user.emailVerified,
+        phoneNumber: user.phoneNumber,
+        createdAt: user.metadata.creationTime,
+        lastLoginAt: user.metadata.lastSignInTime,
+      });
+    }
+  };
+
+  const handleGoogleResponse = async (response: AuthSession.AuthSessionResult) => {
+    if (response.type === 'success') {
+      try {
+        setIsLoading(true);
+        
+        // Ottieni l'access token
+        const { access_token } = response.params;
+        
+        // Crea il credential per Firebase
+        const credential = GoogleAuthProvider.credential(null, access_token);
+        
+        // Accedi con Firebase
+        await signInWithCredential(auth, credential);
+        
+      } catch (error: any) {
+        console.error('Errore Google Sign-In:', error);
+        Alert.alert('Errore', 'Errore durante l\'accesso con Google');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
 
   const validateEmail = (text: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -61,7 +150,6 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    // Validazione
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
     
@@ -72,71 +160,117 @@ export default function LoginScreen() {
     setIsLoading(true);
     
     try {
-      // Simula una chiamata API di login 
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Login completato con successo
-      setUser({
-        id: '123',
-        name: 'Nome Utente',
-        email: email,
-        isLoggedIn: true,
-      });
-      
-      // Il reindirizzamento principale avverrà automaticamente tramite 
-      // la logica dell'AppNavigator poiché abbiamo aggiornato lo stato utente
-    } catch (error) {
+      await signInWithEmailAndPassword(auth, email, password);
+      // handleAuthStateChanged gestirà l'aggiornamento dello stato
+    } catch (error: any) {
       console.error('Errore di login:', error);
+      let errorMessage = 'Errore durante il login';
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'Utente non trovato';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Password non corretta';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Email non valida';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'Account disabilitato';
+          break;
+        case 'auth/invalid-credential':
+          errorMessage = 'Credenziali non valide';
+          break;
+        default:
+          errorMessage = error.message || 'Errore durante il login';
+      }
+      
+      Alert.alert('Errore', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  async function onAppleButtonPress() {
-  // Start the sign-in request
-  const appleAuthRequestResponse = await appleAuth.performRequest({
-    requestedOperation: appleAuth.Operation.LOGIN,
-    // As per the FAQ of react-native-apple-authentication, the name should come first in the following array.
-    // See: https://github.com/invertase/react-native-apple-authentication#faqs
-    requestedScopes: [appleAuth.Scope.FULL_NAME, appleAuth.Scope.EMAIL],
-  });
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (!request) {
+        Alert.alert('Errore', 'Configurazione Google non pronta');
+        return;
+      }
+      
+      // Avvia il flusso OAuth
+      await promptAsync();
+      
+    } catch (error: any) {
+      console.error('Errore Google Sign-In:', error);
+      Alert.alert('Errore', 'Errore durante l\'accesso con Google');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Ensure Apple returned a user identityToken
-  if (!appleAuthRequestResponse.identityToken) {
-    throw new Error('Apple Sign-In failed - no identify token returned');
-  }
+  const handleAppleLogin = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Verifica se Apple Sign-In è disponibile
+      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('Errore', 'Apple Sign-In non è disponibile su questo dispositivo');
+        return;
+      }
 
-  // Create a Firebase credential from the response
-  const { identityToken, nonce } = appleAuthRequestResponse;
-  const appleCredential = AppleAuthProvider.credential(identityToken, nonce);
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
 
-  // Sign the user in with the credential
-  console.log(signInWithCredential(getAuth(), appleCredential));
+      // Crea il nonce per Apple Sign-In
+      const nonce = Math.random().toString(36).substring(2, 15);
+      const hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        nonce,
+        { encoding: Crypto.CryptoEncoding.HEX }
+      );
 
-  return ;
-}
-async function onGoogleButtonPress() {
-  // Check if your device supports Google Play
-  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-  // Get the users ID token
-  const signInResult = await GoogleSignin.signIn();
+      // Crea il provider Apple per Firebase
+      const provider = new OAuthProvider('apple.com');
+      const oauthCredential = provider.credential({
+        idToken: credential.identityToken,
+        rawNonce: nonce,
+      });
 
-  // Try the new style of google-sign in result, from v13+ of that module
-  let idToken = signInResult.data?.idToken;
-  if (!idToken) {
-    // if you are using older versions of google-signin, try old style result
-    idToken = signInResult.idToken;
-  }
-  if (!idToken) {
-    throw new Error('No ID token found');
-  }
+      // Accedi con Firebase (se hai configurato Apple Sign-In su Firebase)
+      // await signInWithCredential(auth, oauthCredential);
 
-  // Create a Google credential with the token
-  const googleCredential = GoogleAuthProvider.credential(signInResult.data.idToken);
+      // Per ora, simuliamo un login di successo
+      console.log(credential)
+      setUser({
+        id: credential.user,
+        name: credential.fullName?.givenName 
+          ? `${credential.fullName.givenName} ${credential.fullName.familyName || ''}`.trim()
+          : 'Utente Apple',
+        email: credential.email || `${credential.user}@privaterelay.appleid.com`,
+        isLoggedIn: true,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      });
+      
+    } catch (error: any) {
+      console.error('Errore Apple Sign-In:', error);
+      if (error.code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Errore', 'Errore durante l\'accesso con Apple');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Sign-in the user with the credential
-  return signInWithCredential(getAuth(), googleCredential);
-}
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -144,11 +278,13 @@ async function onGoogleButtonPress() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.logoContainer}>
-          {/* Placeholder per il logo. Sostituiscilo con la tua immagine */}
           <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>MyApp</Text>
+            <Text style={styles.logoText}>🚗</Text>
           </View>
-          <Text variant="headlineMedium" style={styles.appName}>MyApp</Text>
+          <Text variant="headlineMedium" style={styles.appName}>AutoManager</Text>
+          <Text variant="bodyMedium" style={styles.subtitle}>
+            Gestisci la tua auto in modo smart
+          </Text>
         </View>
 
         <View style={styles.formContainer}>
@@ -235,20 +371,27 @@ async function onGoogleButtonPress() {
           
           {/* Pulsanti Social */}
           <View style={styles.socialButtonsContainer}>
-            <IconButton
+            <Button
+              mode="outlined"
+              onPress={handleGoogleLogin}
+              disabled={isLoading}
+              style={[styles.socialButton, { flex: 1, marginRight: 8 }]}
               icon="google"
-              mode="contained"
-              size={24}
-              onPress={() => onGoogleButtonPress().then(() => console.log('Signed in with Google!'))}
-              style={styles.socialButton}
-            />
-            <IconButton
-              icon="apple"
-              mode="contained"
-              size={24}
-              onPress={() => onAppleButtonPress().then(() => console.log('Apple sign-in complete!'))}
-              style={styles.socialButton}
-            />
+            >
+              Google
+            </Button>
+            
+            {Platform.OS === 'ios' && (
+              <Button
+                mode="outlined"
+                onPress={handleAppleLogin}
+                disabled={isLoading}
+                style={[styles.socialButton, { flex: 1, marginLeft: 8 }]}
+                icon="apple"
+              >
+                Apple
+              </Button>
+            )}
           </View>
           
           {/* Link Registrazione */}
@@ -290,15 +433,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 12,
   },
   logoText: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 32,
   },
   appName: {
-    marginTop: 8,
     fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  subtitle: {
+    color: '#666',
+    textAlign: 'center',
   },
   formContainer: {
     width: '100%',
@@ -341,11 +488,10 @@ const styles = StyleSheet.create({
   },
   socialButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     marginBottom: 24,
   },
   socialButton: {
-    marginHorizontal: 12,
+    marginVertical: 4,
   },
   registerContainer: {
     flexDirection: 'row',
