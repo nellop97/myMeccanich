@@ -1,0 +1,1030 @@
+// ========== ECCEZIONI PERSONALIZZATE ==========
+
+/**
+ * Eccezione base per l'applicazione
+ */
+public abstract class CarManagementException extends RuntimeException {
+    public CarManagementException(String message) {
+        super(message);
+    }
+    
+    public CarManagementException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+
+/**
+ * Eccezione per risorse non trovate
+ */
+public class ResourceNotFoundException extends CarManagementException {
+    public ResourceNotFoundException(String resource, Long id) {
+        super(String.format("%s with id %d not found", resource, id));
+    }
+    
+    public ResourceNotFoundException(String message) {
+        super(message);
+    }
+}
+
+/**
+ * Eccezione per violazioni di business rules
+ */
+public class BusinessRuleViolationException extends CarManagementException {
+    public BusinessRuleViolationException(String message) {
+        super(message);
+    }
+}
+
+/**
+ * Eccezione per accessi non autorizzati
+ */
+public class UnauthorizedAccessException extends CarManagementException {
+    public UnauthorizedAccessException(String message) {
+        super(message);
+    }
+}
+
+// ========== REPOSITORY INTERFACES ==========
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
+    List<User> findByRole(UserRole role);
+    boolean existsByEmail(String email);
+    boolean existsByFiscalCode(String fiscalCode);
+}
+
+@Repository
+public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
+    List<Vehicle> findByOwnerId(Long ownerId);
+    Optional<Vehicle> findByLicensePlate(String licensePlate);
+    Optional<Vehicle> findByVin(String vin);
+    List<Vehicle> findByNextInspectionDateBefore(Date date);
+    List<Vehicle> findByInsuranceExpiryDateBefore(Date date);
+}
+
+@Repository
+public interface VehicleModelRepository extends JpaRepository<VehicleModel, Long> {
+    List<VehicleModel> findByBrandIgnoreCase(String brand);
+    Optional<VehicleModel> findByBrandIgnoreCaseAndModelIgnoreCase(String brand, String model);
+}
+
+@Repository
+public interface MaintenanceRecordRepository extends JpaRepository<MaintenanceRecord, Long> {
+    List<MaintenanceRecord> findByVehicleIdOrderByServiceDateDesc(Long vehicleId);
+    List<MaintenanceRecord> findByWorkshopIdOrderByServiceDateDesc(Long workshopId);
+    List<MaintenanceRecord> findByMechanicIdOrderByServiceDateDesc(Long mechanicId);
+    List<MaintenanceRecord> findByStatus(MaintenanceStatus status);
+    List<MaintenanceRecord> findByNextServiceDateBefore(Date date);
+}
+
+@Repository
+public interface WorkshopRepository extends JpaRepository<Workshop, Long> {
+    Optional<Workshop> findByOwnerId(Long ownerId);
+    List<Workshop> findByCityIgnoreCase(String city);
+    List<Workshop> findByServiceTypesContaining(ServiceType serviceType);
+}
+
+@Repository
+public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
+    List<Invoice> findByWorkshopIdOrderByIssueDateDesc(Long workshopId);
+    List<Invoice> findByCustomerIdOrderByIssueDateDesc(Long customerId);
+    List<Invoice> findByStatus(InvoiceStatus status);
+    List<Invoice> findByDueDateBeforeAndStatus(Date date, InvoiceStatus status);
+    Optional<Invoice> findByInvoiceNumber(String invoiceNumber);
+}
+
+@Repository
+public interface ReminderRepository extends JpaRepository<Reminder, Long> {
+    List<Reminder> findByUserIdAndIsActiveOrderByReminderDate(Long userId, Boolean isActive);
+    List<Reminder> findByVehicleIdAndIsActiveOrderByReminderDate(Long vehicleId, Boolean isActive);
+    List<Reminder> findByReminderDateBeforeAndIsActive(Date date, Boolean isActive);
+    List<Reminder> findByTypeAndIsActive(ReminderType type, Boolean isActive);
+}
+
+// ========== SERVIZI ==========
+
+/**
+ * Servizio per la gestione degli utenti
+ */
+@Service
+@Transactional
+public class UserService {
+    
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final WorkshopRepository workshopRepository;
+    
+    public UserService(UserRepository userRepository, 
+                      PasswordEncoder passwordEncoder,
+                      WorkshopRepository workshopRepository) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.workshopRepository = workshopRepository;
+    }
+    
+    /**
+     * Crea un nuovo utente
+     */
+    public User createUser(User user) {
+        validateUserCreation(user);
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        return userRepository.save(user);
+    }
+    
+    /**
+     * Trova utente per email
+     */
+    @Transactional(readOnly = true)
+    public Optional<User> findByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
+    
+    /**
+     * Trova utente per ID con controllo esistenza
+     */
+    @Transactional(readOnly = true)
+    public User findById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id));
+    }
+    
+    /**
+     * Aggiorna profilo utente
+     */
+    public User updateProfile(Long userId, User updatedUser) {
+        User existingUser = findById(userId);
+        
+        // Aggiorna solo i campi modificabili
+        existingUser.setFirstName(updatedUser.getFirstName());
+        existingUser.setLastName(updatedUser.getLastName());
+        existingUser.setPhoneNumber(updatedUser.getPhoneNumber());
+        existingUser.setAddress(updatedUser.getAddress());
+        existingUser.setCity(updatedUser.getCity());
+        existingUser.setPostalCode(updatedUser.getPostalCode());
+        
+        return userRepository.save(existingUser);
+    }
+    
+    /**
+     * Cambia password
+     */
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = findById(userId);
+        
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new BusinessRuleViolationException("Password attuale non corretta");
+        }
+        
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+    
+    /**
+     * Trova tutti i meccanici
+     */
+    @Transactional(readOnly = true)
+    public List<User> findAllMechanics() {
+        return userRepository.findByRole(UserRole.MECHANIC);
+    }
+    
+    private void validateUserCreation(User user) {
+        if (userRepository.existsByEmail(user.getEmail())) {
+            throw new BusinessRuleViolationException("Email già in uso");
+        }
+        
+        if (user.getFiscalCode() != null && userRepository.existsByFiscalCode(user.getFiscalCode())) {
+            throw new BusinessRuleViolationException("Codice fiscale già in uso");
+        }
+    }
+}
+
+/**
+ * Servizio per la gestione dei veicoli
+ */
+@Service
+@Transactional
+public class VehicleService {
+    
+    private final VehicleRepository vehicleRepository;
+    private final VehicleModelRepository vehicleModelRepository;
+    private final UserService userService;
+    private final ReminderService reminderService;
+    
+    public VehicleService(VehicleRepository vehicleRepository,
+                         VehicleModelRepository vehicleModelRepository,
+                         UserService userService,
+                         ReminderService reminderService) {
+        this.vehicleRepository = vehicleRepository;
+        this.vehicleModelRepository = vehicleModelRepository;
+        this.userService = userService;
+        this.reminderService = reminderService;
+    }
+    
+    /**
+     * Registra un nuovo veicolo
+     */
+    public Vehicle registerVehicle(Vehicle vehicle, Long ownerId) {
+        validateVehicleRegistration(vehicle);
+        
+        User owner = userService.findById(ownerId);
+        vehicle.setOwner(owner);
+        
+        Vehicle savedVehicle = vehicleRepository.save(vehicle);
+        
+        // Crea promemoria automatici per revisione e assicurazione
+        createAutomaticReminders(savedVehicle);
+        
+        return savedVehicle;
+    }
+    
+    /**
+     * Trova veicoli di un proprietario
+     */
+    @Transactional(readOnly = true)
+    public List<Vehicle> findByOwnerId(Long ownerId) {
+        return vehicleRepository.findByOwnerId(ownerId);
+    }
+    
+    /**
+     * Trova veicolo per ID
+     */
+    @Transactional(readOnly = true)
+    public Vehicle findById(Long id) {
+        return vehicleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Vehicle", id));
+    }
+    
+    /**
+     * Trova veicolo per targa
+     */
+    @Transactional(readOnly = true)
+    public Optional<Vehicle> findByLicensePlate(String licensePlate) {
+        return vehicleRepository.findByLicensePlate(licensePlate);
+    }
+    
+    /**
+     * Aggiorna chilometraggio
+     */
+    public Vehicle updateMileage(Long vehicleId, Integer newMileage, Long requesterId) {
+        Vehicle vehicle = findById(vehicleId);
+        validateVehicleAccess(vehicle, requesterId);
+        
+        if (newMileage < vehicle.getMileage()) {
+            throw new BusinessRuleViolationException("Il nuovo chilometraggio non può essere inferiore a quello attuale");
+        }
+        
+        vehicle.setMileage(newMileage);
+        return vehicleRepository.save(vehicle);
+    }
+    
+    /**
+     * Aggiorna date scadenze
+     */
+    public Vehicle updateExpiryDates(Long vehicleId, Date nextInspection, Date insuranceExpiry, Long requesterId) {
+        Vehicle vehicle = findById(vehicleId);
+        validateVehicleAccess(vehicle, requesterId);
+        
+        if (nextInspection != null) {
+            vehicle.setNextInspectionDate(nextInspection);
+        }
+        if (insuranceExpiry != null) {
+            vehicle.setInsuranceExpiryDate(insuranceExpiry);
+        }
+        
+        Vehicle savedVehicle = vehicleRepository.save(vehicle);
+        
+        // Aggiorna i promemoria
+        reminderService.updateVehicleReminders(savedVehicle);
+        
+        return savedVehicle;
+    }
+    
+    /**
+     * Trova veicoli con scadenze vicine
+     */
+    @Transactional(readOnly = true)
+    public List<Vehicle> findVehiclesWithUpcomingExpiries(int daysAhead) {
+        Date futureDate = Date.from(LocalDate.now().plusDays(daysAhead)
+                .atStartOfDay(ZoneId.systemDefault()).toInstant());
+        
+        Set<Vehicle> vehicles = new HashSet<>();
+        vehicles.addAll(vehicleRepository.findByNextInspectionDateBefore(futureDate));
+        vehicles.addAll(vehicleRepository.findByInsuranceExpiryDateBefore(futureDate));
+        
+        return new ArrayList<>(vehicles);
+    }
+    
+    private void validateVehicleRegistration(Vehicle vehicle) {
+        if (vehicleRepository.findByLicensePlate(vehicle.getLicensePlate()).isPresent()) {
+            throw new BusinessRuleViolationException("Targa già registrata nel sistema");
+        }
+        
+        if (vehicleRepository.findByVin(vehicle.getVin()).isPresent()) {
+            throw new BusinessRuleViolationException("VIN già registrato nel sistema");
+        }
+    }
+    
+    private void validateVehicleAccess(Vehicle vehicle, Long requesterId) {
+        if (!vehicle.getOwner().getId().equals(requesterId)) {
+            throw new UnauthorizedAccessException("Non hai i permessi per modificare questo veicolo");
+        }
+    }
+    
+    private void createAutomaticReminders(Vehicle vehicle) {
+        if (vehicle.getNextInspectionDate() != null) {
+            reminderService.createInspectionReminder(vehicle);
+        }
+        if (vehicle.getInsuranceExpiryDate() != null) {
+            reminderService.createInsuranceReminder(vehicle);
+        }
+    }
+}
+
+/**
+ * Servizio per la gestione degli interventi di manutenzione
+ */
+@Service
+@Transactional
+public class MaintenanceService {
+    
+    private final MaintenanceRecordRepository maintenanceRepository;
+    private final VehicleService vehicleService;
+    private final UserService userService;
+    private final WorkshopService workshopService;
+    private final ReminderService reminderService;
+    
+    public MaintenanceService(MaintenanceRecordRepository maintenanceRepository,
+                             VehicleService vehicleService,
+                             UserService userService,
+                             WorkshopService workshopService,
+                             ReminderService reminderService) {
+        this.maintenanceRepository = maintenanceRepository;
+        this.vehicleService = vehicleService;
+        this.userService = userService;
+        this.workshopService = workshopService;
+        this.reminderService = reminderService;
+    }
+    
+    /**
+     * Crea un nuovo intervento di manutenzione
+     */
+    public MaintenanceRecord createMaintenanceRecord(MaintenanceRecord record) {
+        validateMaintenanceRecord(record);
+        
+        record.setStatus(MaintenanceStatus.SCHEDULED);
+        MaintenanceRecord savedRecord = maintenanceRepository.save(record);
+        
+        // Aggiorna il chilometraggio del veicolo se necessario
+        if (record.getStatus() == MaintenanceStatus.COMPLETED) {
+            updateVehicleMileage(savedRecord);
+        }
+        
+        return savedRecord;
+    }
+    
+    /**
+     * Completa un intervento di manutenzione
+     */
+    public MaintenanceRecord completeMaintenanceRecord(Long recordId, String notes, Integer finalMileage) {
+        MaintenanceRecord record = findById(recordId);
+        
+        record.setStatus(MaintenanceStatus.COMPLETED);
+        record.setNotes(notes);
+        record.setMileageAtService(finalMileage);
+        record.setServiceDate(new Date());
+        
+        MaintenanceRecord savedRecord = maintenanceRepository.save(record);
+        
+        // Aggiorna chilometraggio veicolo
+        updateVehicleMileage(savedRecord);
+        
+        // Crea promemoria per prossimo intervento se specificato
+        if (record.getNextServiceDate() != null || record.getNextServiceMileage() != null) {
+            reminderService.createMaintenanceReminder(savedRecord);
+        }
+        
+        return savedRecord;
+    }
+    
+    /**
+     * Trova interventi per veicolo
+     */
+    @Transactional(readOnly = true)
+    public List<MaintenanceRecord> findByVehicleId(Long vehicleId) {
+        return maintenanceRepository.findByVehicleIdOrderByServiceDateDesc(vehicleId);
+    }
+    
+    /**
+     * Trova interventi per officina
+     */
+    @Transactional(readOnly = true)
+    public List<MaintenanceRecord> findByWorkshopId(Long workshopId) {
+        return maintenanceRepository.findByWorkshopIdOrderByServiceDateDesc(workshopId);
+    }
+    
+    /**
+     * Trova interventi per meccanico
+     */
+    @Transactional(readOnly = true)
+    public List<MaintenanceRecord> findByMechanicId(Long mechanicId) {
+        return maintenanceRepository.findByMechanicIdOrderByServiceDateDesc(mechanicId);
+    }
+    
+    /**
+     * Trova interventi programmati
+     */
+    @Transactional(readOnly = true)
+    public List<MaintenanceRecord> findScheduledMaintenances() {
+        return maintenanceRepository.findByStatus(MaintenanceStatus.SCHEDULED);
+    }
+    
+    /**
+     * Trova interventi in corso
+     */
+    @Transactional(readOnly = true)
+    public List<MaintenanceRecord> findInProgressMaintenances() {
+        return maintenanceRepository.findByStatus(MaintenanceStatus.IN_PROGRESS);
+    }
+    
+    /**
+     * Trova per ID
+     */
+    @Transactional(readOnly = true)
+    public MaintenanceRecord findById(Long id) {
+        return maintenanceRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaintenanceRecord", id));
+    }
+    
+    /**
+     * Calcola statistiche manutenzione per un veicolo
+     */
+    @Transactional(readOnly = true)
+    public MaintenanceStats calculateMaintenanceStats(Long vehicleId) {
+        List<MaintenanceRecord> records = findByVehicleId(vehicleId);
+        
+        BigDecimal totalCost = records.stream()
+                .filter(r -> r.getCost() != null)
+                .map(MaintenanceRecord::getCost)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        long completedCount = records.stream()
+                .filter(r -> r.getStatus() == MaintenanceStatus.COMPLETED)
+                .count();
+        
+        return new MaintenanceStats(totalCost, (int) completedCount, records.size());
+    }
+    
+    private void validateMaintenanceRecord(MaintenanceRecord record) {
+        if (record.getVehicle() == null) {
+            throw new BusinessRuleViolationException("Veicolo obbligatorio");
+        }
+        
+        if (record.getServiceDate() == null) {
+            throw new BusinessRuleViolationException("Data servizio obbligatoria");
+        }
+    }
+    
+    private void updateVehicleMileage(MaintenanceRecord record) {
+        if (record.getMileageAtService() != null) {
+            Vehicle vehicle = record.getVehicle();
+            if (vehicle.getMileage() == null || record.getMileageAtService() > vehicle.getMileage()) {
+                vehicle.setMileage(record.getMileageAtService());
+                vehicleService.updateMileage(vehicle.getId(), record.getMileageAtService(), vehicle.getOwner().getId());
+            }
+        }
+    }
+}
+
+/**
+ * Classe per le statistiche di manutenzione
+ */
+public class MaintenanceStats {
+    private final BigDecimal totalCost;
+    private final Integer completedMaintenances;
+    private final Integer totalMaintenances;
+    
+    public MaintenanceStats(BigDecimal totalCost, Integer completedMaintenances, Integer totalMaintenances) {
+        this.totalCost = totalCost;
+        this.completedMaintenances = completedMaintenances;
+        this.totalMaintenances = totalMaintenances;
+    }
+    
+    // Getter
+    public BigDecimal getTotalCost() { return totalCost; }
+    public Integer getCompletedMaintenances() { return completedMaintenances; }
+    public Integer getTotalMaintenances() { return totalMaintenances; }
+}
+
+/**
+ * Servizio per la gestione delle officine
+ */
+@Service
+@Transactional
+public class WorkshopService {
+    
+    private final WorkshopRepository workshopRepository;
+    private final UserService userService;
+    
+    public WorkshopService(WorkshopRepository workshopRepository, UserService userService) {
+        this.workshopRepository = workshopRepository;
+        this.userService = userService;
+    }
+    
+    /**
+     * Crea una nuova officina
+     */
+    public Workshop createWorkshop(Workshop workshop, Long ownerId) {
+        User owner = userService.findById(ownerId);
+        
+        if (owner.getRole() != UserRole.MECHANIC && owner.getRole() != UserRole.WORKSHOP_ADMIN) {
+            throw new BusinessRuleViolationException("Solo meccanici possono creare officine");
+        }
+        
+        if (workshopRepository.findByOwnerId(ownerId).isPresent()) {
+            throw new BusinessRuleViolationException("L'utente ha già un'officina registrata");
+        }
+        
+        workshop.setOwner(owner);
+        return workshopRepository.save(workshop);
+    }
+    
+    /**
+     * Trova officina per proprietario
+     */
+    @Transactional(readOnly = true)
+    public Optional<Workshop> findByOwnerId(Long ownerId) {
+        return workshopRepository.findByOwnerId(ownerId);
+    }
+    
+    /**
+     * Trova per ID
+     */
+    @Transactional(readOnly = true)
+    public Workshop findById(Long id) {
+        return workshopRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Workshop", id));
+    }
+    
+    /**
+     * Cerca officine per città
+     */
+    @Transactional(readOnly = true)
+    public List<Workshop> findByCity(String city) {
+        return workshopRepository.findByCityIgnoreCase(city);
+    }
+    
+    /**
+     * Cerca officine per tipo di servizio
+     */
+    @Transactional(readOnly = true)
+    public List<Workshop> findByServiceType(ServiceType serviceType) {
+        return workshopRepository.findByServiceTypesContaining(serviceType);
+    }
+    
+    /**
+     * Aggiorna profilo officina
+     */
+    public Workshop updateWorkshop(Long workshopId, Workshop updatedWorkshop, Long requesterId) {
+        Workshop existingWorkshop = findById(workshopId);
+        
+        if (!existingWorkshop.getOwner().getId().equals(requesterId)) {
+            throw new UnauthorizedAccessException("Non hai i permessi per modificare questa officina");
+        }
+        
+        // Aggiorna i campi modificabili
+        existingWorkshop.setName(updatedWorkshop.getName());
+        existingWorkshop.setDescription(updatedWorkshop.getDescription());
+        existingWorkshop.setPhoneNumber(updatedWorkshop.getPhoneNumber());
+        existingWorkshop.setEmail(updatedWorkshop.getEmail());
+        existingWorkshop.setWebsite(updatedWorkshop.getWebsite());
+        existingWorkshop.setServiceTypes(updatedWorkshop.getServiceTypes());
+        
+        return workshopRepository.save(existingWorkshop);
+    }
+}
+
+/**
+ * Servizio per la gestione dei promemoria
+ */
+@Service
+@Transactional
+public class ReminderService {
+    
+    private final ReminderRepository reminderRepository;
+    private final VehicleService vehicleService;
+    private final UserService userService;
+    
+    public ReminderService(ReminderRepository reminderRepository,
+                          VehicleService vehicleService,
+                          UserService userService) {
+        this.reminderRepository = reminderRepository;
+        this.vehicleService = vehicleService;
+        this.userService = userService;
+    }
+    
+    /**
+     * Crea un promemoria personalizzato
+     */
+    public Reminder createCustomReminder(Reminder reminder, Long userId) {
+        User user = userService.findById(userId);
+        reminder.setUser(user);
+        reminder.setType(ReminderType.CUSTOM);
+        reminder.setIsActive(true);
+        
+        return reminderRepository.save(reminder);
+    }
+    
+    /**
+     * Crea promemoria automatico per revisione
+     */
+    public Reminder createInspectionReminder(Vehicle vehicle) {
+        if (vehicle.getNextInspectionDate() == null) return null;
+        
+        Reminder reminder = new Reminder();
+        reminder.setVehicle(vehicle);
+        reminder.setUser(vehicle.getOwner());
+        reminder.setTitle("Revisione in scadenza");
+        reminder.setDescription("La revisione del veicolo " + vehicle.getLicensePlate() + " è in scadenza");
+        reminder.setType(ReminderType.INSPECTION_DUE);
+        reminder.setReminderDate(calculateReminderDate(vehicle.getNextInspectionDate(), 30));
+        reminder.setIsActive(true);
+        reminder.setIsRecurring(false);
+        
+        return reminderRepository.save(reminder);
+    }
+    
+    /**
+     * Crea promemoria automatico per assicurazione
+     */
+    public Reminder createInsuranceReminder(Vehicle vehicle) {
+        if (vehicle.getInsuranceExpiryDate() == null) return null;
+        
+        Reminder reminder = new Reminder();
+        reminder.setVehicle(vehicle);
+        reminder.setUser(vehicle.getOwner());
+        reminder.setTitle("Assicurazione in scadenza");
+        reminder.setDescription("L'assicurazione del veicolo " + vehicle.getLicensePlate() + " è in scadenza");
+        reminder.setType(ReminderType.INSURANCE_EXPIRY);
+        reminder.setReminderDate(calculateReminderDate(vehicle.getInsuranceExpiryDate(), 15));
+        reminder.setIsActive(true);
+        reminder.setIsRecurring(false);
+        
+        return reminderRepository.save(reminder);
+    }
+    
+    /**
+     * Crea promemoria per manutenzione programmata
+     */
+    public Reminder createMaintenanceReminder(MaintenanceRecord maintenanceRecord) {
+        Reminder reminder = new Reminder();
+        reminder.setVehicle(maintenanceRecord.getVehicle());
+        reminder.setUser(maintenanceRecord.getVehicle().getOwner());
+        reminder.setTitle("Manutenzione programmata");
+        reminder.setDescription("Manutenzione programmata per " + maintenanceRecord.getType().toString());
+        reminder.setType(ReminderType.MAINTENANCE_DUE);
+        reminder.setReminderDate(maintenanceRecord.getNextServiceDate());
+        reminder.setReminderMileage(maintenanceRecord.getNextServiceMileage());
+        reminder.setIsActive(true);
+        reminder.setIsRecurring(false);
+        
+        return reminderRepository.save(reminder);
+    }
+    
+    /**
+     * Trova promemoria attivi per utente
+     */
+    @Transactional(readOnly = true)
+    public List<Reminder> findActiveRemindersByUser(Long userId) {
+        return reminderRepository.findByUserIdAndIsActiveOrderByReminderDate(userId, true);
+    }
+    
+    /**
+     * Trova promemoria scaduti
+     */
+    @Transactional(readOnly = true)
+    public List<Reminder> findOverdueReminders() {
+        return reminderRepository.findByReminderDateBeforeAndIsActive(new Date(), true);
+    }
+    
+    /**
+     * Disattiva un promemoria
+     */
+    public void deactivateReminder(Long reminderId, Long userId) {
+        Reminder reminder = reminderRepository.findById(reminderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reminder", reminderId));
+        
+        if (!reminder.getUser().getId().equals(userId)) {
+            throw new UnauthorizedAccessException("Non hai i permessi per modificare questo promemoria");
+        }
+        
+        reminder.setIsActive(false);
+        reminderRepository.save(reminder);
+    }
+    
+    /**
+     * Aggiorna promemoria del veicolo
+     */
+    public void updateVehicleReminders(Vehicle vehicle) {
+        // Disattiva vecchi promemoria
+        List<Reminder> oldReminders = reminderRepository
+                .findByVehicleIdAndIsActiveOrderByReminderDate(vehicle.getId(), true);
+        
+        oldReminders.stream()
+                .filter(r -> r.getType() == ReminderType.INSPECTION_DUE || 
+                           r.getType() == ReminderType.INSURANCE_EXPIRY)
+                .forEach(r -> r.setIsActive(false));
+        
+        reminderRepository.saveAll(oldReminders);
+        
+        // Crea nuovi promemoria
+        createInspectionReminder(vehicle);
+        createInsuranceReminder(vehicle);
+    }
+    
+    private Date calculateReminderDate(Date expiryDate, int daysBefore) {
+        return Date.from(expiryDate.toInstant()
+                .minus(daysBefore, ChronoUnit.DAYS));
+    }
+}
+
+/**
+ * Servizio per la gestione delle fatture
+ */
+@Service
+@Transactional
+public class InvoiceService {
+    
+    private final InvoiceRepository invoiceRepository;
+    private final WorkshopService workshopService;
+    private final UserService userService;
+    private final MaintenanceService maintenanceService;
+    
+    public InvoiceService(InvoiceRepository invoiceRepository,
+                         WorkshopService workshopService,
+                         UserService userService,
+                         MaintenanceService maintenanceService) {
+        this.invoiceRepository = invoiceRepository;
+        this.workshopService = workshopService;
+        this.userService = userService;
+        this.maintenanceService = maintenanceService;
+    }
+    
+    /**
+     * Crea una nuova fattura
+     */
+    public Invoice createInvoice(Invoice invoice, Long workshopId) {
+        Workshop workshop = workshopService.findById(workshopId);
+        invoice.setWorkshop(workshop);
+        invoice.setStatus(InvoiceStatus.DRAFT);
+        invoice.setInvoiceNumber(generateInvoiceNumber(workshop));
+        
+        validateInvoice(invoice);
+        calculateInvoiceTotals(invoice);
+        
+        return invoiceRepository.save(invoice);
+    }
+    
+    /**
+     * Crea fattura da intervento di manutenzione
+     */
+    public Invoice createInvoiceFromMaintenance(Long maintenanceRecordId, Long workshopId) {
+        MaintenanceRecord maintenance = maintenanceService.findById(maintenanceRecordId);
+        Workshop workshop = workshopService.findById(workshopId);
+        
+        if (!maintenance.getWorkshop().getId().equals(workshopId)) {
+            throw new BusinessRuleViolationException("L'intervento non appartiene a questa officina");
+        }
+        
+        Invoice invoice = new Invoice();
+        invoice.setWorkshop(workshop);
+        invoice.setCustomer(maintenance.getVehicle().getOwner());
+        invoice.setMaintenanceRecord(maintenance);
+        invoice.setIssueDate(new Date());
+        invoice.setStatus(InvoiceStatus.DRAFT);
+        invoice.setInvoiceNumber(generateInvoiceNumber(workshop));
+        
+        // Crea voci fattura dall'intervento
+        createInvoiceItemsFromMaintenance(invoice, maintenance);
+        calculateInvoiceTotals(invoice);
+        
+        return invoiceRepository.save(invoice);
+    }
+    
+    /**
+     * Invia fattura al cliente
+     */
+    public Invoice sendInvoice(Long invoiceId, Long requesterId) {
+        Invoice invoice = findById(invoiceId);
+        validateInvoiceAccess(invoice, requesterId);
+        
+        if (invoice.getStatus() != InvoiceStatus.DRAFT) {
+            throw new BusinessRuleViolationException("Solo le fatture in bozza possono essere inviate");
+        }
+        
+        invoice.setStatus(InvoiceStatus.SENT);
+        if (invoice.getDueDate() == null) {
+            // Imposta scadenza a 30 giorni
+            invoice.setDueDate(Date.from(LocalDate.now().plusDays(30)
+                    .atStartOfDay(ZoneId.systemDefault()).toInstant()));
+        }
+        
+        return invoiceRepository.save(invoice);
+    }
+    
+    /**
+     * Registra pagamento fattura
+     */
+    public Invoice markAsPaid(Long invoiceId, PaymentMethod paymentMethod, Long requesterId) {
+        Invoice invoice = findById(invoiceId);
+        validateInvoiceAccess(invoice, requesterId);
+        
+        if (invoice.getStatus() == InvoiceStatus.PAID) {
+            throw new BusinessRuleViolationException("La fattura è già stata pagata");
+        }
+        
+        invoice.setStatus(InvoiceStatus.PAID);
+        invoice.setPaidDate(new Date());
+        invoice.setPaymentMethod(paymentMethod);
+        
+        return invoiceRepository.save(invoice);
+    }
+    
+    /**
+     * Trova fatture per officina
+     */
+    @Transactional(readOnly = true)
+    public List<Invoice> findByWorkshopId(Long workshopId) {
+        return invoiceRepository.findByWorkshopIdOrderByIssueDateDesc(workshopId);
+    }
+    
+    /**
+     * Trova fatture per cliente
+     */
+    @Transactional(readOnly = true)
+    public List<Invoice> findByCustomerId(Long customerId) {
+        return invoiceRepository.findByCustomerIdOrderByIssueDateDesc(customerId);
+    }
+    
+    /**
+     * Trova fatture scadute
+     */
+    @Transactional(readOnly = true)
+    public List<Invoice> findOverdueInvoices() {
+        return invoiceRepository.findByDueDateBeforeAndStatus(new Date(), InvoiceStatus.SENT);
+    }
+    
+    /**
+     * Trova per ID
+     */
+    @Transactional(readOnly = true)
+    public Invoice findById(Long id) {
+        return invoiceRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice", id));
+    }
+    
+    /**
+     * Calcola statistiche fatturazione per officina
+     */
+    @Transactional(readOnly = true)
+    public InvoiceStats calculateInvoiceStats(Long workshopId, int year, int month) {
+        List<Invoice> invoices = findByWorkshopId(workshopId);
+        
+        // Filtra per mese/anno se specificato
+        Stream<Invoice> filteredInvoices = invoices.stream();
+        if (year > 0) {
+            filteredInvoices = filteredInvoices.filter(inv -> {
+                LocalDate issueDate = inv.getIssueDate().toInstant()
+                        .atZone(ZoneId.systemDefault()).toLocalDate();
+                return issueDate.getYear() == year && 
+                       (month <= 0 || issueDate.getMonthValue() == month);
+            });
+        }
+        
+        List<Invoice> filtered = filteredInvoices.collect(Collectors.toList());
+        
+        BigDecimal totalRevenue = filtered.stream()
+                .filter(inv -> inv.getStatus() == InvoiceStatus.PAID)
+                .map(Invoice::getTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal pendingAmount = filtered.stream()
+                .filter(inv -> inv.getStatus() == InvoiceStatus.SENT)
+                .map(Invoice::getTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        long paidCount = filtered.stream()
+                .filter(inv -> inv.getStatus() == InvoiceStatus.PAID)
+                .count();
+        
+        long overdueCount = filtered.stream()
+                .filter(inv -> inv.getStatus() == InvoiceStatus.SENT && 
+                              inv.getDueDate() != null && 
+                              inv.getDueDate().before(new Date()))
+                .count();
+        
+        return new InvoiceStats(totalRevenue, pendingAmount, (int) paidCount, (int) overdueCount);
+    }
+    
+    private String generateInvoiceNumber(Workshop workshop) {
+        String year = String.valueOf(LocalDate.now().getYear());
+        String prefix = workshop.getName().substring(0, Math.min(3, workshop.getName().length())).toUpperCase();
+        
+        // Trova ultimo numero fattura per l'anno corrente
+        List<Invoice> yearInvoices = invoiceRepository.findByWorkshopIdOrderByIssueDateDesc(workshop.getId())
+                .stream()
+                .filter(inv -> inv.getInvoiceNumber().contains(year))
+                .collect(Collectors.toList());
+        
+        int nextNumber = yearInvoices.size() + 1;
+        return String.format("%s-%s-%04d", prefix, year, nextNumber);
+    }
+    
+    private void validateInvoice(Invoice invoice) {
+        if (invoice.getCustomer() == null) {
+            throw new BusinessRuleViolationException("Cliente obbligatorio");
+        }
+        
+        if (invoice.getItems() == null || invoice.getItems().isEmpty()) {
+            throw new BusinessRuleViolationException("La fattura deve contenere almeno una voce");
+        }
+    }
+    
+    private void validateInvoiceAccess(Invoice invoice, Long requesterId) {
+        if (!invoice.getWorkshop().getOwner().getId().equals(requesterId)) {
+            throw new UnauthorizedAccessException("Non hai i permessi per modificare questa fattura");
+        }
+    }
+    
+    private void calculateInvoiceTotals(Invoice invoice) {
+        BigDecimal subtotal = invoice.getItems().stream()
+                .map(InvoiceItem::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal vatRate = invoice.getVatRate() != null ? invoice.getVatRate() : new BigDecimal("22.00");
+        BigDecimal vatAmount = subtotal.multiply(vatRate).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+        BigDecimal total = subtotal.add(vatAmount);
+        
+        invoice.setSubtotal(subtotal);
+        invoice.setVatRate(vatRate);
+        invoice.setVatAmount(vatAmount);
+        invoice.setTotal(total);
+    }
+    
+    private void createInvoiceItemsFromMaintenance(Invoice invoice, MaintenanceRecord maintenance) {
+        List<InvoiceItem> items = new ArrayList<>();
+        
+        // Voce per manodopera
+        if (maintenance.getCost() != null) {
+            InvoiceItem laborItem = new InvoiceItem();
+            laborItem.setInvoice(invoice);
+            laborItem.setDescription("Manodopera - " + maintenance.getDescription());
+            laborItem.setQuantity(1);
+            laborItem.setUnitPrice(maintenance.getCost());
+            laborItem.setTotalPrice(maintenance.getCost());
+            laborItem.setItemType(ItemType.LABOR);
+            items.add(laborItem);
+        }
+        
+        // Voci per parti utilizzate
+        if (maintenance.getUsedParts() != null) {
+            for (UsedPart part : maintenance.getUsedParts()) {
+                InvoiceItem partItem = new InvoiceItem();
+                partItem.setInvoice(invoice);
+                partItem.setDescription(part.getPartName() + 
+                        (part.getPartNumber() != null ? " (" + part.getPartNumber() + ")" : ""));
+                partItem.setQuantity(part.getQuantity());
+                partItem.setUnitPrice(part.getUnitPrice());
+                partItem.setTotalPrice(part.getTotalPrice());
+                partItem.setItemType(ItemType.PART);
+                items.add(partItem);
+            }
+        }
+        
+        invoice.setItems(items);
+    }
+}
+
+/**
+ * Classe per le statistiche delle fatture
+ */
+public class InvoiceStats {
+    private final BigDecimal totalRevenue;
+    private final BigDecimal pendingAmount;
+    private final Integer paidInvoices;
+    private final Integer overdueInvoices;
+    
+    public InvoiceStats(BigDecimal totalRevenue, BigDecimal pendingAmount, 
+                       Integer paidInvoices, Integer overdueInvoices) {
+        this.totalRevenue = totalRevenue;
+        this.pendingAmount = pendingAmount;
+        this.paidInvoices = paidInvoices;
+        this.overdueInvoices = overdueInvoices;
+    }
+    
+    // Getter
+    public BigDecimal getTotalRevenue() { return totalRevenue; }
+    public BigDecimal getPendingAmount() { return pendingAmount; }
+    public Integer getPaidInvoices() { return paidInvoices; }
+    public Integer getOverdueInvoices() { return overdueInvoices; }
+}

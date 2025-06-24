@@ -1,0 +1,1272 @@
+// ========== IMPORTS NECESSARI ==========
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.validation.annotation.Validated;
+import javax.validation.Valid;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.ZoneId;
+
+// ========== BASE CONTROLLER ==========
+
+/**
+ * Controller base con utilities comuni
+ */
+public abstract class BaseController {
+    
+    protected Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal) {
+            return ((UserPrincipal) authentication.getPrincipal()).getId();
+        }
+        throw new UnauthorizedAccessException("Utente non autenticato");
+    }
+    
+    protected UserRole getCurrentUserRole() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal) {
+            return ((UserPrincipal) authentication.getPrincipal()).getRole();
+        }
+        throw new UnauthorizedAccessException("Utente non autenticato");
+    }
+    
+    protected <T> ResponseEntity<ApiResponse<T>> success(T data) {
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+    
+    protected <T> ResponseEntity<ApiResponse<T>> success(String message, T data) {
+        return ResponseEntity.ok(ApiResponse.success(message, data));
+    }
+    
+    protected <T> ResponseEntity<ApiResponse<T>> created(T data) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Risorsa creata con successo", data));
+    }
+    
+    protected <T> ResponseEntity<ApiResponse<T>> error(String message, HttpStatus status) {
+        return ResponseEntity.status(status)
+                .body(ApiResponse.error(message));
+    }
+}
+
+// ========== AUTHENTICATION CONTROLLER ==========
+
+/**
+ * Controller per autenticazione e registrazione
+ */
+@RestController
+@RequestMapping("/api/auth")
+@Validated
+public class AuthController extends BaseController {
+    
+    private final UserService userService;
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenProvider tokenProvider;
+    private final DTOMapper dtoMapper;
+    
+    public AuthController(UserService userService,
+                         AuthenticationManager authenticationManager,
+                         JwtTokenProvider tokenProvider,
+                         DTOMapper dtoMapper) {
+        this.userService = userService;
+        this.authenticationManager = authenticationManager;
+        this.tokenProvider = tokenProvider;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Registrazione nuovo utente
+     */
+    @PostMapping("/register")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> register(
+            @Valid @RequestBody UserRegistrationRequest request) {
+        
+        User user = dtoMapper.toUserEntity(request);
+        User savedUser = userService.createUser(user);
+        UserProfileResponse response = dtoMapper.toUserProfileResponse(savedUser);
+        
+        return created(response);
+    }
+    
+    /**
+     * Login utente
+     */
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<LoginResponse>> login(
+            @Valid @RequestBody LoginRequest request) {
+        
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+        );
+        
+        String token = tokenProvider.generateToken(authentication);
+        User user = userService.findByEmail(request.getEmail())
+                .orElseThrow(() -> new ResourceNotFoundException("Utente non trovato"));
+        
+        UserProfileResponse userResponse = dtoMapper.toUserProfileResponse(user);
+        LoginResponse response = new LoginResponse(token, userResponse);
+        
+        return success(response);
+    }
+    
+    /**
+     * Verifica validità token
+     */
+    @GetMapping("/verify")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> verifyToken() {
+        Long userId = getCurrentUserId();
+        User user = userService.findById(userId);
+        UserProfileResponse response = dtoMapper.toUserProfileResponse(user);
+        
+        return success(response);
+    }
+    
+    /**
+     * Logout (invalidazione token lato client)
+     */
+    @PostMapping("/logout")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<ApiResponse<String>> logout() {
+        return success("Logout effettuato con successo", null);
+    }
+}
+
+// ========== USER CONTROLLER ==========
+
+/**
+ * Controller per gestione profilo utente
+ */
+@RestController
+@RequestMapping("/api/users")
+@PreAuthorize("hasRole('USER')")
+@Validated
+public class UserController extends BaseController {
+    
+    private final UserService userService;
+    private final DTOMapper dtoMapper;
+    
+    public UserController(UserService userService, DTOMapper dtoMapper) {
+        this.userService = userService;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Ottieni profilo utente corrente
+     */
+    @GetMapping("/profile")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getProfile() {
+        Long userId = getCurrentUserId();
+        User user = userService.findById(userId);
+        UserProfileResponse response = dtoMapper.toUserProfileResponse(user);
+        
+        return success(response);
+    }
+    
+    /**
+     * Aggiorna profilo utente
+     */
+    @PutMapping("/profile")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateProfile(
+            @Valid @RequestBody UserProfileUpdateRequest request) {
+        
+        Long userId = getCurrentUserId();
+        User updatedUser = new User();
+        updatedUser.setFirstName(request.getFirstName());
+        updatedUser.setLastName(request.getLastName());
+        updatedUser.setPhoneNumber(request.getPhoneNumber());
+        updatedUser.setAddress(request.getAddress());
+        updatedUser.setCity(request.getCity());
+        updatedUser.setPostalCode(request.getPostalCode());
+        
+        User user = userService.updateProfile(userId, updatedUser);
+        UserProfileResponse response = dtoMapper.toUserProfileResponse(user);
+        
+        return success("Profilo aggiornato con successo", response);
+    }
+    
+    /**
+     * Cambia password
+     */
+    @PutMapping("/change-password")
+    public ResponseEntity<ApiResponse<String>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request) {
+        
+        Long userId = getCurrentUserId();
+        userService.changePassword(userId, request.getCurrentPassword(), request.getNewPassword());
+        
+        return success("Password cambiata con successo", null);
+    }
+    
+    /**
+     * Lista meccanici (solo per proprietari di veicoli)
+     */
+    @GetMapping("/mechanics")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> getMechanics() {
+        List<User> mechanics = userService.findAllMechanics();
+        List<UserSummaryResponse> response = mechanics.stream()
+                .map(dtoMapper::toUserSummaryResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+}
+
+// ========== VEHICLE CONTROLLER ==========
+
+/**
+ * Controller per gestione veicoli
+ */
+@RestController
+@RequestMapping("/api/vehicles")
+@PreAuthorize("hasRole('USER')")
+@Validated
+public class VehicleController extends BaseController {
+    
+    private final VehicleService vehicleService;
+    private final VehicleModelRepository vehicleModelRepository;
+    private final DTOMapper dtoMapper;
+    
+    public VehicleController(VehicleService vehicleService,
+                           VehicleModelRepository vehicleModelRepository,
+                           DTOMapper dtoMapper) {
+        this.vehicleService = vehicleService;
+        this.vehicleModelRepository = vehicleModelRepository;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Registra nuovo veicolo
+     */
+    @PostMapping
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<VehicleResponse>> registerVehicle(
+            @Valid @RequestBody VehicleRegistrationRequest request) {
+        
+        Long ownerId = getCurrentUserId();
+        
+        // Trova il modello
+        VehicleModel model = vehicleModelRepository.findById(request.getModelId())
+                .orElseThrow(() -> new ResourceNotFoundException("VehicleModel", request.getModelId()));
+        
+        // Crea veicolo
+        Vehicle vehicle = new Vehicle();
+        vehicle.setLicensePlate(request.getLicensePlate().toUpperCase());
+        vehicle.setVin(request.getVin().toUpperCase());
+        vehicle.setModel(model);
+        vehicle.setYear(request.getYear());
+        vehicle.setColor(request.getColor());
+        vehicle.setMileage(request.getMileage());
+        vehicle.setEngineCode(request.getEngineCode());
+        vehicle.setFuelType(request.getFuelType());
+        vehicle.setRegistrationDate(request.getRegistrationDate());
+        vehicle.setNextInspectionDate(request.getNextInspectionDate());
+        vehicle.setInsuranceExpiryDate(request.getInsuranceExpiryDate());
+        
+        Vehicle savedVehicle = vehicleService.registerVehicle(vehicle, ownerId);
+        VehicleResponse response = dtoMapper.toVehicleResponse(savedVehicle);
+        
+        return created(response);
+    }
+    
+    /**
+     * Lista veicoli dell'utente corrente
+     */
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<List<VehicleResponse>>> getMyVehicles() {
+        Long ownerId = getCurrentUserId();
+        List<Vehicle> vehicles = vehicleService.findByOwnerId(ownerId);
+        List<VehicleResponse> response = vehicles.stream()
+                .map(dtoMapper::toVehicleResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Dettagli veicolo per ID
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<VehicleResponse>> getVehicle(@PathVariable Long id) {
+        Vehicle vehicle = vehicleService.findById(id);
+        
+        // Verifica accesso: proprietario o meccanico che ha lavorato sul veicolo
+        Long currentUserId = getCurrentUserId();
+        UserRole currentRole = getCurrentUserRole();
+        
+        if (currentRole == UserRole.VEHICLE_OWNER && !vehicle.getOwner().getId().equals(currentUserId)) {
+            throw new UnauthorizedAccessException("Non hai accesso a questo veicolo");
+        }
+        
+        VehicleResponse response = dtoMapper.toVehicleResponse(vehicle);
+        return success(response);
+    }
+    
+    /**
+     * Aggiorna chilometraggio
+     */
+    @PutMapping("/{id}/mileage")
+    public ResponseEntity<ApiResponse<VehicleResponse>> updateMileage(
+            @PathVariable Long id,
+            @Valid @RequestBody MileageUpdateRequest request) {
+        
+        Long currentUserId = getCurrentUserId();
+        Vehicle vehicle = vehicleService.updateMileage(id, request.getMileage(), currentUserId);
+        VehicleResponse response = dtoMapper.toVehicleResponse(vehicle);
+        
+        return success("Chilometraggio aggiornato", response);
+    }
+    
+    /**
+     * Aggiorna scadenze
+     */
+    @PutMapping("/{id}/expiry-dates")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<VehicleResponse>> updateExpiryDates(
+            @PathVariable Long id,
+            @Valid @RequestBody ExpiryDatesUpdateRequest request) {
+        
+        Long currentUserId = getCurrentUserId();
+        Vehicle vehicle = vehicleService.updateExpiryDates(
+                id, 
+                request.getNextInspectionDate(), 
+                request.getInsuranceExpiryDate(), 
+                currentUserId
+        );
+        VehicleResponse response = dtoMapper.toVehicleResponse(vehicle);
+        
+        return success("Scadenze aggiornate", response);
+    }
+    
+    /**
+     * Cerca veicolo per targa (solo meccanici)
+     */
+    @GetMapping("/search/license-plate/{licensePlate}")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<VehicleResponse>> findByLicensePlate(
+            @PathVariable String licensePlate) {
+        
+        Vehicle vehicle = vehicleService.findByLicensePlate(licensePlate.toUpperCase())
+                .orElseThrow(() -> new ResourceNotFoundException("Veicolo con targa " + licensePlate + " non trovato"));
+        
+        VehicleResponse response = dtoMapper.toVehicleResponse(vehicle);
+        return success(response);
+    }
+    
+    /**
+     * Lista modelli veicoli disponibili
+     */
+    @GetMapping("/models")
+    public ResponseEntity<ApiResponse<List<VehicleModelResponse>>> getVehicleModels(
+            @RequestParam(required = false) String brand) {
+        
+        List<VehicleModel> models;
+        if (brand != null && !brand.isEmpty()) {
+            models = vehicleModelRepository.findByBrandIgnoreCase(brand);
+        } else {
+            models = vehicleModelRepository.findAll();
+        }
+        
+        List<VehicleModelResponse> response = models.stream()
+                .map(dtoMapper::toVehicleModelResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Lista marche veicoli
+     */
+    @GetMapping("/brands")
+    public ResponseEntity<ApiResponse<List<String>>> getVehicleBrands() {
+        List<String> brands = vehicleModelRepository.findAll().stream()
+                .map(VehicleModel::getBrand)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        
+        return success(brands);
+    }
+    
+    /**
+     * Veicoli con scadenze vicine
+     */
+    @GetMapping("/upcoming-expiries")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<List<VehicleResponse>>> getUpcomingExpiries(
+            @RequestParam(defaultValue = "30") int days) {
+        
+        List<Vehicle> vehicles = vehicleService.findVehiclesWithUpcomingExpiries(days);
+        Long currentUserId = getCurrentUserId();
+        
+        // Filtra solo i veicoli dell'utente corrente
+        List<VehicleResponse> response = vehicles.stream()
+                .filter(v -> v.getOwner().getId().equals(currentUserId))
+                .map(dtoMapper::toVehicleResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+}
+
+// ========== MAINTENANCE CONTROLLER ==========
+
+/**
+ * Controller per gestione manutenzioni
+ */
+@RestController
+@RequestMapping("/api/maintenance")
+@PreAuthorize("hasRole('USER')")
+@Validated
+public class MaintenanceController extends BaseController {
+    
+    private final MaintenanceService maintenanceService;
+    private final VehicleService vehicleService;
+    private final UserService userService;
+    private final WorkshopService workshopService;
+    private final DTOMapper dtoMapper;
+    
+    public MaintenanceController(MaintenanceService maintenanceService,
+                               VehicleService vehicleService,
+                               UserService userService,
+                               WorkshopService workshopService,
+                               DTOMapper dtoMapper) {
+        this.maintenanceService = maintenanceService;
+        this.vehicleService = vehicleService;
+        this.userService = userService;
+        this.workshopService = workshopService;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Crea nuovo intervento di manutenzione
+     */
+    @PostMapping
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<MaintenanceRecordResponse>> createMaintenanceRecord(
+            @Valid @RequestBody MaintenanceRecordCreateRequest request) {
+        
+        // Carica entità correlate
+        Vehicle vehicle = vehicleService.findById(request.getVehicleId());
+        
+        MaintenanceRecord record = new MaintenanceRecord();
+        record.setVehicle(vehicle);
+        record.setServiceDate(request.getServiceDate());
+        record.setMileageAtService(request.getMileageAtService());
+        record.setType(request.getType());
+        record.setDescription(request.getDescription());
+        record.setNotes(request.getNotes());
+        record.setCost(request.getCost());
+        record.setNextServiceDate(request.getNextServiceDate());
+        record.setNextServiceMileage(request.getNextServiceMileage());
+        
+        if (request.getWorkshopId() != null) {
+            Workshop workshop = workshopService.findById(request.getWorkshopId());
+            record.setWorkshop(workshop);
+        }
+        
+        if (request.getMechanicId() != null) {
+            User mechanic = userService.findById(request.getMechanicId());
+            record.setMechanic(mechanic);
+        }
+        
+        // Gestione parti utilizzate
+        if (request.getUsedParts() != null) {
+            List<UsedPart> usedParts = request.getUsedParts().stream()
+                    .map(partRequest -> {
+                        UsedPart part = new UsedPart();
+                        part.setMaintenanceRecord(record);
+                        part.setPartName(partRequest.getPartName());
+                        part.setPartNumber(partRequest.getPartNumber());
+                        part.setBrand(partRequest.getBrand());
+                        part.setQuantity(partRequest.getQuantity());
+                        part.setUnitPrice(partRequest.getUnitPrice());
+                        part.setTotalPrice(partRequest.getUnitPrice().multiply(new BigDecimal(partRequest.getQuantity())));
+                        return part;
+                    })
+                    .collect(Collectors.toList());
+            record.setUsedParts(usedParts);
+        }
+        
+        MaintenanceRecord savedRecord = maintenanceService.createMaintenanceRecord(record);
+        MaintenanceRecordResponse response = dtoMapper.toMaintenanceRecordResponse(savedRecord);
+        
+        return created(response);
+    }
+    
+    /**
+     * Lista interventi per veicolo
+     */
+    @GetMapping("/vehicle/{vehicleId}")
+    public ResponseEntity<ApiResponse<List<MaintenanceRecordResponse>>> getMaintenanceByVehicle(
+            @PathVariable Long vehicleId) {
+        
+        // Verifica accesso al veicolo
+        Vehicle vehicle = vehicleService.findById(vehicleId);
+        Long currentUserId = getCurrentUserId();
+        UserRole currentRole = getCurrentUserRole();
+        
+        if (currentRole == UserRole.VEHICLE_OWNER && !vehicle.getOwner().getId().equals(currentUserId)) {
+            throw new UnauthorizedAccessException("Non hai accesso agli interventi di questo veicolo");
+        }
+        
+        List<MaintenanceRecord> records = maintenanceService.findByVehicleId(vehicleId);
+        List<MaintenanceRecordResponse> response = records.stream()
+                .map(dtoMapper::toMaintenanceRecordResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Lista interventi per officina
+     */
+    @GetMapping("/workshop/{workshopId}")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<List<MaintenanceRecordResponse>>> getMaintenanceByWorkshop(
+            @PathVariable Long workshopId) {
+        
+        List<MaintenanceRecord> records = maintenanceService.findByWorkshopId(workshopId);
+        List<MaintenanceRecordResponse> response = records.stream()
+                .map(dtoMapper::toMaintenanceRecordResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Lista interventi del meccanico corrente
+     */
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<List<MaintenanceRecordResponse>>> getMyMaintenances() {
+        Long mechanicId = getCurrentUserId();
+        List<MaintenanceRecord> records = maintenanceService.findByMechanicId(mechanicId);
+        List<MaintenanceRecordResponse> response = records.stream()
+                .map(dtoMapper::toMaintenanceRecordResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Dettagli intervento
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<MaintenanceRecordResponse>> getMaintenanceRecord(
+            @PathVariable Long id) {
+        
+        MaintenanceRecord record = maintenanceService.findById(id);
+        
+        // Verifica accesso
+        Long currentUserId = getCurrentUserId();
+        UserRole currentRole = getCurrentUserRole();
+        
+        boolean hasAccess = false;
+        if (currentRole == UserRole.VEHICLE_OWNER) {
+            hasAccess = record.getVehicle().getOwner().getId().equals(currentUserId);
+        } else if (currentRole == UserRole.MECHANIC || currentRole == UserRole.WORKSHOP_ADMIN) {
+            hasAccess = (record.getMechanic() != null && record.getMechanic().getId().equals(currentUserId)) ||
+                       (record.getWorkshop() != null && record.getWorkshop().getOwner().getId().equals(currentUserId));
+        }
+        
+        if (!hasAccess) {
+            throw new UnauthorizedAccessException("Non hai accesso a questo intervento");
+        }
+        
+        MaintenanceRecordResponse response = dtoMapper.toMaintenanceRecordResponse(record);
+        return success(response);
+    }
+    
+    /**
+     * Completa intervento
+     */
+    @PutMapping("/{id}/complete")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<MaintenanceRecordResponse>> completeMaintenanceRecord(
+            @PathVariable Long id,
+            @Valid @RequestBody CompleteMaintenanceRequest request) {
+        
+        MaintenanceRecord record = maintenanceService.completeMaintenanceRecord(
+                id, request.getNotes(), request.getFinalMileage());
+        MaintenanceRecordResponse response = dtoMapper.toMaintenanceRecordResponse(record);
+        
+        return success("Intervento completato", response);
+    }
+    
+    /**
+     * Interventi programmati
+     */
+    @GetMapping("/scheduled")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<List<MaintenanceRecordResponse>>> getScheduledMaintenances() {
+        List<MaintenanceRecord> records = maintenanceService.findScheduledMaintenances();
+        List<MaintenanceRecordResponse> response = records.stream()
+                .map(dtoMapper::toMaintenanceRecordResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Interventi in corso
+     */
+    @GetMapping("/in-progress")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<List<MaintenanceRecordResponse>>> getInProgressMaintenances() {
+        List<MaintenanceRecord> records = maintenanceService.findInProgressMaintenances();
+        List<MaintenanceRecordResponse> response = records.stream()
+                .map(dtoMapper::toMaintenanceRecordResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Statistiche manutenzione per veicolo
+     */
+    @GetMapping("/stats/vehicle/{vehicleId}")
+    public ResponseEntity<ApiResponse<MaintenanceStatsResponse>> getMaintenanceStats(
+            @PathVariable Long vehicleId) {
+        
+        // Verifica accesso al veicolo
+        Vehicle vehicle = vehicleService.findById(vehicleId);
+        Long currentUserId = getCurrentUserId();
+        UserRole currentRole = getCurrentUserRole();
+        
+        if (currentRole == UserRole.VEHICLE_OWNER && !vehicle.getOwner().getId().equals(currentUserId)) {
+            throw new UnauthorizedAccessException("Non hai accesso alle statistiche di questo veicolo");
+        }
+        
+        MaintenanceStats stats = maintenanceService.calculateMaintenanceStats(vehicleId);
+        
+        MaintenanceStatsResponse response = new MaintenanceStatsResponse();
+        response.setTotalCost(stats.getTotalCost());
+        response.setCompletedMaintenances(stats.getCompletedMaintenances());
+        response.setTotalMaintenances(stats.getTotalMaintenances());
+        
+        // Calcola media costo
+        if (stats.getCompletedMaintenances() > 0) {
+            response.setAverageCost(stats.getTotalCost().divide(
+                    new BigDecimal(stats.getCompletedMaintenances()), 2, RoundingMode.HALF_UP));
+        } else {
+            response.setAverageCost(BigDecimal.ZERO);
+        }
+        
+        return success(response);
+    }
+}
+
+// ========== WORKSHOP CONTROLLER ==========
+
+/**
+ * Controller per gestione officine
+ */
+@RestController
+@RequestMapping("/api/workshops")
+@PreAuthorize("hasRole('USER')")
+@Validated
+public class WorkshopController extends BaseController {
+    
+    private final WorkshopService workshopService;
+    private final DTOMapper dtoMapper;
+    
+    public WorkshopController(WorkshopService workshopService, DTOMapper dtoMapper) {
+        this.workshopService = workshopService;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Crea nuova officina
+     */
+    @PostMapping
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<WorkshopResponse>> createWorkshop(
+            @Valid @RequestBody WorkshopCreateRequest request) {
+        
+        Long ownerId = getCurrentUserId();
+        Workshop workshop = dtoMapper.toWorkshopEntity(request);
+        Workshop savedWorkshop = workshopService.createWorkshop(workshop, ownerId);
+        WorkshopResponse response = dtoMapper.toWorkshopResponse(savedWorkshop);
+        
+        return created(response);
+    }
+    
+    /**
+     * Ottieni officina dell'utente corrente
+     */
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<WorkshopResponse>> getMyWorkshop() {
+        Long ownerId = getCurrentUserId();
+        Workshop workshop = workshopService.findByOwnerId(ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Nessuna officina registrata per questo utente"));
+        
+        WorkshopResponse response = dtoMapper.toWorkshopResponse(workshop);
+        return success(response);
+    }
+    
+    /**
+     * Aggiorna officina
+     */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<WorkshopResponse>> updateWorkshop(
+            @PathVariable Long id,
+            @Valid @RequestBody WorkshopCreateRequest request) {
+        
+        Long requesterId = getCurrentUserId();
+        Workshop updatedWorkshop = dtoMapper.toWorkshopEntity(request);
+        Workshop workshop = workshopService.updateWorkshop(id, updatedWorkshop, requesterId);
+        WorkshopResponse response = dtoMapper.toWorkshopResponse(workshop);
+        
+        return success("Officina aggiornata", response);
+    }
+    
+    /**
+     * Dettagli officina
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<WorkshopResponse>> getWorkshop(@PathVariable Long id) {
+        Workshop workshop = workshopService.findById(id);
+        WorkshopResponse response = dtoMapper.toWorkshopResponse(workshop);
+        
+        return success(response);
+    }
+    
+    /**
+     * Cerca officine per città
+     */
+    @GetMapping("/search/city/{city}")
+    public ResponseEntity<ApiResponse<List<WorkshopSummaryResponse>>> findByCity(
+            @PathVariable String city) {
+        
+        List<Workshop> workshops = workshopService.findByCity(city);
+        List<WorkshopSummaryResponse> response = workshops.stream()
+                .map(dtoMapper::toWorkshopSummaryResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Cerca officine per tipo di servizio
+     */
+    @GetMapping("/search/service/{serviceType}")
+    public ResponseEntity<ApiResponse<List<WorkshopSummaryResponse>>> findByServiceType(
+            @PathVariable ServiceType serviceType) {
+        
+        List<Workshop> workshops = workshopService.findByServiceType(serviceType);
+        List<WorkshopSummaryResponse> response = workshops.stream()
+                .map(dtoMapper::toWorkshopSummaryResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Lista tutti i tipi di servizio disponibili
+     */
+    @GetMapping("/service-types")
+    public ResponseEntity<ApiResponse<List<ServiceType>>> getServiceTypes() {
+        List<ServiceType> serviceTypes = Arrays.asList(ServiceType.values());
+        return success(serviceTypes);
+    }
+}
+
+// ========== INVOICE CONTROLLER ==========
+
+/**
+ * Controller per gestione fatture
+ */
+@RestController
+@RequestMapping("/api/invoices")
+@PreAuthorize("hasRole('USER')")
+@Validated
+public class InvoiceController extends BaseController {
+    
+    private final InvoiceService invoiceService;
+    private final WorkshopService workshopService;
+    private final UserService userService;
+    private final DTOMapper dtoMapper;
+    
+    public InvoiceController(InvoiceService invoiceService,
+                           WorkshopService workshopService,
+                           UserService userService,
+                           DTOMapper dtoMapper) {
+        this.invoiceService = invoiceService;
+        this.workshopService = workshopService;
+        this.userService = userService;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Crea nuova fattura
+     */
+    @PostMapping
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<InvoiceResponse>> createInvoice(
+            @Valid @RequestBody InvoiceCreateRequest request) {
+        
+        Long currentUserId = getCurrentUserId();
+        Workshop workshop = workshopService.findByOwnerId(currentUserId)
+                .orElseThrow(() -> new BusinessRuleViolationException("Devi avere un'officina per creare fatture"));
+        
+        // Crea entità fattura
+        Invoice invoice = new Invoice();
+        invoice.setIssueDate(request.getIssueDate());
+        invoice.setDueDate(request.getDueDate());
+        invoice.setVatRate(request.getVatRate() != null ? request.getVatRate() : new BigDecimal("22.00"));
+        invoice.setNotes(request.getNotes());
+        
+        // Carica cliente
+        User customer = userService.findById(request.getCustomerId());
+        invoice.setCustomer(customer);
+        
+        // Crea voci fattura
+        List<InvoiceItem> items = request.getItems().stream()
+                .map(itemRequest -> {
+                    InvoiceItem item = new InvoiceItem();
+                    item.setInvoice(invoice);
+                    item.setDescription(itemRequest.getDescription());
+                    item.setQuantity(itemRequest.getQuantity());
+                    item.setUnitPrice(itemRequest.getUnitPrice());
+                    item.setTotalPrice(itemRequest.getUnitPrice().multiply(new BigDecimal(itemRequest.getQuantity())));
+                    item.setItemType(itemRequest.getItemType());
+                    return item;
+                })
+                .collect(Collectors.toList());
+        invoice.setItems(items);
+        
+        Invoice savedInvoice = invoiceService.createInvoice(invoice, workshop.getId());
+        InvoiceResponse response = dtoMapper.toInvoiceResponse(savedInvoice);
+        
+        return created(response);
+    }
+    
+    /**
+     * Crea fattura da intervento di manutenzione
+     */
+    @PostMapping("/from-maintenance/{maintenanceId}")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<InvoiceResponse>> createInvoiceFromMaintenance(
+            @PathVariable Long maintenanceId) {
+        
+        Long currentUserId = getCurrentUserId();
+        Workshop workshop = workshopService.findByOwnerId(currentUserId)
+                .orElseThrow(() -> new BusinessRuleViolationException("Devi avere un'officina per creare fatture"));
+        
+        Invoice invoice = invoiceService.createInvoiceFromMaintenance(maintenanceId, workshop.getId());
+        InvoiceResponse response = dtoMapper.toInvoiceResponse(invoice);
+        
+        return created(response);
+    }
+    
+    /**
+     * Lista fatture dell'officina corrente
+     */
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<List<InvoiceResponse>>> getMyInvoices() {
+        Long currentUserId = getCurrentUserId();
+        Workshop workshop = workshopService.findByOwnerId(currentUserId)
+                .orElseThrow(() -> new BusinessRuleViolationException("Devi avere un'officina per vedere le fatture"));
+        
+        List<Invoice> invoices = invoiceService.findByWorkshopId(workshop.getId());
+        List<InvoiceResponse> response = invoices.stream()
+                .map(dtoMapper::toInvoiceResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Lista fatture del cliente corrente
+     */
+    @GetMapping("/customer")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<List<InvoiceResponse>>> getCustomerInvoices() {
+        Long customerId = getCurrentUserId();
+        List<Invoice> invoices = invoiceService.findByCustomerId(customerId);
+        List<InvoiceResponse> response = invoices.stream()
+                .map(dtoMapper::toInvoiceResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Dettagli fattura
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<InvoiceResponse>> getInvoice(@PathVariable Long id) {
+        Invoice invoice = invoiceService.findById(id);
+        
+        // Verifica accesso
+        Long currentUserId = getCurrentUserId();
+        UserRole currentRole = getCurrentUserRole();
+        
+        boolean hasAccess = false;
+        if (currentRole == UserRole.VEHICLE_OWNER) {
+            hasAccess = invoice.getCustomer().getId().equals(currentUserId);
+        } else if (currentRole == UserRole.MECHANIC || currentRole == UserRole.WORKSHOP_ADMIN) {
+            hasAccess = invoice.getWorkshop().getOwner().getId().equals(currentUserId);
+        }
+        
+        if (!hasAccess) {
+            throw new UnauthorizedAccessException("Non hai accesso a questa fattura");
+        }
+        
+        InvoiceResponse response = dtoMapper.toInvoiceResponse(invoice);
+        return success(response);
+    }
+    
+    /**
+     * Invia fattura
+     */
+    @PutMapping("/{id}/send")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<InvoiceResponse>> sendInvoice(@PathVariable Long id) {
+        Long requesterId = getCurrentUserId();
+        Invoice invoice = invoiceService.sendInvoice(id, requesterId);
+        InvoiceResponse response = dtoMapper.toInvoiceResponse(invoice);
+        
+        return success("Fattura inviata", response);
+    }
+    
+    /**
+     * Registra pagamento
+     */
+    @PutMapping("/{id}/pay")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<InvoiceResponse>> markAsPaid(
+            @PathVariable Long id,
+            @Valid @RequestBody PaymentRequest request) {
+        
+        Long requesterId = getCurrentUserId();
+        Invoice invoice = invoiceService.markAsPaid(id, request.getPaymentMethod(), requesterId);
+        InvoiceResponse response = dtoMapper.toInvoiceResponse(invoice);
+        
+        return success("Pagamento registrato", response);
+    }
+    
+    /**
+     * Fatture scadute
+     */
+    @GetMapping("/overdue")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<List<InvoiceResponse>>> getOverdueInvoices() {
+        List<Invoice> invoices = invoiceService.findOverdueInvoices();
+        
+        // Filtra per officina dell'utente corrente
+        Long currentUserId = getCurrentUserId();
+        List<InvoiceResponse> response = invoices.stream()
+                .filter(inv -> inv.getWorkshop().getOwner().getId().equals(currentUserId))
+                .map(dtoMapper::toInvoiceResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Statistiche fatturazione
+     */
+    @GetMapping("/stats")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<InvoiceStatsResponse>> getInvoiceStats(
+            @RequestParam(defaultValue = "0") int year,
+            @RequestParam(defaultValue = "0") int month) {
+        
+        Long currentUserId = getCurrentUserId();
+        Workshop workshop = workshopService.findByOwnerId(currentUserId)
+                .orElseThrow(() -> new BusinessRuleViolationException("Devi avere un'officina per vedere le statistiche"));
+        
+        InvoiceStats stats = invoiceService.calculateInvoiceStats(workshop.getId(), year, month);
+        
+        InvoiceStatsResponse response = new InvoiceStatsResponse();
+        response.setTotalRevenue(stats.getTotalRevenue());
+        response.setPendingAmount(stats.getPendingAmount());
+        response.setPaidInvoices(stats.getPaidInvoices());
+        response.setOverdueInvoices(stats.getOverdueInvoices());
+        response.setTotalInvoices(stats.getPaidInvoices() + stats.getOverdueInvoices());
+        
+        // Calcola media valore fattura
+        if (response.getTotalInvoices() > 0) {
+            response.setAverageInvoiceValue(stats.getTotalRevenue().add(stats.getPendingAmount())
+                    .divide(new BigDecimal(response.getTotalInvoices()), 2, RoundingMode.HALF_UP));
+        } else {
+            response.setAverageInvoiceValue(BigDecimal.ZERO);
+        }
+        
+        return success(response);
+    }
+}
+
+// ========== REMINDER CONTROLLER ==========
+
+/**
+ * Controller per gestione promemoria
+ */
+@RestController
+@RequestMapping("/api/reminders")
+@PreAuthorize("hasRole('USER')")
+@Validated
+public class ReminderController extends BaseController {
+    
+    private final ReminderService reminderService;
+    private final VehicleService vehicleService;
+    private final DTOMapper dtoMapper;
+    
+    public ReminderController(ReminderService reminderService,
+                            VehicleService vehicleService,
+                            DTOMapper dtoMapper) {
+        this.reminderService = reminderService;
+        this.vehicleService = vehicleService;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Crea promemoria personalizzato
+     */
+    @PostMapping
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<ReminderResponse>> createReminder(
+            @Valid @RequestBody ReminderCreateRequest request) {
+        
+        Long userId = getCurrentUserId();
+        
+        // Verifica accesso al veicolo
+        Vehicle vehicle = vehicleService.findById(request.getVehicleId());
+        if (!vehicle.getOwner().getId().equals(userId)) {
+            throw new UnauthorizedAccessException("Non hai accesso a questo veicolo");
+        }
+        
+        Reminder reminder = new Reminder();
+        reminder.setVehicle(vehicle);
+        reminder.setTitle(request.getTitle());
+        reminder.setDescription(request.getDescription());
+        reminder.setType(request.getType());
+        reminder.setReminderDate(request.getReminderDate());
+        reminder.setReminderMileage(request.getReminderMileage());
+        reminder.setIsRecurring(request.getIsRecurring());
+        reminder.setRecurringIntervalDays(request.getRecurringIntervalDays());
+        reminder.setRecurringIntervalMileage(request.getRecurringIntervalMileage());
+        
+        Reminder savedReminder = reminderService.createCustomReminder(reminder, userId);
+        ReminderResponse response = dtoMapper.toReminderResponse(savedReminder);
+        
+        return created(response);
+    }
+    
+    /**
+     * Lista promemoria attivi dell'utente
+     */
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<List<ReminderResponse>>> getMyReminders() {
+        Long userId = getCurrentUserId();
+        List<Reminder> reminders = reminderService.findActiveRemindersByUser(userId);
+        List<ReminderResponse> response = reminders.stream()
+                .map(dtoMapper::toReminderResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Promemoria scaduti
+     */
+    @GetMapping("/overdue")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<List<ReminderResponse>>> getOverdueReminders() {
+        Long userId = getCurrentUserId();
+        List<Reminder> allOverdue = reminderService.findOverdueReminders();
+        
+        // Filtra per utente corrente
+        List<ReminderResponse> response = allOverdue.stream()
+                .filter(r -> r.getUser().getId().equals(userId))
+                .map(dtoMapper::toReminderResponse)
+                .collect(Collectors.toList());
+        
+        return success(response);
+    }
+    
+    /**
+     * Disattiva promemoria
+     */
+    @PutMapping("/{id}/deactivate")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<String>> deactivateReminder(@PathVariable Long id) {
+        Long userId = getCurrentUserId();
+        reminderService.deactivateReminder(id, userId);
+        
+        return success("Promemoria disattivato", null);
+    }
+    
+    /**
+     * Lista tipi di promemoria disponibili
+     */
+    @GetMapping("/types")
+    public ResponseEntity<ApiResponse<List<ReminderType>>> getReminderTypes() {
+        List<ReminderType> types = Arrays.asList(ReminderType.values());
+        return success(types);
+    }
+}
+
+// ========== DASHBOARD CONTROLLER ==========
+
+/**
+ * Controller per dashboard e overview
+ */
+@RestController
+@RequestMapping("/api/dashboard")
+@PreAuthorize("hasRole('USER')")
+public class DashboardController extends BaseController {
+    
+    private final VehicleService vehicleService;
+    private final MaintenanceService maintenanceService;
+    private final ReminderService reminderService;
+    private final InvoiceService invoiceService;
+    private final WorkshopService workshopService;
+    private final DTOMapper dtoMapper;
+    
+    public DashboardController(VehicleService vehicleService,
+                             MaintenanceService maintenanceService,
+                             ReminderService reminderService,
+                             InvoiceService invoiceService,
+                             WorkshopService workshopService,
+                             DTOMapper dtoMapper) {
+        this.vehicleService = vehicleService;
+        this.maintenanceService = maintenanceService;
+        this.reminderService = reminderService;
+        this.invoiceService = invoiceService;
+        this.workshopService = workshopService;
+        this.dtoMapper = dtoMapper;
+    }
+    
+    /**
+     * Dashboard per proprietario veicolo
+     */
+    @GetMapping("/owner")
+    @PreAuthorize("hasRole('VEHICLE_OWNER')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOwnerDashboard() {
+        Long userId = getCurrentUserId();
+        Map<String, Object> dashboard = new HashMap<>();
+        
+        // Veicoli
+        List<Vehicle> vehicles = vehicleService.findByOwnerId(userId);
+        dashboard.put("totalVehicles", vehicles.size());
+        dashboard.put("vehicles", vehicles.stream()
+                .map(dtoMapper::toVehicleSummaryResponse)
+                .collect(Collectors.toList()));
+        
+        // Scadenze vicine
+        List<Vehicle> upcomingExpiries = vehicleService.findVehiclesWithUpcomingExpiries(30)
+                .stream()
+                .filter(v -> v.getOwner().getId().equals(userId))
+                .collect(Collectors.toList());
+        dashboard.put("upcomingExpiries", upcomingExpiries.stream()
+                .map(dtoMapper::toVehicleSummaryResponse)
+                .collect(Collectors.toList()));
+        
+        // Promemoria attivi
+        List<Reminder> activeReminders = reminderService.findActiveRemindersByUser(userId);
+        dashboard.put("activeReminders", activeReminders.stream()
+                .map(dtoMapper::toReminderResponse)
+                .limit(5)
+                .collect(Collectors.toList()));
+        
+        // Ultime manutenzioni
+        List<MaintenanceRecord> recentMaintenances = new ArrayList<>();
+        for (Vehicle vehicle : vehicles) {
+            List<MaintenanceRecord> vehicleMaintenances = maintenanceService.findByVehicleId(vehicle.getId());
+            recentMaintenances.addAll(vehicleMaintenances.stream()
+                    .limit(3)
+                    .collect(Collectors.toList()));
+        }
+        dashboard.put("recentMaintenances", recentMaintenances.stream()
+                .sorted((m1, m2) -> m2.getServiceDate().compareTo(m1.getServiceDate()))
+                .limit(5)
+                .map(dtoMapper::toMaintenanceRecordResponse)
+                .collect(Collectors.toList()));
+        
+        // Fatture recenti
+        List<Invoice> recentInvoices = invoiceService.findByCustomerId(userId);
+        dashboard.put("recentInvoices", recentInvoices.stream()
+                .limit(5)
+                .map(dtoMapper::toInvoiceResponse)
+                .collect(Collectors.toList()));
+        
+        return success(dashboard);
+    }
+    
+    /**
+     * Dashboard per meccanico/officina
+     */
+    @GetMapping("/mechanic")
+    @PreAuthorize("hasRole('MECHANIC') or hasRole('WORKSHOP_ADMIN')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getMechanicDashboard() {
+        Long userId = getCurrentUserId();
+        Map<String, Object> dashboard = new HashMap<>();
+        
+        // Officina
+        Optional<Workshop> workshopOpt = workshopService.findByOwnerId(userId);
+        if (workshopOpt.isPresent()) {
+            Workshop workshop = workshopOpt.get();
+            dashboard.put("workshop", dtoMapper.toWorkshopSummaryResponse(workshop));
+            
+            // Interventi programmati
+            List<MaintenanceRecord> scheduled = maintenanceService.findScheduledMaintenances()
+                    .stream()
+                    .filter(m -> m.getWorkshop() != null && m.getWorkshop().getId().equals(workshop.getId()))
+                    .collect(Collectors.toList());
+            dashboard.put("scheduledMaintenances", scheduled.stream()
+                    .map(dtoMapper::toMaintenanceRecordResponse)
+                    .collect(Collectors.toList()));
+            
+            // Interventi in corso
+            List<MaintenanceRecord> inProgress = maintenanceService.findInProgressMaintenances()
+                    .stream()
+                    .filter(m -> m.getWorkshop() != null && m.getWorkshop().getId().equals(workshop.getId()))
+                    .collect(Collectors.toList());
+            dashboard.put("inProgressMaintenances", inProgress.stream()
+                    .map(dtoMapper::toMaintenanceRecordResponse)
+                    .collect(Collectors.toList()));
+            
+            // Fatture scadute
+            List<Invoice> overdueInvoices = invoiceService.findOverdueInvoices()
+                    .stream()
+                    .filter(inv -> inv.getWorkshop().getId().equals(workshop.getId()))
+                    .collect(Collectors.toList());
+            dashboard.put("overdueInvoices", overdueInvoices.stream()
+                    .map(dtoMapper::toInvoiceResponse)
+                    .collect(Collectors.toList()));
+            
+            // Statistiche del mese
+            LocalDate now = LocalDate.now();
+            InvoiceStats monthlyStats = invoiceService.calculateInvoiceStats(
+                    workshop.getId(), now.getYear(), now.getMonthValue());
+            dashboard.put("monthlyStats", monthlyStats);
+        }
+        
+        // Interventi personali
+        List<MaintenanceRecord> myMaintenances = maintenanceService.findByMechanicId(userId);
+        dashboard.put("myRecentMaintenances", myMaintenances.stream()
+                .limit(10)
+                .map(dtoMapper::toMaintenanceRecordResponse)
+                .collect(Collectors.toList()));
+        
+        return success(dashboard);
+    }
+}
