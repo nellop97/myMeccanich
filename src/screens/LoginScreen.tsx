@@ -15,7 +15,9 @@ import {
 } from 'react-native-paper';
 import { AuthStackParamList } from '../navigation/AppNavigator';
 import { useStore } from '../store';
-
+import appleAuth, { AppleButton } from '@invertase/react-native-apple-authentication';
+import { AppleAuthProvider, getAuth, GoogleAuthProvider, signInWithCredential } from '@react-native-firebase/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 type NavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
@@ -90,6 +92,51 @@ export default function LoginScreen() {
     }
   };
 
+  async function onAppleButtonPress() {
+  // Start the sign-in request
+  const appleAuthRequestResponse = await appleAuth.performRequest({
+    requestedOperation: appleAuth.Operation.LOGIN,
+    // As per the FAQ of react-native-apple-authentication, the name should come first in the following array.
+    // See: https://github.com/invertase/react-native-apple-authentication#faqs
+    requestedScopes: [appleAuth.Scope.FULL_NAME, appleAuth.Scope.EMAIL],
+  });
+
+  // Ensure Apple returned a user identityToken
+  if (!appleAuthRequestResponse.identityToken) {
+    throw new Error('Apple Sign-In failed - no identify token returned');
+  }
+
+  // Create a Firebase credential from the response
+  const { identityToken, nonce } = appleAuthRequestResponse;
+  const appleCredential = AppleAuthProvider.credential(identityToken, nonce);
+
+  // Sign the user in with the credential
+  console.log(signInWithCredential(getAuth(), appleCredential));
+
+  return ;
+}
+async function onGoogleButtonPress() {
+  // Check if your device supports Google Play
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  // Get the users ID token
+  const signInResult = await GoogleSignin.signIn();
+
+  // Try the new style of google-sign in result, from v13+ of that module
+  let idToken = signInResult.data?.idToken;
+  if (!idToken) {
+    // if you are using older versions of google-signin, try old style result
+    idToken = signInResult.idToken;
+  }
+  if (!idToken) {
+    throw new Error('No ID token found');
+  }
+
+  // Create a Google credential with the token
+  const googleCredential = GoogleAuthProvider.credential(signInResult.data.idToken);
+
+  // Sign-in the user with the credential
+  return signInWithCredential(getAuth(), googleCredential);
+}
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -192,21 +239,14 @@ export default function LoginScreen() {
               icon="google"
               mode="contained"
               size={24}
-              onPress={() => {}}
-              style={styles.socialButton}
-            />
-            <IconButton
-              icon="facebook"
-              mode="contained"
-              size={24}
-              onPress={() => {}}
+              onPress={() => onGoogleButtonPress().then(() => console.log('Signed in with Google!'))}
               style={styles.socialButton}
             />
             <IconButton
               icon="apple"
               mode="contained"
               size={24}
-              onPress={() => {}}
+              onPress={() => onAppleButtonPress().then(() => console.log('Apple sign-in complete!'))}
               style={styles.socialButton}
             />
           </View>

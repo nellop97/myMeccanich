@@ -34,9 +34,9 @@ import {
   BarChart2,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useStore } from '../store';
+import { useStore } from '../../store';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useUserCarsStore } from '../store/useCarsStore';
+import { useUserCarsStore } from '../../store/useCarsStore';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const CARD_WIDTH = screenWidth * 0.8;

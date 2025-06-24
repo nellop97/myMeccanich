@@ -23,7 +23,7 @@ import CustomersListScreen from '../screens/mechanic/CustomersListScreen';
 import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
 
 // Importa le nuove schermate utente
-import HomeScreen from '../screens/HomeScreen';
+import HomeScreen from '../screens/user/HomeScreen';
 import AddCarScreen from '../screens/user/AddCarScreen';
 import CarOverviewScreen from '../screens/user/CarOverviewScreen';
 import CarMaintenanceAllScreen from '../screens/user/CarMaintenanceAllScreen';
