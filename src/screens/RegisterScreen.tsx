@@ -137,8 +137,8 @@ const RegisterScreen: React.FC = () => {
   let request: any, response: any, promptAsync: any;
   if (Platform.OS !== 'web' && RNComponents.Google) {
     [request, response, promptAsync] = RNComponents.Google.useAuthRequest({
-      clientId: 'YOUR_GOOGLE_CLIENT_ID',
-      iosClientId: 'YOUR_IOS_CLIENT_ID',
+      clientId: '112490164694439514061',
+      iosClientId: '619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com',
       androidClientId: 'YOUR_ANDROID_CLIENT_ID',
     });
 

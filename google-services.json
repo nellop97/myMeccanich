@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "619020396283",
+    "project_id": "mymecanich",
+    "storage_bucket": "mymecanich.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:619020396283:android:40491528c86f9a7b05b25e",
+        "android_client_info": {
+          "package_name": "com.mymeccanick"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "619020396283-4gd2pd371hop6d1vkc0tvo6j3jaod2t6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7yNZPe5_hN2TTAa58EBjkbS9k6NfkYGc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "619020396283-4gd2pd371hop6d1vkc0tvo6j3jaod2t6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mymeccanich.com"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "AutoManager",
-    "slug": "auto-manager",
+    "name": "MyMechanic",
+    "slug": "myMechanic",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./logo.png",
-    "scheme": "auto-manager",
+    "scheme": "mymeccanich",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -17,7 +17,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.automanager",
+      "bundleIdentifier": "com.yourcompany.mymeccanich",
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true
       }
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yourcompany.automanager"
+      "package": "com.yourcompany.mymeccanich"
     },
     "web": {
       "bundler": "metro",
