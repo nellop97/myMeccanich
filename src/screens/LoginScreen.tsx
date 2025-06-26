@@ -37,7 +37,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 // Configurazione Google OAuth
 const googleConfig = {
-  clientId: '1:619020396283:web:883f0ca48dce8c4d05b25e',
+  clientId: '619020396283-hsb93gobbbuokvc80idf466ptlh7fmdi.apps.googleusercontent.com',
   scopes: ['openid', 'profile', 'email'],
   additionalParameters: {},
   customParameters: {},

@@ -4,35 +4,35 @@
     "slug": "myMechanic",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./logo.png",
+    // "icon": "./logo.png", // Commenta questa riga
     "scheme": "mymeccanich",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./splashscreen.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    // "splash": { // Commenta l'intero blocco splash
+    //   "image": "./splashscreen.png",
+    //   "resizeMode": "contain",
+    //   "backgroundColor": "#ffffff"
+    // },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.mymeccanich",
+      "bundleIdentifier": "com.mymeccanich.com",
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.yourcompany.mymeccanich"
+      // "adaptiveIcon": { // Commenta l'intero blocco adaptiveIcon
+      //   "foregroundImage": "./logo.png",
+      //   "backgroundColor": "#ffffff"
+      // },
+      "package": "com.mymecchanich"
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "static"
+      // "favicon": "./logo.png" /
     },
     "plugins": [
       "expo-dev-client",

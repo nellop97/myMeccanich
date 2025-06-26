@@ -1,7 +1,7 @@
 // src/hooks/useAuth.ts
 import { useState, useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
-import { 
+import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
@@ -46,9 +46,9 @@ export const useAuth = () => {
   // Google OAuth configuration - SOSTITUISCI CON I TUOI CLIENT ID REALI
   const googleConfig = {
     // Questi sono placeholder - sostituisci con i tuoi veri Client ID
-    webClientId: '619020396283-web-client-id.apps.googleusercontent.com',
-    iosClientId: '619020396283-ios-client-id.apps.googleusercontent.com',
-    androidClientId: '619020396283-android-client-id.apps.googleusercontent.com',
+    webClientId: '619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com',
+    iosClientId: '619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com',
+    androidClientId: '619020396283-hsb93gobbbuokvc80idf466ptlh7fmdi.apps.googleusercontent.com',
     expoClientId: '619020396283-expo-client-id.apps.googleusercontent.com',
   };
 
@@ -80,8 +80,8 @@ export const useAuth = () => {
           scheme: 'mymeccanich', // Deve corrispondere a app.json
           path: 'redirect'
         }),
-      }, { 
-        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth' 
+      }, {
+        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth'
       });
     } catch (error) {
       console.log('Could not initialize Google Auth Request:', error);
@@ -105,7 +105,7 @@ export const useAuth = () => {
       } else {
         setUser(null);
       }
-      
+
       if (initializing) {
         setInitializing(false);
       }
@@ -159,18 +159,18 @@ export const useAuth = () => {
 
   // Registrazione con email e password
   const registerWithEmail = async (
-    email: string, 
-    password: string, 
+    email: string,
+    password: string,
     displayName?: string
   ) => {
     try {
       setLoading(true);
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
+
       if (displayName) {
         await updateProfile(userCredential.user, { displayName });
       }
-      
+
       return { success: true, user: userCredential.user };
     } catch (error: any) {
       const errorMessage = getFirebaseErrorMessage(error);
@@ -191,18 +191,18 @@ export const useAuth = () => {
         const provider = new GoogleAuthProvider();
         provider.addScope('profile');
         provider.addScope('email');
-        
+
         const result = await signInWithPopup(auth, provider);
         showSuccess('Accesso effettuato con Google!');
         return { success: true, user: result.user };
-        
+
       } else {
         // Mobile: usa Expo AuthSession
         if (!request || !promptAsync) {
           showError('Configurazione Google non disponibile. Verifica la configurazione.');
           return { success: false, error: 'Google config not available' };
         }
-        
+
         await promptAsync();
         // Il risultato verrà gestito da useEffect
         return { success: true };
@@ -224,7 +224,7 @@ export const useAuth = () => {
   const handleGoogleAuthResponse = async (authResponse: any) => {
     try {
       const { authentication } = authResponse;
-      
+
       if (!authentication?.accessToken) {
         throw new Error('Token di accesso mancante');
       }
@@ -237,7 +237,7 @@ export const useAuth = () => {
       const result = await signInWithCredential(auth, credential);
       showSuccess('Accesso effettuato con Google!');
       return { success: true, user: result.user };
-      
+
     } catch (error: any) {
       console.error('Google Auth Response Error:', error);
       const errorMessage = getFirebaseErrorMessage(error);
