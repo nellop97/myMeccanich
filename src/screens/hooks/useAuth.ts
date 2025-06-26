@@ -12,7 +12,7 @@ import {
   User as FirebaseUser,
   updateProfile
 } from 'firebase/auth';
-import { auth, getFirebaseErrorMessage, isWeb } from '../services/firebase';
+import { auth, getFirebaseErrorMessage, isWeb } from '../../services/firebase';
 
 // Expo imports condizionali per evitare errori su web
 let AuthSession: any = null;

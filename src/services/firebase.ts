@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { Platform } from 'react-native';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 // Per Firebase v10+, la configurazione di Auth è più semplice
 import { getAuth, initializeAuth } from 'firebase/auth';
@@ -32,46 +33,24 @@ const firebaseConfig = {
   measurementId: "G-FS1LZ8SWL1"
 };
 
-// Inizializza Firebase
+
 const app = initializeApp(firebaseConfig);
 
-// Inizializza Auth con configurazione specifica per piattaforma
-let auth;
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+});
 
-try {
-  if (Platform.OS === 'web') {
-    // Per Web, usa getAuth normale
-    auth = getAuth(app);
-  } else if (getReactNativePersistence && AsyncStorage) {
-    // Per React Native con persistenza (Firebase v10+)
-    auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage)
-    });
-  } else {
-    // Fallback: configurazione semplice senza persistenza personalizzata
-    auth = getAuth(app);
-  }
-} catch (error) {
-  // Se initializeAuth fallisce (app già inizializzata), usa getAuth
-  console.log('Auth already initialized, using getAuth');
-  auth = getAuth(app);
-}
-
-// Inizializza Firestore
 export const db = getFirestore(app);
 
-// Esporta auth e app
 export { auth };
-export default app;
 
-// Utility functions
 export const isWeb = Platform.OS === 'web';
 export const isMobile = Platform.OS !== 'web';
 
 // Helper per gestire errori Firebase in modo cross-platform
 export const getFirebaseErrorMessage = (error: any): string => {
   const errorCode = error.code;
-  
+
   switch (errorCode) {
     case 'auth/user-not-found':
       return 'Utente non trovato';
