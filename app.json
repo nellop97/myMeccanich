@@ -8,7 +8,7 @@
     "scheme": "mymeccanich",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash.png",
+      "image": "./splashscreen.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },

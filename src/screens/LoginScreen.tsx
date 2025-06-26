@@ -23,9 +23,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 
 // Firebase imports
-import { 
-  signInWithEmailAndPassword, 
-  GoogleAuthProvider, 
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
   signInWithCredential,
   onAuthStateChanged,
   User as FirebaseUser,
@@ -49,7 +49,7 @@ export default function LoginScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { setUser } = useStore();
   const theme = useTheme();
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -64,7 +64,7 @@ export default function LoginScreen() {
       clientId: googleConfig.clientId,
       scopes: googleConfig.scopes,
       redirectUri: AuthSession.makeRedirectUri({
-        scheme: 'your-app-scheme', // Sostituisci con il tuo scheme
+        scheme: 'com.mymeccanick', // Sostituisci con il tuo scheme
         useProxy: true,
       }),
     },
@@ -104,16 +104,16 @@ export default function LoginScreen() {
     if (response.type === 'success') {
       try {
         setIsLoading(true);
-        
+
         // Ottieni l'access token
         const { access_token } = response.params;
-        
+
         // Crea il credential per Firebase
         const credential = GoogleAuthProvider.credential(null, access_token);
-        
+
         // Accedi con Firebase
         await signInWithCredential(auth, credential);
-        
+
       } catch (error: any) {
         console.error('Errore Google Sign-In:', error);
         Alert.alert('Errore', 'Errore durante l\'accesso con Google');
@@ -153,20 +153,20 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
-    
+
     if (!isEmailValid || !isPasswordValid) {
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
       // handleAuthStateChanged gestirà l'aggiornamento dello stato
     } catch (error: any) {
       console.error('Errore di login:', error);
       let errorMessage = 'Errore durante il login';
-      
+
       switch (error.code) {
         case 'auth/user-not-found':
           errorMessage = 'Utente non trovato';
@@ -186,7 +186,7 @@ export default function LoginScreen() {
         default:
           errorMessage = error.message || 'Errore durante il login';
       }
-      
+
       Alert.alert('Errore', errorMessage);
     } finally {
       setIsLoading(false);
@@ -196,15 +196,15 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true);
-      
+
       if (!request) {
         Alert.alert('Errore', 'Configurazione Google non pronta');
         return;
       }
-      
+
       // Avvia il flusso OAuth
       await promptAsync();
-      
+
     } catch (error: any) {
       console.error('Errore Google Sign-In:', error);
       Alert.alert('Errore', 'Errore durante l\'accesso con Google');
@@ -216,7 +216,7 @@ export default function LoginScreen() {
   const handleAppleLogin = async () => {
     try {
       setIsLoading(true);
-      
+
       // Verifica se Apple Sign-In è disponibile
       const isAvailable = await AppleAuthentication.isAvailableAsync();
       if (!isAvailable) {
@@ -253,7 +253,7 @@ export default function LoginScreen() {
       console.log(credential)
       setUser({
         id: credential.user,
-        name: credential.fullName?.givenName 
+        name: credential.fullName?.givenName
           ? `${credential.fullName.givenName} ${credential.fullName.familyName || ''}`.trim()
           : 'Utente Apple',
         email: credential.email || `${credential.user}@privaterelay.appleid.com`,
@@ -261,7 +261,7 @@ export default function LoginScreen() {
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
       });
-      
+
     } catch (error: any) {
       console.error('Errore Apple Sign-In:', error);
       if (error.code !== 'ERR_REQUEST_CANCELED') {
@@ -273,13 +273,13 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.logoContainer}>
-        
+
           <Text variant="headlineMedium" style={styles.appName}>AutoManager</Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
             Gestisci la tua auto in modo smart
@@ -288,7 +288,7 @@ export default function LoginScreen() {
 
         <View style={styles.formContainer}>
           <Text variant="titleLarge" style={styles.title}>Accedi</Text>
-          
+
           {/* Campo Email */}
           <TextInput
             label="Email"
@@ -306,7 +306,7 @@ export default function LoginScreen() {
             error={!!emailError}
           />
           {emailError ? <HelperText type="error">{emailError}</HelperText> : null}
-          
+
           {/* Campo Password */}
           <TextInput
             label="Password"
@@ -329,11 +329,11 @@ export default function LoginScreen() {
             error={!!passwordError}
           />
           {passwordError ? <HelperText type="error">{passwordError}</HelperText> : null}
-          
+
           {/* Opzioni aggiuntive */}
           <View style={styles.optionsRow}>
-            <TouchableOpacity 
-              style={styles.checkboxContainer} 
+            <TouchableOpacity
+              style={styles.checkboxContainer}
               onPress={() => setRememberMe(!rememberMe)}
             >
               <Checkbox
@@ -342,17 +342,17 @@ export default function LoginScreen() {
               />
               <Text variant="bodyMedium">Ricordami</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity>
               <Text variant="bodyMedium" style={{color: theme.colors.primary}}>
                 Password dimenticata?
               </Text>
             </TouchableOpacity>
           </View>
-          
+
           {/* Pulsante di Login */}
-          <Button 
-            mode="contained" 
+          <Button
+            mode="contained"
             onPress={handleLogin}
             style={styles.loginButton}
             loading={isLoading}
@@ -360,14 +360,14 @@ export default function LoginScreen() {
           >
             {isLoading ? 'Accesso in corso...' : 'Accedi'}
           </Button>
-          
+
           {/* Divisore */}
           <View style={styles.dividerContainer}>
             <Divider style={styles.divider} />
             <Text variant="bodySmall" style={styles.dividerText}>oppure</Text>
             <Divider style={styles.divider} />
           </View>
-          
+
           {/* Pulsanti Social */}
           <View style={styles.socialButtonsContainer}>
             <Button
@@ -379,7 +379,7 @@ export default function LoginScreen() {
             >
               Google
             </Button>
-            
+
             {Platform.OS === 'ios' && (
               <Button
                 mode="outlined"
@@ -392,13 +392,13 @@ export default function LoginScreen() {
               </Button>
             )}
           </View>
-          
+
           {/* Link Registrazione */}
           <View style={styles.registerContainer}>
             <Text variant="bodyMedium">Non hai ancora un account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text 
-                variant="bodyMedium" 
+              <Text
+                variant="bodyMedium"
                 style={{color: theme.colors.primary, fontWeight: 'bold'}}
               >
                 Registrati
