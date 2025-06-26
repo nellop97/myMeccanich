@@ -1,19 +1,76 @@
-// src/screens/RegisterScreen.tsx
+// src/screens/RegisterScreen.tsx - UNIVERSAL COMPONENT
 import React, { useState } from 'react';
-import { Car, Wrench, User, Mail, Lock, Phone, MapPin, Building, FileText, Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Platform } from 'react-native';
 
-// Import Firebase services
+// Conditional imports - solo quelli necessari per la piattaforma corrente
+let RNComponents: any = {};
+let WebComponents: any = {};
+
+if (Platform.OS !== 'web') {
+  // React Native imports per mobile
+  const RN = require('react-native');
+  const Paper = require('react-native-paper');
+  const VectorIcons = require('react-native-vector-icons/MaterialIcons');
+  const AuthSession = require('expo-auth-session');
+  const AppleAuth = require('expo-apple-authentication');
+  const Google = require('expo-auth-session/providers/google');
+  
+  RNComponents = {
+    View: RN.View,
+    ScrollView: RN.ScrollView,
+    Text: RN.Text,
+    TextInput: RN.TextInput,
+    TouchableOpacity: RN.TouchableOpacity,
+    SafeAreaView: RN.SafeAreaView,
+    KeyboardAvoidingView: RN.KeyboardAvoidingView,
+    Alert: RN.Alert,
+    StyleSheet: RN.StyleSheet,
+    ActivityIndicator: RN.ActivityIndicator,
+    Button: Paper.Button,
+    Card: Paper.Card,
+    Checkbox: Paper.Checkbox,
+    Portal: Paper.Portal,
+    Modal: Paper.Modal,
+    Icon: VectorIcons.default,
+    AuthSession,
+    AppleAuth,
+    Google
+  };
+} else {
+  // Web imports
+  WebComponents = {
+    // Lucide icons per web
+    Car: require('lucide-react').Car,
+    Wrench: require('lucide-react').Wrench,
+    User: require('lucide-react').User,
+    Mail: require('lucide-react').Mail,
+    Lock: require('lucide-react').Lock,
+    Phone: require('lucide-react').Phone,
+    MapPin: require('lucide-react').MapPin,
+    Building: require('lucide-react').Building,
+    FileText: require('lucide-react').FileText,
+    Eye: require('lucide-react').Eye,
+    EyeOff: require('lucide-react').EyeOff,
+    Loader2: require('lucide-react').Loader2,
+    CheckCircle: require('lucide-react').CheckCircle,
+    AlertCircle: require('lucide-react').AlertCircle,
+    Apple: require('lucide-react').Apple
+  };
+}
+
+// Firebase imports (universali)
 import { 
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
   OAuthProvider,
-  UserCredential
+  updateProfile,
+  signInWithCredential
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { auth, db, UserProfile } from '../config/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
 
-// Tipi TypeScript
+// TypeScript interfaces (condivise)
 interface FormData {
   email: string;
   password: string;
@@ -28,47 +85,41 @@ interface FormData {
 }
 
 type UserType = 'user' | 'mechanic';
-type SocialProvider = 'Google' | 'Apple';
-type AlertType = 'error' | 'success' | 'info';
 
-interface InputFieldProps {
-  icon: React.ComponentType<{ className?: string }>;
-  type: string;
-  name: keyof FormData;
-  placeholder: string;
-  value: string;
-  required?: boolean;
-}
-
-interface PasswordFieldProps {
-  name: keyof FormData;
-  placeholder: string;
-  value: string;
-  showPassword: boolean;
-  toggleShow: () => void;
-}
-
-interface SocialButtonProps {
-  provider: SocialProvider;
-  icon: React.ReactNode;
-  bgColor: string;
-  textColor: string;
-}
-
-interface AlertMessageProps {
-  type: AlertType;
-  message: string;
+interface UserProfile {
+  uid: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  userType: UserType;
+  loginProvider: string;
+  profileComplete: boolean;
+  verified?: boolean;
+  workshopName?: string;
+  address?: string;
+  vatNumber?: string;
+  mechanicLicense?: string;
+  rating?: number;
+  reviewsCount?: number;
+  services?: string[];
+  createdAt: any;
+  lastLogin: any;
 }
 
 const RegisterScreen: React.FC = () => {
+  // 🧠 LOGICA CONDIVISA (identica per tutte le piattaforme)
   const [currentPage, setCurrentPage] = useState<UserType>('user');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
-  const [error, setError] = useState<string>('');
-  const [success, setSuccess] = useState<boolean>(false);
-  const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [step, setStep] = useState(1);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
@@ -82,605 +133,1113 @@ const RegisterScreen: React.FC = () => {
     mechanicLicense: ''
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
+  // Google OAuth setup per mobile
+  let request: any, response: any, promptAsync: any;
+  if (Platform.OS !== 'web' && RNComponents.Google) {
+    [request, response, promptAsync] = RNComponents.Google.useAuthRequest({
+      clientId: '112490164694439514061',
+      iosClientId: '619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com',
+      androidClientId: 'YOUR_ANDROID_CLIENT_ID',
+    });
+
+    React.useEffect(() => {
+      if (response?.type === 'success') {
+        handleGoogleAuthResponse(response);
+      }
+    }, [response]);
+  }
+
+  // Gestione input (universale)
+  const handleInputChange = (name: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (error) setError('');
     if (success) setSuccess(false);
   };
 
-  const handlePageChange = (newPage: UserType): void => {
-    if (newPage !== currentPage) {
-      setCurrentPage(newPage);
-      setError('');
-      setSuccess(false);
+  // Validazione (universale)
+  const validateStep = (stepNumber: number): boolean => {
+    switch (stepNumber) {
+      case 1:
+        if (!formData.firstName.trim()) {
+          showError('Il nome è obbligatorio');
+          return false;
+        }
+        if (!formData.lastName.trim()) {
+          showError('Il cognome è obbligatorio');
+          return false;
+        }
+        if (!formData.phone.trim()) {
+          showError('Il numero di telefono è obbligatorio');
+          return false;
+        }
+        return true;
       
-      if (currentPage === 'mechanic' && newPage === 'user') {
-        setFormData(prev => ({
-          ...prev,
-          workshopName: '',
-          address: '',
-          vatNumber: '',
-          mechanicLicense: ''
-        }));
-      }
+      case 2:
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+          showError('Formato email non valido');
+          return false;
+        }
+        if (formData.password.length < 6) {
+          showError('La password deve essere di almeno 6 caratteri');
+          return false;
+        }
+        if (formData.password !== formData.confirmPassword) {
+          showError('Le password non coincidono');
+          return false;
+        }
+        return true;
+      
+      case 3:
+        if (currentPage === 'mechanic') {
+          if (!formData.workshopName.trim()) {
+            showError('Il nome dell\'officina è obbligatorio');
+            return false;
+          }
+          if (!formData.address.trim()) {
+            showError('L\'indirizzo è obbligatorio');
+            return false;
+          }
+          if (!formData.vatNumber.trim()) {
+            showError('La Partita IVA è obbligatoria');
+            return false;
+          }
+          const vatRegex = /^\d{11}$/;
+          if (!vatRegex.test(formData.vatNumber)) {
+            showError('La Partita IVA deve contenere 11 cifre');
+            return false;
+          }
+        }
+        if (!termsAccepted) {
+          showError('Devi accettare i termini di servizio e la privacy policy');
+          return false;
+        }
+        return true;
+      
+      default:
+        return true;
     }
   };
 
-  const validateForm = (): boolean => {
-    setError('');
-    
-    if (!formData.firstName.trim()) {
-      setError('Il nome è obbligatorio');
-      return false;
+  // Helper per gestire errori in modo platform-specific
+  const showError = (message: string) => {
+    if (Platform.OS === 'web') {
+      setError(message);
+    } else {
+      RNComponents.Alert.alert('Errore', message);
     }
-    
-    if (!formData.lastName.trim()) {
-      setError('Il cognome è obbligatorio');
-      return false;
-    }
-    
-    if (!formData.email.trim()) {
-      setError('L\'email è obbligatoria');
-      return false;
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setError('Formato email non valido');
-      return false;
-    }
-    
-    if (!formData.phone.trim()) {
-      setError('Il telefono è obbligatorio');
-      return false;
-    }
-    
-    if (!formData.password) {
-      setError('La password è obbligatoria');
-      return false;
-    }
-    
-    if (formData.password.length < 6) {
-      setError('La password deve essere di almeno 6 caratteri');
-      return false;
-    }
-    
-    if (formData.password !== formData.confirmPassword) {
-      setError('Le password non coincidono');
-      return false;
-    }
-    
-    if (currentPage === 'mechanic') {
-      if (!formData.workshopName.trim()) {
-        setError('Il nome dell\'officina è obbligatorio');
-        return false;
-      }
-      
-      if (!formData.address.trim()) {
-        setError('L\'indirizzo è obbligatorio');
-        return false;
-      }
-      
-      if (!formData.vatNumber.trim()) {
-        setError('La Partita IVA è obbligatoria');
-        return false;
-      }
-      
-      const vatRegex = /^\d{11}$/;
-      if (!vatRegex.test(formData.vatNumber)) {
-        setError('La Partita IVA deve contenere 11 cifre');
-        return false;
-      }
-    }
-    
-    if (!termsAccepted) {
-      setError('Devi accettare i termini di servizio e la privacy policy');
-      return false;
-    }
-    
-    return true;
   };
 
-  const handleSocialLogin = async (provider: SocialProvider): Promise<void> => {
-    setSocialLoading(provider);
+  const showSuccess = (message: string) => {
+    if (Platform.OS === 'web') {
+      setSuccess(true);
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 2000);
+    } else {
+      RNComponents.Alert.alert('Successo', message, [
+        { text: 'OK', onPress: () => {/* Navigate to dashboard */} }
+      ]);
+    }
+  };
+
+  // Navigation helpers
+  const nextStep = () => {
+    if (validateStep(step)) {
+      setStep(prev => Math.min(prev + 1, 3));
+    }
+  };
+
+  const prevStep = () => {
+    setStep(prev => Math.max(prev - 1, 1));
     setError('');
+  };
+
+  // Social Authentication (platform-specific)
+  const handleGoogleLogin = async () => {
+    setSocialLoading('google');
     
     try {
-      let authProvider: GoogleAuthProvider | OAuthProvider;
-      
-      if (provider === 'Google') {
-        authProvider = new GoogleAuthProvider();
-        authProvider.addScope('email');
-        authProvider.addScope('profile');
+      if (Platform.OS === 'web') {
+        // Web popup approach
+        const provider = new GoogleAuthProvider();
+        provider.addScope('email');
+        provider.addScope('profile');
+        
+        const result = await signInWithPopup(auth, provider);
+        await saveUserToFirestore(result.user, 'google');
+        showSuccess('Accesso effettuato con Google!');
+        
       } else {
-        authProvider = new OAuthProvider('apple.com');
-        authProvider.addScope('email');
-        authProvider.addScope('name');
-      }
-      
-      const result: UserCredential = await signInWithPopup(auth, authProvider);
-      const user = result.user;
-      
-      const userData: UserProfile = {
-        uid: user.uid,
-        email: user.email || '',
-        firstName: user.displayName?.split(' ')[0] || '',
-        lastName: user.displayName?.split(' ')[1] || '',
-        phone: user.phoneNumber || '',
-        userType: currentPage,
-        loginProvider: provider,
-        profileComplete: currentPage === 'user',
-        createdAt: new Date(),
-        lastLogin: new Date()
-      };
-      
-      if (currentPage === 'mechanic') {
-        userData.workshopName = '';
-        userData.address = '';
-        userData.vatNumber = '';
-        userData.mechanicLicense = '';
-        userData.verified = false;
-        userData.rating = 0;
-        userData.reviewsCount = 0;
-        userData.services = [];
-      }
-      
-      await setDoc(doc(db, 'users', user.uid), userData);
-      
-      setSuccess(true);
-      console.log('Registrazione social completata:', userData);
-      
-      setTimeout(() => {
-        if (currentPage === 'mechanic' && !userData.profileComplete) {
-          alert('Registrazione completata! Completa il tuo profilo officina.');
-        } else {
-          alert('Registrazione completata con successo!');
+        // Mobile approach
+        if (!request) {
+          showError('Configurazione Google non pronta');
+          return;
         }
-      }, 1000);
+        await promptAsync();
+      }
+    } catch (error: any) {
+      console.error('Errore Google Sign-In:', error);
+      showError('Errore durante l\'accesso con Google');
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleGoogleAuthResponse = async (authResponse: any) => {
+    try {
+      const { authentication } = authResponse;
+      const credential = GoogleAuthProvider.credential(
+        authentication.idToken,
+        authentication.accessToken
+      );
+      
+      const result = await signInWithCredential(auth, credential);
+      await saveUserToFirestore(result.user, 'google');
+      showSuccess('Accesso effettuato con Google!');
       
     } catch (error: any) {
-      console.error('Errore registrazione social:', error);
-      
-      if (error.code === 'auth/popup-closed-by-user') {
-        setError('Accesso annullato dall\'utente');
-      } else if (error.code === 'auth/popup-blocked') {
-        setError('Popup bloccato dal browser. Abilita i popup per questo sito.');
-      } else if (error.code === 'auth/account-exists-with-different-credential') {
-        setError('Esiste già un account con questa email usando un provider diverso.');
+      console.error('Errore autenticazione Google:', error);
+      showError('Errore durante l\'autenticazione con Google');
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    setSocialLoading('apple');
+    
+    try {
+      if (Platform.OS === 'web') {
+        // Web Apple Sign-In
+        const provider = new OAuthProvider('apple.com');
+        provider.addScope('email');
+        provider.addScope('name');
+        
+        const result = await signInWithPopup(auth, provider);
+        await saveUserToFirestore(result.user, 'apple');
+        showSuccess('Accesso effettuato con Apple!');
+        
+      } else if (Platform.OS === 'ios') {
+        // iOS native Apple Sign-In
+        const isAvailable = await RNComponents.AppleAuth.isAvailableAsync();
+        if (!isAvailable) {
+          showError('Apple Sign-In non è disponibile su questo dispositivo');
+          return;
+        }
+
+        const credential = await RNComponents.AppleAuth.signInAsync({
+          requestedScopes: [
+            RNComponents.AppleAuth.AppleAuthenticationScope.FULL_NAME,
+            RNComponents.AppleAuth.AppleAuthenticationScope.EMAIL,
+          ],
+        });
+
+        // Per una completa integrazione Firebase, configurare l'OAuthProvider
+        showSuccess('Accesso effettuato con Apple!');
       } else {
-        setError(`Errore durante la registrazione: ${error.message}`);
+        showError('Apple Sign-In disponibile solo su iOS e Web');
+      }
+    } catch (error: any) {
+      console.error('Errore Apple Sign-In:', error);
+      if (error.code !== 'ERR_REQUEST_CANCELED') {
+        showError('Errore durante l\'accesso con Apple');
       }
     } finally {
       setSocialLoading(null);
     }
   };
 
-  const handleSubmit = async (): Promise<void> => {
-    if (!validateForm()) {
-      return;
-    }
-    
+  // Email/Password Registration (universale)
+  const handleEmailRegistration = async () => {
+    if (!validateStep(3)) return;
+
     setLoading(true);
-    setError('');
-    
+
     try {
-      const userCredential: UserCredential = await createUserWithEmailAndPassword(
-        auth, 
-        formData.email.trim(), 
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        formData.email.trim(),
         formData.password
       );
-      
-      const user = userCredential.user;
-      
-      const userData: UserProfile = {
-        uid: user.uid,
-        email: formData.email.trim().toLowerCase(),
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        phone: formData.phone.trim(),
-        userType: currentPage,
-        loginProvider: 'email',
-        profileComplete: true,
-        createdAt: new Date(),
-        lastLogin: new Date()
-      };
-      
-      if (currentPage === 'mechanic') {
-        userData.workshopName = formData.workshopName.trim();
-        userData.address = formData.address.trim();
-        userData.vatNumber = formData.vatNumber.trim();
-        userData.mechanicLicense = formData.mechanicLicense.trim();
-        userData.verified = false;
-        userData.rating = 0;
-        userData.reviewsCount = 0;
-        userData.services = [];
-      }
-      
-      await setDoc(doc(db, 'users', user.uid), userData);
-      
-      setSuccess(true);
-      console.log('Registrazione completata:', userData);
-      
-      setTimeout(() => {
-        alert(`Registrazione completata con successo! Benvenuto${currentPage === 'user' ? '' : ' nella community AutoCare'}, ${formData.firstName}!`);
-      }, 1000);
-      
+
+      await updateProfile(userCredential.user, {
+        displayName: `${formData.firstName} ${formData.lastName}`
+      });
+
+      await saveUserToFirestore(userCredential.user, 'email');
+      showSuccess('Registrazione completata con successo!');
+
     } catch (error: any) {
       console.error('Errore durante la registrazione:', error);
+      let errorMessage = 'Errore durante la registrazione. Riprova.';
       
       switch (error.code) {
         case 'auth/email-already-in-use':
-          setError('Questa email è già registrata. Prova ad accedere invece.');
+          errorMessage = 'Questa email è già registrata. Prova ad accedere invece.';
           break;
         case 'auth/weak-password':
-          setError('La password è troppo debole. Usa almeno 6 caratteri.');
+          errorMessage = 'La password è troppo debole. Usa almeno 6 caratteri.';
           break;
         case 'auth/invalid-email':
-          setError('Formato email non valido.');
+          errorMessage = 'Formato email non valido.';
           break;
-        case 'auth/operation-not-allowed':
-          setError('Registrazione email/password non abilitata. Contatta il supporto.');
-          break;
-        case 'auth/network-request-failed':
-          setError('Errore di connessione. Controlla la tua connessione internet.');
-          break;
-        default:
-          setError(`Errore durante la registrazione: ${error.message}`);
       }
+
+      showError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const SocialButton: React.FC<SocialButtonProps> = ({ provider, icon, bgColor, textColor }) => {
-    const isLoading = socialLoading === provider;
-    const isDisabled = socialLoading !== null || loading;
-    
-    return (
-      <button
-        onClick={() => !isDisabled && handleSocialLogin(provider)}
-        disabled={isDisabled}
-        className={`w-full ${bgColor} ${textColor} py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-3 hover:opacity-90 transition-all duration-200 shadow-md disabled:opacity-60 disabled:cursor-not-allowed`}
-      >
-        {isLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
-        ) : (
-          icon
-        )}
-        {isLoading ? 'Connessione...' : `Continua con ${provider}`}
-      </button>
-    );
+  // Save user to Firestore (universale)
+  const saveUserToFirestore = async (user: any, loginProvider: string) => {
+    const displayName = user.displayName || '';
+    const [firstName, ...lastNameArray] = displayName.split(' ');
+    const lastName = lastNameArray.join(' ');
+
+    const userData: UserProfile = {
+      uid: user.uid,
+      email: user.email || '',
+      firstName: loginProvider === 'email' ? formData.firstName : (firstName || 'Nome'),
+      lastName: loginProvider === 'email' ? formData.lastName : (lastName || 'Cognome'),
+      phone: loginProvider === 'email' ? formData.phone : (user.phoneNumber || ''),
+      userType: currentPage,
+      loginProvider,
+      profileComplete: loginProvider === 'email',
+      createdAt: serverTimestamp(),
+      lastLogin: serverTimestamp()
+    };
+
+    if (currentPage === 'mechanic') {
+      if (loginProvider === 'email') {
+        userData.workshopName = formData.workshopName;
+        userData.address = formData.address;
+        userData.vatNumber = formData.vatNumber;
+        userData.mechanicLicense = formData.mechanicLicense;
+      }
+      userData.verified = false;
+      userData.rating = 0;
+      userData.reviewsCount = 0;
+      userData.services = [];
+    }
+
+    await setDoc(doc(db, 'users', user.uid), userData);
   };
 
-  const InputField: React.FC<InputFieldProps> = ({ icon: Icon, type, name, placeholder, value, required = true }) => (
-    <div className="relative">
-      <Icon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-      <input
-        type={type}
-        name={name}
-        placeholder={placeholder}
-        value={value}
-        onChange={handleInputChange}
-        className="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200 outline-none"
-      />
-    </div>
-  );
+  // 🎨 RENDER PLATFORM-SPECIFIC UI
+  if (Platform.OS === 'web') {
+    return renderWebUI();
+  } else {
+    return renderMobileUI();
+  }
 
-  const PasswordField: React.FC<PasswordFieldProps> = ({ name, placeholder, value, showPassword, toggleShow }) => (
-    <div className="relative">
-      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-      <input
-        type={showPassword ? "text" : "password"}
-        name={name}
-        placeholder={placeholder}
-        value={value}
-        onChange={handleInputChange}
-        className="w-full pl-12 pr-12 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200 outline-none"
-      />
-      <button
-        type="button"
-        onClick={toggleShow}
-        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-      >
-        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-      </button>
-    </div>
-  );
+  // 🌐 WEB UI
+  function renderWebUI() {
+    const { Car, Wrench, User, Mail, Lock, Phone, MapPin, Building, FileText, Eye, EyeOff, Loader2, CheckCircle, AlertCircle, Apple } = WebComponents;
 
-  const AlertMessage: React.FC<AlertMessageProps> = ({ type, message }) => {
-    if (!message) return null;
-    
-    const isError = type === 'error';
-    const isSuccess = type === 'success';
-    
     return (
-      <div className={`p-4 rounded-xl flex items-center gap-3 mb-4 ${
-        isError ? 'bg-red-50 border border-red-200' : 
-        isSuccess ? 'bg-green-50 border border-green-200' : 
-        'bg-blue-50 border border-blue-200'
-      }`}>
-        {isError && <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />}
-        {isSuccess && <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />}
-        <p className={`text-sm ${
-          isError ? 'text-red-700' : 
-          isSuccess ? 'text-green-700' : 
-          'text-blue-700'
-        }`}>
-          {message}
-        </p>
-      </div>
-    );
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      {/* Header con toggle */}
-      <div className="bg-white shadow-sm">
-        <div className="max-w-md mx-auto px-6 py-4">
-          <div className="flex items-center justify-center mb-4">
-            <div className="flex items-center gap-2">
-              <Car className="w-8 h-8 text-blue-600" />
-              <span className="text-2xl font-bold text-gray-800">AutoCare</span>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full space-y-8">
+          {/* Header */}
+          <div className="text-center">
+            <div className="mx-auto h-12 w-12 bg-blue-600 rounded-xl flex items-center justify-center">
+              <Car className="h-8 w-8 text-white" />
             </div>
-          </div>
-          
-          {/* Toggle buttons */}
-          <div className="flex bg-gray-100 rounded-xl p-1">
-            <button
-              onClick={() => handlePageChange('user')}
-              disabled={loading || socialLoading !== null}
-              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 ${
-                currentPage === 'user' 
-                  ? 'bg-white text-blue-600 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <User className="w-4 h-4" />
-              Proprietario
-            </button>
-            <button
-              onClick={() => handlePageChange('mechanic')}
-              disabled={loading || socialLoading !== null}
-              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 ${
-                currentPage === 'mechanic' 
-                  ? 'bg-white text-blue-600 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <Wrench className="w-4 h-4" />
-              Meccanico
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Contenuto principale */}
-      <div className="max-w-md mx-auto px-6 py-8">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          {/* Titolo dinamico */}
-          <div className="text-center mb-8">
-            <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
-              currentPage === 'user' ? 'bg-blue-100' : 'bg-orange-100'
-            }`}>
-              {currentPage === 'user' ? (
-                <User className={`w-8 h-8 ${currentPage === 'user' ? 'text-blue-600' : 'text-orange-600'}`} />
-              ) : (
-                <Wrench className={`w-8 h-8 ${currentPage === 'user' ? 'text-blue-600' : 'text-orange-600'}`} />
-              )}
-            </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              {currentPage === 'user' ? 'Registrati come Proprietario' : 'Registrati come Meccanico'}
+            <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+              Registrati su AutoCare
             </h2>
-            <p className="text-gray-600">
-              {currentPage === 'user' 
-                ? 'Gestisci i tuoi veicoli e la manutenzione' 
-                : 'Gestisci la tua officina e i clienti'}
+            <p className="mt-2 text-sm text-gray-600">
+              La tua piattaforma completa per la gestione dell'auto
             </p>
           </div>
 
-          {/* Pulsanti Social */}
-          <div className="space-y-3 mb-6">
-            <SocialButton
-              provider="Google"
-              icon={
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-              }
-              bgColor="bg-white border border-gray-200"
-              textColor="text-gray-700"
-            />
-            <SocialButton
-              provider="Apple"
-              icon={
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                </svg>
-              }
-              bgColor="bg-black"
-              textColor="text-white"
-            />
+          {/* User Type Selection */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setCurrentPage('user')}
+              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-colors ${
+                currentPage === 'user'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <User className="h-8 w-8 mb-2" />
+              <span className="text-sm font-medium">Proprietario</span>
+              <span className="text-xs text-gray-500">Auto privata</span>
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setCurrentPage('mechanic')}
+              className={`flex flex-col items-center p-4 rounded-lg border-2 transition-colors ${
+                currentPage === 'mechanic'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Wrench className="h-8 w-8 mb-2" />
+              <span className="text-sm font-medium">Meccanico</span>
+              <span className="text-xs text-gray-500">Officina/Garage</span>
+            </button>
           </div>
 
-          {/* Separatore */}
-          <div className="relative mb-6">
+          {/* Social Login */}
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={loading || socialLoading !== null}
+              className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {socialLoading === 'google' ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  Continua con Google
+                </>
+              )}
+            </button>
+            
+            <button
+              type="button"
+              onClick={handleAppleLogin}
+              disabled={loading || socialLoading !== null}
+              className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {socialLoading === 'apple' ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Apple className="w-5 h-5 mr-3" />
+                  Continua con Apple
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
+              <div className="w-full border-t border-gray-300" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500">oppure registrati con email</span>
+              <span className="px-2 bg-blue-50 text-gray-500">oppure</span>
             </div>
           </div>
 
-          {/* Alert per errori/successo */}
-          <AlertMessage type="error" message={error} />
-          <AlertMessage type="success" message={success ? 'Registrazione completata con successo!' : ''} />
-
-          {/* Campi di registrazione */}
-          <div className="space-y-4">
-            {/* Campi comuni */}
-            <div className="grid grid-cols-2 gap-4">
-              <InputField
-                icon={User}
-                type="text"
-                name="firstName"
-                placeholder="Nome"
-                value={formData.firstName}
-              />
-              <InputField
-                icon={User}
-                type="text"
-                name="lastName"
-                placeholder="Cognome"
-                value={formData.lastName}
-              />
-            </div>
-
-            <InputField
-              icon={Mail}
-              type="email"
-              name="email"
-              placeholder="Email"
-              value={formData.email}
-            />
-
-            <InputField
-              icon={Phone}
-              type="tel"
-              name="phone"
-              placeholder="Telefono"
-              value={formData.phone}
-            />
-
-            {/* Campi specifici per meccanico */}
-            {currentPage === 'mechanic' && (
-              <div className="space-y-4 pt-2">
-                <div className="border-t border-gray-100 pt-4">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Informazioni Officina</h3>
-                </div>
-                <InputField
-                  icon={Building}
-                  type="text"
-                  name="workshopName"
-                  placeholder="Nome Officina"
-                  value={formData.workshopName}
-                />
-                <InputField
-                  icon={MapPin}
-                  type="text"
-                  name="address"
-                  placeholder="Indirizzo completo"
-                  value={formData.address}
-                />
-                <InputField
-                  icon={FileText}
-                  type="text"
-                  name="vatNumber"
-                  placeholder="Partita IVA"
-                  value={formData.vatNumber}
-                />
-                <InputField
-                  icon={FileText}
-                  type="text"
-                  name="mechanicLicense"
-                  placeholder="Numero Licenza (opzionale)"
-                  value={formData.mechanicLicense}
-                  required={false}
-                />
+          {/* Multi-step Form */}
+          <div className="bg-white py-8 px-4 shadow rounded-lg sm:px-10">
+            {/* Progress Bar */}
+            <div className="mb-6">
+              <div className="flex items-center">
+                {[1, 2, 3].map((stepNumber) => (
+                  <React.Fragment key={stepNumber}>
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
+                      step >= stepNumber ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {step > stepNumber ? (
+                        <CheckCircle className="w-5 h-5" />
+                      ) : (
+                        <span className="text-sm font-medium">{stepNumber}</span>
+                      )}
+                    </div>
+                    {stepNumber < 3 && (
+                      <div className={`flex-1 h-1 mx-2 ${
+                        step > stepNumber ? 'bg-blue-600' : 'bg-gray-200'
+                      }`} />
+                    )}
+                  </React.Fragment>
+                ))}
               </div>
-            )}
-
-            <PasswordField
-              name="password"
-              placeholder="Password"
-              value={formData.password}
-              showPassword={showPassword}
-              toggleShow={() => setShowPassword(!showPassword)}
-            />
-
-            <PasswordField
-              name="confirmPassword"
-              placeholder="Conferma Password"
-              value={formData.confirmPassword}
-              showPassword={showConfirmPassword}
-              toggleShow={() => setShowConfirmPassword(!showConfirmPassword)}
-            />
-
-            {/* Checkbox termini */}
-            <div className="flex items-start gap-3 mt-6">
-              <input
-                type="checkbox"
-                id="terms"
-                checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
-                className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="terms" className="text-sm text-gray-600">
-                Accetto i{' '}
-                <button type="button" className="text-blue-600 hover:underline">
-                  Termini di Servizio
-                </button>{' '}
-                e la{' '}
-                <button type="button" className="text-blue-600 hover:underline">
-                  Privacy Policy
-                </button>
-              </label>
             </div>
 
-            {/* Pulsante registrazione */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading || socialLoading !== null || success}
-              className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 mt-6 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none ${
-                currentPage === 'user' 
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800' 
-                  : 'bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800'
-              }`}
-            >
-              {loading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Registrazione in corso...
+            {/* Form Steps */}
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+              {step === 1 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">Dati personali</h3>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Nome"
+                      value={formData.firstName}
+                      onChange={(e) => handleInputChange('firstName', e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Cognome"
+                      value={formData.lastName}
+                      onChange={(e) => handleInputChange('lastName', e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Phone className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="tel"
+                      placeholder="Numero di telefono"
+                      value={formData.phone}
+                      onChange={(e) => handleInputChange('phone', e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
                 </div>
-              ) : success ? (
-                <div className="flex items-center justify-center gap-2">
-                  <CheckCircle className="w-5 h-5" />
-                  Registrazione completata!
-                </div>
-              ) : (
-                `Registrati come ${currentPage === 'user' ? 'Proprietario' : 'Meccanico'}`
               )}
-            </button>
+
+              {step === 2 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">Credenziali account</h3>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Lock className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Password"
+                      value={formData.password}
+                      onChange={(e) => handleInputChange('password', e.target.value)}
+                      className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
+                    </button>
+                  </div>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Lock className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="Conferma password"
+                      value={formData.confirmPassword}
+                      onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                      className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {step === 3 && (
+                <div className="space-y-4">
+                  {currentPage === 'mechanic' && (
+                    <>
+                      <h3 className="text-lg font-medium text-gray-900">Dati professionali</h3>
+                      
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Building className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Nome officina"
+                          value={formData.workshopName}
+                          onChange={(e) => handleInputChange('workshopName', e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        />
+                      </div>
+                      
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <MapPin className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Indirizzo completo"
+                          value={formData.address}
+                          onChange={(e) => handleInputChange('address', e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        />
+                      </div>
+                      
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <FileText className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Partita IVA (11 cifre)"
+                          value={formData.vatNumber}
+                          onChange={(e) => handleInputChange('vatNumber', e.target.value)}
+                          pattern="[0-9]{11}"
+                          maxLength={11}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        />
+                      </div>
+                      
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <FileText className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Numero patente meccanico (opzionale)"
+                          value={formData.mechanicLicense}
+                          onChange={(e) => handleInputChange('mechanicLicense', e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        />
+                      </div>
+                    </>
+                  )}
+                  
+                  <div className="flex items-center mt-6">
+                    <input
+                      id="terms"
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
+                      Accetto i{' '}
+                      <button type="button" className="text-blue-600 hover:text-blue-500">
+                        termini di servizio
+                      </button>{' '}
+                      e la{' '}
+                      <button type="button" className="text-blue-600 hover:text-blue-500">
+                        privacy policy
+                      </button>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Display */}
+              {error && (
+                <div className="flex items-center p-4 text-red-800 bg-red-50 rounded-lg">
+                  <AlertCircle className="h-5 w-5 mr-3" />
+                  <span className="text-sm">{error}</span>
+                </div>
+              )}
+
+              {/* Success Display */}
+              {success && (
+                <div className="flex items-center p-4 text-green-800 bg-green-50 rounded-lg">
+                  <CheckCircle className="h-5 w-5 mr-3" />
+                  <span className="text-sm">
+                    Registrazione completata con successo! Reindirizzamento in corso...
+                  </span>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex justify-between">
+                {step > 1 && (
+                  <button
+                    type="button"
+                    onClick={prevStep}
+                    className="flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Indietro
+                  </button>
+                )}
+                
+                <div className="ml-auto">
+                  {step < 3 ? (
+                    <button
+                      type="button"
+                      onClick={nextStep}
+                      className="flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      Avanti
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleEmailRegistration}
+                      disabled={loading || !termsAccepted}
+                      className="flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Registrazione in corso...
+                        </>
+                      ) : (
+                        'Completa registrazione'
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </form>
           </div>
 
-          {/* Link al login */}
-          <div className="text-center mt-6">
-            <p className="text-gray-600">
+          {/* Login Link */}
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
               Hai già un account?{' '}
-              <button className="text-blue-600 hover:underline font-medium">
+              <a href="/login" className="font-medium text-blue-600 hover:text-blue-500">
                 Accedi qui
-              </button>
+              </a>
             </p>
           </div>
         </div>
       </div>
+    );
+  }
 
-      {/* Footer */}
-      <div className="text-center pb-8">
-        <p className="text-gray-500 text-sm">
-          © 2025 AutoCare. Tutti i diritti riservati.
-        </p>
-      </div>
-    </div>
-  );
+  // 📱 MOBILE UI
+  function renderMobileUI() {
+    const {
+      SafeAreaView, ScrollView, View, Text, TextInput, TouchableOpacity,
+      KeyboardAvoidingView, ActivityIndicator, StyleSheet,
+      Button, Card, Checkbox, Portal, Modal, Icon
+    } = RNComponents;
+
+    const styles = StyleSheet.create({
+      container: { flex: 1, backgroundColor: '#f5f5f5' },
+      keyboardAvoid: { flex: 1 },
+      scrollContainer: { flexGrow: 1, padding: 16 },
+      header: { alignItems: 'center', marginBottom: 24 },
+      title: { fontSize: 24, fontWeight: 'bold', marginTop: 16, textAlign: 'center' },
+      subtitle: { fontSize: 16, color: '#666', textAlign: 'center', marginTop: 8 },
+      card: { marginBottom: 16 },
+      userTypeContainer: { marginBottom: 16 },
+      sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16, textAlign: 'center' },
+      userTypeButtons: { flexDirection: 'row', justifyContent: 'space-between' },
+      userTypeButton: {
+        flex: 1, alignItems: 'center', padding: 16, borderWidth: 2,
+        borderColor: '#e0e0e0', borderRadius: 8, marginHorizontal: 4, backgroundColor: '#fff'
+      },
+      userTypeButtonActive: { borderColor: '#2196F3', backgroundColor: '#e3f2fd' },
+      userTypeButtonText: { fontSize: 16, fontWeight: '600', marginTop: 8, color: '#666' },
+      userTypeButtonTextActive: { color: '#2196F3' },
+      userTypeButtonSubtext: { fontSize: 12, color: '#999', marginTop: 4 },
+      socialButton: { marginBottom: 8 },
+      orContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 16 },
+      orLine: { flex: 1, height: 1, backgroundColor: '#e0e0e0' },
+      orText: { marginHorizontal: 16, color: '#666' },
+      progressContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+      progressItem: { flexDirection: 'row', alignItems: 'center' },
+      progressCircle: {
+        width: 32, height: 32, borderRadius: 16, backgroundColor: '#e0e0e0',
+        justifyContent: 'center', alignItems: 'center'
+      },
+      progressCircleActive: { backgroundColor: '#2196F3' },
+      progressText: { color: '#666', fontWeight: '600' },
+      progressTextActive: { color: '#fff' },
+      progressLine: { width: 40, height: 2, backgroundColor: '#e0e0e0', marginHorizontal: 8 },
+      progressLineActive: { backgroundColor: '#2196F3' },
+      stepContainer: { marginBottom: 16 },
+      stepTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
+      inputContainer: {
+        flexDirection: 'row', alignItems: 'center', borderWidth: 1,
+        borderColor: '#e0e0e0', borderRadius: 8, marginBottom: 12, backgroundColor: '#fff'
+      },
+      inputIcon: { marginLeft: 12 },
+      input: { flex: 1, paddingHorizontal: 12, paddingVertical: 16, fontSize: 16 },
+      passwordToggle: { padding: 12 },
+      checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+      checkboxText: { marginLeft: 8, fontSize: 14, color: '#666', textDecorationLine: 'underline' },
+      navigationContainer: { flexDirection: 'row', marginTop: 24 },
+      navButton: { flex: 1 },
+      navButtonSpacer: { width: 16 },
+      loginLink: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
+      loginLinkText: { fontSize: 14, color: '#666' },
+      loginLinkButton: { fontSize: 14, color: '#2196F3', fontWeight: '600' },
+      modalContent: { backgroundColor: 'white', padding: 20, margin: 20, borderRadius: 8, maxHeight: '80%' },
+      modalScroll: { marginVertical: 16 },
+      modalParagraph: { marginTop: 16 },
+      modalButton: { marginTop: 16 }
+    });
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoid}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContainer}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Icon name="directions-car" size={48} color="#2196F3" />
+              <Text style={styles.title}>Registrati su AutoCare</Text>
+              <Text style={styles.subtitle}>
+                La tua piattaforma completa per la gestione dell'auto
+              </Text>
+            </View>
+
+            <Card style={styles.card}>
+              <Card.Content>
+                {/* User Type Selection */}
+                <View style={styles.userTypeContainer}>
+                  <Text style={styles.sectionTitle}>Che tipo di utente sei?</Text>
+                  <View style={styles.userTypeButtons}>
+                    <TouchableOpacity
+                      style={[
+                        styles.userTypeButton,
+                        currentPage === 'user' && styles.userTypeButtonActive
+                      ]}
+                      onPress={() => setCurrentPage('user')}
+                    >
+                      <Icon name="person" size={32} color={currentPage === 'user' ? '#2196F3' : '#666'} />
+                      <Text style={[
+                        styles.userTypeButtonText,
+                        currentPage === 'user' && styles.userTypeButtonTextActive
+                      ]}>
+                        Proprietario
+                      </Text>
+                      <Text style={styles.userTypeButtonSubtext}>Auto privata</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.userTypeButton,
+                        currentPage === 'mechanic' && styles.userTypeButtonActive
+                      ]}
+                      onPress={() => setCurrentPage('mechanic')}
+                    >
+                      <Icon name="build" size={32} color={currentPage === 'mechanic' ? '#2196F3' : '#666'} />
+                      <Text style={[
+                        styles.userTypeButtonText,
+                        currentPage === 'mechanic' && styles.userTypeButtonTextActive
+                      ]}>
+                        Meccanico
+                      </Text>
+                      <Text style={styles.userTypeButtonSubtext}>Officina/Garage</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Social Login */}
+                <View>
+                  <Button
+                    mode="outlined"
+                    onPress={handleGoogleLogin}
+                    loading={socialLoading === 'google'}
+                    disabled={loading || socialLoading !== null}
+                    style={styles.socialButton}
+                    icon="google"
+                  >
+                    Continua con Google
+                  </Button>
+
+                  {Platform.OS === 'ios' && (
+                    <Button
+                      mode="outlined"
+                      onPress={handleAppleLogin}
+                      loading={socialLoading === 'apple'}
+                      disabled={loading || socialLoading !== null}
+                      style={styles.socialButton}
+                      icon="apple"
+                    >
+                      Continua con Apple
+                    </Button>
+                  )}
+                </View>
+
+                <View style={styles.orContainer}>
+                  <View style={styles.orLine} />
+                  <Text style={styles.orText}>oppure</Text>
+                  <View style={styles.orLine} />
+                </View>
+
+                {/* Progress Bar */}
+                <View style={styles.progressContainer}>
+                  {[1, 2, 3].map((stepNumber) => (
+                    <View key={stepNumber} style={styles.progressItem}>
+                      <View style={[
+                        styles.progressCircle,
+                        step >= stepNumber && styles.progressCircleActive
+                      ]}>
+                        <Text style={[
+                          styles.progressText,
+                          step >= stepNumber && styles.progressTextActive
+                        ]}>
+                          {stepNumber}
+                        </Text>
+                      </View>
+                      {stepNumber < 3 && (
+                        <View style={[
+                          styles.progressLine,
+                          step > stepNumber && styles.progressLineActive
+                        ]} />
+                      )}
+                    </View>
+                  ))}
+                </View>
+
+                {/* Form Steps */}
+                {step === 1 && (
+                  <View style={styles.stepContainer}>
+                    <Text style={styles.stepTitle}>Dati personali</Text>
+                    
+                    <View style={styles.inputContainer}>
+                      <Icon name="person" size={20} color="#666" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Nome"
+                        value={formData.firstName}
+                        onChangeText={(value) => handleInputChange('firstName', value)}
+                        autoCapitalize="words"
+                      />
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                      <Icon name="person" size={20} color="#666" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Cognome"
+                        value={formData.lastName}
+                        onChangeText={(value) => handleInputChange('lastName', value)}
+                        autoCapitalize="words"
+                      />
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                      <Icon name="phone" size={20} color="#666" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Numero di telefono"
+                        value={formData.phone}
+                        onChangeText={(value) => handleInputChange('phone', value)}
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {step === 2 && (
+                  <View style={styles.stepContainer}>
+                    <Text style={styles.stepTitle}>Credenziali account</Text>
+                    
+                    <View style={styles.inputContainer}>
+                      <Icon name="email" size={20} color="#666" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        value={formData.email}
+                        onChangeText={(value) => handleInputChange('email', value)}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                      <Icon name="lock" size={20} color="#666" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Password"
+                        value={formData.password}
+                        onChangeText={(value) => handleInputChange('password', value)}
+                        secureTextEntry={!showPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.passwordToggle}
+                        onPress={() => setShowPassword(!showPassword)}
+                      >
+                        <Icon name={showPassword ? "visibility-off" : "visibility"} size={20} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                      <Icon name="lock" size={20} color="#666" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Conferma password"
+                        value={formData.confirmPassword}
+                        onChangeText={(value) => handleInputChange('confirmPassword', value)}
+                        secureTextEntry={!showConfirmPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.passwordToggle}
+                        onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        <Icon name={showConfirmPassword ? "visibility-off" : "visibility"} size={20} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {step === 3 && (
+                  <View style={styles.stepContainer}>
+                    {currentPage === 'mechanic' && (
+                      <>
+                        <Text style={styles.stepTitle}>Dati professionali</Text>
+                        
+                        <View style={styles.inputContainer}>
+                          <Icon name="business" size={20} color="#666" style={styles.inputIcon} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Nome officina"
+                            value={formData.workshopName}
+                            onChangeText={(value) => handleInputChange('workshopName', value)}
+                          />
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                          <Icon name="location-on" size={20} color="#666" style={styles.inputIcon} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Indirizzo completo"
+                            value={formData.address}
+                            onChangeText={(value) => handleInputChange('address', value)}
+                            multiline
+                          />
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                          <Icon name="description" size={20} color="#666" style={styles.inputIcon} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Partita IVA (11 cifre)"
+                            value={formData.vatNumber}
+                            onChangeText={(value) => handleInputChange('vatNumber', value)}
+                            keyboardType="numeric"
+                            maxLength={11}
+                          />
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                          <Icon name="card-membership" size={20} color="#666" style={styles.inputIcon} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Numero patente meccanico (opzionale)"
+                            value={formData.mechanicLicense}
+                            onChangeText={(value) => handleInputChange('mechanicLicense', value)}
+                          />
+                        </View>
+                      </>
+                    )}
+
+                    <View style={styles.checkboxContainer}>
+                      <Checkbox
+                        status={termsAccepted ? 'checked' : 'unchecked'}
+                        onPress={() => setTermsAccepted(!termsAccepted)}
+                      />
+                      <TouchableOpacity onPress={() => setShowTermsModal(true)}>
+                        <Text style={styles.checkboxText}>
+                          Accetto i termini di servizio e la privacy policy
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Navigation Buttons */}
+                <View style={styles.navigationContainer}>
+                  {step > 1 && (
+                    <Button
+                      mode="outlined"
+                      onPress={prevStep}
+                      style={styles.navButton}
+                    >
+                      Indietro
+                    </Button>
+                  )}
+                  
+                  <View style={styles.navButtonSpacer} />
+                  
+                  {step < 3 ? (
+                    <Button
+                      mode="contained"
+                      onPress={nextStep}
+                      style={styles.navButton}
+                    >
+                      Avanti
+                    </Button>
+                  ) : (
+                    <Button
+                      mode="contained"
+                      onPress={handleEmailRegistration}
+                      loading={loading}
+                      disabled={loading || !termsAccepted}
+                      style={styles.navButton}
+                    >
+                      Completa registrazione
+                    </Button>
+                  )}
+                </View>
+              </Card.Content>
+            </Card>
+
+            {/* Login Link */}
+            <View style={styles.loginLink}>
+              <Text style={styles.loginLinkText}>Hai già un account? </Text>
+              <TouchableOpacity onPress={() => {/* Navigate to Login */}}>
+                <Text style={styles.loginLinkButton}>Accedi qui</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        {/* Terms Modal */}
+        <Portal>
+          <Modal
+            visible={showTermsModal}
+            onDismiss={() => setShowTermsModal(false)}
+            contentContainerStyle={styles.modalContent}
+          >
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>
+              Termini di Servizio e Privacy Policy
+            </Text>
+            <ScrollView style={styles.modalScroll}>
+              <Text style={{ fontSize: 14, lineHeight: 20, marginBottom: 16 }}>
+                Qui inserisci i tuoi termini di servizio e la privacy policy completa.
+                Questo è solo un esempio per dimostrare la funzionalità del modal.
+              </Text>
+              <Text style={[styles.modalParagraph, { fontSize: 14, lineHeight: 20 }]}>
+                L'utente accetta di utilizzare l'app AutoCare in conformità con le leggi vigenti
+                e di fornire informazioni accurate durante la registrazione.
+              </Text>
+            </ScrollView>
+            <Button
+              mode="contained"
+              onPress={() => setShowTermsModal(false)}
+              style={styles.modalButton}
+            >
+              Chiudi
+            </Button>
+          </Modal>
+        </Portal>
+      </SafeAreaView>
+    );
+  }
 };
 
 export default RegisterScreen;
