@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "MyMeccanich",
-    "slug": "mymeccanich",
+    "name": "MyMechanic",
+    "slug": "myMechanic",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./logo.png",
