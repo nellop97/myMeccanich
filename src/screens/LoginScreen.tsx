@@ -4,6 +4,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState, useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
 import {
+  Avatar,
   Button,
   Checkbox,
   Divider,
@@ -278,9 +279,7 @@ export default function LoginScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.logoContainer}>
-          <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>🚗</Text>
-          </View>
+        
           <Text variant="headlineMedium" style={styles.appName}>AutoManager</Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
             Gestisci la tua auto in modo smart

@@ -1,104 +1,136 @@
-// src/screens/RegisterScreen.tsx
 import React, { useState } from 'react';
 import { Car, Wrench, User, Mail, Lock, Phone, MapPin, Building, FileText, Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
 // Import Firebase services
+// IMPORTANTE: Assicurati che il path '../config/firebase' corrisponda alla posizione del tuo file di configurazione Firebase
 import { 
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
-  OAuthProvider,
-  UserCredential
+  OAuthProvider 
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth, db, UserProfile } from '../config/firebase';
+import { auth, db } from '../config/firebase'; // Aggiorna questo path se necessario
 
-// Tipi TypeScript
-interface FormData {
-  email: string;
-  password: string;
-  confirmPassword: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  workshopName: string;
-  address: string;
-  vatNumber: string;
-  mechanicLicense: string;
-}
-
-type UserType = 'user' | 'mechanic';
-type SocialProvider = 'Google' | 'Apple';
-type AlertType = 'error' | 'success' | 'info';
-
-interface InputFieldProps {
-  icon: React.ComponentType<{ className?: string }>;
-  type: string;
-  name: keyof FormData;
-  placeholder: string;
-  value: string;
-  required?: boolean;
-}
-
-interface PasswordFieldProps {
-  name: keyof FormData;
-  placeholder: string;
-  value: string;
-  showPassword: boolean;
-  toggleShow: () => void;
-}
-
-interface SocialButtonProps {
-  provider: SocialProvider;
-  icon: React.ReactNode;
-  bgColor: string;
-  textColor: string;
-}
-
-interface AlertMessageProps {
-  type: AlertType;
-  message: string;
-}
-
-const RegisterScreen: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<UserType>('user');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
-  const [error, setError] = useState<string>('');
-  const [success, setSuccess] = useState<boolean>(false);
-  const [termsAccepted, setTermsAccepted] = useState<boolean>(false);
-  const [formData, setFormData] = useState<FormData>({
+const AutoCareRegistration = () => {
+  const [currentPage, setCurrentPage] = useState('user'); // 'user' or 'mechanic'
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
     firstName: '',
     lastName: '',
     phone: '',
+    // Campi specifici per meccanico
     workshopName: '',
     address: '',
     vatNumber: '',
     mechanicLicense: ''
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
+  const handleInputChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+    // Reset error quando l'utente inizia a digitare
     if (error) setError('');
     if (success) setSuccess(false);
   };
 
-  const handlePageChange = (newPage: UserType): void => {
+  const handleSocialLogin = async (provider) => {
+    setSocialLoading(provider);
+    setError('');
+    
+    try {
+      let authProvider;
+      
+      if (provider === 'Google') {
+        authProvider = new GoogleAuthProvider();
+        authProvider.addScope('email');
+        authProvider.addScope('profile');
+      } else if (provider === 'Apple') {
+        authProvider = new OAuthProvider('apple.com');
+        authProvider.addScope('email');
+        authProvider.addScope('name');
+      }
+      
+      const result = await signInWithPopup(auth, authProvider);
+      const user = result.user;
+      
+      // Prepara i dati utente
+      const userData = {
+        uid: user.uid,
+        email: user.email,
+        firstName: user.displayName?.split(' ')[0] || '',
+        lastName: user.displayName?.split(' ')[1] || '',
+        phone: user.phoneNumber || '',
+        userType: currentPage,
+        loginProvider: provider,
+        createdAt: new Date(),
+        lastLogin: new Date()
+      };
+      
+      // Se è un meccanico ma non ha completato il profilo, 
+      // salva i dati base e richiedi completamento
+      if (currentPage === 'mechanic') {
+        userData.profileComplete = false;
+        userData.workshopName = '';
+        userData.address = '';
+        userData.vatNumber = '';
+        userData.mechanicLicense = '';
+      } else {
+        userData.profileComplete = true;
+      }
+      
+      // Salva in Firestore
+      await setDoc(doc(db, 'users', user.uid), userData);
+      
+      setSuccess(true);
+      console.log('Registrazione social completata:', userData);
+      
+      // Redirect o callback di successo
+      setTimeout(() => {
+        if (currentPage === 'mechanic' && !userData.profileComplete) {
+          // Potresti reindirizzare a una pagina di completamento profilo
+          alert('Registrazione completata! Completa il tuo profilo officina.');
+        } else {
+          alert('Registrazione completata con successo!');
+        }
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Errore registrazione social:', error);
+      
+      // Gestisci errori specifici
+      if (error.code === 'auth/popup-closed-by-user') {
+        setError('Accesso annullato dall\'utente');
+      } else if (error.code === 'auth/popup-blocked') {
+        setError('Popup bloccato dal browser. Abilita i popup per questo sito.');
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        setError('Esiste già un account con questa email usando un provider diverso.');
+      } else {
+        setError(`Errore durante la registrazione: ${error.message}`);
+      }
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handlePageChange = (newPage) => {
     if (newPage !== currentPage) {
       setCurrentPage(newPage);
+      // Reset dello stato quando si cambia tipo di utente
       setError('');
       setSuccess(false);
-      
+      // Reset solo dei campi specifici del meccanico se si passa da meccanico a utente
       if (currentPage === 'mechanic' && newPage === 'user') {
         setFormData(prev => ({
           ...prev,
@@ -110,10 +142,10 @@ const RegisterScreen: React.FC = () => {
       }
     }
   };
-
-  const validateForm = (): boolean => {
+    // Reset errori
     setError('');
     
+    // Validazione campi obbligatori
     if (!formData.firstName.trim()) {
       setError('Il nome è obbligatorio');
       return false;
@@ -129,6 +161,7 @@ const RegisterScreen: React.FC = () => {
       return false;
     }
     
+    // Validazione formato email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       setError('Formato email non valido');
@@ -140,6 +173,7 @@ const RegisterScreen: React.FC = () => {
       return false;
     }
     
+    // Validazione password
     if (!formData.password) {
       setError('La password è obbligatoria');
       return false;
@@ -155,6 +189,7 @@ const RegisterScreen: React.FC = () => {
       return false;
     }
     
+    // Validazione campi meccanico
     if (currentPage === 'mechanic') {
       if (!formData.workshopName.trim()) {
         setError('Il nome dell\'officina è obbligatorio');
@@ -171,6 +206,7 @@ const RegisterScreen: React.FC = () => {
         return false;
       }
       
+      // Validazione base Partita IVA italiana (11 cifre)
       const vatRegex = /^\d{11}$/;
       if (!vatRegex.test(formData.vatNumber)) {
         setError('La Partita IVA deve contenere 11 cifre');
@@ -178,6 +214,7 @@ const RegisterScreen: React.FC = () => {
       }
     }
     
+    // Validazione termini
     if (!termsAccepted) {
       setError('Devi accettare i termini di servizio e la privacy policy');
       return false;
@@ -186,81 +223,8 @@ const RegisterScreen: React.FC = () => {
     return true;
   };
 
-  const handleSocialLogin = async (provider: SocialProvider): Promise<void> => {
-    setSocialLoading(provider);
-    setError('');
-    
-    try {
-      let authProvider: GoogleAuthProvider | OAuthProvider;
-      
-      if (provider === 'Google') {
-        authProvider = new GoogleAuthProvider();
-        authProvider.addScope('email');
-        authProvider.addScope('profile');
-      } else {
-        authProvider = new OAuthProvider('apple.com');
-        authProvider.addScope('email');
-        authProvider.addScope('name');
-      }
-      
-      const result: UserCredential = await signInWithPopup(auth, authProvider);
-      const user = result.user;
-      
-      const userData: UserProfile = {
-        uid: user.uid,
-        email: user.email || '',
-        firstName: user.displayName?.split(' ')[0] || '',
-        lastName: user.displayName?.split(' ')[1] || '',
-        phone: user.phoneNumber || '',
-        userType: currentPage,
-        loginProvider: provider,
-        profileComplete: currentPage === 'user',
-        createdAt: new Date(),
-        lastLogin: new Date()
-      };
-      
-      if (currentPage === 'mechanic') {
-        userData.workshopName = '';
-        userData.address = '';
-        userData.vatNumber = '';
-        userData.mechanicLicense = '';
-        userData.verified = false;
-        userData.rating = 0;
-        userData.reviewsCount = 0;
-        userData.services = [];
-      }
-      
-      await setDoc(doc(db, 'users', user.uid), userData);
-      
-      setSuccess(true);
-      console.log('Registrazione social completata:', userData);
-      
-      setTimeout(() => {
-        if (currentPage === 'mechanic' && !userData.profileComplete) {
-          alert('Registrazione completata! Completa il tuo profilo officina.');
-        } else {
-          alert('Registrazione completata con successo!');
-        }
-      }, 1000);
-      
-    } catch (error: any) {
-      console.error('Errore registrazione social:', error);
-      
-      if (error.code === 'auth/popup-closed-by-user') {
-        setError('Accesso annullato dall\'utente');
-      } else if (error.code === 'auth/popup-blocked') {
-        setError('Popup bloccato dal browser. Abilita i popup per questo sito.');
-      } else if (error.code === 'auth/account-exists-with-different-credential') {
-        setError('Esiste già un account con questa email usando un provider diverso.');
-      } else {
-        setError(`Errore durante la registrazione: ${error.message}`);
-      }
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-
-  const handleSubmit = async (): Promise<void> => {
+  const handleSubmit = async () => {
+    // Validazione
     if (!validateForm()) {
       return;
     }
@@ -269,7 +233,8 @@ const RegisterScreen: React.FC = () => {
     setError('');
     
     try {
-      const userCredential: UserCredential = await createUserWithEmailAndPassword(
+      // Crea utente con Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email.trim(), 
         formData.password
@@ -277,7 +242,8 @@ const RegisterScreen: React.FC = () => {
       
       const user = userCredential.user;
       
-      const userData: UserProfile = {
+      // Prepara dati per Firestore
+      const userData = {
         uid: user.uid,
         email: formData.email.trim().toLowerCase(),
         firstName: formData.firstName.trim(),
@@ -290,29 +256,38 @@ const RegisterScreen: React.FC = () => {
         lastLogin: new Date()
       };
       
+      // Aggiungi campi specifici per meccanico
       if (currentPage === 'mechanic') {
         userData.workshopName = formData.workshopName.trim();
         userData.address = formData.address.trim();
         userData.vatNumber = formData.vatNumber.trim();
         userData.mechanicLicense = formData.mechanicLicense.trim();
-        userData.verified = false;
+        
+        // Campi aggiuntivi per meccanici
+        userData.verified = false; // Da verificare manualmente
         userData.rating = 0;
         userData.reviewsCount = 0;
         userData.services = [];
       }
       
+      // Salva in Firestore
       await setDoc(doc(db, 'users', user.uid), userData);
       
       setSuccess(true);
       console.log('Registrazione completata:', userData);
       
+      // Feedback successo
       setTimeout(() => {
         alert(`Registrazione completata con successo! Benvenuto${currentPage === 'user' ? '' : ' nella community AutoCare'}, ${formData.firstName}!`);
+        
+        // Qui potresti fare il redirect alla dashboard
+        // window.location.href = '/dashboard';
       }, 1000);
       
-    } catch (error: any) {
+    } catch (error) {
       console.error('Errore durante la registrazione:', error);
       
+      // Gestisci errori specifici di Firebase Auth
       switch (error.code) {
         case 'auth/email-already-in-use':
           setError('Questa email è già registrata. Prova ad accedere invece.');
@@ -337,7 +312,7 @@ const RegisterScreen: React.FC = () => {
     }
   };
 
-  const SocialButton: React.FC<SocialButtonProps> = ({ provider, icon, bgColor, textColor }) => {
+  const SocialButton = ({ provider, icon, bgColor, textColor }) => {
     const isLoading = socialLoading === provider;
     const isDisabled = socialLoading !== null || loading;
     
@@ -357,7 +332,7 @@ const RegisterScreen: React.FC = () => {
     );
   };
 
-  const InputField: React.FC<InputFieldProps> = ({ icon: Icon, type, name, placeholder, value, required = true }) => (
+  const InputField = ({ icon: Icon, type, name, placeholder, value, required = true }) => (
     <div className="relative">
       <Icon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
       <input
@@ -371,28 +346,7 @@ const RegisterScreen: React.FC = () => {
     </div>
   );
 
-  const PasswordField: React.FC<PasswordFieldProps> = ({ name, placeholder, value, showPassword, toggleShow }) => (
-    <div className="relative">
-      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-      <input
-        type={showPassword ? "text" : "password"}
-        name={name}
-        placeholder={placeholder}
-        value={value}
-        onChange={handleInputChange}
-        className="w-full pl-12 pr-12 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200 outline-none"
-      />
-      <button
-        type="button"
-        onClick={toggleShow}
-        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-      >
-        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-      </button>
-    </div>
-  );
-
-  const AlertMessage: React.FC<AlertMessageProps> = ({ type, message }) => {
+  const AlertMessage = ({ type, message }) => {
     if (!message) return null;
     
     const isError = type === 'error';
@@ -416,6 +370,25 @@ const RegisterScreen: React.FC = () => {
       </div>
     );
   };
+    <div className="relative">
+      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+      <input
+        type={showPassword ? "text" : "password"}
+        name={name}
+        placeholder={placeholder}
+        value={value}
+        onChange={handleInputChange}
+        className="w-full pl-12 pr-12 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200 outline-none"
+      />
+      <button
+        type="button"
+        onClick={toggleShow}
+        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+      >
+        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+      </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -520,10 +493,6 @@ const RegisterScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Alert per errori/successo */}
-          <AlertMessage type="error" message={error} />
-          <AlertMessage type="success" message={success ? 'Registrazione completata con successo!' : ''} />
-
           {/* Campi di registrazione */}
           <div className="space-y-4">
             {/* Campi comuni */}
@@ -614,6 +583,10 @@ const RegisterScreen: React.FC = () => {
               toggleShow={() => setShowConfirmPassword(!showConfirmPassword)}
             />
 
+            {/* Alert per errori/successo */}
+            <AlertMessage type="error" message={error} />
+            <AlertMessage type="success" message={success ? 'Registrazione completata con successo!' : ''} />
+
             {/* Checkbox termini */}
             <div className="flex items-start gap-3 mt-6">
               <input
@@ -683,4 +656,4 @@ const RegisterScreen: React.FC = () => {
   );
 };
 
-export default RegisterScreen;
+export default AutoCareRegistration;
