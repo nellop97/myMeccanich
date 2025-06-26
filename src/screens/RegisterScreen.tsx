@@ -1,6 +1,14 @@
-// src/screens/RegisterScreen.tsx - VERSIONE COMPLETA CON FIRESTORE
+// src/screens/RegisterScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { Platform, StyleSheet, ScrollView, View, KeyboardAvoidingView, Alert } from 'react-native';
+import {
+  Platform,
+  StyleSheet,
+  ScrollView,
+  View,
+  KeyboardAvoidingView,
+  Alert,
+  TouchableOpacity
+} from 'react-native';
 import {
   Text,
   TextInput,
@@ -12,9 +20,12 @@ import {
   useTheme,
   ActivityIndicator,
   HelperText,
-  Chip
+  Chip,
+  Divider,
+  IconButton
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 // Firebase imports
 import {
@@ -24,23 +35,38 @@ import {
   OAuthProvider,
   updateProfile,
   signInWithCredential,
-  User as FirebaseUser
+  User as FirebaseUser,
+  AuthCredential
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, collection } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
-// Conditional imports per OAuth (solo se necessari)
+// Expo imports condizionali
 let AuthSession: any = null;
 let AppleAuthentication: any = null;
+let WebBrowser: any = null;
 
 if (Platform.OS !== 'web') {
   try {
     AuthSession = require('expo-auth-session');
     AppleAuthentication = require('expo-apple-authentication');
+    WebBrowser = require('expo-web-browser');
+    WebBrowser.maybeCompleteAuthSession();
   } catch (error) {
     console.log('OAuth libraries not available');
   }
 }
+
+// Configurazione Google OAuth
+const GOOGLE_CONFIG = {
+  clientId: Platform.select({
+    ios: '619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com',
+    android: '619020396283-hsb93gobbbuokvc80idf466ptlh7fmdi.apps.googleusercontent.com',
+    web: '619020396283-4gd2pd371hop6d1vkc0tvo6j3jaod2t6.apps.googleusercontent.com',
+    default: '619020396283-hsb93gobbbuokvc80idf466ptlh7fmdi.apps.googleusercontent.com'
+  }),
+  scopes: ['openid', 'profile', 'email'],
+};
 
 // TypeScript interfaces
 interface FormData {
@@ -57,6 +83,7 @@ interface FormData {
 }
 
 type UserType = 'user' | 'mechanic';
+type SocialProvider = 'google' | 'apple' | null;
 
 interface UserProfile {
   uid: string;
@@ -74,22 +101,25 @@ interface UserProfile {
   mechanicLicense?: string;
   rating?: number;
   reviewsCount?: number;
-  settings: {
-    notifications: boolean;
-    darkMode: boolean;
-    language: string;
-  };
   createdAt: any;
   updatedAt: any;
 }
 
-export default function RegisterScreen() {
+const RegisterScreen: React.FC = () => {
   const navigation = useNavigation();
   const theme = useTheme();
 
-  // State per il form
-  const [currentStep, setCurrentStep] = useState(1);
+  // Stati principali
+  const [currentStep, setCurrentStep] = useState(0); // 0: tipo utente, 1: credenziali, 2: dati personali, 3: conferma
   const [userType, setUserType] = useState<UserType>('user');
+  const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<SocialProvider>(null);
+  const [socialUser, setSocialUser] = useState<FirebaseUser | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
+  // Dati del form
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
@@ -103,47 +133,33 @@ export default function RegisterScreen() {
     mechanicLicense: ''
   });
 
-  // State per UI
-  const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [socialUser, setSocialUser] = useState<FirebaseUser | null>(null); // Per tracciare utenti social
-
-  // State per errori
+  // Errori di validazione
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Configurazione Google OAuth
-  const [googleRequest, googleResponse, promptGoogleAsync] = Platform.OS !== 'web' && AuthSession
-      ? AuthSession.useAuthRequest({
-        clientId: '619020396283-hsb93gobbbuokvc80idf466ptlh7fmdi.apps.googleusercontent.com',
-        scopes: ['openid', 'profile', 'email'],
-        redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
-      }, { authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth' })
-      : [null, null, null];
+  // Configurazione Google OAuth per mobile
+  const [googleRequest, googleResponse, promptGoogleAsync] = AuthSession?.useAuthRequest ?
+      AuthSession.useAuthRequest(
+          {
+            clientId: GOOGLE_CONFIG.clientId,
+            scopes: GOOGLE_CONFIG.scopes,
+            redirectUri: AuthSession.makeRedirectUri({
+              scheme: 'com.mymeccanick',
+              useProxy: true,
+            }),
+          },
+          { authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth' }
+      ) : [null, null, null];
 
-  // Effect per gestire la risposta Google OAuth
+  // Effetti per gestire le risposte OAuth
   useEffect(() => {
-    if (googleResponse?.type === 'success' && googleResponse.authentication) {
+    if (googleResponse?.type === 'success') {
       handleGoogleAuthResponse(googleResponse);
+    } else if (googleResponse?.type === 'error') {
+      console.error('Google OAuth Error:', googleResponse.error);
+      setSocialLoading(null);
+      Alert.alert('Errore', 'Errore durante l\'autenticazione con Google');
     }
   }, [googleResponse]);
-
-  // Effect per pre-compilare i campi quando arriva un utente social
-  useEffect(() => {
-    if (socialUser && socialUser.displayName) {
-      const [firstName, ...lastNameArray] = socialUser.displayName.split(' ');
-      const lastName = lastNameArray.join(' ');
-
-      setFormData(prev => ({
-        ...prev,
-        firstName: firstName || '',
-        lastName: lastName || '',
-        email: socialUser.email || ''
-      }));
-    }
-  }, [socialUser]);
 
   // Funzioni di validazione
   const validateEmail = (email: string): boolean => {
@@ -159,7 +175,13 @@ export default function RegisterScreen() {
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (step >= 1) {
+    // Step 0: selezione tipo utente - nessuna validazione necessaria
+    if (step === 0) {
+      return true;
+    }
+
+    // Step 1: credenziali email/password
+    if (step === 1) {
       if (!formData.email.trim()) {
         newErrors.email = 'Email richiesta';
       } else if (!validateEmail(formData.email)) {
@@ -179,7 +201,8 @@ export default function RegisterScreen() {
       }
     }
 
-    if (step >= 2) {
+    // Step 2: dati personali
+    if (step === 2) {
       if (!formData.firstName.trim()) {
         newErrors.firstName = 'Nome richiesto';
       }
@@ -193,7 +216,8 @@ export default function RegisterScreen() {
       }
     }
 
-    if (step >= 3 && userType === 'mechanic') {
+    // Step 3: dati officina (solo per meccanici)
+    if (step === 3 && userType === 'mechanic') {
       if (!formData.workshopName?.trim()) {
         newErrors.workshopName = 'Nome officina richiesto';
       }
@@ -205,7 +229,9 @@ export default function RegisterScreen() {
       }
     }
 
-    if (step === 3 && !agreedToTerms) {
+    // Step finale: termini e condizioni
+    const isFinalStep = (step === 3 && userType === 'user') || (step === 4 && userType === 'mechanic');
+    if (isFinalStep && !agreedToTerms) {
       newErrors.terms = 'Devi accettare i termini e condizioni';
     }
 
@@ -226,21 +252,16 @@ export default function RegisterScreen() {
         firstName: loginProvider === 'email' ? formData.firstName : (firstName || 'Nome'),
         lastName: loginProvider === 'email' ? formData.lastName : (lastName || 'Cognome'),
         phone: loginProvider === 'email' ? formData.phone : '',
-        userType: userType,
-        loginProvider: loginProvider,
+        userType,
+        loginProvider,
         profileComplete: loginProvider === 'email',
-        verified: false,
-        settings: {
-          notifications: true,
-          darkMode: false,
-          language: 'it'
-        },
+        verified: user.emailVerified,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       };
 
-      // Aggiungi campi specifici per meccanici
-      if (userType === 'mechanic' && loginProvider === 'email') {
+      // Aggiungi dati specifici per meccanici
+      if (userType === 'mechanic') {
         userData.workshopName = formData.workshopName;
         userData.address = formData.address;
         userData.vatNumber = formData.vatNumber;
@@ -249,74 +270,66 @@ export default function RegisterScreen() {
         userData.reviewsCount = 0;
       }
 
-      // Salva in Firestore nella collezione 'users'
-      await setDoc(doc(db, 'users', user.uid), userData);
-
-      console.log('✅ Utente salvato in Firestore:', userData);
+      // Verifica se l'utente esiste già
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (!userDoc.exists()) {
+        await setDoc(doc(db, 'users', user.uid), userData);
+        console.log('✅ Utente salvato in Firestore:', userData);
+      } else {
+        console.log('ℹ️ Utente già esistente in Firestore');
+      }
     } catch (error) {
-      console.error('❌ Errore salvando utente in Firestore:', error);
-      throw new Error('Errore durante il salvataggio del profilo');
+      console.error('❌ Errore salvataggio Firestore:', error);
+      throw error;
     }
   };
 
-  // Gestione registrazione email/password o completamento social
+  // Registrazione con email e password
   const handleEmailRegistration = async (): Promise<void> => {
-    if (!validateStep(3)) return;
+    if (!validateStep(userType === 'mechanic' ? 4 : 3)) {
+      return;
+    }
 
     setLoading(true);
 
     try {
-      if (socialUser) {
-        // Completa registrazione per utente social
-        await saveUserToFirestore(socialUser, socialUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'apple');
+      // Crea l'account Firebase
+      const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          formData.password
+      );
 
-        Alert.alert(
-            'Registrazione completata!',
-            `Benvenuto ${formData.firstName}! Il tuo account ${userType === 'mechanic' ? 'meccanico' : 'utente'} è stato creato con successo.`,
-            [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
-      } else {
-        // Registrazione normale email/password
-        const userCredential = await createUserWithEmailAndPassword(
-            auth,
-            formData.email.trim(),
-            formData.password
-        );
+      // Aggiorna il profilo con il nome completo
+      await updateProfile(userCredential.user, {
+        displayName: `${formData.firstName} ${formData.lastName}`
+      });
 
-        // Aggiorna il profilo
-        await updateProfile(userCredential.user, {
-          displayName: `${formData.firstName} ${formData.lastName}`
-        });
+      // Salva i dati in Firestore
+      await saveUserToFirestore(userCredential.user, 'email');
 
-        // Salva in Firestore
-        await saveUserToFirestore(userCredential.user, 'email');
-
-        // Mostra messaggio di successo
-        Alert.alert(
-            'Registrazione completata!',
-            `Benvenuto ${formData.firstName}! Il tuo account ${userType === 'mechanic' ? 'meccanico' : 'utente'} è stato creato con successo.`,
-            [{ text: 'OK', onPress: () => navigation.goBack() }]
-        );
-      }
+      Alert.alert(
+          'Registrazione completata!',
+          'Account creato con successo. Verifica la tua email per completare l\'attivazione.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
 
     } catch (error: any) {
-      console.error('❌ Errore durante la registrazione:', error);
-
-      let errorMessage = 'Errore durante la registrazione. Riprova.';
+      console.error('❌ Errore registrazione email:', error);
+      let errorMessage = 'Errore durante la registrazione';
 
       switch (error.code) {
         case 'auth/email-already-in-use':
-          errorMessage = 'Questa email è già registrata. Prova ad accedere invece.';
-          break;
-        case 'auth/weak-password':
-          errorMessage = 'La password è troppo debole. Usa almeno 6 caratteri.';
+          errorMessage = 'Questa email è già registrata';
           break;
         case 'auth/invalid-email':
-          errorMessage = 'Formato email non valido.';
+          errorMessage = 'Email non valida';
           break;
-        case 'auth/network-request-failed':
-          errorMessage = 'Errore di connessione. Verifica la tua connessione internet.';
+        case 'auth/weak-password':
+          errorMessage = 'Password troppo debole';
           break;
+        default:
+          errorMessage = error.message || 'Errore durante la registrazione';
       }
 
       Alert.alert('Errore', errorMessage);
@@ -341,11 +354,11 @@ export default function RegisterScreen() {
         // Se è un meccanico, salva l'utente e vai al completamento profilo
         if (userType === 'mechanic') {
           setSocialUser(result.user);
-          setCurrentStep(2); // Vai al completamento del profilo
+          setCurrentStep(2);
           return;
         }
 
-        // Se è un utente normale, completa subito la registrazione
+        // Se è un utente normale, completa la registrazione
         await saveUserToFirestore(result.user, 'google');
 
         Alert.alert(
@@ -373,11 +386,8 @@ export default function RegisterScreen() {
   // Gestione risposta Google OAuth (mobile)
   const handleGoogleAuthResponse = async (authResponse: any): Promise<void> => {
     try {
-      const { authentication } = authResponse;
-      const credential = GoogleAuthProvider.credential(
-          authentication.idToken,
-          authentication.accessToken
-      );
+      const { access_token } = authResponse.params;
+      const credential = GoogleAuthProvider.credential(null, access_token);
 
       const result = await signInWithCredential(auth, credential);
 
@@ -400,6 +410,8 @@ export default function RegisterScreen() {
     } catch (error: any) {
       console.error('❌ Errore autenticazione Google:', error);
       Alert.alert('Errore', 'Errore durante l\'autenticazione con Google');
+    } finally {
+      setSocialLoading(null);
     }
   };
 
@@ -408,6 +420,28 @@ export default function RegisterScreen() {
     setSocialLoading('apple');
 
     try {
+      // Controlla se siamo in ambiente di sviluppo
+      const isExpoGo = __DEV__ && Platform.OS === 'ios';
+
+      if (isExpoGo) {
+        // Durante lo sviluppo con Expo Go, mostra un messaggio informativo
+        Alert.alert(
+            'Apple Sign-In in sviluppo',
+            'Apple Sign-In richiede un build personalizzato dell\'app. Durante lo sviluppo con Expo Go, questa funzionalità non è disponibile.\n\nPer testare Apple Sign-In:\n1. Usa "expo build" o "eas build"\n2. Oppure testa su web/Android con Google Sign-In',
+            [
+              { text: 'OK', style: 'default' },
+              {
+                text: 'Usa Google invece',
+                onPress: () => {
+                  setSocialLoading(null);
+                  handleGoogleSignIn();
+                }
+              }
+            ]
+        );
+        return;
+      }
+
       if (Platform.OS === 'web') {
         // Web Apple Sign-In
         const provider = new OAuthProvider('apple.com');
@@ -432,11 +466,12 @@ export default function RegisterScreen() {
             [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
 
-      } else if (Platform.OS === 'ios' && AppleAuthentication) {
-        // iOS native Apple Sign-In
+      } else if (AppleAuthentication) {
+        // Mobile Apple Sign-In (solo con build personalizzato)
         const isAvailable = await AppleAuthentication.isAvailableAsync();
         if (!isAvailable) {
-          throw new Error('Apple Sign-In non disponibile');
+          Alert.alert('Errore', 'Apple Sign-In non è disponibile su questo dispositivo');
+          return;
         }
 
         const credential = await AppleAuthentication.signInAsync({
@@ -446,15 +481,54 @@ export default function RegisterScreen() {
           ],
         });
 
-        // TODO: Implementa l'integrazione completa con Firebase
-        Alert.alert('Apple Sign-In', 'Implementazione in corso...');
+        // Crea il provider Apple per Firebase
+        const provider = new OAuthProvider('apple.com');
+        const authCredential = provider.credential({
+          idToken: credential.identityToken!,
+          rawNonce: credential.realUserStatus?.toString(),
+        });
+
+        const result = await signInWithCredential(auth, authCredential);
+
+        // Se è un meccanico, salva l'utente e vai al completamento profilo
+        if (userType === 'mechanic') {
+          setSocialUser(result.user);
+          setCurrentStep(2);
+          return;
+        }
+
+        // Se è un utente normale, completa la registrazione
+        await saveUserToFirestore(result.user, 'apple');
+
+        Alert.alert(
+            'Registrazione completata!',
+            'Account creato con successo usando Apple.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
 
       } else {
-        throw new Error('Apple Sign-In disponibile solo su iOS e Web');
+        throw new Error('Apple Sign-In non configurato');
       }
     } catch (error: any) {
       console.error('❌ Errore Apple Sign-In:', error);
-      if (error.code !== 'ERR_REQUEST_CANCELED') {
+
+      // Gestione errori specifici
+      if (error.code === 'auth/invalid-credential') {
+        Alert.alert(
+            'Errore configurazione',
+            'Apple Sign-In non è configurato correttamente per questo ambiente. Durante lo sviluppo, usa Google Sign-In o testa su un build di produzione.',
+            [
+              { text: 'OK', style: 'default' },
+              {
+                text: 'Usa Google',
+                onPress: () => {
+                  setSocialLoading(null);
+                  handleGoogleSignIn();
+                }
+              }
+            ]
+        );
+      } else if (error.code !== 'ERR_REQUEST_CANCELED') {
         Alert.alert('Errore', 'Errore durante l\'accesso con Apple');
       }
     } finally {
@@ -462,81 +536,159 @@ export default function RegisterScreen() {
     }
   };
 
-  // Render steps
-  const renderStep1 = () => (
+  // Completamento profilo per utenti social che diventano meccanici
+  const completeSocialMechanicProfile = async (): Promise<void> => {
+    if (!socialUser || !validateStep(4)) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await saveUserToFirestore(socialUser, socialUser.providerData[0]?.providerId || 'social');
+
+      Alert.alert(
+          'Registrazione completata!',
+          'Profilo meccanico completato con successo.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+
+    } catch (error: any) {
+      console.error('❌ Errore completamento profilo:', error);
+      Alert.alert('Errore', 'Errore durante il completamento del profilo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Navigazione tra gli step
+  const nextStep = (): void => {
+    const maxStep = userType === 'mechanic' ? 4 : 3;
+
+    if (currentStep < maxStep) {
+      // Step 0 (selezione tipo utente) non ha validazione
+      if (currentStep === 0) {
+        setCurrentStep(currentStep + 1);
+      } else {
+        // Per gli altri step, valida prima di procedere
+        if (validateStep(currentStep)) {
+          setCurrentStep(currentStep + 1);
+        }
+      }
+    } else {
+      // Ultimo step - valida e completa registrazione
+      if (validateStep(currentStep)) {
+        if (socialUser) {
+          completeSocialMechanicProfile();
+        } else {
+          handleEmailRegistration();
+        }
+      }
+    }
+  };
+
+  const prevStep = (): void => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  // Aggiornamento dati del form
+  const updateFormData = (field: keyof FormData, value: string): void => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Rimuovi l'errore se presente
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  // Render dei diversi step
+  const renderUserTypeSelection = () => (
+      <View style={styles.stepContainer}>
+        <Text variant="headlineSmall" style={styles.stepTitle}>
+          Che tipo di account vuoi creare?
+        </Text>
+
+        <TouchableOpacity
+            onPress={() => setUserType('user')}
+            style={[
+              styles.userTypeCard,
+              userType === 'user' && styles.userTypeCardSelected
+            ]}
+        >
+          <MaterialCommunityIcons
+              name="account"
+              size={48}
+              color={userType === 'user' ? theme.colors.primary : theme.colors.onSurface}
+          />
+          <Text variant="titleMedium" style={{ marginTop: 8 }}>Proprietario Auto</Text>
+          <Text variant="bodySmall" style={{ textAlign: 'center', marginTop: 4 }}>
+            Gestisci la manutenzione delle tue automobili
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+            onPress={() => setUserType('mechanic')}
+            style={[
+              styles.userTypeCard,
+              userType === 'mechanic' && styles.userTypeCardSelected
+            ]}
+        >
+          <MaterialCommunityIcons
+              name="wrench"
+              size={48}
+              color={userType === 'mechanic' ? theme.colors.primary : theme.colors.onSurface}
+          />
+          <Text variant="titleMedium" style={{ marginTop: 8 }}>Meccanico/Officina</Text>
+          <Text variant="bodySmall" style={{ textAlign: 'center', marginTop: 4 }}>
+            Gestisci i tuoi clienti e i servizi offerti
+          </Text>
+        </TouchableOpacity>
+      </View>
+  );
+
+  const renderCredentialsStep = () => (
       <View style={styles.stepContainer}>
         <Text variant="headlineSmall" style={styles.stepTitle}>
           Crea il tuo account
         </Text>
 
-        <View style={styles.userTypeContainer}>
-          <Chip
-              selected={userType === 'user'}
-              onPress={() => setUserType('user')}
-              style={[styles.userTypeChip, userType === 'user' && styles.selectedChip]}
-              textStyle={userType === 'user' && styles.selectedChipText}
-          >
-            👤 Proprietario Auto
-          </Chip>
-          <Chip
-              selected={userType === 'mechanic'}
-              onPress={() => setUserType('mechanic')}
-              style={[styles.userTypeChip, userType === 'mechanic' && styles.selectedChip]}
-              textStyle={userType === 'mechanic' && styles.selectedChipText}
-          >
-            🔧 Meccanico
-          </Chip>
-        </View>
-
-        {/* OPZIONI SOCIAL LOGIN PRINCIPALI */}
-        <Text variant="bodyLarge" style={styles.socialTitle}>
-          Registrati velocemente con:
-        </Text>
-
+        {/* Bottoni Social Login */}
         <Button
-            mode="contained"
+            mode="outlined"
             onPress={handleGoogleSignIn}
-            style={[styles.socialButton, styles.googleButton]}
-            disabled={socialLoading === 'google'}
             loading={socialLoading === 'google'}
+            disabled={loading || socialLoading !== null}
             icon="google"
-            contentStyle={styles.socialButtonContent}
+            style={styles.socialButton}
         >
-          Continua con Google
+          Registrati con Google
         </Button>
 
-        {(Platform.OS === 'ios' || Platform.OS === 'web') && (
+        {Platform.OS === 'ios' && (
             <Button
-                mode="contained"
+                mode="outlined"
                 onPress={handleAppleSignIn}
-                style={[styles.socialButton, styles.appleButton]}
-                disabled={socialLoading === 'apple'}
                 loading={socialLoading === 'apple'}
+                disabled={loading || socialLoading !== null}
                 icon="apple"
-                contentStyle={styles.socialButtonContent}
-                buttonColor="#000000"
+                style={styles.socialButton}
             >
-              Continua con Apple
+              Registrati con Apple
             </Button>
         )}
 
-        {/* DIVIDER */}
         <View style={styles.dividerContainer}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>oppure</Text>
-          <View style={styles.dividerLine} />
+          <Divider style={styles.divider} />
+          <Text variant="bodySmall" style={styles.dividerText}>OPPURE</Text>
+          <Divider style={styles.divider} />
         </View>
 
-        {/* FORM EMAIL/PASSWORD */}
-        <Text variant="bodyMedium" style={styles.emailFormTitle}>
-          Registrati con email:
-        </Text>
-
+        {/* Form Email/Password */}
         <TextInput
             label="Email"
             value={formData.email}
-            onChangeText={(text) => setFormData({ ...formData, email: text })}
-            mode="outlined"
+            onChangeText={(text) => updateFormData('email', text)}
             keyboardType="email-address"
             autoCapitalize="none"
             error={!!errors.email}
@@ -549,8 +701,7 @@ export default function RegisterScreen() {
         <TextInput
             label="Password"
             value={formData.password}
-            onChangeText={(text) => setFormData({ ...formData, password: text })}
-            mode="outlined"
+            onChangeText={(text) => updateFormData('password', text)}
             secureTextEntry={!showPassword}
             right={
               <TextInput.Icon
@@ -568,15 +719,8 @@ export default function RegisterScreen() {
         <TextInput
             label="Conferma Password"
             value={formData.confirmPassword}
-            onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
-            mode="outlined"
-            secureTextEntry={!showConfirmPassword}
-            right={
-              <TextInput.Icon
-                  icon={showConfirmPassword ? "eye-off" : "eye"}
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              />
-            }
+            onChangeText={(text) => updateFormData('confirmPassword', text)}
+            secureTextEntry={!showPassword}
             error={!!errors.confirmPassword}
             style={styles.input}
         />
@@ -586,26 +730,18 @@ export default function RegisterScreen() {
       </View>
   );
 
-  const renderStep2 = () => (
+  const renderPersonalDataStep = () => (
       <View style={styles.stepContainer}>
         <Text variant="headlineSmall" style={styles.stepTitle}>
-          {socialUser ? 'Completa il tuo profilo' : 'Informazioni personali'}
+          Dati personali
         </Text>
-
-        {socialUser && (
-            <Text variant="bodyMedium" style={styles.socialWelcome}>
-              Ciao {socialUser.displayName || 'Utente'}! Completa le informazioni per continuare.
-            </Text>
-        )}
 
         <TextInput
             label="Nome"
             value={formData.firstName}
-            onChangeText={(text) => setFormData({ ...formData, firstName: text })}
-            mode="outlined"
+            onChangeText={(text) => updateFormData('firstName', text)}
             error={!!errors.firstName}
             style={styles.input}
-            placeholder={socialUser?.displayName?.split(' ')[0] || ''}
         />
         <HelperText type="error" visible={!!errors.firstName}>
           {errors.firstName}
@@ -614,11 +750,9 @@ export default function RegisterScreen() {
         <TextInput
             label="Cognome"
             value={formData.lastName}
-            onChangeText={(text) => setFormData({ ...formData, lastName: text })}
-            mode="outlined"
+            onChangeText={(text) => updateFormData('lastName', text)}
             error={!!errors.lastName}
             style={styles.input}
-            placeholder={socialUser?.displayName?.split(' ').slice(1).join(' ') || ''}
         />
         <HelperText type="error" visible={!!errors.lastName}>
           {errors.lastName}
@@ -627,8 +761,7 @@ export default function RegisterScreen() {
         <TextInput
             label="Numero di telefono"
             value={formData.phone}
-            onChangeText={(text) => setFormData({ ...formData, phone: text })}
-            mode="outlined"
+            onChangeText={(text) => updateFormData('phone', text)}
             keyboardType="phone-pad"
             error={!!errors.phone}
             style={styles.input}
@@ -639,173 +772,212 @@ export default function RegisterScreen() {
       </View>
   );
 
-  const renderStep3 = () => (
+  const renderMechanicDataStep = () => (
       <View style={styles.stepContainer}>
         <Text variant="headlineSmall" style={styles.stepTitle}>
-          {userType === 'mechanic' ? 'Informazioni officina' : 'Completa registrazione'}
+          Dati officina
         </Text>
 
-        {userType === 'mechanic' && (
-            <>
-              <TextInput
-                  label="Nome Officina"
-                  value={formData.workshopName}
-                  onChangeText={(text) => setFormData({ ...formData, workshopName: text })}
-                  mode="outlined"
-                  error={!!errors.workshopName}
-                  style={styles.input}
-              />
-              <HelperText type="error" visible={!!errors.workshopName}>
-                {errors.workshopName}
-              </HelperText>
+        <TextInput
+            label="Nome officina"
+            value={formData.workshopName}
+            onChangeText={(text) => updateFormData('workshopName', text)}
+            error={!!errors.workshopName}
+            style={styles.input}
+        />
+        <HelperText type="error" visible={!!errors.workshopName}>
+          {errors.workshopName}
+        </HelperText>
 
-              <TextInput
-                  label="Indirizzo"
-                  value={formData.address}
-                  onChangeText={(text) => setFormData({ ...formData, address: text })}
-                  mode="outlined"
-                  error={!!errors.address}
-                  style={styles.input}
-              />
-              <HelperText type="error" visible={!!errors.address}>
-                {errors.address}
-              </HelperText>
+        <TextInput
+            label="Indirizzo"
+            value={formData.address}
+            onChangeText={(text) => updateFormData('address', text)}
+            multiline
+            numberOfLines={2}
+            error={!!errors.address}
+            style={styles.input}
+        />
+        <HelperText type="error" visible={!!errors.address}>
+          {errors.address}
+        </HelperText>
 
-              <TextInput
-                  label="Partita IVA"
-                  value={formData.vatNumber}
-                  onChangeText={(text) => setFormData({ ...formData, vatNumber: text })}
-                  mode="outlined"
-                  error={!!errors.vatNumber}
-                  style={styles.input}
-              />
-              <HelperText type="error" visible={!!errors.vatNumber}>
-                {errors.vatNumber}
-              </HelperText>
+        <TextInput
+            label="Partita IVA"
+            value={formData.vatNumber}
+            onChangeText={(text) => updateFormData('vatNumber', text)}
+            error={!!errors.vatNumber}
+            style={styles.input}
+        />
+        <HelperText type="error" visible={!!errors.vatNumber}>
+          {errors.vatNumber}
+        </HelperText>
 
-              <TextInput
-                  label="Licenza Meccanico (opzionale)"
-                  value={formData.mechanicLicense}
-                  onChangeText={(text) => setFormData({ ...formData, mechanicLicense: text })}
-                  mode="outlined"
-                  style={styles.input}
-              />
-            </>
-        )}
+        <TextInput
+            label="Numero licenza meccanico (opzionale)"
+            value={formData.mechanicLicense}
+            onChangeText={(text) => updateFormData('mechanicLicense', text)}
+            style={styles.input}
+        />
+      </View>
+  );
+
+  const renderTermsStep = () => (
+      <View style={styles.stepContainer}>
+        <Text variant="headlineSmall" style={styles.stepTitle}>
+          Termini e condizioni
+        </Text>
 
         <View style={styles.termsContainer}>
           <Checkbox
               status={agreedToTerms ? 'checked' : 'unchecked'}
               onPress={() => setAgreedToTerms(!agreedToTerms)}
           />
-          <Text style={styles.termsText}>
-            Accetto i termini e condizioni e la privacy policy
-          </Text>
+          <View style={styles.termsTextContainer}>
+            <Text variant="bodyMedium">
+              Accetto i{' '}
+              <Text
+                  style={styles.linkText}
+                  onPress={() => setShowTermsModal(true)}
+              >
+                termini e condizioni
+              </Text>
+              {' '}e la{' '}
+              <Text
+                  style={styles.linkText}
+                  onPress={() => setShowTermsModal(true)}
+              >
+                privacy policy
+              </Text>
+            </Text>
+          </View>
         </View>
         <HelperText type="error" visible={!!errors.terms}>
           {errors.terms}
         </HelperText>
+
+        <Text variant="bodySmall" style={styles.summaryText}>
+          Stai per creare un account come{' '}
+          <Text style={{ fontWeight: 'bold' }}>
+            {userType === 'mechanic' ? 'Meccanico/Officina' : 'Proprietario Auto'}
+          </Text>
+          {socialUser ? ' utilizzando il tuo account social.' : ' con email e password.'}
+        </Text>
       </View>
   );
 
-  const renderCurrentStep = () => {
-    switch (currentStep) {
-      case 1:
-        return renderStep1();
-      case 2:
-        return renderStep2();
-      case 3:
-        return renderStep3();
-      default:
-        return renderStep1();
-    }
-  };
-
+  // Render principale
   return (
       <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
+        >
           <Card style={styles.card}>
             <Card.Content>
               {/* Progress indicator */}
               <View style={styles.progressContainer}>
-                {[1, 2, 3].map((step) => (
+                {Array.from({ length: userType === 'mechanic' ? 5 : 4 }, (_, i) => (
                     <View
-                        key={step}
+                        key={i}
                         style={[
                           styles.progressDot,
-                          step <= currentStep && styles.progressDotActive
+                          i <= currentStep && styles.progressDotActive
                         ]}
                     />
                 ))}
               </View>
 
-              <Text variant="headlineMedium" style={styles.title}>
-                Registrazione MyMecanich
-              </Text>
+              {/* Contenuto dello step corrente */}
+              {currentStep === 0 && renderUserTypeSelection()}
+              {currentStep === 1 && renderCredentialsStep()}
+              {currentStep === 2 && renderPersonalDataStep()}
+              {currentStep === 3 && userType === 'mechanic' && renderMechanicDataStep()}
+              {((currentStep === 3 && userType === 'user') ||
+                  (currentStep === 4 && userType === 'mechanic')) && renderTermsStep()}
 
-              {renderCurrentStep()}
-
-              {/* Navigation buttons */}
+              {/* Bottoni di navigazione */}
               <View style={styles.buttonContainer}>
-                {currentStep > 1 && (
+                {currentStep > 0 && (
                     <Button
                         mode="outlined"
-                        onPress={() => {
-                          if (currentStep === 2 && socialUser) {
-                            // Se siamo allo step 2 con un utente social, torna alla selezione account
-                            setSocialUser(null);
-                            setCurrentStep(1);
-                          } else {
-                            setCurrentStep(currentStep - 1);
-                          }
-                        }}
-                        style={styles.backButton}
+                        onPress={prevStep}
+                        disabled={loading || socialLoading !== null}
+                        style={styles.navigationButton}
                     >
                       Indietro
                     </Button>
                 )}
 
-                {currentStep < 3 ? (
+                {currentStep === 0 ? (
                     <Button
                         mode="contained"
-                        onPress={() => {
-                          if (validateStep(currentStep)) {
-                            setCurrentStep(currentStep + 1);
-                          }
-                        }}
-                        style={styles.nextButton}
+                        onPress={nextStep}
+                        style={styles.navigationButton}
                     >
-                      Avanti
+                      Continua
                     </Button>
                 ) : (
                     <Button
                         mode="contained"
-                        onPress={handleEmailRegistration}
+                        onPress={nextStep}
                         loading={loading}
-                        disabled={loading}
-                        style={styles.registerButton}
+                        disabled={loading || socialLoading !== null}
+                        style={styles.navigationButton}
                     >
-                      {loading ? 'Registrazione...' : (socialUser ? 'Completa Registrazione' : 'Registrati')}
+                      {((currentStep === 3 && userType === 'user') ||
+                          (currentStep === 4 && userType === 'mechanic'))
+                          ? 'Completa registrazione'
+                          : 'Continua'
+                      }
                     </Button>
                 )}
               </View>
 
-              <Button
-                  mode="text"
+              {/* Link per tornare al login */}
+              <TouchableOpacity
                   onPress={() => navigation.goBack()}
-                  style={styles.loginButton}
+                  style={styles.loginLinkContainer}
               >
-                Hai già un account? Accedi
-              </Button>
+                <Text variant="bodyMedium" style={styles.loginLink}>
+                  Hai già un account? Accedi
+                </Text>
+              </TouchableOpacity>
             </Card.Content>
           </Card>
         </ScrollView>
+
+        {/* Modal per termini e condizioni */}
+        <Portal>
+          <Modal
+              visible={showTermsModal}
+              onDismiss={() => setShowTermsModal(false)}
+              contentContainerStyle={styles.modalContainer}
+          >
+            <Text variant="headlineSmall" style={styles.modalTitle}>
+              Termini e Condizioni
+            </Text>
+            <ScrollView style={styles.modalContent}>
+              <Text variant="bodyMedium">
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit...
+                {/* Inserisci qui i tuoi termini e condizioni reali */}
+              </Text>
+            </ScrollView>
+            <Button
+                mode="contained"
+                onPress={() => setShowTermsModal(false)}
+                style={styles.modalButton}
+            >
+              Chiudi
+            </Button>
+          </Modal>
+        </Portal>
       </KeyboardAvoidingView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -819,134 +991,117 @@ const styles = StyleSheet.create({
   },
   card: {
     elevation: 4,
-    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   progressContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginBottom: 24,
+    gap: 8,
   },
   progressDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
     backgroundColor: '#e0e0e0',
-    marginHorizontal: 4,
   },
   progressDotActive: {
-    backgroundColor: '#6200ea',
-  },
-  title: {
-    textAlign: 'center',
-    marginBottom: 24,
-    fontWeight: 'bold',
+    backgroundColor: '#6200ee',
   },
   stepContainer: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   stepTitle: {
     textAlign: 'center',
-    marginBottom: 16,
-    fontWeight: '600',
-  },
-  userTypeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
     marginBottom: 24,
-  },
-  userTypeChip: {
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  selectedChip: {
-    backgroundColor: '#6200ea',
-  },
-  selectedChipText: {
-    color: 'white',
-  },
-  input: {
-    marginBottom: 8,
-  },
-  termsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  termsText: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  socialTitle: {
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 16,
     fontWeight: '600',
-    color: '#333',
   },
-  socialButtonContent: {
-    height: 48,
-    flexDirection: 'row',
-  },
-  googleButton: {
-    backgroundColor: '#4285f4',
-    marginBottom: 12,
-  },
-  appleButton: {
-    backgroundColor: '#000000',
+  userTypeCard: {
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
     marginBottom: 16,
+    backgroundColor: '#fafafa',
+  },
+  userTypeCardSelected: {
+    borderColor: '#6200ee',
+    backgroundColor: '#f3e5f5',
+  },
+  socialButton: {
+    marginBottom: 12,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 20,
   },
-  dividerLine: {
+  divider: {
     flex: 1,
-    height: 1,
-    backgroundColor: '#e0e0e0',
   },
   dividerText: {
     marginHorizontal: 16,
     color: '#666',
-    fontSize: 14,
   },
-  emailFormTitle: {
-    marginBottom: 12,
-    color: '#666',
-  },
-  socialWelcome: {
-    textAlign: 'center',
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: '#e8f5e8',
-    borderRadius: 8,
-    color: '#2e7d32',
-  },
-  orText: {
-    textAlign: 'center',
-    marginVertical: 16,
-    color: '#666',
-  },
-  socialButton: {
+  input: {
     marginBottom: 8,
+  },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  termsTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  linkText: {
+    color: '#6200ee',
+    textDecorationLine: 'underline',
+  },
+  summaryText: {
+    textAlign: 'center',
+    color: '#666',
+    marginTop: 16,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
     marginTop: 24,
   },
-  backButton: {
-    flex: 1,
-    marginRight: 8,
-  },
-  nextButton: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  registerButton: {
+  navigationButton: {
     flex: 1,
   },
-  loginButton: {
+  loginLinkContainer: {
+    alignItems: 'center',
     marginTop: 16,
   },
+  loginLink: {
+    color: '#6200ee',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    margin: 20,
+    borderRadius: 8,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalContent: {
+    maxHeight: 300,
+    marginBottom: 16,
+  },
+  modalButton: {
+    alignSelf: 'stretch',
+  },
 });
+
+export default RegisterScreen;

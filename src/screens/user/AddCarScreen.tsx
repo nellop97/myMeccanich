@@ -42,6 +42,7 @@ import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/fi
 
 import { useStore } from '../../store';
 import { useUserCarsStore } from '@/src/store/useCarsStore';
+import {userInfo} from "node:os";
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -453,6 +454,8 @@ const AddCarScreen = () => {
 
   // Render step content
   const renderStepContent = () => {
+
+    {{console.log(auth)}}
     switch (currentStep) {
       case 0:
         return (

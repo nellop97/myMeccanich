@@ -4,14 +4,8 @@
     "slug": "myMechanic",
     "version": "1.0.0",
     "orientation": "portrait",
-    // "icon": "./logo.png", // Commenta questa riga
     "scheme": "mymeccanich",
     "userInterfaceStyle": "automatic",
-    // "splash": { // Commenta l'intero blocco splash
-    //   "image": "./splashscreen.png",
-    //   "resizeMode": "contain",
-    //   "backgroundColor": "#ffffff"
-    // },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -19,20 +13,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mymeccanich.com",
       "infoPlist": {
-        "CFBundleAllowMixedLocalizations": true
+        "CFBundleAllowMixedLocalizations": true,
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      // "adaptiveIcon": { // Commenta l'intero blocco adaptiveIcon
-      //   "foregroundImage": "./logo.png",
-      //   "backgroundColor": "#ffffff"
-      // },
       "package": "com.mymecchanich"
     },
     "web": {
       "bundler": "metro",
       "output": "static"
-      // "favicon": "./logo.png" /
     },
     "plugins": [
       "expo-dev-client",
@@ -47,6 +37,17 @@
     ],
     "experiments": {
       "typedRoutes": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ed142135-d0fd-4eb0-9424-99bc2efce5ea"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ed142135-d0fd-4eb0-9424-99bc2efce5ea"
     }
   }
 }

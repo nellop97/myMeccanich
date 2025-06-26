@@ -2,27 +2,11 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { Platform } from 'react-native';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
-// Per Firebase v10+, la configurazione di Auth è più semplice
+// Import condizionali per evitare errori
 import { getAuth, initializeAuth } from 'firebase/auth';
 
-// Solo per React Native, importa getReactNativePersistence dal modulo corretto
-let getReactNativePersistence: any = null;
-let AsyncStorage: any = null;
-
-if (Platform.OS !== 'web') {
-  // Import condizionale per React Native
-  try {
-    // In Firebase v10+, importa da firebase/auth/react-native
-    getReactNativePersistence = require('firebase/auth/react-native').getReactNativePersistence;
-    AsyncStorage = require('@react-native-async-storage/async-storage').default;
-  } catch (error) {
-    console.log('Using fallback auth configuration');
-  }
-}
-
-// Configurazione Firebase - I tuoi dati reali
+// Configurazione Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyC-AmP6d3a_VVXJnCWVHB1WmU_wPHF0ISI",
   authDomain: "mymecanich.firebaseapp.com",
@@ -33,17 +17,38 @@ const firebaseConfig = {
   measurementId: "G-FS1LZ8SWL1"
 };
 
-
+// Inizializza Firebase
 const app = initializeApp(firebaseConfig);
 
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
-
+// Inizializza Firestore
 export const db = getFirestore(app);
+
+// Inizializza Auth in modo cross-platform
+let auth;
+
+if (Platform.OS === 'web') {
+  // Su web usa la configurazione standard
+  auth = getAuth(app);
+} else {
+  // Su mobile usa la persistenza React Native
+  try {
+    // Import dinamico per React Native
+    const { getReactNativePersistence } = require('firebase/auth/react-native');
+    const ReactNativeAsyncStorage = require('@react-native-async-storage/async-storage').default;
+
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+    });
+  } catch (error) {
+    console.warn('Fallback to default auth config:', error);
+    // Fallback alla configurazione di default se la persistenza React Native non è disponibile
+    auth = getAuth(app);
+  }
+}
 
 export { auth };
 
+// Utility per platform detection
 export const isWeb = Platform.OS === 'web';
 export const isMobile = Platform.OS !== 'web';
 
