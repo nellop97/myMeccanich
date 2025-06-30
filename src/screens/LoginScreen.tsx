@@ -1,4 +1,4 @@
-// src/screens/LoginScreen.tsx - VERSIONE AGGIORNATA
+// src/screens/LoginScreen.tsx - VERSIONE AGGIORNATA E SICURA
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -6,7 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  View
+  View,
+  Dimensions,
 } from 'react-native';
 import {
   Button,
@@ -16,7 +17,7 @@ import {
   HelperText,
   Text,
   TextInput,
-  useTheme
+  useTheme,
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -24,6 +25,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuth } from '../hooks/useAuth';
 import { AuthStackParamList } from '../navigation/AppNavigator';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 type NavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -74,33 +77,46 @@ const LoginScreen: React.FC = () => {
     }
   };
 
-  // Gestori eventi
+  // 🔒 GESTORI EVENTI - SEMPLIFICATI
   const handleLogin = async (): Promise<void> => {
+    console.log('🔑 Avvio processo di login...');
+
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
 
     if (!isEmailValid || !isPasswordValid) {
+      console.log('❌ Validazione fallita');
       return;
     }
 
+    console.log('🚀 Chiamata loginWithEmail...');
     const result = await loginWithEmail(email, password);
+
     if (result.success) {
-      // La navigazione sarà gestita automaticamente dal auth state change
-      console.log('Login effettuato con successo');
+      console.log('✅ Login riuscito! La navigazione sarà gestita automaticamente dal auth state change');
+      // 🔒 NON SERVE PIÙ GESTIRE LA NAVIGAZIONE MANUALMENTE
+      // Il listener onAuthStateChanged nell'AppNavigator si occuperà automaticamente
+      // di reindirizzare l'utente alla schermata corretta
+    } else {
+      console.log('❌ Login fallito:', result.error);
     }
   };
 
   const handleGoogleLogin = async (): Promise<void> => {
+    console.log('🔍 Avvio Google login...');
     const result = await loginWithGoogle();
     if (result.success) {
-      console.log('Login Google effettuato con successo');
+      console.log('✅ Login Google riuscito!');
+      // 🔒 Anche qui, la navigazione è automatica
     }
   };
 
   const handleAppleLogin = async (): Promise<void> => {
+    console.log('🍎 Avvio Apple login...');
     const result = await loginWithApple();
     if (result.success) {
-      console.log('Login Apple effettuato con successo');
+      console.log('✅ Login Apple riuscito!');
+      // 🔒 Anche qui, la navigazione è automatica
     }
   };
 
@@ -126,68 +142,49 @@ const LoginScreen: React.FC = () => {
     }
   };
 
+  const handleRegisterPress = (): void => {
+    navigation.navigate('Register');
+  };
+
   return (
       <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
             contentContainerStyle={styles.scrollContainer}
+            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
         >
-          <Card style={styles.card}>
-            <Card.Content>
-              {/* Header */}
-              <View style={styles.header}>
-                <MaterialCommunityIcons
-                    name="car-wrench"
-                    size={64}
-                    color={theme.colors.primary}
-                />
-                <Text variant="headlineMedium" style={styles.title}>
-                  MyMeccanick
-                </Text>
-                <Text variant="bodyLarge" style={styles.subtitle}>
-                  Gestisci le tue automobili
-                </Text>
-              </View>
+          {/* Header */}
+          <View style={styles.header}>
+            <MaterialCommunityIcons
+                name="car-wrench"
+                size={60}
+                color={theme.colors.primary}
+            />
+            <Text style={[styles.title, { color: theme.colors.onBackground }]}>
+              MyMeccanic
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
+              Gestisci la tua auto o la tua officina
+            </Text>
+          </View>
 
-              {/* Social Login */}
-              <Button
-                  mode="outlined"
-                  onPress={handleGoogleLogin}
-                  loading={loading}
-                  disabled={loading}
-                  icon="google"
-                  style={styles.socialButton}
-              >
-                Accedi con Google
-              </Button>
+          {/* Form Card */}
+          <Card style={styles.card} elevation={2}>
+            <Card.Content style={styles.cardContent}>
+              <Text style={[styles.formTitle, { color: theme.colors.onSurface }]}>
+                Accedi al tuo account
+              </Text>
 
-              {Platform.OS === 'ios' && (
-                  <Button
-                      mode="outlined"
-                      onPress={handleAppleLogin}
-                      loading={loading}
-                      disabled={loading}
-                      icon="apple"
-                      style={styles.socialButton}
-                  >
-                    Accedi con Apple
-                  </Button>
-              )}
-
-              <View style={styles.dividerContainer}>
-                <Divider style={styles.divider} />
-                <Text variant="bodySmall" style={styles.dividerText}>OPPURE</Text>
-                <Divider style={styles.divider} />
-              </View>
-
-              {/* Email/Password Form */}
+              {/* Email Input */}
               <TextInput
                   label="Email"
                   value={email}
                   onChangeText={handleEmailChange}
+                  mode="outlined"
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
@@ -199,10 +196,12 @@ const LoginScreen: React.FC = () => {
                 {emailError}
               </HelperText>
 
+              {/* Password Input */}
               <TextInput
                   label="Password"
                   value={password}
                   onChangeText={handlePasswordChange}
+                  mode="outlined"
                   secureTextEntry={!showPassword}
                   autoComplete="password"
                   error={!!passwordError}
@@ -220,20 +219,19 @@ const LoginScreen: React.FC = () => {
               </HelperText>
 
               {/* Remember Me & Forgot Password */}
-              <View style={styles.optionsContainer}>
-                <TouchableOpacity
-                    style={styles.rememberMeContainer}
-                    onPress={() => setRememberMe(!rememberMe)}
-                >
+              <View style={styles.optionsRow}>
+                <View style={styles.checkboxRow}>
                   <Checkbox
                       status={rememberMe ? 'checked' : 'unchecked'}
                       onPress={() => setRememberMe(!rememberMe)}
                   />
-                  <Text variant="bodyMedium">Ricordami</Text>
-                </TouchableOpacity>
+                  <Text style={[styles.checkboxLabel, { color: theme.colors.onSurface }]}>
+                    Ricordami
+                  </Text>
+                </View>
 
                 <TouchableOpacity onPress={handleForgotPassword}>
-                  <Text variant="bodyMedium" style={styles.forgotPassword}>
+                  <Text style={[styles.linkText, { color: theme.colors.primary }]}>
                     Password dimenticata?
                   </Text>
                 </TouchableOpacity>
@@ -246,24 +244,60 @@ const LoginScreen: React.FC = () => {
                   loading={loading}
                   disabled={loading}
                   style={styles.loginButton}
+                  contentStyle={styles.buttonContent}
               >
-                Accedi
+                {loading ? 'Accesso in corso...' : 'Accedi'}
               </Button>
 
-              {/* Register Link */}
-              <View style={styles.registerContainer}>
-                <Text variant="bodyMedium">Non hai ancora un account? </Text>
-                <TouchableOpacity
-                    onPress={() => navigation.navigate('Register')}
+              {/* Divider */}
+              <View style={styles.dividerContainer}>
+                <Divider style={styles.divider} />
+                <Text style={[styles.dividerText, { color: theme.colors.onSurfaceVariant }]}>
+                  oppure
+                </Text>
+                <Divider style={styles.divider} />
+              </View>
+
+              {/* Social Login Buttons */}
+              <View style={styles.socialButtonsContainer}>
+                <Button
+                    mode="outlined"
+                    onPress={handleGoogleLogin}
                     disabled={loading}
+                    style={styles.socialButton}
+                    contentStyle={styles.buttonContent}
+                    icon="google"
                 >
-                  <Text variant="bodyMedium" style={styles.registerLink}>
-                    Registrati
-                  </Text>
-                </TouchableOpacity>
+                  Google
+                </Button>
+
+                {Platform.OS === 'ios' && (
+                    <Button
+                        mode="outlined"
+                        onPress={handleAppleLogin}
+                        disabled={loading}
+                        style={styles.socialButton}
+                        contentStyle={styles.buttonContent}
+                        icon="apple"
+                    >
+                      Apple
+                    </Button>
+                )}
               </View>
             </Card.Content>
           </Card>
+
+          {/* Register Link */}
+          <View style={styles.registerContainer}>
+            <Text style={[styles.registerText, { color: theme.colors.onSurfaceVariant }]}>
+              Non hai un account?{' '}
+            </Text>
+            <TouchableOpacity onPress={handleRegisterPress}>
+              <Text style={[styles.linkText, { color: theme.colors.primary }]}>
+                Registrati qui
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
   );
@@ -276,73 +310,98 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: 16,
-  },
-  card: {
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 30,
+    marginTop: 20,
   },
   title: {
-    marginTop: 16,
+    fontSize: 28,
     fontWeight: 'bold',
+    marginTop: 15,
     textAlign: 'center',
   },
   subtitle: {
+    fontSize: 16,
     marginTop: 8,
     textAlign: 'center',
-    color: '#666',
+    opacity: 0.7,
   },
-  socialButton: {
-    marginBottom: 12,
+  card: {
+    marginBottom: 20,
+    borderRadius: 12,
+  },
+  cardContent: {
+    padding: 20,
+  },
+  formTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  input: {
+    marginBottom: 8,
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkboxLabel: {
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  linkText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loginButton: {
+    marginBottom: 20,
+    borderRadius: 8,
+  },
+  buttonContent: {
+    paddingVertical: 8,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginBottom: 20,
   },
   divider: {
     flex: 1,
   },
   dividerText: {
-    marginHorizontal: 16,
-    color: '#666',
+    marginHorizontal: 15,
+    fontSize: 12,
+    textTransform: 'uppercase',
   },
-  input: {
-    marginBottom: 8,
-  },
-  optionsContainer: {
+  socialButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
+    gap: 10,
   },
-  rememberMeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  forgotPassword: {
-    color: '#6200ee',
-  },
-  loginButton: {
-    marginBottom: 16,
-    paddingVertical: 8,
+  socialButton: {
+    flex: 1,
+    borderRadius: 8,
   },
   registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 20,
   },
-  registerLink: {
-    color: '#6200ee',
-    fontWeight: '600',
+  registerText: {
+    fontSize: 14,
   },
 });
 

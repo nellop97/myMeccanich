@@ -1,4 +1,4 @@
-// src/hooks/useAuth.ts
+// src/hooks/useAuth.ts - VERSIONE SICURA
 import { useState, useEffect, useCallback } from 'react';
 import { Platform, Alert } from 'react-native';
 import {
@@ -44,6 +44,7 @@ const GOOGLE_CONFIG = {
 
 // Interfacce TypeScript
 export interface AuthUser {
+  // Dati base da Firebase Auth
   uid: string;
   email: string | null;
   emailVerified: boolean;
@@ -51,12 +52,52 @@ export interface AuthUser {
   photoURL: string | null;
   phoneNumber: string | null;
   isAnonymous: boolean;
-  createdAt?: string;
-  lastLoginAt?: string;
+
   // Dati aggiuntivi da Firestore
+  name?: string; // Nome completo dell'utente
+  createdAt?: string; // Data di creazione account
+  lastLoginAt?: string; // Ultimo accesso
+  isActive?: boolean; // Account attivo
+  isEmailVerified?: boolean; // Conferma email (da Firestore)
+  userType?: 'user' | 'mechanic'; // Tipo di utente
+
+  // Impostazioni utente
+  settings?: {
+    language: string;
+    currency: string;
+    notifications: {
+      maintenance: boolean;
+      documents: boolean;
+      reminders: boolean;
+      marketing: boolean;
+    };
+    privacy: {
+      shareDataWithWorkshops: boolean;
+      allowMarketingEmails: boolean;
+    };
+  };
+
+  // Informazioni officina (solo per userType: 'mechanic')
+  workshopInfo?: {
+    name: string;
+    address: string;
+    phone: string;
+    email: string;
+    vatNumber: string;
+    specializations: string[];
+    certifications: string[];
+    workingHours: {
+      [key: string]: {
+        open: string;
+        close: string;
+        isClosed: boolean;
+      };
+    };
+  };
+
+  // Campi legacy per compatibilità
   firstName?: string;
   lastName?: string;
-  userType?: 'user' | 'mechanic';
   profileComplete?: boolean;
   workshopName?: string;
   address?: string;
@@ -127,29 +168,142 @@ export const useAuth = (): AuthContextType => {
   // Funzione per caricare i dati utente da Firestore
   const loadUserData = useCallback(async (firebaseUser: FirebaseUser): Promise<AuthUser | null> => {
     try {
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      console.log('🔍 DEBUG - Firebase User UID:', firebaseUser.uid);
+      console.log('🔍 DEBUG - Firebase User Email:', firebaseUser.email);
 
-      const baseUser: AuthUser = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        emailVerified: firebaseUser.emailVerified,
-        displayName: firebaseUser.displayName,
-        photoURL: firebaseUser.photoURL,
-        phoneNumber: firebaseUser.phoneNumber,
-        isAnonymous: firebaseUser.isAnonymous,
-        createdAt: firebaseUser.metadata.creationTime,
-        lastLoginAt: firebaseUser.metadata.lastSignInTime,
-      };
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+      console.log('🔍 DEBUG - Document path:', `users/${firebaseUser.uid}`);
+
+      const userDoc = await getDoc(userDocRef);
+      console.log('🔍 DEBUG - Document exists:', userDoc.exists());
 
       if (userDoc.exists()) {
+        console.log('🔍 DEBUG - Document data:', userDoc.data());
         const userData = userDoc.data();
-        return { ...baseUser, ...userData };
+
+        // Resto del codice per processare i dati...
+        const processedUserData = {
+          ...userData,
+          createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate().toISOString() : userData.createdAt,
+          lastLoginAt: userData.lastLoginAt?.toDate ? userData.lastLoginAt.toDate().toISOString() : userData.lastLoginAt,
+          emailVerified: userData.isEmailVerified ?? firebaseUser.emailVerified,
+          displayName: userData.name ?? firebaseUser.displayName,
+        };
+
+        const baseUser: AuthUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          emailVerified: firebaseUser.emailVerified,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+          phoneNumber: firebaseUser.phoneNumber,
+          isAnonymous: firebaseUser.isAnonymous,
+        };
+
+        return { ...baseUser, ...processedUserData };
       } else {
-        console.log('Documento utente non trovato in Firestore');
-        return baseUser;
+        console.log('❌ Documento utente non trovato in Firestore');
+        console.log('🔍 DEBUG - Cerco altri documenti nella collezione users...');
+
+        // Verifica se esistono altri documenti nella collezione
+        const usersQuery = query(collection(db, 'users'), limit(5));
+        const usersSnapshot = await getDocs(usersQuery);
+
+        console.log('🔍 DEBUG - Documenti trovati nella collezione users:');
+        usersSnapshot.forEach((doc) => {
+          console.log(`  - ID: ${doc.id}, Email: ${doc.data().email}`);
+        });
+
+        // Prova a cercare per email
+        if (firebaseUser.email) {
+          console.log('🔍 DEBUG - Cerco documento per email:', firebaseUser.email);
+          const emailQuery = query(
+              collection(db, 'users'),
+              where('email', '==', firebaseUser.email),
+              limit(1)
+          );
+          const emailSnapshot = await getDocs(emailQuery);
+
+          if (!emailSnapshot.empty) {
+            const foundDoc = emailSnapshot.docs[0];
+            console.log('✅ Trovato documento per email! ID:', foundDoc.id);
+            console.log('⚠️  L\'ID del documento non corrisponde all\'UID Firebase');
+            console.log('   UID Firebase:', firebaseUser.uid);
+            console.log('   ID Documento:', foundDoc.id);
+
+            // Potresti decidere di usare questo documento o crearne uno nuovo
+            return {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              emailVerified: firebaseUser.emailVerified,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              phoneNumber: firebaseUser.phoneNumber,
+              isAnonymous: firebaseUser.isAnonymous,
+              ...foundDoc.data(),
+            };
+          }
+        }
+
+        console.log('🔄 Creo nuovo documento utente...');
+
+        // Base user data
+        const baseUser: AuthUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          emailVerified: firebaseUser.emailVerified,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+          phoneNumber: firebaseUser.phoneNumber,
+          isAnonymous: firebaseUser.isAnonymous,
+        };
+
+        // Crea nuovo documento
+        const newUserData = {
+          email: firebaseUser.email,
+          name: firebaseUser.displayName,
+          isEmailVerified: firebaseUser.emailVerified,
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          isActive: true,
+          userType: 'user',
+          settings: {
+            language: 'it',
+            currency: 'EUR',
+            notifications: {
+              maintenance: true,
+              documents: true,
+              reminders: true,
+              marketing: false,
+            },
+            privacy: {
+              shareDataWithWorkshops: false,
+              allowMarketingEmails: false,
+            },
+          },
+        };
+
+        // Salva il nuovo documento
+        await setDoc(doc(db, 'users', firebaseUser.uid), newUserData);
+        console.log('✅ Nuovo documento utente creato con successo');
+
+        return {
+          ...baseUser,
+          ...newUserData,
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
       }
     } catch (error) {
-      console.error('Errore nel caricamento dati utente:', error);
+      console.error('❌ Errore nel caricamento dati utente:', error);
+
+      // Controlla il tipo di errore
+      if (error.code === 'permission-denied') {
+        console.error('🚫 ERRORE PERMISSIONS - Controlla le regole Firestore');
+      } else if (error.code === 'unavailable') {
+        console.error('🌐 ERRORE CONNESSIONE - Controlla la connessione internet');
+      }
+
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -164,24 +318,27 @@ export const useAuth = (): AuthContextType => {
     }
   }, []);
 
-  // Listener per i cambiamenti di stato dell'autenticazione
+  // 🔒 LISTENER SICURO - UNICA FONTE DI VERITÀ
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
+          console.log('🔥 Firebase: Utente autenticato');
           const authUser = await loadUserData(firebaseUser);
           setUser(authUser);
         } else {
+          console.log('🔥 Firebase: Utente non autenticato');
           setUser(null);
         }
       } catch (error) {
-        console.error('Errore nell\'aggiornamento stato auth:', error);
+        console.error('❌ Errore auth state:', error);
+        // 🔒 IN CASO DI ERRORE, SEMPRE LOGOUT PER SICUREZZA
         setUser(null);
       } finally {
         if (initializing) {
+          console.log('🚀 Auth: Inizializzazione completata');
           setInitializing(false);
         }
-        setLoading(false);
       }
     });
 
@@ -219,9 +376,12 @@ export const useAuth = (): AuthContextType => {
   const loginWithEmail = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     try {
       setLoading(true);
+      console.log('🔑 Tentativo login con email:', email);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('✅ Login riuscito');
       return { success: true, user: userCredential.user };
     } catch (error: any) {
+      console.error('❌ Errore login:', error);
       const errorMessage = getFirebaseErrorMessage(error);
       showError(errorMessage);
       return { success: false, error: errorMessage };
@@ -310,15 +470,8 @@ export const useAuth = (): AuthContextType => {
         showSuccess('Accesso effettuato con Apple!');
         return { success: true, user: result.user };
 
-      } else if (AppleAuthentication) {
-        // Mobile Apple Sign-In
-        const isAvailable = await AppleAuthentication.isAvailableAsync();
-        if (!isAvailable) {
-          const errorMsg = 'Apple Sign-In non è disponibile su questo dispositivo';
-          showError(errorMsg);
-          return { success: false, error: errorMsg };
-        }
-
+      } else if (Platform.OS === 'ios' && AppleAuthentication) {
+        // iOS Apple Sign-In
         const credential = await AppleAuthentication.signInAsync({
           requestedScopes: [
             AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -326,11 +479,10 @@ export const useAuth = (): AuthContextType => {
           ],
         });
 
-        // Crea il provider Apple per Firebase
+        const { identityToken } = credential;
         const provider = new OAuthProvider('apple.com');
         const authCredential = provider.credential({
-          idToken: credential.identityToken!,
-          rawNonce: credential.realUserStatus?.toString(),
+          idToken: identityToken!,
         });
 
         const result = await signInWithCredential(auth, authCredential);
@@ -338,16 +490,14 @@ export const useAuth = (): AuthContextType => {
         return { success: true, user: result.user };
 
       } else {
-        const errorMsg = 'Apple Sign-In non configurato';
+        const errorMsg = 'Apple Sign-In non disponibile su questa piattaforma';
         showError(errorMsg);
         return { success: false, error: errorMsg };
       }
     } catch (error: any) {
       console.error('Errore Apple Sign-In:', error);
       const errorMessage = getFirebaseErrorMessage(error);
-      if (error.code !== 'ERR_REQUEST_CANCELED') {
-        showError(errorMessage);
-      }
+      showError(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
@@ -357,17 +507,16 @@ export const useAuth = (): AuthContextType => {
   // Logout
   const logout = useCallback(async (): Promise<void> => {
     try {
-      setLoading(true);
+      console.log('🚪 Logout in corso...');
       await signOut(auth);
+      console.log('✅ Logout completato');
     } catch (error: any) {
-      console.error('Errore logout:', error);
+      console.error('❌ Errore durante il logout:', error);
       showError(getFirebaseErrorMessage(error));
-    } finally {
-      setLoading(false);
     }
   }, [showError]);
 
-  // Invia email di verifica
+  // Invio email di verifica
   const sendVerificationEmail = useCallback(async (): Promise<boolean> => {
     try {
       if (auth.currentUser) {
