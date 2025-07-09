@@ -1,354 +1,490 @@
-// src/hooks/useUserData.ts - HOOK UTILITY PER DATI UTENTE
-import { useMemo } from 'react';
-import { useAuth } from './useAuth';
-import { useStore } from '../store';
+// src/hooks/useUserData.ts - Hook per gestire i dati utente da Firebase
+import { useState, useEffect, useCallback } from 'react';
+import { 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  getDocs, 
+  onSnapshot,
+  doc,
+  getDoc 
+} from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { useUser } from './useAuthSync';
 
-// 🔧 HOOK PRINCIPALE PER DATI UTENTE
+// Interfacce TypeScript
+export interface Vehicle {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  color?: string;
+  licensePlate: string;
+  vin?: string;
+  currentMileage: number;
+  purchaseDate?: any;
+  purchasePrice?: number;
+  purchaseMileage?: number;
+  insuranceCompany?: string;
+  insuranceExpiry?: any;
+  notes?: string;
+  ownerId: string;
+  sharedWith?: string[];
+  isActive: boolean;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  vehicleId: string;
+  type: string;
+  description: string;
+  cost: number;
+  mileage?: number;
+  completedDate: any;
+  nextDueDate?: any;
+  nextDueMileage?: number;
+  status: 'completed' | 'pending' | 'overdue';
+  mechanicId?: string;
+  workshopId?: string;
+  parts?: Array<{
+    name: string;
+    partNumber?: string;
+    cost: number;
+  }>;
+  notes?: string;
+  ownerId: string;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface Reminder {
+  id: string;
+  vehicleId?: string;
+  title: string;
+  description: string;
+  dueDate: any;
+  status: 'active' | 'completed' | 'overdue';
+  type: 'maintenance' | 'insurance' | 'inspection' | 'other';
+  priority: 'low' | 'medium' | 'high';
+  ownerId: string;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface FuelRecord {
+  id: string;
+  vehicleId: string;
+  date: any;
+  liters: number;
+  pricePerLiter: number;
+  totalCost: number;
+  mileage: number;
+  fuelType: string;
+  station?: string;
+  notes?: string;
+  ownerId: string;
+  createdAt: any;
+}
+
+export interface Expense {
+  id: string;
+  vehicleId: string;
+  category: string;
+  description: string;
+  amount: number;
+  date: any;
+  notes?: string;
+  ownerId: string;
+  createdAt: any;
+}
+
+// Hook principale per i dati utente
 export const useUserData = () => {
-    const { user } = useAuth(); // Prendi solo da Firebase
+  const { authUser, isAuthenticated } = useUser();
+  
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [recentMaintenance, setRecentMaintenance] = useState<MaintenanceRecord[]>([]);
+  const [upcomingReminders, setUpcomingReminders] = useState<Reminder[]>([]);
+  const [recentFuelRecords, setRecentFuelRecords] = useState<FuelRecord[]>([]);
+  const [recentExpenses, setRecentExpenses] = useState<Expense[]>([]);
+  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    // Memoizza i dati per evitare ricalcoli inutili
-    const userData = useMemo(() => {
-        if (!user) {
-            return {
-                userId: null,
-                userName: null,
-                userEmail: null,
-                isMechanic: false,
-                isEmailVerified: false,
-                photoURL: null,
-                phoneNumber: null,
-                workshopName: null,
-                workshopAddress: null,
-                vatNumber: null,
-                isAuthenticated: false,
-                profileComplete: false,
-            };
-        }
+  // Recupera tutti i veicoli dell'utente
+  const fetchVehicles = useCallback(async () => {
+    if (!authUser?.uid) {
+      console.log('🚫 [useUserData] fetchVehicles: authUser.uid mancante');
+      return [];
+    }
 
-        return {
-            userId: user.uid,
-            userName: user.displayName || user.firstName || 'Utente',
-            userEmail: user.email,
-            isMechanic: user.userType === 'mechanic',
-            isEmailVerified: user.emailVerified,
-            photoURL: user.photoURL,
-            phoneNumber: user.phoneNumber,
+    try {
+      console.log('🔍 [useUserData] fetchVehicles: Iniziando query per UID:', authUser.uid);
+      
+      const vehiclesQuery = query(
+        collection(db, 'vehicles'),
+        where('ownerId', '==', authUser.uid),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const snapshot = await getDocs(vehiclesQuery);
+      console.log('📊 [useUserData] fetchVehicles: Query completata, documenti trovati:', snapshot.size);
+      
+      const vehiclesData = snapshot.docs.map(doc => {
+        const data = { id: doc.id, ...doc.data() };
+        console.log('🚗 [useUserData] fetchVehicles: Documento veicolo:', data);
+        return data;
+      }) as Vehicle[];
+      
+      setVehicles(vehiclesData);
+      console.log('✅ [useUserData] fetchVehicles: State aggiornato con', vehiclesData.length, 'veicoli');
+      return vehiclesData;
+    } catch (error: any) {
+      console.error('❌ [useUserData] fetchVehicles: Errore:', error);
+      console.error('❌ [useUserData] fetchVehicles: Dettagli errore:', {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      });
+      return [];
+    }
+  }, [authUser?.uid]);
 
-            // Dati specifici meccanico
-            workshopName: user.workshopName,
-            workshopAddress: user.address,
-            vatNumber: user.vatNumber,
+  // Recupera manutenzioni recenti
+  const fetchRecentMaintenance = useCallback(async (vehicleIds: string[]) => {
+    if (vehicleIds.length === 0) {
+      console.log('🚫 [useUserData] fetchRecentMaintenance: Nessun veicolo fornito');
+      return [];
+    }
 
-            // Stati
-            isAuthenticated: true,
-            profileComplete: user.profileComplete || false,
-        };
-    }, [user]);
+    try {
+      console.log('🔍 [useUserData] fetchRecentMaintenance: Iniziando query per veicoli:', vehicleIds);
+      
+      // Firestore ha un limite di 10 elementi per la clausola 'in'
+      const batchSize = 10;
+      const batches = [];
+      
+      for (let i = 0; i < vehicleIds.length; i += batchSize) {
+        const batch = vehicleIds.slice(i, i + batchSize);
+        batches.push(batch);
+      }
 
-    return userData;
+      console.log('📦 [useUserData] fetchRecentMaintenance: Diviso in', batches.length, 'batch');
+
+      let allMaintenance: MaintenanceRecord[] = [];
+
+      for (const batch of batches) {
+        console.log('🔄 [useUserData] fetchRecentMaintenance: Processando batch:', batch);
+        
+        const maintenanceQuery = query(
+          collection(db, 'maintenance_records'),
+          where('vehicleId', 'in', batch),
+          where('status', '==', 'completed'),
+          orderBy('completedDate', 'desc'),
+          limit(5)
+        );
+        
+        const snapshot = await getDocs(maintenanceQuery);
+        console.log('📊 [useUserData] fetchRecentMaintenance: Batch query completata, documenti:', snapshot.size);
+        
+        const maintenanceData = snapshot.docs.map(doc => {
+          const data = { id: doc.id, ...doc.data() };
+          console.log('🔧 [useUserData] fetchRecentMaintenance: Documento manutenzione:', data);
+          return data;
+        }) as MaintenanceRecord[];
+        
+        allMaintenance = [...allMaintenance, ...maintenanceData];
+      }
+
+      // Ordina per data e prendi solo i più recenti
+      allMaintenance.sort((a, b) => {
+        const dateA = a.completedDate?.toDate?.() || new Date(0);
+        const dateB = b.completedDate?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      const recentData = allMaintenance.slice(0, 5);
+      console.log('✅ [useUserData] fetchRecentMaintenance: Totale manutenzioni trovate:', allMaintenance.length, 'Prime 5:', recentData.length);
+      
+      setRecentMaintenance(recentData);
+      return recentData;
+    } catch (error: any) {
+      console.error('❌ [useUserData] fetchRecentMaintenance: Errore:', error);
+      console.error('❌ [useUserData] fetchRecentMaintenance: Dettagli errore:', {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      });
+      return [];
+    }
+  }, []);
+
+  // Recupera promemoria imminenti
+  const fetchUpcomingReminders = useCallback(async () => {
+    if (!authUser?.uid) return [];
+
+    try {
+      const remindersQuery = query(
+        collection(db, 'reminders'),
+        where('ownerId', '==', authUser.uid),
+        where('status', 'in', ['active', 'overdue']),
+        orderBy('dueDate', 'asc'),
+        limit(10)
+      );
+      
+      const snapshot = await getDocs(remindersQuery);
+      const remindersData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Reminder[];
+      
+      setUpcomingReminders(remindersData);
+      return remindersData;
+    } catch (error: any) {
+      console.error('❌ Errore nel recupero promemoria:', error);
+      return [];
+    }
+  }, [authUser?.uid]);
+
+  // Recupera record carburante recenti
+  const fetchRecentFuelRecords = useCallback(async (vehicleIds: string[]) => {
+    if (vehicleIds.length === 0) return [];
+
+    try {
+      const batchSize = 10;
+      let allFuelRecords: FuelRecord[] = [];
+
+      for (let i = 0; i < vehicleIds.length; i += batchSize) {
+        const batch = vehicleIds.slice(i, i + batchSize);
+        
+        const fuelQuery = query(
+          collection(db, 'fuel_records'),
+          where('vehicleId', 'in', batch),
+          orderBy('date', 'desc'),
+          limit(5)
+        );
+        
+        const snapshot = await getDocs(fuelQuery);
+        const fuelData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FuelRecord[];
+        
+        allFuelRecords = [...allFuelRecords, ...fuelData];
+      }
+
+      // Ordina per data
+      allFuelRecords.sort((a, b) => {
+        const dateA = a.date?.toDate?.() || new Date(0);
+        const dateB = b.date?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      const recentData = allFuelRecords.slice(0, 5);
+      setRecentFuelRecords(recentData);
+      return recentData;
+    } catch (error: any) {
+      console.error('❌ Errore nel recupero record carburante:', error);
+      return [];
+    }
+  }, []);
+
+  // Recupera spese recenti
+  const fetchRecentExpenses = useCallback(async (vehicleIds: string[]) => {
+    if (vehicleIds.length === 0) return [];
+
+    try {
+      const batchSize = 10;
+      let allExpenses: Expense[] = [];
+
+      for (let i = 0; i < vehicleIds.length; i += batchSize) {
+        const batch = vehicleIds.slice(i, i + batchSize);
+        
+        const expensesQuery = query(
+          collection(db, 'expenses'),
+          where('vehicleId', 'in', batch),
+          orderBy('date', 'desc'),
+          limit(5)
+        );
+        
+        const snapshot = await getDocs(expensesQuery);
+        const expensesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Expense[];
+        
+        allExpenses = [...allExpenses, ...expensesData];
+      }
+
+      // Ordina per data
+      allExpenses.sort((a, b) => {
+        const dateA = a.date?.toDate?.() || new Date(0);
+        const dateB = b.date?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      const recentData = allExpenses.slice(0, 5);
+      setRecentExpenses(recentData);
+      return recentData;
+    } catch (error: any) {
+      console.error('❌ Errore nel recupero spese:', error);
+      return [];
+    }
+  }, []);
+
+  // Funzione principale per caricare tutti i dati
+  const fetchAllUserData = useCallback(async () => {
+    if (!authUser?.uid || !isAuthenticated) {
+      console.log('🚫 [useUserData] fetchAllUserData: Utente non autenticato o UID mancante');
+      console.log('  - authUser?.uid:', authUser?.uid);
+      console.log('  - isAuthenticated:', isAuthenticated);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      console.log('🚀 [useUserData] fetchAllUserData: INIZIATO caricamento dati per UID:', authUser.uid);
+      setLoading(true);
+      setError(null);
+
+      // 1. Prima carica i veicoli
+      console.log('📝 [useUserData] fetchAllUserData: Passo 1 - Caricamento veicoli');
+      const vehiclesData = await fetchVehicles();
+      const vehicleIds = vehiclesData.map(v => v.id);
+      console.log('🚗 [useUserData] fetchAllUserData: Veicoli caricati:', vehicleIds);
+
+      // 2. Poi carica tutti gli altri dati in parallelo
+      console.log('📝 [useUserData] fetchAllUserData: Passo 2 - Caricamento dati in parallelo');
+      const promises = [
+        fetchRecentMaintenance(vehicleIds),
+        fetchUpcomingReminders(),
+        fetchRecentFuelRecords(vehicleIds),
+        fetchRecentExpenses(vehicleIds),
+      ];
+
+      const results = await Promise.all(promises);
+      console.log('✅ [useUserData] fetchAllUserData: Dati paralleli completati:', {
+        maintenance: results[0]?.length || 0,
+        reminders: results[1]?.length || 0,
+        fuelRecords: results[2]?.length || 0,
+        expenses: results[3]?.length || 0
+      });
+
+      console.log('🎉 [useUserData] fetchAllUserData: COMPLETATO con successo!');
+    } catch (error: any) {
+      console.error('❌ [useUserData] fetchAllUserData: ERRORE generale:', error);
+      console.error('❌ [useUserData] fetchAllUserData: Stack trace:', error.stack);
+      setError(error.message || 'Errore nel caricamento dei dati');
+    } finally {
+      setLoading(false);
+      console.log('🏁 [useUserData] fetchAllUserData: Loading = false');
+    }
+  }, [
+    authUser?.uid, 
+    isAuthenticated, 
+    fetchVehicles, 
+    fetchRecentMaintenance, 
+    fetchUpcomingReminders,
+    fetchRecentFuelRecords,
+    fetchRecentExpenses
+  ]);
+
+  // Effetto per caricare i dati quando l'utente è autenticato
+  useEffect(() => {
+    console.log('🔄 [useUserData] useEffect triggered:');
+    console.log('  - isAuthenticated:', isAuthenticated);
+    console.log('  - authUser?.uid:', authUser?.uid);
+    
+    if (isAuthenticated && authUser?.uid) {
+      console.log('✅ [useUserData] Condizioni soddisfatte, avvio fetchAllUserData');
+      fetchAllUserData();
+    } else {
+      console.log('🔄 [useUserData] Reset dati - utente non autenticato');
+      // Reset dei dati se l'utente non è autenticato
+      setVehicles([]);
+      setRecentMaintenance([]);
+      setUpcomingReminders([]);
+      setRecentFuelRecords([]);
+      setRecentExpenses([]);
+      setLoading(false);
+      setError(null);
+    }
+  }, [isAuthenticated, authUser?.uid, fetchAllUserData]);
+
+  // Funzione di refresh
+  const refreshData = useCallback(async () => {
+    await fetchAllUserData();
+  }, [fetchAllUserData]);
+
+  // Funzione per ottenere un veicolo specifico
+  const getVehicleById = useCallback((vehicleId: string): Vehicle | undefined => {
+    return vehicles.find(v => v.id === vehicleId);
+  }, [vehicles]);
+
+  // Calcoli statistiche
+  const stats = {
+    vehiclesCount: vehicles.length,
+    maintenanceCount: recentMaintenance.length,
+    remindersCount: upcomingReminders.filter(r => r.status === 'active').length,
+    overdueReminders: upcomingReminders.filter(r => r.status === 'overdue').length,
+    totalMileage: vehicles.reduce((sum, v) => sum + (v.currentMileage || 0), 0),
+    totalMaintenanceCost: recentMaintenance.reduce((sum, m) => sum + (m.cost || 0), 0),
+    totalFuelCost: recentFuelRecords.reduce((sum, f) => sum + (f.totalCost || 0), 0),
+    totalExpenses: recentExpenses.reduce((sum, e) => sum + (e.amount || 0), 0),
+  };
+
+  return {
+    // Dati
+    vehicles,
+    recentMaintenance,
+    upcomingReminders,
+    recentFuelRecords,
+    recentExpenses,
+    
+    // Stati
+    loading,
+    error,
+    
+    // Funzioni
+    refreshData,
+    fetchAllUserData,
+    getVehicleById,
+    
+    // Statistiche
+    stats,
+    
+    // Flags di convenienza
+    hasVehicles: vehicles.length > 0,
+    hasReminders: upcomingReminders.length > 0,
+    hasOverdueReminders: upcomingReminders.some(r => r.status === 'overdue'),
+  };
 };
 
-// 🎛️ HOOK PER STATO GLOBALE DELL'APP
-export const useAppState = () => {
-    const { isLoading, error, clearError } = useStore();
-    const { loading: authLoading, initializing } = useAuth();
-
-    const appState = useMemo(() => ({
-        isLoading: isLoading || authLoading || initializing,
-        error,
-        clearError,
-        isInitializing: initializing,
-        isAuthLoading: authLoading,
-        isAppLoading: isLoading,
-    }), [isLoading, authLoading, initializing, error, clearError]);
-
-    return appState;
+// Hook semplificato per ottenere solo i veicoli
+export const useUserVehicles = () => {
+  const { vehicles, loading, error, refreshData } = useUserData();
+  
+  return {
+    vehicles,
+    loading,
+    error,
+    refreshVehicles: refreshData,
+    vehiclesCount: vehicles.length,
+    hasVehicles: vehicles.length > 0,
+  };
 };
 
-// 🚗 HOOK PER GESTIONE AUTO
-export const useUserCars = () => {
-    const { cars, addCar, updateCar, removeCar, getCar } = useStore();
-    const { userId } = useUserData();
-
-    // Filtra le auto dell'utente corrente (se implementi multi-utente)
-    const userCars = useMemo(() => {
-        // Per ora restituisci tutte le auto, ma in futuro potresti filtrare per userId
-        return cars;
-    }, [cars]);
-
-    const carOperations = useMemo(() => ({
-        cars: userCars,
-        addCar,
-        updateCar,
-        removeCar,
-        getCar,
-        carsCount: userCars.length,
-        hasCars: userCars.length > 0,
-    }), [userCars, addCar, updateCar, removeCar, getCar]);
-
-    return carOperations;
-};
-
-// 🔧 HOOK PER MANUTENZIONI
-export const useMaintenanceData = (carId?: string) => {
-    const {
-        addMaintenanceRecord,
-        updateMaintenanceRecord,
-        removeMaintenanceRecord,
-        getMaintenanceHistory
-    } = useStore();
-
-    const maintenanceOperations = useMemo(() => {
-        if (!carId) {
-            return {
-                maintenanceHistory: [],
-                addMaintenance: addMaintenanceRecord,
-                updateMaintenance: updateMaintenanceRecord,
-                removeMaintenance: removeMaintenanceRecord,
-                maintenanceCount: 0,
-                hasMaintenance: false,
-            };
-        }
-
-        const history = getMaintenanceHistory(carId);
-
-        return {
-            maintenanceHistory: history,
-            addMaintenance: (record: any) => addMaintenanceRecord(carId, record),
-            updateMaintenance: (recordId: string, updates: any) =>
-                updateMaintenanceRecord(carId, recordId, updates),
-            removeMaintenance: (recordId: string) =>
-                removeMaintenanceRecord(carId, recordId),
-            maintenanceCount: history.length,
-            hasMaintenance: history.length > 0,
-        };
-    }, [carId, addMaintenanceRecord, updateMaintenanceRecord, removeMaintenanceRecord, getMaintenanceHistory]);
-
-    return maintenanceOperations;
-};
-
-// 🎨 HOOK PER TEMA E PREFERENZE
-export const useAppTheme = () => {
-    const { darkMode, preferences, setDarkMode, updatePreferences } = useStore();
-
-    const themeOperations = useMemo(() => ({
-        darkMode,
-        theme: darkMode ? 'dark' : 'light',
-        preferences,
-        setDarkMode,
-        updatePreferences,
-        toggleDarkMode: () => setDarkMode(!darkMode),
-    }), [darkMode, preferences, setDarkMode, updatePreferences]);
-
-    return themeOperations;
-};
-
-// 🛡️ HOOK PER CONTROLLI DI AUTORIZZAZIONE
-export const usePermissions = () => {
-    const { isMechanic, isAuthenticated } = useUserData();
-
-    const permissions = useMemo(() => ({
-        canAccessMechanicFeatures: isAuthenticated && isMechanic,
-        canAccessUserFeatures: isAuthenticated && !isMechanic,
-        canCreateInvoices: isAuthenticated && isMechanic,
-        canManageCustomers: isAuthenticated && isMechanic,
-        canViewReports: isAuthenticated && isMechanic,
-        canManageCars: isAuthenticated,
-        canAddMaintenance: isAuthenticated,
-        isAuthenticated,
-        isMechanic,
-    }), [isAuthenticated, isMechanic]);
-
-    return permissions;
-};
-
-// 📊 HOOK PER STATISTICHE UTENTE
+// Hook per ottenere le statistiche dell'utente
 export const useUserStats = () => {
-    const { cars } = useUserCars();
-    const { isAuthenticated } = useUserData();
-
-    const stats = useMemo(() => {
-        if (!isAuthenticated || !cars.length) {
-            return {
-                totalCars: 0,
-                totalMaintenanceRecords: 0,
-                averageCarAge: 0,
-                oldestCar: null,
-                newestCar: null,
-                carsNeedingService: 0,
-            };
-        }
-
-        const currentYear = new Date().getFullYear();
-        const totalMaintenanceRecords = cars.reduce(
-            (total, car) => total + (car.maintenanceHistory?.length || 0),
-            0
-        );
-
-        const carAges = cars.map(car => currentYear - car.year);
-        const averageCarAge = carAges.reduce((sum, age) => sum + age, 0) / cars.length;
-
-        const oldestCar = cars.reduce((oldest, car) =>
-            (!oldest || car.year < oldest.year) ? car : oldest
-        );
-
-        const newestCar = cars.reduce((newest, car) =>
-            (!newest || car.year > newest.year) ? car : newest
-        );
-
-        // Auto che potrebbero aver bisogno di servizio (semplificato)
-        const carsNeedingService = cars.filter(car => {
-            const lastService = car.lastService;
-            if (!lastService) return true;
-
-            const lastServiceDate = new Date(lastService);
-            const monthsAgo = (Date.now() - lastServiceDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
-            return monthsAgo > 6; // Più di 6 mesi dall'ultimo servizio
-        }).length;
-
-        return {
-            totalCars: cars.length,
-            totalMaintenanceRecords,
-            averageCarAge: Math.round(averageCarAge),
-            oldestCar,
-            newestCar,
-            carsNeedingService,
-        };
-    }, [isAuthenticated, cars]);
-
-    return stats;
-};
-
-// 🔍 HOOK PER RICERCA E FILTRI
-export const useSearchAndFilter = <T>(
-    items: T[],
-    searchKey: keyof T,
-    initialFilter?: string
-) => {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [activeFilter, setActiveFilter] = useState(initialFilter || 'all');
-
-    const filteredItems = useMemo(() => {
-        let filtered = items;
-
-        // Applica ricerca
-        if (searchQuery.trim()) {
-            filtered = filtered.filter(item =>
-                String(item[searchKey]).toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
-
-        // Qui puoi aggiungere logica di filtro specifica
-        // basata su activeFilter
-
-        return filtered;
-    }, [items, searchQuery, activeFilter, searchKey]);
-
-    return {
-        searchQuery,
-        setSearchQuery,
-        activeFilter,
-        setActiveFilter,
-        filteredItems,
-        hasResults: filteredItems.length > 0,
-        resultsCount: filteredItems.length,
-    };
-};
-
-// 🚨 HOOK PER NOTIFICHE E PROMEMORIA
-export const useNotifications = () => {
-    const { cars } = useUserCars();
-    const { preferences } = useAppTheme();
-
-    const notifications = useMemo(() => {
-        if (!preferences.notifications.maintenance) {
-            return [];
-        }
-
-        const today = new Date();
-        const notificationList: Array<{
-            id: string;
-            type: 'maintenance' | 'insurance' | 'inspection';
-            message: string;
-            carId: string;
-            carName: string;
-            dueDate: Date;
-            priority: 'high' | 'medium' | 'low';
-        }> = [];
-
-        cars.forEach(car => {
-            const carName = `${car.make} ${car.model}`;
-
-            // Controllo scadenza assicurazione
-            if (car.insuranceExpiry) {
-                const expiryDate = new Date(car.insuranceExpiry);
-                const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-                if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
-                    notificationList.push({
-                        id: `insurance-${car.id}`,
-                        type: 'insurance',
-                        message: `L'assicurazione di ${carName} scade tra ${daysUntilExpiry} giorni`,
-                        carId: car.id,
-                        carName,
-                        dueDate: expiryDate,
-                        priority: daysUntilExpiry <= 7 ? 'high' : 'medium',
-                    });
-                }
-            }
-
-            // Controllo scadenza revisione
-            if (car.inspectionExpiry) {
-                const expiryDate = new Date(car.inspectionExpiry);
-                const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-                if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
-                    notificationList.push({
-                        id: `inspection-${car.id}`,
-                        type: 'inspection',
-                        message: `La revisione di ${carName} scade tra ${daysUntilExpiry} giorni`,
-                        carId: car.id,
-                        carName,
-                        dueDate: expiryDate,
-                        priority: daysUntilExpiry <= 7 ? 'high' : 'medium',
-                    });
-                }
-            }
-
-            // Controllo prossimo servizio
-            if (car.nextService) {
-                const serviceDate = new Date(car.nextService);
-                const daysUntilService = Math.ceil((serviceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-                if (daysUntilService <= 14 && daysUntilService > 0) {
-                    notificationList.push({
-                        id: `maintenance-${car.id}`,
-                        type: 'maintenance',
-                        message: `${carName} ha il prossimo servizio tra ${daysUntilService} giorni`,
-                        carId: car.id,
-                        carName,
-                        dueDate: serviceDate,
-                        priority: daysUntilService <= 3 ? 'high' : 'low',
-                    });
-                }
-            }
-        });
-
-        // Ordina per priorità e data
-        return notificationList.sort((a, b) => {
-            const priorityOrder = { high: 3, medium: 2, low: 1 };
-            if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-                return priorityOrder[b.priority] - priorityOrder[a.priority];
-            }
-            return a.dueDate.getTime() - b.dueDate.getTime();
-        });
-    }, [cars, preferences.notifications.maintenance]);
-
-    return {
-        notifications,
-        hasNotifications: notifications.length > 0,
-        highPriorityCount: notifications.filter(n => n.priority === 'high').length,
-        notificationCount: notifications.length,
-    };
+  const { stats, loading } = useUserData();
+  
+  return {
+    ...stats,
+    loading,
+  };
 };

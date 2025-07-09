@@ -1,5 +1,5 @@
-// src/screens/user/HomeScreenSecure.tsx
-import React, { useState, useCallback } from 'react';
+// src/screens/user/HomeScreen.tsx - VERSIONE CORRETTA
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -9,7 +9,8 @@ import {
   View,
   StatusBar,
   RefreshControl,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import {
   Car,
@@ -19,23 +20,84 @@ import {
   Wrench,
   Fuel,
   DollarSign,
-  FileText
+  FileText,
+  Bell,
+  Calendar,
+  TrendingUp,
+  Shield
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import {
-  useSecureAuth,
-  useDisplayName,
-  useAuthGuard
-} from '../../hooks/useSecureAuth';
 
-const HomeScreenSecure = () => {
+// 🔒 USA GLI HOOK ESISTENTI E CORRETTI
+import { useAuth } from '../../hooks/useAuth';
+import { useUser } from '../../hooks/useAuthSync';
+import { useUserData } from '../../hooks/useUserData';
+
+const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { user, loading, error, logout } = useSecureAuth();
-  const displayName = useDisplayName();
-  const { isAuthenticated, isLoading } = useAuthGuard();
+  
+  // 🔒 USA GLI HOOK CORRETTI
+  const { logout, loading: authLoading } = useAuth();
+  const { user, authUser, loading: userLoading, isAuthenticated, displayName } = useUser();
+  
+  // 📊 USA IL NUOVO HOOK PER I DATI UTENTE
+  const {
+    vehicles,
+    recentMaintenance,
+    upcomingReminders,
+    loading: dataLoading,
+    error,
+    refreshData,
+    stats,
+    hasVehicles,
+    hasReminders,
+    hasOverdueReminders
+  } = useUserData();
+
   const [refreshing, setRefreshing] = useState(false);
 
-  // Theme (semplificato)
+  // Combina tutti gli stati di loading
+  const loading = authLoading || userLoading || dataLoading;
+
+  // 🐛 DEBUG LOGS - Stati di autenticazione
+  useEffect(() => {
+    console.log('🔍 [HomeScreen] Hook States Debug:');
+    console.log('  - authLoading:', authLoading);
+    console.log('  - userLoading:', userLoading);
+    console.log('  - dataLoading:', dataLoading);
+    console.log('  - isAuthenticated:', isAuthenticated);
+    console.log('  - user:', user ? 'EXISTS' : 'NULL');
+    console.log('  - authUser:', authUser ? 'EXISTS' : 'NULL');
+    console.log('  - displayName:', displayName);
+    if (authUser) {
+      console.log('  - authUser.uid:', authUser.uid);
+      console.log('  - authUser.email:', authUser.email);
+      console.log('  - authUser.userType:', authUser.userType);
+    }
+  }, [authLoading, userLoading, dataLoading, isAuthenticated, user, authUser, displayName]);
+
+  // 🐛 DEBUG LOGS - Dati Firebase
+  useEffect(() => {
+    console.log('📊 [HomeScreen] Firebase Data Debug:');
+    console.log('  - vehicles.length:', vehicles.length);
+    console.log('  - vehicles data:', vehicles);
+    console.log('  - recentMaintenance.length:', recentMaintenance.length);
+    console.log('  - recentMaintenance data:', recentMaintenance);
+    console.log('  - upcomingReminders.length:', upcomingReminders.length);
+    console.log('  - upcomingReminders data:', upcomingReminders);
+    console.log('  - error:', error);
+  }, [vehicles, recentMaintenance, upcomingReminders, error]);
+
+  // 🐛 DEBUG LOGS - Statistiche
+  useEffect(() => {
+    console.log('📈 [HomeScreen] Stats Debug:');
+    console.log('  - stats:', stats);
+    console.log('  - hasVehicles:', hasVehicles);
+    console.log('  - hasReminders:', hasReminders);
+    console.log('  - hasOverdueReminders:', hasOverdueReminders);
+  }, [stats, hasVehicles, hasReminders, hasOverdueReminders]);
+
+  // Theme
   const theme = {
     background: '#f3f4f6',
     cardBackground: '#ffffff',
@@ -44,282 +106,400 @@ const HomeScreenSecure = () => {
     border: '#e5e7eb',
     accent: '#2563eb',
     error: '#ef4444',
+    success: '#10b981',
+    warning: '#f59e0b',
   };
 
-  // Logout sicuro con conferma
+  // 🔄 Refresh dei dati
+  const onRefresh = useCallback(async () => {
+    console.log('🔄 [HomeScreen] onRefresh - INIZIATO');
+    setRefreshing(true);
+    
+    try {
+      await refreshData();
+      console.log('✅ [HomeScreen] onRefresh - COMPLETATO con successo');
+    } catch (error) {
+      console.error('❌ [HomeScreen] onRefresh - ERRORE:', error);
+    } finally {
+      setRefreshing(false);
+      console.log('🏁 [HomeScreen] onRefresh - refreshing = false');
+    }
+  }, [refreshData]);
+
+  // 🚪 Gestione logout
   const handleLogout = useCallback(async () => {
+    console.log('🚪 [HomeScreen] handleLogout - Richiesta logout');
+    
     Alert.alert(
-        'Conferma Logout',
-        'Sei sicuro di voler uscire?',
-        [
-          { text: 'Annulla', style: 'cancel' },
-          {
-            text: 'Esci',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await logout();
-                console.log('✅ Logout completed successfully');
-              } catch (error) {
-                console.error('❌ Logout failed:', error);
-                Alert.alert('Errore', 'Errore durante il logout');
-              }
+      'Conferma Logout',
+      'Sei sicuro di voler uscire?',
+      [
+        { 
+          text: 'Annulla', 
+          style: 'cancel',
+          onPress: () => console.log('❌ [HomeScreen] Logout annullato dall\'utente')
+        },
+        {
+          text: 'Esci',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔄 [HomeScreen] Eseguendo logout...');
+              await logout();
+              console.log('✅ [HomeScreen] Logout completato con successo');
+            } catch (error) {
+              console.error('❌ [HomeScreen] Errore durante logout:', error);
+              Alert.alert('Errore', 'Errore durante il logout');
             }
           }
-        ]
+        }
+      ]
     );
   }, [logout]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    // In una vera app, qui ricaricheresti i dati
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
-
-  const handleNavigation = (screenName: string, params?: any) => {
+  // 🧭 Navigazione
+  const handleNavigation = useCallback((screenName: string, params?: any) => {
+    console.log(`🧭 [HomeScreen] Navigazione verso: ${screenName}`, params ? `con parametri: ${JSON.stringify(params)}` : 'senza parametri');
     navigation.navigate(screenName as any, params);
-  };
+  }, [navigation]);
 
-  // Loading state
-  if (isLoading) {
-    return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-          <StatusBar barStyle="dark-content" />
-          <View style={styles.loadingContainer}>
-            <Text style={[styles.loadingText, { color: theme.text }]}>
-              Caricamento...
-            </Text>
-          </View>
-        </SafeAreaView>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-          <StatusBar barStyle="dark-content" />
-          <View style={styles.errorContainer}>
-            <AlertCircle width={48} height={48} color={theme.error} />
-            <Text style={[styles.errorText, { color: theme.text }]}>
-              {error}
-            </Text>
-            <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: theme.accent }]}
-                onPress={onRefresh}
-            >
-              <Text style={styles.retryButtonText}>Riprova</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-    );
-  }
-
-  // Not authenticated (shouldn't happen if guards are in place)
+  // 🔒 Controllo autenticazione
   if (!isAuthenticated) {
+    console.log('🚫 [HomeScreen] RENDER: Non autenticato - mostrando messaggio di errore');
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-          <StatusBar barStyle="dark-content" />
-          <View style={styles.errorContainer}>
-            <Text style={[styles.errorText, { color: theme.text }]}>
-              Non autenticato
-            </Text>
-          </View>
-        </SafeAreaView>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.errorContainer}>
+          <AlertCircle width={48} height={48} color={theme.error} />
+          <Text style={[styles.errorText, { color: theme.text }]}>
+            Non autenticato
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  return (
+  // 📱 Loading state
+  if (loading) {
+    console.log('⏳ [HomeScreen] RENDER: Loading state attivo');
+    console.log('  - authLoading:', authLoading);
+    console.log('  - userLoading:', userLoading);
+    console.log('  - dataLoading:', dataLoading);
+    return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <StatusBar barStyle="dark-content" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.accent} />
+          <Text style={[styles.loadingText, { color: theme.text }]}>
+            Caricamento...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-        <ScrollView
-            style={styles.scrollView}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor={theme.accent}
-              />
-            }
-        >
-          {/* Header con nome utente SICURO */}
-          <View style={styles.header}>
-            <View>
-              <Text style={[styles.greeting, { color: theme.textSecondary }]}>
-                Buongiorno,
+  // ❌ Error state
+  if (error) {
+    console.log('❌ [HomeScreen] RENDER: Error state attivo:', error);
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.errorContainer}>
+          <AlertCircle width={48} height={48} color={theme.error} />
+          <Text style={[styles.errorText, { color: theme.text }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: theme.accent }]}
+            onPress={onRefresh}
+          >
+            <Text style={styles.retryButtonText}>Riprova</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 🏠 INTERFACCIA PRINCIPALE
+  console.log('🏠 [HomeScreen] RENDER: Interfaccia principale');
+  console.log('  - displayName per header:', displayName);
+  console.log('  - refreshing state:', refreshing);
+  console.log('  - Veicoli da mostrare:', vehicles.length);
+  console.log('  - Promemoria da mostrare:', upcomingReminders.length);
+  console.log('  - Manutenzioni da mostrare:', recentMaintenance.length);
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle="dark-content" />
+
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.accent}
+          />
+        }
+      >
+        {/* 👋 Header con saluto */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.greeting, { color: theme.textSecondary }]}>
+              Ciao,
+            </Text>
+            <Text style={[styles.username, { color: theme.text }]}>
+              {displayName}
+            </Text>
+            {authUser?.userType && (
+              <Text style={[styles.userType, { color: theme.textSecondary }]}>
+                {authUser.userType === 'mechanic' ? '🔧 Meccanico' : '🚗 Proprietario'}
               </Text>
-              <Text style={[styles.username, { color: theme.text }]}>
-                {displayName}
-              </Text>
-              {/* Info utente per debug (solo development) */}
-              {__DEV__ && (
-                  <Text style={[styles.debugText, { color: theme.textSecondary }]}>
-                    Debug: {user?.email} | {user?.userType} | Verified: {user?.emailVerified ? '✅' : '❌'}
-                  </Text>
-              )}
-            </View>
-            <TouchableOpacity
-                onPress={() => handleNavigation('Settings')}
-                style={[
-                  styles.settingsButton,
-                  {
-                    backgroundColor: theme.cardBackground,
-                    borderColor: theme.border
-                  }
-                ]}
-            >
-              <Settings width={20} height={20} color={theme.text} />
+            )}
+          </View>
+          <TouchableOpacity 
+            style={styles.settingsButton}
+            onPress={() => handleNavigation('Settings')}
+          >
+            <Settings width={24} height={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* 📊 Statistiche rapide */}
+        <View style={styles.statsContainer}>
+          <View style={[styles.statCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <Car width={24} height={24} color={theme.accent} />
+            <Text style={[styles.statNumber, { color: theme.text }]}>{stats.vehiclesCount}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Veicoli</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <Wrench width={24} height={24} color={theme.success} />
+            <Text style={[styles.statNumber, { color: theme.text }]}>{stats.maintenanceCount}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Interventi</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <Bell width={24} height={24} color={hasOverdueReminders ? theme.error : theme.warning} />
+            <Text style={[styles.statNumber, { color: theme.text }]}>{stats.remindersCount}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Promemoria</Text>
+          </View>
+        </View>
+
+        {/* 🚗 Sezione Veicoli */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>I tuoi Veicoli</Text>
+            <TouchableOpacity onPress={() => handleNavigation('AddCar')}>
+              <Plus width={24} height={24} color={theme.accent} />
             </TouchableOpacity>
           </View>
 
-          {/* Verifica Email (se necessaria) */}
-          {user && !user.emailVerified && (
-              <View style={[styles.warningCard, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
-                <Text style={[styles.warningTitle, { color: '#92400E' }]}>
-                  Email non verificata
-                </Text>
-                <Text style={[styles.warningText, { color: '#92400E' }]}>
-                  Verifica la tua email per accedere a tutte le funzionalità
-                </Text>
-              </View>
-          )}
-
-          {/* Sezione Veicoli */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                I Miei Veicoli
-              </Text>
-              <TouchableOpacity onPress={() => handleNavigation('AddCar')}>
-                <Plus width={24} height={24} color={theme.accent} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Per ora empty state - in una vera app caricheresti da Firebase */}
-            <View style={[styles.emptyState, { backgroundColor: theme.cardBackground }]}>
+          {!hasVehicles ? (
+            <View style={[styles.emptyState, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
               <Car width={48} height={48} color={theme.textSecondary} />
               <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-                Nessun veicolo aggiunto
+                Nessun veicolo registrato
               </Text>
               <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-                Aggiungi il tuo primo veicolo per iniziare
+                Aggiungi il tuo primo veicolo per iniziare a tracciare manutenzioni e spese
               </Text>
               <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: theme.accent }]}
-                  onPress={() => handleNavigation('AddCar')}
+                style={[styles.addButton, { backgroundColor: theme.accent }]}
+                onPress={() => handleNavigation('AddCar')}
               >
                 <Text style={styles.addButtonText}>Aggiungi Veicolo</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Azioni Rapide */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.text, paddingHorizontal: 20 }]}>
-              Azioni Rapide
-            </Text>
-            <View style={styles.quickActionsGrid}>
-              {[
-                {
-                  icon: Wrench,
-                  title: 'Manutenzione',
-                  subtitle: 'Programma intervento',
-                  screen: 'AddMaintenance',
-                  enabled: true
-                },
-                {
-                  icon: Fuel,
-                  title: 'Rifornimento',
-                  subtitle: 'Registra carburante',
-                  screen: 'AddFuel',
-                  enabled: true
-                },
-                {
-                  icon: DollarSign,
-                  title: 'Spesa',
-                  subtitle: 'Aggiungi spesa',
-                  screen: 'AddExpense',
-                  enabled: true
-                },
-                {
-                  icon: FileText,
-                  title: 'Documento',
-                  subtitle: 'Carica documento',
-                  screen: 'AddDocument',
-                  enabled: user?.emailVerified || false
-                },
-              ].map((action, index) => (
-                  <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.quickActionCard,
-                        {
-                          backgroundColor: theme.cardBackground,
-                          borderColor: theme.border,
-                          opacity: action.enabled ? 1 : 0.5
-                        }
-                      ]}
-                      onPress={() => {
-                        if (action.enabled) {
-                          handleNavigation(action.screen);
-                        } else {
-                          Alert.alert('Verifica Email', 'Verifica la tua email per accedere a questa funzione');
-                        }
-                      }}
-                      disabled={!action.enabled}
-                  >
-                    <View style={[styles.quickActionIcon, { backgroundColor: theme.accent + '20' }]}>
-                      <action.icon width={24} height={24} color={theme.accent} />
-                    </View>
-                    <Text style={[styles.quickActionTitle, { color: theme.text }]}>
-                      {action.title}
-                    </Text>
-                    <Text style={[styles.quickActionSubtitle, { color: theme.textSecondary }]}>
-                      {action.subtitle}
-                    </Text>
-                  </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Informazioni Utente (solo per meccanici) */}
-          {user?.userType === 'mechanic' && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.text, paddingHorizontal: 20 }]}>
-                  Informazioni Officina
-                </Text>
-                <View style={[styles.infoCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-                  <Text style={[styles.infoTitle, { color: theme.text }]}>
-                    {user.workshopName || 'Nome officina non impostato'}
-                  </Text>
-                  {user.address && (
-                      <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                        {user.address}
+          ) : (
+            <>
+              {console.log('🚗 [HomeScreen] Rendering veicoli:', vehicles.map(v => `${v.make} ${v.model} (${v.year})`))}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {vehicles.map((vehicle) => {
+                  console.log(`🚗 [HomeScreen] Rendering singolo veicolo:`, {
+                    id: vehicle.id,
+                    make: vehicle.make,
+                    model: vehicle.model,
+                    year: vehicle.year,
+                    licensePlate: vehicle.licensePlate,
+                    currentMileage: vehicle.currentMileage
+                  });
+                  
+                  return (
+                    <TouchableOpacity
+                      key={vehicle.id}
+                      style={[styles.carCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                      onPress={() => handleNavigation('CarDetail', { carId: vehicle.id })}
+                    >
+                      <Car width={32} height={32} color={theme.accent} />
+                      <Text style={[styles.carMake, { color: theme.text }]}>
+                        {vehicle.make} {vehicle.model}
                       </Text>
-                  )}
-                  {user.vatNumber && (
-                      <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                        P.IVA: {user.vatNumber}
+                      <Text style={[styles.carYear, { color: theme.textSecondary }]}>
+                        {vehicle.year}
                       </Text>
-                  )}
-                </View>
-              </View>
+                      <Text style={[styles.carPlate, { color: theme.textSecondary }]}>
+                        {vehicle.licensePlate}
+                      </Text>
+                      <Text style={[styles.carMileage, { color: theme.textSecondary }]}>
+                        {vehicle.currentMileage?.toLocaleString() || '0'} km
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </>
           )}
+        </View>
 
-          {/* Logout Button */}
-          <TouchableOpacity
-              style={[styles.logoutButton, { borderColor: theme.border }]}
-              onPress={handleLogout}
-              activeOpacity={0.7}
-          >
-            <Text style={[styles.logoutButtonText, { color: theme.text }]}>
-              Esci
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
+        {/* ⚡ Azioni rapide */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Azioni Rapide</Text>
+          <View style={styles.quickActionsGrid}>
+            <TouchableOpacity
+              style={[styles.quickActionCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+              onPress={() => handleNavigation('AddMaintenance')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: theme.success + '20' }]}>
+                <Wrench width={24} height={24} color={theme.success} />
+              </View>
+              <Text style={[styles.quickActionTitle, { color: theme.text }]}>
+                Nuova Manutenzione
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickActionCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+              onPress={() => handleNavigation('AddExpense')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: theme.warning + '20' }]}>
+                <DollarSign width={24} height={24} color={theme.warning} />
+              </View>
+              <Text style={[styles.quickActionTitle, { color: theme.text }]}>
+                Aggiungi Spesa
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickActionCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+              onPress={() => handleNavigation('Documents')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: theme.accent + '20' }]}>
+                <FileText width={24} height={24} color={theme.accent} />
+              </View>
+              <Text style={[styles.quickActionTitle, { color: theme.text }]}>
+                Documenti
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickActionCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+              onPress={() => handleNavigation('Reminders')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: theme.error + '20' }]}>
+                <Bell width={24} height={24} color={theme.error} />
+              </View>
+              <Text style={[styles.quickActionTitle, { color: theme.text }]}>
+                Promemoria
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ⏰ Promemoria imminenti */}
+        {upcomingReminders.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Promemoria Imminenti</Text>
+            {console.log('⏰ [HomeScreen] Rendering promemoria:', upcomingReminders.map(r => `${r.title} - ${r.status}`))}
+            {upcomingReminders.slice(0, 3).map((reminder) => {
+              console.log(`⏰ [HomeScreen] Rendering singolo promemoria:`, {
+                id: reminder.id,
+                title: reminder.title,
+                description: reminder.description,
+                status: reminder.status,
+                dueDate: reminder.dueDate
+              });
+              
+              return (
+                <View
+                  key={reminder.id}
+                  style={[styles.reminderCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                >
+                  <View style={styles.reminderIcon}>
+                    <Bell width={20} height={20} color={theme.warning} />
+                  </View>
+                  <View style={styles.reminderContent}>
+                    <Text style={[styles.reminderTitle, { color: theme.text }]}>
+                      {reminder.title}
+                    </Text>
+                    <Text style={[styles.reminderDescription, { color: theme.textSecondary }]}>
+                      {reminder.description}
+                    </Text>
+                    <Text style={[styles.reminderDate, { color: theme.warning }]}>
+                      Scadenza: {reminder.dueDate?.toDate?.()?.toLocaleDateString('it-IT') || 'N/A'}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* 🔧 Manutenzioni recenti */}
+        {recentMaintenance.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Manutenzioni Recenti</Text>
+            {console.log('🔧 [HomeScreen] Rendering manutenzioni:', recentMaintenance.map(m => `${m.type} - €${m.cost}`))}
+            {recentMaintenance.slice(0, 3).map((maintenance) => {
+              const vehicle = vehicles.find(v => v.id === maintenance.vehicleId);
+              console.log(`🔧 [HomeScreen] Rendering singola manutenzione:`, {
+                id: maintenance.id,
+                type: maintenance.type,
+                vehicleId: maintenance.vehicleId,
+                vehicleFound: vehicle ? `${vehicle.make} ${vehicle.model}` : 'NOT FOUND',
+                cost: maintenance.cost,
+                completedDate: maintenance.completedDate
+              });
+              
+              return (
+                <View
+                  key={maintenance.id}
+                  style={[styles.maintenanceCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                >
+                  <View style={styles.maintenanceIcon}>
+                    <Wrench width={20} height={20} color={theme.success} />
+                  </View>
+                  <View style={styles.maintenanceContent}>
+                    <Text style={[styles.maintenanceType, { color: theme.text }]}>
+                      {maintenance.type}
+                    </Text>
+                    <Text style={[styles.maintenanceVehicle, { color: theme.textSecondary }]}>
+                      {vehicle ? `${vehicle.make} ${vehicle.model}` : 'Veicolo non trovato'}
+                    </Text>
+                    <Text style={[styles.maintenanceDate, { color: theme.textSecondary }]}>
+                      {maintenance.completedDate?.toDate?.()?.toLocaleDateString('it-IT') || 'N/A'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.maintenanceCost, { color: theme.success }]}>
+                    €{maintenance.cost?.toFixed(2) || '0.00'}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* 🚪 Logout */}
+        <TouchableOpacity
+          style={[styles.logoutButton, { borderColor: theme.error }]}
+          onPress={handleLogout}
+        >
+          <Text style={[styles.logoutButtonText, { color: theme.error }]}>
+            Esci dall'App
+          </Text>
+        </TouchableOpacity>
+
+        {/* Spazio finale per scroll */}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -336,8 +516,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
     marginTop: 16,
+    fontSize: 16,
   },
   errorContainer: {
     flex: 1,
@@ -348,7 +528,8 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     textAlign: 'center',
-    marginVertical: 16,
+    marginTop: 16,
+    marginBottom: 24,
   },
   retryButton: {
     paddingHorizontal: 24,
@@ -372,36 +553,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   username: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     marginTop: 4,
   },
-  debugText: {
-    fontSize: 10,
+  userType: {
+    fontSize: 14,
     marginTop: 4,
-    maxWidth: 200,
   },
   settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
+    padding: 8,
   },
-  warningCard: {
-    margin: 20,
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 32,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
+    alignItems: 'center',
   },
-  warningTitle: {
-    fontSize: 16,
+  statNumber: {
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginTop: 8,
   },
-  warningText: {
-    fontSize: 14,
+  statLabel: {
+    fontSize: 12,
+    marginTop: 4,
   },
   section: {
     marginBottom: 32,
@@ -445,6 +628,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  carCard: {
+    width: 160,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginLeft: 20,
+    marginRight: 4,
+  },
+  carMake: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 12,
+  },
+  carYear: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  carPlate: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  carMileage: {
+    fontSize: 12,
+    marginTop: 2,
+  },
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -471,26 +679,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 4,
   },
-  quickActionSubtitle: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  infoCard: {
-    marginHorizontal: 20,
+  reminderCard: {
+    flexDirection: 'row',
     padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 12,
     borderRadius: 12,
     borderWidth: 1,
   },
-  infoTitle: {
+  reminderIcon: {
+    marginRight: 12,
+  },
+  reminderContent: {
+    flex: 1,
+  },
+  reminderTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 8,
   },
-  infoText: {
+  reminderDescription: {
     fontSize: 14,
-    marginBottom: 4,
+    marginTop: 4,
+  },
+  reminderDate: {
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  maintenanceCard: {
+    flexDirection: 'row',
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  maintenanceIcon: {
+    marginRight: 12,
+  },
+  maintenanceContent: {
+    flex: 1,
+  },
+  maintenanceType: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  maintenanceVehicle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  maintenanceDate: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  maintenanceCost: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   logoutButton: {
     borderWidth: 1,
@@ -506,4 +752,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreenSecure;
+export default HomeScreen;
