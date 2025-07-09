@@ -1,5 +1,5 @@
-// src/screens/user/HomeScreen.tsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+// src/screens/user/HomeScreenSecure.tsx
+import React, { useState, useCallback } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -8,344 +8,83 @@ import {
   TouchableOpacity,
   View,
   StatusBar,
-  Dimensions,
-  Image,
-  Animated,
-  FlatList,
-  Platform,
-  ImageBackground,
-  Alert,
   RefreshControl,
+  Alert
 } from 'react-native';
 import {
   Car,
-  Calendar,
-  FileText,
   Settings,
-  Bell,
   Plus,
-  ChevronRight,
-  Wrench,
-  DollarSign,
-  Fuel,
   AlertCircle,
-  Clock,
-  Activity,
-  MapPin,
-  CheckCircle,
-  BarChart2,
+  Wrench,
+  Fuel,
+  DollarSign,
+  FileText
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useStore } from '../../store';
-import { useAuth } from '../../hooks/useAuth';
-import { LinearGradient } from 'expo-linear-gradient';
-
-// Firestore imports
-import { db } from '../../services/firebase';
 import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  onSnapshot,
-  Timestamp
-} from 'firebase/firestore';
+  useSecureAuth,
+  useDisplayName,
+  useAuthGuard
+} from '../../hooks/useSecureAuth';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const CARD_WIDTH = screenWidth * 0.8;
-const CARD_SPACING = screenWidth * 0.05;
-
-// Tipi per i dati Firestore
-interface Vehicle {
-  id: string;
-  ownerId: string;
-  make: string;
-  model: string;
-  year: number;
-  licensePlate: string;
-  currentMileage: number;
-  color?: string;
-  photoURL?: string;
-  nextMaintenanceDate?: Timestamp;
-  lastMaintenanceDate?: Timestamp;
-  insuranceExpiry?: Timestamp;
-  inspectionExpiry?: Timestamp;
-}
-
-interface YearlyStats {
-  totalMaintenance: number;
-  totalExpenses: number;
-  totalKilometers: number;
-  averageExpensePerKm: number;
-}
-
-// Hook per sincronizzare Firebase Auth con Store Zustand
-const useAuthSync = () => {
-  const { user: authUser, loading: authLoading, initializing } = useAuth();
-  const { user: storeUser, setUser, setLoading } = useStore();
-
-  useEffect(() => {
-    console.log('🔄 Auth Sync - Auth User:', authUser);
-    console.log('🔄 Auth Sync - Store User:', storeUser);
-
-    if (!initializing) {
-      if (authUser) {
-        // Costruisci il nome dell'utente dai dati disponibili
-        const userName = authUser.displayName ||
-            (authUser.firstName && authUser.lastName ?
-                `${authUser.firstName} ${authUser.lastName}` : null) ||
-            authUser.firstName ||
-            authUser.email?.split('@')[0] ||
-            'Utente';
-
-        // Sincronizza i dati Firebase con lo store Zustand
-        const syncedUser = {
-          id: authUser.uid,
-          name: userName,
-          email: authUser.email || '',
-          isLoggedIn: true,
-          photoURL: authUser.photoURL,
-          isMechanic: authUser.userType === 'mechanic',
-          phoneNumber: authUser.phoneNumber,
-          emailVerified: authUser.emailVerified,
-          createdAt: authUser.createdAt,
-          lastLoginAt: authUser.lastLoginAt,
-          // Dati specifici per meccanici
-          workshopName: authUser.workshopName,
-          workshopAddress: authUser.address,
-          vatNumber: authUser.vatNumber,
-        };
-
-        console.log('✅ Auth Sync - Syncing user to store:', syncedUser);
-        setUser(syncedUser);
-      } else {
-        console.log('❌ Auth Sync - No auth user, clearing store');
-        setUser(null);
-      }
-
-      setLoading(authLoading);
-    }
-  }, [authUser, initializing, authLoading, setUser, setLoading]);
-
-  return {
-    user: storeUser,
-    authUser,
-    loading: authLoading || initializing,
-    isAuthenticated: !!authUser && !!storeUser?.isLoggedIn
-  };
-};
-
-// Hook per caricare i veicoli dell'utente
-const useUserVehicles = (userId: string | null) => {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!userId) {
-      setVehicles([]);
-      setLoading(false);
-      return;
-    }
-
-    console.log('🚗 Loading vehicles for user:', userId);
-
-    const vehiclesQuery = query(
-        collection(db, 'vehicles'),
-        where('ownerId', '==', userId),
-        orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(
-        vehiclesQuery,
-        (snapshot) => {
-          const vehiclesData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as Vehicle[];
-
-          console.log('✅ Vehicles loaded:', vehiclesData.length);
-          setVehicles(vehiclesData);
-          setLoading(false);
-          setError(null);
-        },
-        (err) => {
-          console.error('❌ Error loading vehicles:', err);
-          setError('Errore nel caricamento dei veicoli');
-          setLoading(false);
-        }
-    );
-
-    return () => unsubscribe();
-  }, [userId]);
-
-  return { vehicles, loading, error };
-};
-
-// Hook per statistiche annuali
-const useYearlyStats = (userId: string | null, vehicles: Vehicle[]) => {
-  const [stats, setStats] = useState<YearlyStats>({
-    totalMaintenance: 0,
-    totalExpenses: 0,
-    totalKilometers: 0,
-    averageExpensePerKm: 0
-  });
-
-  useEffect(() => {
-    if (!userId || vehicles.length === 0) {
-      setStats({
-        totalMaintenance: 0,
-        totalExpenses: 0,
-        totalKilometers: 0,
-        averageExpensePerKm: 0
-      });
-      return;
-    }
-
-    // Calcola le statistiche dai veicoli
-    const currentYear = new Date().getFullYear();
-
-    // Qui dovresti fare query a Firestore per ottenere i dati reali
-    // Per ora uso dati mock per dimostrare la funzionalità
-    const mockStats = {
-      totalMaintenance: vehicles.length * 3, // Media 3 interventi per veicolo
-      totalExpenses: vehicles.length * 850, // Media €850 per veicolo
-      totalKilometers: vehicles.reduce((total, vehicle) => total + (vehicle.currentMileage || 0), 0),
-      averageExpensePerKm: 0.12
-    };
-
-    setStats(mockStats);
-  }, [userId, vehicles]);
-
-  return stats;
-};
-
-// Hook per attività recenti
-const useRecentActivities = (userId: string | null) => {
-  const [activities, setActivities] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!userId) {
-      setActivities([]);
-      setLoading(false);
-      return;
-    }
-
-    // Query per gli ultimi 5 record di manutenzione
-    const maintenanceQuery = query(
-        collection(db, 'maintenance_records'),
-        where('ownerId', '==', userId),
-        orderBy('completedDate', 'desc'),
-        limit(5)
-    );
-
-    const unsubscribe = onSnapshot(maintenanceQuery, (snapshot) => {
-      const activitiesData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          type: 'maintenance',
-          title: data.title,
-          subtitle: data.description,
-          date: data.completedDate,
-          amount: data.totalCost,
-          icon: Wrench,
-          color: '#007AFF'
-        };
-      });
-
-      setActivities(activitiesData);
-      setLoading(false);
-    }, (err) => {
-      console.error('Errore nel recupero attività:', err);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [userId]);
-
-  return { activities, loading };
-};
-
-const HomeScreen = () => {
+const HomeScreenSecure = () => {
   const navigation = useNavigation();
-  const { logout: storeLogout } = useStore();
-  const { logout: authLogout } = useAuth();
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const [activeCarIndex, setActiveCarIndex] = useState(0);
+  const { user, loading, error, logout } = useSecureAuth();
+  const displayName = useDisplayName();
+  const { isAuthenticated, isLoading } = useAuthGuard();
   const [refreshing, setRefreshing] = useState(false);
 
-  // Usa il nuovo hook per sincronizzare auth
-  const { user, authUser, loading: authLoading, isAuthenticated } = useAuthSync();
-
-  // Usa i nuovi hook per i dati
-  const { vehicles, loading: vehiclesLoading, error: vehiclesError } = useUserVehicles(authUser?.uid || null);
-  const yearlyStats = useYearlyStats(authUser?.uid || null, vehicles);
-  const { activities, loading: activitiesLoading } = useRecentActivities(authUser?.uid || null);
-
-  // Determina la modalità scura dal sistema (poiché non è nello store visibile)
-  const [darkMode] = useState(false); // Puoi collegarlo alle preferenze di sistema
-
+  // Theme (semplificato)
   const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    cardBackgroundAlt: darkMode ? '#2a3441' : '#f9fafb',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
+    background: '#f3f4f6',
+    cardBackground: '#ffffff',
+    text: '#000000',
+    textSecondary: '#6b7280',
+    border: '#e5e7eb',
     accent: '#2563eb',
-    accentGradient: ['#2563eb', '#3b82f6'],
-    success: '#10b981',
-    successGradient: ['#059669', '#10b981'],
-    warning: '#f59e0b',
-    warningGradient: ['#d97706', '#f59e0b'],
     error: '#ef4444',
-    errorGradient: ['#dc2626', '#ef4444'],
-    shadow: darkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
   };
 
-  // Funzione per logout che pulisce entrambi i sistemi
+  // Logout sicuro con conferma
   const handleLogout = useCallback(async () => {
-    try {
-      console.log('🚪 Logging out...');
-      await authLogout(); // Logout da Firebase
-      storeLogout(); // Pulisci lo store
-      console.log('✅ Logout completed');
-    } catch (error) {
-      console.error('❌ Logout error:', error);
-    }
-  }, [authLogout, storeLogout]);
+    Alert.alert(
+        'Conferma Logout',
+        'Sei sicuro di voler uscire?',
+        [
+          { text: 'Annulla', style: 'cancel' },
+          {
+            text: 'Esci',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await logout();
+                console.log('✅ Logout completed successfully');
+              } catch (error) {
+                console.error('❌ Logout failed:', error);
+                Alert.alert('Errore', 'Errore durante il logout');
+              }
+            }
+          }
+        ]
+    );
+  }, [logout]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    // Il refresh viene gestito automaticamente dai listener Firestore
+    // In una vera app, qui ricaricheresti i dati
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('it-IT', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
-
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('it-IT');
-  };
 
   const handleNavigation = (screenName: string, params?: any) => {
     navigation.navigate(screenName as any, params);
   };
 
   // Loading state
-  if (authLoading || !isAuthenticated) {
+  if (isLoading) {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-          <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+          <StatusBar barStyle="dark-content" />
           <View style={styles.loadingContainer}>
             <Text style={[styles.loadingText, { color: theme.text }]}>
               Caricamento...
@@ -356,14 +95,14 @@ const HomeScreen = () => {
   }
 
   // Error state
-  if (vehiclesError) {
+  if (error) {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-          <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+          <StatusBar barStyle="dark-content" />
           <View style={styles.errorContainer}>
             <AlertCircle width={48} height={48} color={theme.error} />
             <Text style={[styles.errorText, { color: theme.text }]}>
-              {vehiclesError}
+              {error}
             </Text>
             <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: theme.accent }]}
@@ -376,20 +115,23 @@ const HomeScreen = () => {
     );
   }
 
-  // Costruisci il nome utente con fallback multipli
-  const displayName = user?.name ||
-      authUser?.displayName ||
-      (authUser?.firstName && authUser?.lastName ?
-          `${authUser.firstName} ${authUser.lastName}` : null) ||
-      authUser?.firstName ||
-      user?.email?.split('@')[0] ||
-      'Utente';
-
-  console.log('🎯 Display name resolved to:', displayName);
+  // Not authenticated (shouldn't happen if guards are in place)
+  if (!isAuthenticated) {
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+          <StatusBar barStyle="dark-content" />
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: theme.text }]}>
+              Non autenticato
+            </Text>
+          </View>
+        </SafeAreaView>
+    );
+  }
 
   return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle="dark-content" />
 
         <ScrollView
             style={styles.scrollView}
@@ -399,11 +141,10 @@ const HomeScreen = () => {
                   refreshing={refreshing}
                   onRefresh={onRefresh}
                   tintColor={theme.accent}
-                  colors={[theme.accent]}
               />
             }
         >
-          {/* Header con nome utente */}
+          {/* Header con nome utente SICURO */}
           <View style={styles.header}>
             <View>
               <Text style={[styles.greeting, { color: theme.textSecondary }]}>
@@ -412,15 +153,10 @@ const HomeScreen = () => {
               <Text style={[styles.username, { color: theme.text }]}>
                 {displayName}
               </Text>
+              {/* Info utente per debug (solo development) */}
               {__DEV__ && (
                   <Text style={[styles.debugText, { color: theme.textSecondary }]}>
-                    Debug: {JSON.stringify({
-                    storeName: user?.name,
-                    authDisplayName: authUser?.displayName,
-                    authFirstName: authUser?.firstName,
-                    authLastName: authUser?.lastName,
-                    email: user?.email
-                  }, null, 2)}
+                    Debug: {user?.email} | {user?.userType} | Verified: {user?.emailVerified ? '✅' : '❌'}
                   </Text>
               )}
             </View>
@@ -438,6 +174,18 @@ const HomeScreen = () => {
             </TouchableOpacity>
           </View>
 
+          {/* Verifica Email (se necessaria) */}
+          {user && !user.emailVerified && (
+              <View style={[styles.warningCard, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+                <Text style={[styles.warningTitle, { color: '#92400E' }]}>
+                  Email non verificata
+                </Text>
+                <Text style={[styles.warningText, { color: '#92400E' }]}>
+                  Verifica la tua email per accedere a tutte le funzionalità
+                </Text>
+              </View>
+          )}
+
           {/* Sezione Veicoli */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -449,112 +197,23 @@ const HomeScreen = () => {
               </TouchableOpacity>
             </View>
 
-            {vehicles.length > 0 ? (
-                <FlatList
-                    data={vehicles}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    pagingEnabled
-                    snapToInterval={CARD_WIDTH + CARD_SPACING}
-                    decelerationRate="fast"
-                    contentContainerStyle={{ paddingLeft: CARD_SPACING / 2 }}
-                    onScroll={Animated.event(
-                        [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                        { useNativeDriver: false }
-                    )}
-                    renderItem={({ item: vehicle, index }) => (
-                        <TouchableOpacity
-                            style={[
-                              styles.carCard,
-                              {
-                                width: CARD_WIDTH,
-                                marginHorizontal: CARD_SPACING / 2,
-                                backgroundColor: theme.cardBackground,
-                                borderColor: theme.border
-                              }
-                            ]}
-                            onPress={() => handleNavigation('CarDetail', { carId: vehicle.id })}
-                        >
-                          <LinearGradient
-                              colors={theme.accentGradient}
-                              style={styles.carCardGradient}
-                          >
-                            <View style={styles.carCardContent}>
-                              <View style={styles.carCardHeader}>
-                                <Text style={styles.carCardTitle}>
-                                  {vehicle.make} {vehicle.model}
-                                </Text>
-                                <Text style={styles.carCardYear}>{vehicle.year}</Text>
-                              </View>
-                              <Text style={styles.carCardPlate}>
-                                {vehicle.licensePlate}
-                              </Text>
-                              <Text style={styles.carCardMileage}>
-                                {vehicle.currentMileage?.toLocaleString()} km
-                              </Text>
-                            </View>
-                            <ChevronRight width={20} height={20} color="#ffffff" />
-                          </LinearGradient>
-                        </TouchableOpacity>
-                    )}
-                    keyExtractor={(item) => item.id}
-                />
-            ) : (
-                <View style={[styles.emptyState, { backgroundColor: theme.cardBackground }]}>
-                  <Car width={48} height={48} color={theme.textSecondary} />
-                  <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-                    Nessun veicolo aggiunto
-                  </Text>
-                  <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-                    Aggiungi il tuo primo veicolo per iniziare
-                  </Text>
-                  <TouchableOpacity
-                      style={[styles.addButton, { backgroundColor: theme.accent }]}
-                      onPress={() => handleNavigation('AddCar')}
-                  >
-                    <Text style={styles.addButtonText}>Aggiungi Veicolo</Text>
-                  </TouchableOpacity>
-                </View>
-            )}
+            {/* Per ora empty state - in una vera app caricheresti da Firebase */}
+            <View style={[styles.emptyState, { backgroundColor: theme.cardBackground }]}>
+              <Car width={48} height={48} color={theme.textSecondary} />
+              <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
+                Nessun veicolo aggiunto
+              </Text>
+              <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
+                Aggiungi il tuo primo veicolo per iniziare
+              </Text>
+              <TouchableOpacity
+                  style={[styles.addButton, { backgroundColor: theme.accent }]}
+                  onPress={() => handleNavigation('AddCar')}
+              >
+                <Text style={styles.addButtonText}>Aggiungi Veicolo</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-
-          {/* Statistiche Annuali */}
-          {vehicles.length > 0 && (
-              <View style={[styles.statsCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-                <TouchableOpacity style={styles.statsArrow}>
-                  <ChevronRight width={20} height={20} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <Text style={[styles.statsTitle, { color: theme.text }]}>
-                  Statistiche {new Date().getFullYear()}
-                </Text>
-                <View style={styles.statsGrid}>
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: theme.accent }]}>
-                      {yearlyStats.totalMaintenance}
-                    </Text>
-                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                      Interventi
-                    </Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: theme.success }]}>
-                      {formatCurrency(yearlyStats.totalExpenses)}
-                    </Text>
-                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                      Spese Totali
-                    </Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={[styles.statValue, { color: theme.warning }]}>
-                      {yearlyStats.totalKilometers.toLocaleString()}
-                    </Text>
-                    <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                      Km Totali
-                    </Text>
-                  </View>
-                </View>
-              </View>
-          )}
 
           {/* Azioni Rapide */}
           <View style={styles.section}>
@@ -563,17 +222,55 @@ const HomeScreen = () => {
             </Text>
             <View style={styles.quickActionsGrid}>
               {[
-                { icon: Wrench, title: 'Manutenzione', subtitle: 'Programma un intervento', screen: 'AddMaintenance' },
-                { icon: Fuel, title: 'Rifornimento', subtitle: 'Registra carburante', screen: 'AddFuel' },
-                { icon: DollarSign, title: 'Spesa', subtitle: 'Aggiungi una spesa', screen: 'AddExpense' },
-                { icon: FileText, title: 'Documento', subtitle: 'Carica documento', screen: 'AddDocument' },
+                {
+                  icon: Wrench,
+                  title: 'Manutenzione',
+                  subtitle: 'Programma intervento',
+                  screen: 'AddMaintenance',
+                  enabled: true
+                },
+                {
+                  icon: Fuel,
+                  title: 'Rifornimento',
+                  subtitle: 'Registra carburante',
+                  screen: 'AddFuel',
+                  enabled: true
+                },
+                {
+                  icon: DollarSign,
+                  title: 'Spesa',
+                  subtitle: 'Aggiungi spesa',
+                  screen: 'AddExpense',
+                  enabled: true
+                },
+                {
+                  icon: FileText,
+                  title: 'Documento',
+                  subtitle: 'Carica documento',
+                  screen: 'AddDocument',
+                  enabled: user?.emailVerified || false
+                },
               ].map((action, index) => (
                   <TouchableOpacity
                       key={index}
-                      style={[styles.quickActionCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-                      onPress={() => handleNavigation(action.screen)}
+                      style={[
+                        styles.quickActionCard,
+                        {
+                          backgroundColor: theme.cardBackground,
+                          borderColor: theme.border,
+                          opacity: action.enabled ? 1 : 0.5
+                        }
+                      ]}
+                      onPress={() => {
+                        if (action.enabled) {
+                          handleNavigation(action.screen);
+                        } else {
+                          Alert.alert('Verifica Email', 'Verifica la tua email per accedere a questa funzione');
+                        }
+                      }}
+                      disabled={!action.enabled}
                   >
-                    <View style={[styles.quickActionIcon, { backgroundColor: theme.accentGradient[0] + '20' }]}>
+                    <View style={[styles.quickActionIcon, { backgroundColor: theme.accent + '20' }]}>
                       <action.icon width={24} height={24} color={theme.accent} />
                     </View>
                     <Text style={[styles.quickActionTitle, { color: theme.text }]}>
@@ -587,49 +284,26 @@ const HomeScreen = () => {
             </View>
           </View>
 
-          {/* Attività Recenti */}
-          {activities.length > 0 && (
+          {/* Informazioni Utente (solo per meccanici) */}
+          {user?.userType === 'mechanic' && (
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                    Attività Recenti
+                <Text style={[styles.sectionTitle, { color: theme.text, paddingHorizontal: 20 }]}>
+                  Informazioni Officina
+                </Text>
+                <View style={[styles.infoCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                  <Text style={[styles.infoTitle, { color: theme.text }]}>
+                    {user.workshopName || 'Nome officina non impostato'}
                   </Text>
-                  <TouchableOpacity onPress={() => handleNavigation('MaintenanceHistory')}>
-                    <Text style={[{ color: theme.accent }]}>Vedi tutto</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.activityCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-                  {activities.map((activity, index) => (
-                      <View key={activity.id}>
-                        <View style={styles.activityItem}>
-                          <View style={[styles.activityIcon, { backgroundColor: activity.color + '20' }]}>
-                            <activity.icon width={20} height={20} color={activity.color} />
-                          </View>
-                          <View style={styles.activityContent}>
-                            <Text style={[styles.activityTitle, { color: theme.text }]}>
-                              {activity.title}
-                            </Text>
-                            <Text style={[styles.activitySubtitle, { color: theme.textSecondary }]}>
-                              {activity.subtitle}
-                            </Text>
-                          </View>
-                          <View style={styles.activityMeta}>
-                            <Text style={[styles.activityDate, { color: theme.textSecondary }]}>
-                              {formatDate(activity.date)}
-                            </Text>
-                            {activity.amount && (
-                                <Text style={[{ color: theme.text, fontWeight: '600' }]}>
-                                  {formatCurrency(activity.amount)}
-                                </Text>
-                            )}
-                          </View>
-                        </View>
-                        {index < activities.length - 1 && (
-                            <View style={[styles.separator, { backgroundColor: theme.border }]} />
-                        )}
-                      </View>
-                  ))}
+                  {user.address && (
+                      <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                        {user.address}
+                      </Text>
+                  )}
+                  {user.vatNumber && (
+                      <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                        P.IVA: {user.vatNumber}
+                      </Text>
+                  )}
                 </View>
               </View>
           )}
@@ -715,6 +389,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
+  warningCard: {
+    margin: 20,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  warningTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  warningText: {
+    fontSize: 14,
+  },
   section: {
     marginBottom: 32,
   },
@@ -728,58 +416,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  carCard: {
-    height: 160,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  carCardGradient: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-  },
-  carCardContent: {
-    flex: 1,
-  },
-  carCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  carCardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  carCardYear: {
-    fontSize: 14,
-    color: '#ffffff',
-    opacity: 0.8,
-  },
-  carCardPlate: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  carCardMileage: {
-    fontSize: 14,
-    color: '#ffffff',
-    opacity: 0.8,
   },
   emptyState: {
     alignItems: 'center',
@@ -822,16 +458,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
   },
   quickActionIcon: {
     width: 48,
@@ -851,100 +477,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-  activityCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
+  infoCard: {
+    marginHorizontal: 20,
     padding: 16,
-    marginHorizontal: 20,
-    ...Platform.select({
-      ios: {
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  activitySubtitle: {
-    fontSize: 14,
-  },
-  activityMeta: {
-    alignItems: 'flex-end',
-  },
-  activityDate: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  separator: {
-    height: 1,
-    marginVertical: 8,
-  },
-  statsCard: {
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 20,
-    marginBottom: 24,
-    marginHorizontal: 20,
-    position: 'relative',
-    ...Platform.select({
-      ios: {
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
   },
-  statsTitle: {
-    fontSize: 18,
+  infoTitle: {
+    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
+    marginBottom: 8,
   },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statLabel: {
+  infoText: {
     fontSize: 14,
-  },
-  statsArrow: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
+    marginBottom: 4,
   },
   logoutButton: {
     borderWidth: 1,
@@ -960,4 +506,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+export default HomeScreenSecure;
