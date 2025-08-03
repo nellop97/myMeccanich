@@ -7,12 +7,20 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:619020396283:android:40491528c86f9a7b05b25e",
+        "mobilesdk_app_id": "1:619020396283:android:d2998bc156a933b205b25e",
         "android_client_info": {
-          "package_name": "com.mymeccanick"
+          "package_name": "com.mymecanich"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "619020396283-e77qk176ug9n0tc49gt2l5nj902rhu34.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mymecanich",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
         {
           "client_id": "619020396283-4gd2pd371hop6d1vkc0tvo6j3jaod2t6.apps.googleusercontent.com",
           "client_type": 3
