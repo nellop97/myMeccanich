@@ -1,4 +1,4 @@
-// src/screens/LoginScreen.tsx - VERSIONE AGGIORNATA E SICURA
+// src/screens/LoginScreen.tsx - VERSIONE AGGIORNATA CON FIX ANDROID
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
   Dimensions,
+  SafeAreaView,
 } from 'react-native';
 import {
   Button,
@@ -22,17 +23,19 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../hooks/useAuth';
 import { AuthStackParamList } from '../navigation/AppNavigator';
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 type NavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const {
     loginWithEmail,
     loginWithGoogle,
@@ -77,7 +80,7 @@ const LoginScreen: React.FC = () => {
     }
   };
 
-  // 🔒 GESTORI EVENTI - SEMPLIFICATI
+  // Gestori eventi
   const handleLogin = async (): Promise<void> => {
     console.log('🔑 Avvio processo di login...');
 
@@ -93,10 +96,7 @@ const LoginScreen: React.FC = () => {
     const result = await loginWithEmail(email, password);
 
     if (result.success) {
-      console.log('✅ Login riuscito! La navigazione sarà gestita automaticamente dal auth state change');
-      // 🔒 NON SERVE PIÙ GESTIRE LA NAVIGAZIONE MANUALMENTE
-      // Il listener onAuthStateChanged nell'AppNavigator si occuperà automaticamente
-      // di reindirizzare l'utente alla schermata corretta
+      console.log('✅ Login riuscito!');
     } else {
       console.log('❌ Login fallito:', result.error);
     }
@@ -107,7 +107,6 @@ const LoginScreen: React.FC = () => {
     const result = await loginWithGoogle();
     if (result.success) {
       console.log('✅ Login Google riuscito!');
-      // 🔒 Anche qui, la navigazione è automatica
     }
   };
 
@@ -116,7 +115,6 @@ const LoginScreen: React.FC = () => {
     const result = await loginWithApple();
     if (result.success) {
       console.log('✅ Login Apple riuscito!');
-      // 🔒 Anche qui, la navigazione è automatica
     }
   };
 
@@ -124,7 +122,6 @@ const LoginScreen: React.FC = () => {
     if (!validateEmail(email)) {
       return;
     }
-
     await resetPassword(email);
   };
 
@@ -146,23 +143,37 @@ const LoginScreen: React.FC = () => {
     navigation.navigate('Register');
   };
 
+  // Calcolo padding bottom dinamico per Android
+  const getBottomPadding = () => {
+    if (Platform.OS === 'android') {
+      // Su Android aggiungiamo padding extra per evitare sovrapposizioni
+      return Math.max(insets.bottom, 80);
+    }
+    return insets.bottom || 20;
+  };
+
   return (
+    <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.scrollContainer,
+            { paddingBottom: getBottomPadding() }
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
         >
           {/* Header */}
           <View style={styles.header}>
             <MaterialCommunityIcons
-                name="car-wrench"
-                size={60}
-                color={theme.colors.primary}
+              name="car-wrench"
+              size={60}
+              color={theme.colors.primary}
             />
             <Text style={[styles.title, { color: theme.colors.onBackground }]}>
               MyMeccanic
@@ -181,16 +192,16 @@ const LoginScreen: React.FC = () => {
 
               {/* Email Input */}
               <TextInput
-                  label="Email"
-                  value={email}
-                  onChangeText={handleEmailChange}
-                  mode="outlined"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  error={!!emailError}
-                  style={styles.input}
-                  left={<TextInput.Icon icon="email" />}
+                label="Email"
+                value={email}
+                onChangeText={handleEmailChange}
+                mode="outlined"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                error={!!emailError}
+                style={styles.input}
+                left={<TextInput.Icon icon="email" />}
               />
               <HelperText type="error" visible={!!emailError}>
                 {emailError}
@@ -198,21 +209,21 @@ const LoginScreen: React.FC = () => {
 
               {/* Password Input */}
               <TextInput
-                  label="Password"
-                  value={password}
-                  onChangeText={handlePasswordChange}
-                  mode="outlined"
-                  secureTextEntry={!showPassword}
-                  autoComplete="password"
-                  error={!!passwordError}
-                  style={styles.input}
-                  left={<TextInput.Icon icon="lock" />}
-                  right={
-                    <TextInput.Icon
-                        icon={showPassword ? "eye-off" : "eye"}
-                        onPress={() => setShowPassword(!showPassword)}
-                    />
-                  }
+                label="Password"
+                value={password}
+                onChangeText={handlePasswordChange}
+                mode="outlined"
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+                error={!!passwordError}
+                style={styles.input}
+                left={<TextInput.Icon icon="lock" />}
+                right={
+                  <TextInput.Icon
+                    icon={showPassword ? "eye-off" : "eye"}
+                    onPress={() => setShowPassword(!showPassword)}
+                  />
+                }
               />
               <HelperText type="error" visible={!!passwordError}>
                 {passwordError}
@@ -222,8 +233,8 @@ const LoginScreen: React.FC = () => {
               <View style={styles.optionsRow}>
                 <View style={styles.checkboxRow}>
                   <Checkbox
-                      status={rememberMe ? 'checked' : 'unchecked'}
-                      onPress={() => setRememberMe(!rememberMe)}
+                    status={rememberMe ? 'checked' : 'unchecked'}
+                    onPress={() => setRememberMe(!rememberMe)}
                   />
                   <Text style={[styles.checkboxLabel, { color: theme.colors.onSurface }]}>
                     Ricordami
@@ -239,12 +250,12 @@ const LoginScreen: React.FC = () => {
 
               {/* Login Button */}
               <Button
-                  mode="contained"
-                  onPress={handleLogin}
-                  loading={loading}
-                  disabled={loading}
-                  style={styles.loginButton}
-                  contentStyle={styles.buttonContent}
+                mode="contained"
+                onPress={handleLogin}
+                loading={loading}
+                disabled={loading}
+                style={styles.loginButton}
+                contentStyle={styles.buttonContent}
               >
                 {loading ? 'Accesso in corso...' : 'Accedi'}
               </Button>
@@ -261,62 +272,74 @@ const LoginScreen: React.FC = () => {
               {/* Social Login Buttons */}
               <View style={styles.socialButtonsContainer}>
                 <Button
-                    mode="outlined"
-                    onPress={handleGoogleLogin}
-                    disabled={loading}
-                    style={styles.socialButton}
-                    contentStyle={styles.buttonContent}
-                    icon="google"
+                  mode="outlined"
+                  onPress={handleGoogleLogin}
+                  disabled={loading}
+                  style={styles.socialButton}
+                  contentStyle={styles.buttonContent}
+                  icon="google"
                 >
                   Google
                 </Button>
 
                 {Platform.OS === 'ios' && (
-                    <Button
-                        mode="outlined"
-                        onPress={handleAppleLogin}
-                        disabled={loading}
-                        style={styles.socialButton}
-                        contentStyle={styles.buttonContent}
-                        icon="apple"
-                    >
-                      Apple
-                    </Button>
+                  <Button
+                    mode="outlined"
+                    onPress={handleAppleLogin}
+                    disabled={loading}
+                    style={styles.socialButton}
+                    contentStyle={styles.buttonContent}
+                    icon="apple"
+                  >
+                    Apple
+                  </Button>
                 )}
               </View>
             </Card.Content>
           </Card>
 
-          {/* Register Link */}
-          <View style={styles.registerContainer}>
+          {/* Register Link - Modificato per evitare sovrapposizioni */}
+          <View style={[
+            styles.registerContainer,
+            Platform.OS === 'android' && styles.registerContainerAndroid
+          ]}>
             <Text style={[styles.registerText, { color: theme.colors.onSurfaceVariant }]}>
               Non hai un account?{' '}
             </Text>
-            <TouchableOpacity onPress={handleRegisterPress}>
+            <TouchableOpacity onPress={handleRegisterPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={[styles.linkText, { color: theme.colors.primary }]}>
                 Registrati qui
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Spacer per Android - evita sovrapposizioni con navigation bar */}
+          {Platform.OS === 'android' && (
+            <View style={{ height: 40 }} />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  container: {
+    flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingTop: 20,
   },
   header: {
     alignItems: 'center',
     marginBottom: 30,
-    marginTop: 20,
+    marginTop: 10,
   },
   title: {
     fontSize: 28,
@@ -363,7 +386,8 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   loginButton: {
     marginBottom: 20,
@@ -399,6 +423,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
+    marginBottom: 20,
+  },
+  registerContainerAndroid: {
+    marginBottom: 30,
   },
   registerText: {
     fontSize: 14,

@@ -18,7 +18,7 @@
       }
     },
     "android": {
-      "package": "com.mymecchanich"
+      "package": "com.mymeccanich"
     },
     "web": {
       "bundler": "metro",
@@ -33,6 +33,13 @@
             "useFrameworks": "static"
           }
         }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosClientId": "619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com",
+          "iosUrlScheme": "com.googleusercontent.apps.619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r"
+        }
       ]
     ],
     "experiments": {
@@ -43,9 +50,7 @@
         "projectId": "ed142135-d0fd-4eb0-9424-99bc2efce5ea"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/ed142135-d0fd-4eb0-9424-99bc2efce5ea"
     }

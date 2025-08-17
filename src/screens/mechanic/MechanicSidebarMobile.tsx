@@ -1,4 +1,5 @@
-// src/components/mechanic/MechanicSidebarMobile.tsx
+// src/screens/mechanic/MechanicSidebarMobile.tsx - VERSIONE CORRETTA COMPLETA
+
 import { useNavigation } from '@react-navigation/native';
 import {
     Bell,
@@ -23,6 +24,9 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+
+// ✅ USA FIREBASE AUTH INVECE DI STORE PER DATI UTENTE
+import { useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 
@@ -41,11 +45,28 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
   onTabChange,
 }) => {
   const navigation = useNavigation();
-  const { user, darkMode, toggleDarkMode } = useStore();
+  
+  // ✅ USA FIREBASE AUTH PER DATI UTENTE
+  const { user } = useAuth();
+  
+  // ✅ USA STORE SOLO PER DATI APP (TEMA, ECC.)
+  const { darkMode, setDarkMode } = useStore();
   const { addCar } = useWorkshopStore();
   
+  // ✅ TUTTI GLI HOOKS DEVONO ESSERE CHIAMATI SEMPRE
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const sidebarAnimation = useRef(new Animated.Value(0)).current;
+  
+  // ✅ FUNZIONE PER GESTIRE TOGGLE DEL DARK MODE
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
+  // ✅ COSTRUISCI IL NOME UTENTE CON FALLBACK SICURO
+  const userName = user?.displayName || 
+                  `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
+                  user?.email?.split('@')[0] ||
+                  'Meccanico';
   
   useEffect(() => {
     Animated.timing(sidebarAnimation, {
@@ -54,6 +75,16 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
       useNativeDriver: false,
     }).start();
   }, [sidebarVisible]);
+
+  // ✅ CONTROLLO DI SICUREZZA DOPO TUTTI GLI HOOKS
+  if (!user) {
+    console.log('⚠️ MechanicSidebarMobile: user is undefined, showing loading...');
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Caricamento profilo...</Text>
+      </View>
+    );
+  }
 
   const theme = {
     background: darkMode ? '#1f2937' : '#ffffff',
@@ -170,13 +201,16 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
         <View style={styles.userProfile}>
           <View style={styles.userAvatar}>
             <Text style={styles.userAvatarText}>
-              {user.name ? user.name.substring(0, 2).toUpperCase() : 'MG'}
+              {/* ✅ CORREZIONE: Usa userName costruito sopra */}
+              {userName.substring(0, 2).toUpperCase()}
             </Text>
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{user.name || 'Mario Galli'}</Text>
+            {/* ✅ CORREZIONE: Usa userName costruito sopra */}
+            <Text style={styles.userName}>{userName}</Text>
             <Text style={styles.userRole}>
-              {user.isMechanic ? 'Meccanico' : 'Utente'}
+              {/* ✅ CORREZIONE: Controllo sicuro */}
+              {user?.userType === 'mechanic' ? 'Meccanico' : 'Utente'}
             </Text>
           </View>
         </View>
@@ -206,15 +240,14 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
           </TouchableOpacity>
           <View>
             <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Buongiorno, {user.name?.split(' ')[0] || 'Nello'}!
+              {/* ✅ CORREZIONE: Usa userName costruito sopra */}
+              Buongiorno, {userName.split(' ')[0] || 'Meccanico'}!
             </Text>
             <View style={styles.notificationBadge}>
               <Bell size={14} color="#d97706" />
-              <TouchableOpacity
-              onPress={alert("ci stiamo lavorando ")}>
+              <TouchableOpacity onPress={() => alert("ci stiamo lavorando")}>
                 <Text style={styles.notificationText}>3 notifiche</Text>
               </TouchableOpacity>
-              
             </View>
           </View>
         </View>
@@ -252,6 +285,7 @@ const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
   );
 };
 
+// ✅ STILI DEL COMPONENTE
 const styles = StyleSheet.create({
   headerContainer: {
     flexDirection: 'row',
@@ -259,12 +293,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: 60, // Per lo status bar
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -273,30 +303,26 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     marginRight: 12,
-    padding: 4,
+    padding: 8,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   notificationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
     marginTop: 4,
   },
   notificationText: {
-    color: '#d97706',
     fontSize: 12,
+    color: '#d97706',
     marginLeft: 4,
   },
   addButtonMobile: {
-    backgroundColor: '#2563eb',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 20,
+    padding: 8,
   },
   content: {
     flex: 1,
@@ -311,15 +337,12 @@ const styles = StyleSheet.create({
   sidebar: {
     width: SIDEBAR_WIDTH,
     height: '100%',
-    padding: 16,
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    zIndex: 1000,
+    paddingTop: 40,
   },
   sidebarHeader: {
-    marginBottom: 24,
-    paddingTop: 40,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   sidebarTitleContainer: {
     flexDirection: 'row',
@@ -327,7 +350,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sidebarTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
   },
@@ -336,70 +359,74 @@ const styles = StyleSheet.create({
   },
   sidebarSubtitle: {
     fontSize: 14,
-    color: '#93c5fd',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 4,
   },
   sidebarNav: {
     flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 20,
   },
   sidebarButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 2,
     borderRadius: 8,
   },
   sidebarButtonText: {
     color: '#ffffff',
-    marginLeft: 12,
     fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 12,
   },
   sidebarFooter: {
-    paddingBottom: 40,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   userProfile: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1e40af',
-    padding: 12,
-    borderRadius: 8,
     marginBottom: 16,
   },
   userAvatar: {
     width: 40,
     height: 40,
-    backgroundColor: '#3b82f6',
     borderRadius: 20,
-    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   userAvatarText: {
     color: '#ffffff',
-    fontWeight: 'bold',
     fontSize: 16,
+    fontWeight: 'bold',
   },
   userInfo: {
     flex: 1,
   },
   userName: {
     color: '#ffffff',
-    fontWeight: '500',
     fontSize: 16,
+    fontWeight: '600',
   },
   userRole: {
-    color: '#93c5fd',
+    color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 12,
   },
   themeButton: {
-    backgroundColor: '#1e40af',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 6,
   },
   themeButtonText: {
     color: '#ffffff',
-    fontWeight: '500',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
 
