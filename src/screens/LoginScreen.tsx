@@ -99,16 +99,6 @@ const LoginScreen: React.FC = () => {
     return () => subscription?.remove();
   }, []);
 
-  // Effect per gestire i cambiamenti del tema nella StatusBar
-  useEffect(() => {
-    if (Platform.OS !== 'web') {
-      StatusBar.setBarStyle(isDark ? 'light-content' : 'dark-content', true);
-      if (Platform.OS === 'android') {
-        StatusBar.setBackgroundColor(isDark ? colors.background : colors.surface, true);
-      }
-    }
-  }, [isDark, colors.background, colors.surface]);
-
   // Stati del form
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -762,7 +752,7 @@ const LoginScreen: React.FC = () => {
       {/* Background Gradient */}
       <LinearGradient
         colors={isDark ? 
-          [colors.background, colors.surface, colors.surfaceVariant] : 
+          ['#000000', '#1C1C1E', '#2C2C2E'] : 
           ['#FAFAFA', '#F5F5F5', '#FFFFFF']
         }
         style={styles.backgroundGradient}
@@ -774,7 +764,7 @@ const LoginScreen: React.FC = () => {
       {/* Status Bar */}
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? colors.background : colors.surface}
+        backgroundColor={colors.background}
         translucent={false}
       />
 
