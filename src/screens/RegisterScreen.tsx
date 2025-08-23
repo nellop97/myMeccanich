@@ -1,4 +1,5 @@
-// src/screens/RegisterScreen.tsx - VERSIONE SISTEMATA PER WEB
+
+// src/screens/RegisterScreen.tsx - VERSIONE COMPLETA
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -23,6 +24,7 @@ import {
   ProgressBar,
   Checkbox,
   Surface,
+  Menu,
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -86,6 +88,14 @@ interface FormData {
   address?: string;
   vatNumber?: string;
   mechanicLicense?: string;
+  specializations?: string[];
+  workingHours?: {
+    [key: string]: {
+      open: string;
+      close: string;
+      isClosed: boolean;
+    };
+  };
 }
 
 interface CarData {
@@ -96,6 +106,9 @@ interface CarData {
   vin: string;
   fuelType: string;
   kilometers: string;
+  color: string;
+  engineSize: string;
+  transmission: string;
 }
 
 type UserType = 'user' | 'mechanic';
@@ -117,7 +130,7 @@ const RegisterScreen: React.FC = () => {
   const slideAnim = useState(new Animated.Value(30))[0];
   const progressAnim = useState(new Animated.Value(0))[0];
 
-  // Stati principali - INIZIALIZZATI SUBITO
+  // Stati principali
   const [currentStep, setCurrentStep] = useState(0);
   const [userType, setUserType] = useState<UserType>('user');
   const [loading, setLoading] = useState(false);
@@ -138,7 +151,17 @@ const RegisterScreen: React.FC = () => {
     workshopName: '',
     address: '',
     vatNumber: '',
-    mechanicLicense: ''
+    mechanicLicense: '',
+    specializations: [],
+    workingHours: {
+      monday: { open: '08:00', close: '18:00', isClosed: false },
+      tuesday: { open: '08:00', close: '18:00', isClosed: false },
+      wednesday: { open: '08:00', close: '18:00', isClosed: false },
+      thursday: { open: '08:00', close: '18:00', isClosed: false },
+      friday: { open: '08:00', close: '18:00', isClosed: false },
+      saturday: { open: '08:00', close: '13:00', isClosed: false },
+      sunday: { open: '00:00', close: '00:00', isClosed: true },
+    }
   });
 
   // Dati auto (per utenti normali)
@@ -150,17 +173,43 @@ const RegisterScreen: React.FC = () => {
     licensePlate: '',
     vin: '',
     fuelType: 'gasoline',
-    kilometers: ''
+    kilometers: '',
+    color: '',
+    engineSize: '',
+    transmission: 'manual'
   });
 
   // Errori di validazione
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Calcolo responsive - DOPO GLI STATI
+  // Menù per specializzazioni
+  const [showSpecializationsMenu, setShowSpecializationsMenu] = useState(false);
+
+  // Opzioni disponibili
+  const specializationOptions = [
+    'Auto', 'Moto', 'Elettrico', 'Ibrido', 'Diesel', 'Benzina', 
+    'Climatizzazione', 'Elettronica', 'Carrozzeria', 'Pneumatici'
+  ];
+
+  const fuelTypeOptions = [
+    { value: 'gasoline', label: 'Benzina' },
+    { value: 'diesel', label: 'Diesel' },
+    { value: 'electric', label: 'Elettrico' },
+    { value: 'hybrid', label: 'Ibrido' },
+    { value: 'lpg', label: 'GPL' },
+    { value: 'methane', label: 'Metano' }
+  ];
+
+  const transmissionOptions = [
+    { value: 'manual', label: 'Manuale' },
+    { value: 'automatic', label: 'Automatico' },
+    { value: 'semiautomatic', label: 'Semiautomatico' }
+  ];
+
+  // Calcolo responsive
   const isTablet = screenData.width >= 768;
   const isDesktop = screenData.width >= 1024;
 
-  // Configurazione layout responsive
   const getContainerWidth = () => {
     if (isDesktop) return 1200;
     if (isTablet) return 800;
@@ -168,21 +217,9 @@ const RegisterScreen: React.FC = () => {
   };
 
   const getCardWidth = () => {
-    if (isDesktop) return 500;
-    if (isTablet) return 600;
+    if (isDesktop) return 600;
+    if (isTablet) return 700;
     return '100%';
-  };
-
-  const getCardMargin = () => {
-    if (isDesktop) return 40;
-    if (isTablet) return 24;
-    return 16;
-  };
-
-  const getIconSize = () => {
-    if (isDesktop) return 64;
-    if (isTablet) return 56;
-    return 48;
   };
 
   useEffect(() => {
@@ -218,31 +255,6 @@ const RegisterScreen: React.FC = () => {
     }).start();
   }, [currentStep]);
 
-  // Configurazione Google OAuth per mobile
-  const [googleRequest, googleResponse, promptGoogleAsync] = AuthSession?.useAuthRequest ?
-    AuthSession.useAuthRequest(
-      {
-        clientId: GOOGLE_CONFIG.clientId,
-        scopes: GOOGLE_CONFIG.scopes,
-        redirectUri: AuthSession.makeRedirectUri({
-          scheme: 'com.mymeccanick',
-          useProxy: true,
-        }),
-      },
-      { authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth' }
-    ) : [null, null, null];
-
-  // Effetti per gestire le risposte OAuth
-  useEffect(() => {
-    if (googleResponse?.type === 'success') {
-      handleGoogleAuthResponse(googleResponse);
-    } else if (googleResponse?.type === 'error') {
-      console.error('Google OAuth Error:', googleResponse.error);
-      setSocialLoading(null);
-      Alert.alert('Errore', 'Errore durante l\'autenticazione con Google');
-    }
-  }, [googleResponse]);
-
   // Funzioni di validazione
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -252,6 +264,16 @@ const RegisterScreen: React.FC = () => {
   const validatePhone = (phone: string): boolean => {
     const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/;
     return phoneRegex.test(phone);
+  };
+
+  const validateVatNumber = (vatNumber: string): boolean => {
+    const vatRegex = /^IT[0-9]{11}$/;
+    return vatRegex.test(vatNumber);
+  };
+
+  const validateLicensePlate = (plate: string): boolean => {
+    const plateRegex = /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/;
+    return plateRegex.test(plate.toUpperCase());
   };
 
   const validateStep = (step: number): boolean => {
@@ -290,8 +312,13 @@ const RegisterScreen: React.FC = () => {
           if (!formData.address) {
             newErrors.address = 'Indirizzo obbligatorio';
           }
-          if (!formData.vatNumber) {
-            newErrors.vatNumber = 'Partita IVA obbligatoria';
+          if (!formData.vatNumber || !validateVatNumber(formData.vatNumber)) {
+            newErrors.vatNumber = 'Partita IVA non valida (formato: IT + 11 cifre)';
+          }
+        } else {
+          // Validazione auto per utenti
+          if (carDataList.length === 0) {
+            newErrors.cars = 'Aggiungi almeno una auto';
           }
         }
         break;
@@ -312,42 +339,88 @@ const RegisterScreen: React.FC = () => {
     try {
       console.log('💾 Salvataggio dati utente su Firestore...');
       
-      const userData = {
+      const baseUserData = {
         uid: user.uid,
         email: user.email,
-        authProvider,
-        userType,
         firstName: formData.firstName,
         lastName: formData.lastName,
-        phone: formData.phone,
         name: `${formData.firstName} ${formData.lastName}`,
+        phone: formData.phone,
+        userType,
+        authProvider,
         profilePicture: user.photoURL || null,
         isEmailVerified: user.emailVerified,
+        profileComplete: true,
+        isActive: true,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp(),
+        settings: {
+          language: 'it',
+          currency: 'EUR',
+          notifications: userType === 'mechanic' ? {
+            appointments: true,
+            invoices: true,
+            reviews: true,
+            marketing: false,
+          } : {
+            maintenance: true,
+            documents: true,
+            reminders: true,
+            marketing: false,
+          },
+          privacy: {
+            shareDataWithWorkshops: userType === 'user',
+            allowMarketingEmails: false,
+          },
+        },
       };
 
-      // Aggiungi dati specifici per tipo utente
+      let userData = { ...baseUserData };
+
+      // Dati specifici per meccanici
       if (userType === 'mechanic') {
-        Object.assign(userData, {
+        userData = {
+          ...userData,
           workshopName: formData.workshopName,
           address: formData.address,
           vatNumber: formData.vatNumber,
-          mechanicLicense: formData.mechanicLicense,
+          mechanicLicense: formData.mechanicLicense || '',
+          specializations: formData.specializations || [],
+          workingHours: formData.workingHours,
           rating: 0,
           reviewsCount: 0,
-        });
+          verified: false,
+          certifications: [],
+        };
       }
 
+      // Salva l'utente
       await setDoc(doc(db, 'users', user.uid), userData);
 
       // Se è un utente normale, salva anche le auto
       if (userType === 'user' && carDataList.length > 0) {
-        for (const car of carDataList) {
-          await setDoc(doc(db, 'users', user.uid, 'cars', car.licensePlate), {
-            ...car,
+        for (let i = 0; i < carDataList.length; i++) {
+          const car = carDataList[i];
+          const carId = `${user.uid}_vehicle_${i + 1}`;
+          
+          await setDoc(doc(db, 'vehicles', carId), {
+            id: carId,
+            userId: user.uid,
+            brand: car.brand,
+            model: car.model,
+            year: parseInt(car.year),
+            licensePlate: car.licensePlate.toUpperCase(),
+            vin: car.vin.toUpperCase(),
+            fuelType: car.fuelType,
+            kilometers: parseInt(car.kilometers),
+            color: car.color,
+            engineSize: car.engineSize,
+            transmission: car.transmission,
+            isActive: true,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+            notes: '',
           });
         }
       }
@@ -378,7 +451,7 @@ const RegisterScreen: React.FC = () => {
 
       Alert.alert(
         'Registrazione completata!',
-        'Account creato con successo. Verifica la tua email per completare l\'attivazione.',
+        'Account creato con successo. Benvenuto in MyMeccanic!',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
 
@@ -390,81 +463,39 @@ const RegisterScreen: React.FC = () => {
     }
   };
 
-  // Gestione Google Sign-In
-  const handleGoogleSignIn = async () => {
-    setSocialLoading('google');
-
-    try {
-      if (isWeb) {
-        const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(auth, provider);
-        setSocialUser(result.user);
-        
-        // Pre-popola i dati dal profilo Google
-        if (result.user.displayName) {
-          const nameParts = result.user.displayName.split(' ');
-          setFormData(prev => ({
-            ...prev,
-            firstName: nameParts[0] || '',
-            lastName: nameParts.slice(1).join(' ') || '',
-            email: result.user.email || '',
-          }));
-        }
-        
-        setCurrentStep(2); // Vai ai dati personali
-      } else if (promptGoogleAsync) {
-        await promptGoogleAsync();
-      }
-    } catch (error: any) {
-      console.error('❌ Errore Google Sign-In:', error);
-      Alert.alert('Errore', 'Errore durante l\'accesso con Google');
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-
-  // Gestione risposta Google OAuth
-  const handleGoogleAuthResponse = async (response: any) => {
-    try {
-      const { access_token } = response.params;
-      const credential = GoogleAuthProvider.credential(null, access_token);
-      const result = await signInWithCredential(auth, credential);
-      setSocialUser(result.user);
-      
-      // Pre-popola i dati dal profilo Google
-      if (result.user.displayName) {
-        const nameParts = result.user.displayName.split(' ');
-        setFormData(prev => ({
-          ...prev,
-          firstName: nameParts[0] || '',
-          lastName: nameParts.slice(1).join(' ') || '',
-          email: result.user.email || '',
-        }));
-      }
-      
-      setCurrentStep(2); // Vai ai dati personali
-    } catch (error: any) {
-      console.error('❌ Errore autenticazione Google:', error);
-      Alert.alert('Errore', 'Errore durante l\'autenticazione con Google');
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-
-  // Gestione auto per utenti normali
+  // Gestione auto
   const addCar = () => {
-    if (currentCarData.brand && currentCarData.model && currentCarData.licensePlate) {
-      setCarDataList([...carDataList, { ...currentCarData }]);
-      setCurrentCarData({
-        brand: '',
-        model: '',
-        year: '',
-        licensePlate: '',
-        vin: '',
-        fuelType: 'gasoline',
-        kilometers: ''
-      });
+    const newErrors: Record<string, string> = {};
+
+    if (!currentCarData.brand) newErrors.brand = 'Marca obbligatoria';
+    if (!currentCarData.model) newErrors.model = 'Modello obbligatorio';
+    if (!currentCarData.year) newErrors.year = 'Anno obbligatorio';
+    if (!currentCarData.licensePlate) {
+      newErrors.licensePlate = 'Targa obbligatoria';
+    } else if (!validateLicensePlate(currentCarData.licensePlate)) {
+      newErrors.licensePlate = 'Formato targa non valido (es: AB123CD)';
     }
+    if (!currentCarData.kilometers) newErrors.kilometers = 'Chilometraggio obbligatorio';
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setCarDataList([...carDataList, { ...currentCarData }]);
+    setCurrentCarData({
+      brand: '',
+      model: '',
+      year: '',
+      licensePlate: '',
+      vin: '',
+      fuelType: 'gasoline',
+      kilometers: '',
+      color: '',
+      engineSize: '',
+      transmission: 'manual'
+    });
+    setErrors({});
   };
 
   const removeCar = (index: number) => {
@@ -483,362 +514,6 @@ const RegisterScreen: React.FC = () => {
       setCurrentStep(currentStep - 1);
     }
   };
-
-  const goToStep = (step: number) => {
-    if (step <= currentStep) {
-      setCurrentStep(step);
-    }
-  };
-
-  // STILI STATICI - SENZA RIFERIMENTI A STATI
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    backgroundGradient: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      top: 0,
-      bottom: 0,
-    },
-    contentContainer: {
-      flex: 1,
-      maxWidth: getContainerWidth(),
-      alignSelf: 'center',
-      width: '100%',
-    },
-    scrollContainer: {
-      flexGrow: 1,
-      paddingHorizontal: getCardMargin(),
-      paddingTop: isDesktop ? 40 : Math.max(insets.top + 20, 40),
-      paddingBottom: Math.max(insets.bottom + 20, 40),
-    },
-
-    // Theme toggle button
-    themeToggleContainer: {
-      position: 'absolute',
-      top: insets.top + 10,
-      right: 20,
-      zIndex: 1000,
-    },
-    themeToggle: {
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 20,
-      padding: 8,
-      ...dynamicStyles.cardShadow,
-    },
-
-    // Header
-    header: {
-      alignItems: 'center',
-      marginBottom: isDesktop ? 40 : 32,
-    },
-    headerIcon: {
-      marginBottom: 16,
-      padding: 20,
-      borderRadius: 40,
-      backgroundColor: colors.primaryContainer,
-      ...dynamicStyles.cardShadow,
-    },
-    title: {
-      fontSize: isDesktop ? 36 : isTablet ? 32 : 28,
-      fontWeight: 'bold',
-      textAlign: 'center',
-      marginBottom: 8,
-      color: colors.onBackground,
-    },
-    subtitle: {
-      fontSize: isDesktop ? 16 : 14,
-      textAlign: 'center',
-      color: colors.onSurfaceVariant,
-      maxWidth: 400,
-      lineHeight: 22,
-    },
-
-    // Step indicator
-    stepIndicatorContainer: {
-      marginBottom: 32,
-      alignItems: 'center',
-    },
-    progressBarContainer: {
-      width: '100%',
-      height: 8,
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 4,
-      overflow: 'hidden',
-      marginBottom: 12,
-    },
-    progressBarFill: {
-      height: '100%',
-      borderRadius: 4,
-    },
-    stepText: {
-      fontSize: 12,
-      color: colors.onSurfaceVariant,
-    },
-
-    // Step breadcrumbs per desktop
-    stepBreadcrumbs: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      marginBottom: 32,
-      gap: 8,
-      flexWrap: 'wrap',
-    },
-    breadcrumbItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 20,
-      backgroundColor: colors.surfaceVariant,
-    },
-    breadcrumbItemActive: {
-      backgroundColor: colors.primaryContainer,
-    },
-    breadcrumbItemCompleted: {
-      backgroundColor: colors.primary,
-    },
-    breadcrumbItemInactive: {
-      opacity: 0.5,
-    },
-    breadcrumbText: {
-      fontSize: 12,
-      marginLeft: 4,
-      color: colors.onSurfaceVariant,
-    },
-    breadcrumbTextActive: {
-      color: colors.primary,
-      fontWeight: '600',
-    },
-    breadcrumbTextCompleted: {
-      color: colors.onPrimary,
-      fontWeight: '600',
-    },
-
-    // Card principale
-    card: {
-      width: getCardWidth(),
-      alignSelf: 'center',
-      maxWidth: '100%',
-      backgroundColor: colors.surface,
-      borderRadius: 24,
-      overflow: 'hidden',
-      ...dynamicStyles.cardShadow,
-    },
-    cardGradient: {
-      height: 6,
-    },
-    cardContent: {
-      padding: isDesktop ? 40 : isTablet ? 32 : 24,
-    },
-
-    // Step container
-    stepContainer: {
-      alignItems: 'center',
-      minHeight: 400,
-    },
-    stepTitle: {
-      fontSize: isDesktop ? 28 : isTablet ? 24 : 20,
-      fontWeight: '600',
-      textAlign: 'center',
-      marginBottom: 12,
-      color: colors.onSurface,
-    },
-    stepSubtitle: {
-      fontSize: isDesktop ? 16 : 14,
-      textAlign: 'center',
-      color: colors.onSurfaceVariant,
-      marginBottom: 32,
-      maxWidth: 400,
-      lineHeight: 22,
-    },
-
-    // User type selection
-    userTypeContainer: {
-      flexDirection: isTablet ? 'row' : 'column',
-      gap: isTablet ? 20 : 16,
-      width: '100%',
-      maxWidth: 600,
-    },
-    userTypeCard: {
-      flex: isTablet ? 1 : undefined,
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 20,
-      padding: 24,
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: 'transparent',
-      minHeight: 160,
-      ...dynamicStyles.cardShadow,
-    },
-    userTypeCardSelected: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primaryContainer,
-      transform: [{ scale: 1.02 }],
-    },
-
-    // Animations
-    animatedContainer: {
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }],
-    },
-
-    // Navigation buttons
-    navigationContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 32,
-      width: '100%',
-      maxWidth: 400,
-    },
-    navigationButton: {
-      minWidth: 100,
-      borderRadius: 12,
-    },
-
-    // Input container
-    inputsContainer: {
-      width: '100%',
-      maxWidth: 400,
-      gap: 16,
-    },
-    input: {
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 12,
-    },
-
-    // Social buttons
-    socialButtonsContainer: {
-      width: '100%',
-      maxWidth: 400,
-      gap: 12,
-      marginBottom: 24,
-    },
-    socialButton: {
-      borderRadius: 12,
-      backgroundColor: colors.surfaceVariant,
-      borderColor: colors.outline,
-    },
-
-    // Divider
-    dividerContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginVertical: 24,
-      width: '100%',
-      maxWidth: 400,
-    },
-    divider: {
-      flex: 1,
-      backgroundColor: colors.outline,
-    },
-    dividerText: {
-      marginHorizontal: 16,
-      fontSize: 12,
-      color: colors.onSurfaceVariant,
-      backgroundColor: colors.surface,
-      paddingHorizontal: 8,
-    },
-  });
-
-  // Theme Toggle Component
-  const ThemeToggle = () => (
-    <View style={styles.themeToggleContainer}>
-      <TouchableOpacity
-        style={styles.themeToggle}
-        onPress={toggleTheme}
-        activeOpacity={0.7}
-      >
-        <MaterialCommunityIcons
-          name={isDark ? 'weather-sunny' : 'weather-night'}
-          size={24}
-          color={colors.primary}
-        />
-      </TouchableOpacity>
-    </View>
-  );
-
-  // Render step indicator
-  const renderStepIndicator = () => (
-    <View style={styles.stepIndicatorContainer}>
-      {isDesktop ? (
-        // Breadcrumbs per desktop
-        <View style={styles.stepBreadcrumbs}>
-          {[
-            { key: 0, name: 'Tipo Account', icon: 'account-group' },
-            { key: 1, name: 'Credenziali', icon: 'lock' },
-            { key: 2, name: 'Dati Personali', icon: 'account' },
-            { key: 3, name: userType === 'mechanic' ? 'Dati Officina' : 'Le Tue Auto', icon: userType === 'mechanic' ? 'wrench' : 'car' },
-            { key: 4, name: 'Conferma', icon: 'check' },
-          ].map((step, index) => {
-            const isActive = currentStep === step.key;
-            const isCompleted = currentStep > step.key;
-            const isAccessible = currentStep >= step.key;
-
-            return (
-              <TouchableOpacity
-                key={step.key}
-                style={[
-                  styles.breadcrumbItem,
-                  isActive && styles.breadcrumbItemActive,
-                  isCompleted && styles.breadcrumbItemCompleted,
-                  !isAccessible && styles.breadcrumbItemInactive,
-                ]}
-                onPress={() => goToStep(step.key)}
-                disabled={!isAccessible}
-              >
-                <MaterialCommunityIcons
-                  name={step.icon as any}
-                  size={16}
-                  color={
-                    isCompleted ? colors.onPrimary :
-                    isActive ? colors.primary : 
-                    colors.onSurfaceVariant
-                  }
-                />
-                <Text style={[
-                  styles.breadcrumbText,
-                  isActive && styles.breadcrumbTextActive,
-                  isCompleted && styles.breadcrumbTextCompleted,
-                ]}>
-                  {step.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      ) : (
-        // Progress bar per mobile con animazione
-        <>
-          <View style={styles.progressBarContainer}>
-            <Animated.View style={[
-              styles.progressBarFill,
-              {
-                width: progressAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0%', '100%'],
-                }),
-              }
-            ]}>
-              <LinearGradient
-                colors={dynamicStyles.primaryGradient}
-                style={{ flex: 1 }}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              />
-            </Animated.View>
-          </View>
-          <Text style={styles.stepText}>
-            Passo {currentStep + 1} di 5
-          </Text>
-        </>
-      )}
-    </View>
-  );
 
   // Render selezione tipo utente
   const renderUserTypeSelection = () => (
@@ -864,24 +539,13 @@ const RegisterScreen: React.FC = () => {
         >
           <MaterialCommunityIcons
             name="car"
-            size={getIconSize()}
+            size={64}
             color={userType === 'user' ? colors.primary : colors.onSurface}
           />
-          <Text style={{ 
-            fontSize: 18, 
-            fontWeight: '600', 
-            marginTop: 12, 
-            textAlign: 'center',
-            color: colors.onSurface 
-          }}>
+          <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
             Proprietario Auto
           </Text>
-          <Text style={{ 
-            fontSize: 14, 
-            textAlign: 'center', 
-            marginTop: 4, 
-            color: colors.onSurfaceVariant 
-          }}>
+          <Text style={[styles.userTypeSubtitle, { color: colors.onSurfaceVariant }]}>
             Gestisci la manutenzione delle tue auto
           </Text>
         </TouchableOpacity>
@@ -899,24 +563,13 @@ const RegisterScreen: React.FC = () => {
         >
           <MaterialCommunityIcons
             name="wrench"
-            size={getIconSize()}
+            size={64}
             color={userType === 'mechanic' ? colors.primary : colors.onSurface}
           />
-          <Text style={{ 
-            fontSize: 18, 
-            fontWeight: '600', 
-            marginTop: 12, 
-            textAlign: 'center',
-            color: colors.onSurface 
-          }}>
+          <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
             Meccanico/Officina
           </Text>
-          <Text style={{ 
-            fontSize: 14, 
-            textAlign: 'center', 
-            marginTop: 4, 
-            color: colors.onSurfaceVariant 
-          }}>
+          <Text style={[styles.userTypeSubtitle, { color: colors.onSurfaceVariant }]}>
             Gestisci clienti e servizi
           </Text>
         </TouchableOpacity>
@@ -924,49 +577,13 @@ const RegisterScreen: React.FC = () => {
     </View>
   );
 
-  // Render step credenziali - VERSIONE SEMPLIFICATA
+  // Render step credenziali
   const renderCredentialsStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>
-        Crea il tuo account
+      <Text style={styles.stepTitle}>Crea il tuo account</Text>
+      <Text style={styles.stepSubtitle}>
+        Inserisci i tuoi dati per accedere
       </Text>
-
-      <View style={styles.socialButtonsContainer}>
-        <Button
-          mode="outlined"
-          onPress={handleGoogleSignIn}
-          loading={socialLoading === 'google'}
-          disabled={loading || socialLoading !== null}
-          icon="google"
-          style={styles.socialButton}
-          contentStyle={{ height: 48 }}
-          textColor={colors.onSurfaceVariant}
-        >
-          Registrati con Google
-        </Button>
-
-        {(Platform.OS === 'ios' || isWeb) && (
-          <Button
-            mode="outlined"
-            onPress={() => Alert.alert('Apple Sign-In', 'Disponibile nella versione finale')}
-            disabled={loading || socialLoading !== null}
-            icon="apple"
-            style={styles.socialButton}
-            contentStyle={{ height: 48 }}
-            textColor={colors.onSurfaceVariant}
-          >
-            Registrati con Apple
-          </Button>
-        )}
-      </View>
-
-      <View style={styles.dividerContainer}>
-        <Divider style={styles.divider} />
-        <Text style={styles.dividerText}>
-          OPPURE
-        </Text>
-        <Divider style={styles.divider} />
-      </View>
 
       <View style={styles.inputsContainer}>
         <TextInput
@@ -978,9 +595,7 @@ const RegisterScreen: React.FC = () => {
           error={!!errors.email}
           style={styles.input}
           mode="outlined"
-          outlineColor={colors.outline}
-          activeOutlineColor={colors.primary}
-          left={<TextInput.Icon icon="email" iconColor={colors.primary} />}
+          left={<TextInput.Icon icon="email" />}
         />
         <HelperText type="error" visible={!!errors.email}>
           {errors.email}
@@ -994,13 +609,10 @@ const RegisterScreen: React.FC = () => {
           error={!!errors.password}
           style={styles.input}
           mode="outlined"
-          outlineColor={colors.outline}
-          activeOutlineColor={colors.primary}
-          left={<TextInput.Icon icon="lock" iconColor={colors.primary} />}
+          left={<TextInput.Icon icon="lock" />}
           right={
             <TextInput.Icon
               icon={showPassword ? "eye-off" : "eye"}
-              iconColor={colors.primary}
               onPress={() => setShowPassword(!showPassword)}
             />
           }
@@ -1017,13 +629,10 @@ const RegisterScreen: React.FC = () => {
           error={!!errors.confirmPassword}
           style={styles.input}
           mode="outlined"
-          outlineColor={colors.outline}
-          activeOutlineColor={colors.primary}
-          left={<TextInput.Icon icon="lock-check" iconColor={colors.primary} />}
+          left={<TextInput.Icon icon="lock-check" />}
           right={
             <TextInput.Icon
               icon={showConfirmPassword ? "eye-off" : "eye"}
-              iconColor={colors.primary}
               onPress={() => setShowConfirmPassword(!showConfirmPassword)}
             />
           }
@@ -1035,22 +644,247 @@ const RegisterScreen: React.FC = () => {
     </View>
   );
 
-  // Placeholder per altri step (da implementare)
-  const renderPlaceholderStep = (title: string) => (
+  // Render dati personali
+  const renderPersonalDataStep = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>{title}</Text>
-      <Text style={styles.stepSubtitle}>Questa sezione sarà implementata presto</Text>
-      
-      <Button
-        mode="contained"
-        onPress={nextStep}
-        buttonColor={colors.primary}
-        style={{ marginTop: 32 }}
-      >
-        Continua
-      </Button>
+      <Text style={styles.stepTitle}>Dati Personali</Text>
+      <Text style={styles.stepSubtitle}>
+        Inserisci i tuoi dati personali
+      </Text>
+
+      <View style={styles.inputsContainer}>
+        <TextInput
+          label="Nome"
+          value={formData.firstName}
+          onChangeText={(text) => setFormData({ ...formData, firstName: text })}
+          error={!!errors.firstName}
+          style={styles.input}
+          mode="outlined"
+          left={<TextInput.Icon icon="account" />}
+        />
+        <HelperText type="error" visible={!!errors.firstName}>
+          {errors.firstName}
+        </HelperText>
+
+        <TextInput
+          label="Cognome"
+          value={formData.lastName}
+          onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+          error={!!errors.lastName}
+          style={styles.input}
+          mode="outlined"
+          left={<TextInput.Icon icon="account" />}
+        />
+        <HelperText type="error" visible={!!errors.lastName}>
+          {errors.lastName}
+        </HelperText>
+
+        <TextInput
+          label="Telefono"
+          value={formData.phone}
+          onChangeText={(text) => setFormData({ ...formData, phone: text })}
+          keyboardType="phone-pad"
+          error={!!errors.phone}
+          style={styles.input}
+          mode="outlined"
+          left={<TextInput.Icon icon="phone" />}
+        />
+        <HelperText type="error" visible={!!errors.phone}>
+          {errors.phone}
+        </HelperText>
+      </View>
     </View>
   );
+
+  // Render dati specifici
+  const renderSpecificDataStep = () => {
+    if (userType === 'mechanic') {
+      return (
+        <View style={styles.stepContainer}>
+          <Text style={styles.stepTitle}>Dati Officina</Text>
+          <Text style={styles.stepSubtitle}>
+            Inserisci i dati della tua officina
+          </Text>
+
+          <View style={styles.inputsContainer}>
+            <TextInput
+              label="Nome Officina"
+              value={formData.workshopName}
+              onChangeText={(text) => setFormData({ ...formData, workshopName: text })}
+              error={!!errors.workshopName}
+              style={styles.input}
+              mode="outlined"
+              left={<TextInput.Icon icon="store" />}
+            />
+            <HelperText type="error" visible={!!errors.workshopName}>
+              {errors.workshopName}
+            </HelperText>
+
+            <TextInput
+              label="Indirizzo"
+              value={formData.address}
+              onChangeText={(text) => setFormData({ ...formData, address: text })}
+              error={!!errors.address}
+              style={styles.input}
+              mode="outlined"
+              multiline
+              numberOfLines={2}
+              left={<TextInput.Icon icon="map-marker" />}
+            />
+            <HelperText type="error" visible={!!errors.address}>
+              {errors.address}
+            </HelperText>
+
+            <TextInput
+              label="Partita IVA (IT + 11 cifre)"
+              value={formData.vatNumber}
+              onChangeText={(text) => setFormData({ ...formData, vatNumber: text.toUpperCase() })}
+              error={!!errors.vatNumber}
+              style={styles.input}
+              mode="outlined"
+              left={<TextInput.Icon icon="file-document" />}
+            />
+            <HelperText type="error" visible={!!errors.vatNumber}>
+              {errors.vatNumber}
+            </HelperText>
+
+            <TextInput
+              label="Licenza Meccanico (opzionale)"
+              value={formData.mechanicLicense}
+              onChangeText={(text) => setFormData({ ...formData, mechanicLicense: text })}
+              style={styles.input}
+              mode="outlined"
+              left={<TextInput.Icon icon="certificate" />}
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
+              Specializzazioni
+            </Text>
+            <View style={styles.chipContainer}>
+              {specializationOptions.map((spec) => (
+                <Chip
+                  key={spec}
+                  selected={formData.specializations?.includes(spec)}
+                  onPress={() => {
+                    const current = formData.specializations || [];
+                    const updated = current.includes(spec)
+                      ? current.filter(s => s !== spec)
+                      : [...current, spec];
+                    setFormData({ ...formData, specializations: updated });
+                  }}
+                  style={styles.chip}
+                >
+                  {spec}
+                </Chip>
+              ))}
+            </View>
+          </View>
+        </View>
+      );
+    } else {
+      return (
+        <View style={styles.stepContainer}>
+          <Text style={styles.stepTitle}>Le Tue Auto</Text>
+          <Text style={styles.stepSubtitle}>
+            Aggiungi almeno una auto per iniziare
+          </Text>
+
+          <View style={styles.inputsContainer}>
+            <View style={styles.addCarForm}>
+              <View style={styles.carFormRow}>
+                <TextInput
+                  label="Marca"
+                  value={currentCarData.brand}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, brand: text })}
+                  error={!!errors.brand}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                />
+                <TextInput
+                  label="Modello"
+                  value={currentCarData.model}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, model: text })}
+                  error={!!errors.model}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                />
+              </View>
+
+              <View style={styles.carFormRow}>
+                <TextInput
+                  label="Anno"
+                  value={currentCarData.year}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, year: text })}
+                  keyboardType="numeric"
+                  error={!!errors.year}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                />
+                <TextInput
+                  label="Targa"
+                  value={currentCarData.licensePlate}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, licensePlate: text.toUpperCase() })}
+                  error={!!errors.licensePlate}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                />
+              </View>
+
+              <TextInput
+                label="Chilometri"
+                value={currentCarData.kilometers}
+                onChangeText={(text) => setCurrentCarData({ ...currentCarData, kilometers: text })}
+                keyboardType="numeric"
+                error={!!errors.kilometers}
+                style={styles.input}
+                mode="outlined"
+              />
+
+              <Button
+                mode="outlined"
+                onPress={addCar}
+                style={styles.addButton}
+                icon="plus"
+              >
+                Aggiungi Auto
+              </Button>
+
+              {Object.keys(errors).map(key => errors[key] && (
+                <HelperText key={key} type="error" visible={true}>
+                  {errors[key]}
+                </HelperText>
+              ))}
+            </View>
+
+            {carDataList.length > 0 && (
+              <View style={styles.carsList}>
+                <Text style={[styles.carsListTitle, { color: colors.onSurface }]}>
+                  Auto aggiunte ({carDataList.length})
+                </Text>
+                {carDataList.map((car, index) => (
+                  <View key={index} style={[styles.carItem, { borderColor: colors.outline }]}>
+                    <View style={styles.carInfo}>
+                      <Text style={[styles.carTitle, { color: colors.onSurface }]}>
+                        {car.brand} {car.model} ({car.year})
+                      </Text>
+                      <Text style={[styles.carSubtitle, { color: colors.onSurfaceVariant }]}>
+                        {car.licensePlate} - {car.kilometers} km
+                      </Text>
+                    </View>
+                    <IconButton
+                      icon="delete"
+                      onPress={() => removeCar(index)}
+                      iconColor={colors.error}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      );
+    }
+  };
 
   // Step finale
   const renderFinalStep = () => (
@@ -1060,21 +894,21 @@ const RegisterScreen: React.FC = () => {
         Accetta i termini per completare la registrazione
       </Text>
 
-      <View style={{ alignItems: 'center', marginTop: 40 }}>
+      <View style={styles.finalStepContent}>
         <MaterialCommunityIcons
           name="check-circle-outline"
           size={80}
           color={colors.primary}
-          style={{ marginBottom: 24 }}
+          style={styles.finalIcon}
         />
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
+        <View style={styles.checkboxContainer}>
           <Checkbox
             status={agreedToTerms ? 'checked' : 'unchecked'}
             onPress={() => setAgreedToTerms(!agreedToTerms)}
             color={colors.primary}
           />
-          <Text style={{ marginLeft: 8, color: colors.onSurface }}>
+          <Text style={[styles.checkboxLabel, { color: colors.onSurface }]}>
             Accetto i termini e condizioni
           </Text>
         </View>
@@ -1085,8 +919,8 @@ const RegisterScreen: React.FC = () => {
           loading={loading}
           disabled={loading || !agreedToTerms}
           buttonColor={colors.primary}
-          style={{ width: '100%', maxWidth: 300 }}
-          contentStyle={{ height: 48 }}
+          style={styles.finalButton}
+          contentStyle={styles.finalButtonContent}
         >
           {loading ? 'Creazione account...' : 'Crea Account'}
         </Button>
@@ -1128,105 +962,190 @@ const RegisterScreen: React.FC = () => {
     switch (currentStep) {
       case 0: return renderUserTypeSelection();
       case 1: return renderCredentialsStep();
-      case 2: return renderPlaceholderStep('Dati Personali');
-      case 3: return renderPlaceholderStep(userType === 'mechanic' ? 'Dati Officina' : 'Le Tue Auto');
+      case 2: return renderPersonalDataStep();
+      case 3: return renderSpecificDataStep();
       case 4: return renderFinalStep();
       default: return renderUserTypeSelection();
     }
   };
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContainer: {
+      flexGrow: 1,
+      paddingHorizontal: 16,
+      paddingVertical: Math.max(insets.top + 20, 40),
+    },
+    stepContainer: {
+      alignItems: 'center',
+      minHeight: 400,
+    },
+    stepTitle: {
+      fontSize: isDesktop ? 28 : 20,
+      fontWeight: '600',
+      textAlign: 'center',
+      marginBottom: 12,
+      color: colors.onSurface,
+    },
+    stepSubtitle: {
+      fontSize: 14,
+      textAlign: 'center',
+      color: colors.onSurfaceVariant,
+      marginBottom: 32,
+      maxWidth: 400,
+    },
+    userTypeContainer: {
+      flexDirection: isTablet ? 'row' : 'column',
+      gap: 16,
+      width: '100%',
+      maxWidth: 600,
+    },
+    userTypeCard: {
+      flex: isTablet ? 1 : undefined,
+      backgroundColor: colors.surfaceVariant,
+      borderRadius: 20,
+      padding: 24,
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: 'transparent',
+      minHeight: 160,
+    },
+    userTypeCardSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryContainer,
+    },
+    userTypeTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      marginTop: 12,
+      textAlign: 'center',
+    },
+    userTypeSubtitle: {
+      fontSize: 14,
+      textAlign: 'center',
+      marginTop: 4,
+    },
+    inputsContainer: {
+      width: '100%',
+      maxWidth: 400,
+      gap: 16,
+    },
+    input: {
+      backgroundColor: colors.surfaceVariant,
+      borderRadius: 12,
+    },
+    navigationContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 32,
+      width: '100%',
+      maxWidth: 400,
+    },
+    navigationButton: {
+      minWidth: 100,
+      borderRadius: 12,
+    },
+    inputLabel: {
+      fontSize: 16,
+      fontWeight: '500',
+      marginBottom: 8,
+    },
+    chipContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 16,
+    },
+    chip: {
+      margin: 2,
+    },
+    addCarForm: {
+      marginBottom: 24,
+    },
+    carFormRow: {
+      flexDirection: 'row',
+      gap: 12,
+      marginBottom: 16,
+    },
+    halfWidth: {
+      flex: 1,
+    },
+    addButton: {
+      marginTop: 16,
+      borderRadius: 12,
+    },
+    carsList: {
+      width: '100%',
+    },
+    carsListTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 12,
+    },
+    carItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderWidth: 1,
+      borderRadius: 8,
+      marginBottom: 8,
+    },
+    carInfo: {
+      flex: 1,
+    },
+    carTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    carSubtitle: {
+      fontSize: 12,
+      marginTop: 2,
+    },
+    finalStepContent: {
+      alignItems: 'center',
+      marginTop: 40,
+      width: '100%',
+      maxWidth: 400,
+    },
+    finalIcon: {
+      marginBottom: 24,
+    },
+    checkboxContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    checkboxLabel: {
+      marginLeft: 8,
+      flex: 1,
+    },
+    finalButton: {
+      width: '100%',
+      borderRadius: 12,
+    },
+    finalButtonContent: {
+      height: 48,
+    },
+  });
+
   return (
     <View style={styles.container}>
-      {/* Background Gradient */}
-      <LinearGradient
-        colors={isDark ? 
-          ['#000000', '#1C1C1E', '#2C2C2E'] : 
-          ['#FAFAFA', '#F5F5F5', '#FFFFFF']
-        }
-        style={styles.backgroundGradient}
-      />
-      
-      {/* Theme Toggle */}
-      <ThemeToggle />
-
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <View style={styles.contentContainer}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-          >
-            {/* Header */}
-            <Animated.View style={[styles.header, styles.animatedContainer]}>
-              <Surface style={styles.headerIcon} elevation={0}>
-                <MaterialCommunityIcons
-                  name="car-wrench"
-                  size={isDesktop ? 72 : isTablet ? 64 : 56}
-                  color={colors.primary}
-                />
-              </Surface>
-              <Text style={styles.title}>
-                Benvenuto in MyMeccanic
-              </Text>
-              <Text style={styles.subtitle}>
-                Crea il tuo account per iniziare a gestire le tue automobili
-              </Text>
-            </Animated.View>
-
-            {/* Step Indicator */}
-            <Animated.View style={styles.animatedContainer}>
-              {renderStepIndicator()}
-            </Animated.View>
-
-            {/* Main Card */}
-            <Animated.View style={styles.animatedContainer}>
-              <Card style={styles.card} elevation={0}>
-                {/* Gradient accent */}
-                <LinearGradient
-                  colors={dynamicStyles.primaryGradient}
-                  style={styles.cardGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                />
-                
-                <Card.Content style={styles.cardContent}>
-                  {renderCurrentStep()}
-                  {renderNavigationButtons()}
-                </Card.Content>
-              </Card>
-            </Animated.View>
-
-            {/* Login Link */}
-            <View style={{ alignItems: 'center', marginTop: 24 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: colors.onSurfaceVariant }}>
-                  Hai già un account?{' '}
-                </Text>
-                {isWeb ? (
-                  <Button
-                    mode="text"
-                    onPress={() => navigation.goBack()}
-                    compact
-                    textColor={colors.primary}
-                  >
-                    Accedi
-                  </Button>
-                ) : (
-                  <TouchableOpacity onPress={() => navigation.goBack()}>
-                    <Text style={{ color: colors.primary, fontWeight: '600' }}>
-                      Accedi
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </ScrollView>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {renderCurrentStep()}
+          {renderNavigationButtons()}
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
