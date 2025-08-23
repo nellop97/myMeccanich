@@ -28,6 +28,7 @@ import {
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 import CalendarAppointmentPicker from './CalendarAppointmentPicker';
+import UserSearchModal from '../../components/UserSearchModal';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -44,7 +45,7 @@ const NewAppointmentScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
   const { addAppointment } = useWorkshopStore();
-  
+
   // Stati per il calendario integrato
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
@@ -66,7 +67,25 @@ const NewAppointmentScreen = () => {
     inputBackground: darkMode ? '#374151' : '#ffffff',
     placeholderColor: darkMode ? '#9ca3af' : '#6b7280',
     accent: '#2563eb',
+    primary: darkMode ? '#60a5fa' : '#2563eb', // Accent color for UI elements
   };
+
+  const [carData, setCarData] = useState({
+    model: '',
+    vin: '',
+    licensePlate: '',
+    owner: '',
+    color: '',
+    year: '',
+    mileage: '',
+    ownerId: '', // ID dell'utente proprietario
+    ownerPhone: '', // Telefono del proprietario
+    ownerEmail: '', // Email del proprietario
+  });
+
+  // Stati per la ricerca utenti
+  const [showUserSearch, setShowUserSearch] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   const onSubmit = (data: FormData) => {
     try {
@@ -137,6 +156,39 @@ const NewAppointmentScreen = () => {
         {error && <Text style={styles.errorText}>Questo campo è obbligatorio</Text>}
       </View>
   );
+
+  const handleSelectUser = (user) => {
+    setSelectedUser(user);
+    setCarData(prev => ({
+      ...prev,
+      owner: `${user.firstName} ${user.lastName}`,
+      ownerId: user.id,
+      ownerPhone: user.phone || '',
+      ownerEmail: user.email,
+    }));
+  };
+
+  const handleSave = () => {
+    // Validazione base
+    if (!carData.model.trim() || !carData.licensePlate.trim() || !selectedUser) {
+      Alert.alert('Errore', 'Compila tutti i campi obbligatori e seleziona un proprietario');
+      return;
+    }
+
+    if (repairs.length === 0) {
+      Alert.alert('Errore', 'Aggiungi almeno una riparazione');
+      return;
+    }
+
+    const invalidRepairs = repairs.some(repair => 
+      !repair.description.trim() || !repair.estimatedCost.trim()
+    );
+
+    if (invalidRepairs) {
+      Alert.alert('Errore', 'Compila tutti i campi delle riparazioni');
+      return;
+    }
+  };
 
   return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -220,20 +272,68 @@ const NewAppointmentScreen = () => {
               </View>
 
               <View style={isDesktop ? styles.halfWidth : styles.fullWidth}>
-                <Controller
-                    control={control}
-                    rules={{ required: true }}
-                    render={({ field: { onChange, value } }) => (
-                        <FormInput
-                            label="Proprietario *"
-                            placeholder="Nome e cognome del proprietario"
-                            value={value}
-                            onChangeText={onChange}
-                            error={errors.owner}
-                        />
-                    )}
-                    name="owner"
-                />
+                <View style={styles.inputContainer}>
+                  <Text style={[styles.label, { color: theme.text }]}>
+                    Proprietario *
+                  </Text>
+
+                  {selectedUser ? (
+                    <View style={[styles.selectedUserContainer, { backgroundColor: theme.cardBackground, borderColor: theme.primary }]}>
+                      <View style={styles.selectedUserInfo}>
+                        <View style={[styles.userAvatar, { backgroundColor: theme.primary }]}>
+                          <Text style={styles.userAvatarText}>
+                            {selectedUser.firstName.charAt(0)}{selectedUser.lastName.charAt(0)}
+                          </Text>
+                        </View>
+                        <View style={styles.userDetails}>
+                          <Text style={[styles.selectedUserName, { color: theme.text }]}>
+                            {selectedUser.firstName} {selectedUser.lastName}
+                          </Text>
+                          <Text style={[styles.selectedUserEmail, { color: theme.textSecondary }]}>
+                            {selectedUser.email}
+                          </Text>
+                          {selectedUser.phone && (
+                            <Text style={[styles.selectedUserPhone, { color: theme.textSecondary }]}>
+                              📞 {selectedUser.phone}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <TouchableOpacity 
+                        onPress={() => {
+                          setSelectedUser(null);
+                          setCarData(prev => ({
+                            ...prev,
+                            owner: '',
+                            ownerId: '',
+                            ownerPhone: '',
+                            ownerEmail: '',
+                          }));
+                        }}
+                        style={styles.removeUserButton}
+                      >
+                        <MaterialCommunityIcons name="close" size={20} color={theme.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.searchUserButton, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                      onPress={() => setShowUserSearch(true)}
+                    >
+                      <MaterialCommunityIcons name="account-search" size={20} color={theme.primary} />
+                      <Text style={[styles.searchUserText, { color: theme.primary }]}>
+                        Cerca proprietario
+                      </Text>
+                      <MaterialCommunityIcons name="chevron-right" size={20} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+
+                  {!selectedUser && (
+                    <Text style={[styles.helperText, { color: theme.textSecondary }]}>
+                      Clicca per cercare il proprietario tra i tuoi clienti registrati
+                    </Text>
+                  )}
+                </View>
               </View>
             </View>
           </FormCard>
@@ -328,7 +428,15 @@ const NewAppointmentScreen = () => {
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </SafeAreaView>
+
+      {/* User Search Modal */}
+      <UserSearchModal
+        visible={showUserSearch}
+        onClose={() => setShowUserSearch(false)}
+        onSelectUser={handleSelectUser}
+        darkMode={darkMode}
+      />
+    </SafeAreaView>
   );
 };
 
@@ -494,6 +602,70 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginLeft: 8,
+  },
+  // Stili per la ricerca utenti
+  selectedUserContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+  },
+  selectedUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  userAvatarText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  userDetails: {
+    flex: 1,
+  },
+  selectedUserName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  selectedUserEmail: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  selectedUserPhone: {
+    fontSize: 12,
+  },
+  removeUserButton: {
+    padding: 8,
+  },
+  searchUserButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  searchUserText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  helperText: {
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });
 
