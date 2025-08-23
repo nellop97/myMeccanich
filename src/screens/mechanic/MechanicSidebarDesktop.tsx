@@ -281,6 +281,7 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
         <TouchableOpacity
           style={styles.footerButton}
           onPress={handleLogout}
+
           activeOpacity={0.7}
         >
           <MaterialCommunityIcons
