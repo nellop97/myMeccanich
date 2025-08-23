@@ -30,7 +30,21 @@ interface MenuItem {
 
 const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
-  const { darkMode, toggleDarkMode } = useStore();
+  const store = useStore();
+  const { darkMode } = store;
+  
+  // Funzione sicura per toggle dark mode
+  const handleToggleDarkMode = () => {
+    try {
+      if (store && typeof store.toggleDarkMode === 'function') {
+        store.toggleDarkMode();
+      } else {
+        console.warn('toggleDarkMode function not available');
+      }
+    } catch (error) {
+      console.error('Error toggling dark mode:', error);
+    }
+  };
   const [expandedSections, setExpandedSections] = useState<string[]>(['main']);
 
   // Tema dinamico
@@ -97,15 +111,41 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
           onPress: async () => {
             try {
               console.log('🚪 Desktop Sidebar: Iniziando logout...');
+              
+              // Verifica che la funzione logout esista
+              if (!logout || typeof logout !== 'function') {
+                throw new Error('Logout function not available');
+              }
+              
               await logout();
-              console.log('✅ Desktop Sidebar: Logout completato');
+              console.log('✅ Desktop Sidebar: Logout completato con successo');
+              
             } catch (error) {
               console.error('❌ Desktop Sidebar: Errore durante il logout:', error);
-              Alert.alert(
-                'Errore',
-                'Si è verificato un errore durante il logout. Riprova.',
-                [{ text: 'OK' }]
-              );
+              
+              // Forza il reload della pagina se siamo su web come fallback
+              if (typeof window !== 'undefined' && window.location) {
+                console.log('🔄 Forcing page reload as fallback...');
+                window.location.reload();
+              } else {
+                Alert.alert(
+                  'Errore Logout',
+                  'Si è verificato un errore durante il logout. L\'app verrà riavviata.',
+                  [{ 
+                    text: 'OK',
+                    onPress: () => {
+                      // Forza restart dell'app su mobile se possibile
+                      if (typeof require !== 'undefined') {
+                        try {
+                          require('react-native').NativeModules.DevSettings?.reload?.();
+                        } catch (e) {
+                          console.log('Could not restart app');
+                        }
+                      }
+                    }
+                  }]
+                );
+              }
             }
           }
         }
@@ -271,7 +311,7 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
         {/* Toggle tema */}
         <TouchableOpacity
           style={styles.footerButton}
-          onPress={toggleDarkMode}
+          onPress={handleToggleDarkMode}
           activeOpacity={0.7}
         >
           <MaterialCommunityIcons

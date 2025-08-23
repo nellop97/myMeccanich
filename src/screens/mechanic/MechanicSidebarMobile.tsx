@@ -36,7 +36,22 @@ interface MenuItem {
 
 const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
-  const { darkMode, toggleDarkMode } = useStore();
+  const store = useStore();
+  const { darkMode } = store;
+  
+  // Funzione sicura per toggle dark mode
+  const handleToggleDarkMode = () => {
+    try {
+      if (store && typeof store.toggleDarkMode === 'function') {
+        store.toggleDarkMode();
+        closeDrawer();
+      } else {
+        console.warn('toggleDarkMode function not available');
+      }
+    } catch (error) {
+      console.error('Error toggling dark mode:', error);
+    }
+  };
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>(['main']);
@@ -149,18 +164,46 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           onPress: async () => {
             try {
               console.log('🚪 Mobile Sidebar: Iniziando logout...');
+              
+              // Verifica che la funzione logout esista
+              if (!logout || typeof logout !== 'function') {
+                throw new Error('Logout function not available');
+              }
+              
               await logout();
-              console.log('✅ Mobile Sidebar: Logout completato');
+              console.log('✅ Mobile Sidebar: Logout completato con successo');
+              
               // Chiudi il drawer solo dopo il logout riuscito
               closeDrawer();
+              
             } catch (error) {
               console.error('❌ Mobile Sidebar: Errore durante il logout:', error);
-              Alert.alert(
-                'Errore',
-                'Si è verificato un errore durante il logout. Riprova.',
-                [{ text: 'OK' }]
-              );
-              // Non chiudere il drawer se c'è un errore
+              
+              // Forza il reload della pagina se siamo su web come fallback
+              if (typeof window !== 'undefined' && window.location) {
+                console.log('🔄 Forcing page reload as fallback...');
+                closeDrawer();
+                window.location.reload();
+              } else {
+                Alert.alert(
+                  'Errore Logout',
+                  'Si è verificato un errore durante il logout. L\'app verrà riavviata.',
+                  [{ 
+                    text: 'OK',
+                    onPress: () => {
+                      closeDrawer();
+                      // Forza restart dell'app su mobile se possibile
+                      if (typeof require !== 'undefined') {
+                        try {
+                          require('react-native').NativeModules.DevSettings?.reload?.();
+                        } catch (e) {
+                          console.log('Could not restart app');
+                        }
+                      }
+                    }
+                  }]
+                );
+              }
             }
           }
         }
@@ -367,10 +410,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
         <View style={[styles.drawerFooter, { borderTopColor: theme.border }]}>
           <TouchableOpacity
             style={styles.footerButton}
-            onPress={() => {
-              toggleDarkMode();
-              closeDrawer();
-            }}
+            onPress={handleToggleDarkMode}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
