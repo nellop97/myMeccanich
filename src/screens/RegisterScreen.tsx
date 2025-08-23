@@ -492,21 +492,12 @@ const RegisterScreen: React.FC = () => {
     }
     if (!currentCarData.kilometers) newErrors.kilometers = 'Chilometraggio obbligatorio';
 
-    // Validazione dati auto con API
-    if (currentCarData.brand && currentCarData.model && currentCarData.year) {
-      try {
-        const isValid = await carDataService.validateCarData(
-          currentCarData.brand,
-          currentCarData.model,
-          parseInt(currentCarData.year)
-        );
-        
-        if (!isValid) {
-          newErrors.brand = 'Combinazione marca/modello/anno non valida';
-        }
-      } catch (error) {
-        console.warn('Impossibile validare dati auto:', error);
-        // Continua comunque senza bloccare l'utente
+    // Validazione anno
+    if (currentCarData.year) {
+      const year = parseInt(currentCarData.year);
+      const currentYear = new Date().getFullYear();
+      if (isNaN(year) || year < 1900 || year > currentYear + 1) {
+        newErrors.year = 'Anno non valido (1900 - ' + (currentYear + 1) + ')';
       }
     }
 
@@ -854,46 +845,77 @@ const RegisterScreen: React.FC = () => {
 
           <View style={styles.inputsContainer}>
             <View style={styles.addCarForm}>
-              {/* Selezione Auto con Ricerca */}
-              <TouchableOpacity
-                style={[styles.carSearchButton, { backgroundColor: colors.primaryContainer, borderColor: colors.outline }]}
-                onPress={() => openCarSearch()}
-                activeOpacity={0.7}
-              >
-                <MaterialCommunityIcons
-                  name="car-search"
-                  size={24}
-                  color={colors.primary}
-                />
-                <View style={styles.carSearchContent}>
-                  {currentCarData.brand && currentCarData.model ? (
-                    <>
-                      <Text style={[styles.carSearchTitle, { color: colors.onSurface }]}>
-                        {currentCarData.brand} {currentCarData.model}
-                      </Text>
-                      {currentCarData.year && (
-                        <Text style={[styles.carSearchSubtitle, { color: colors.onSurfaceVariant }]}>
-                          Anno: {currentCarData.year}
-                        </Text>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Text style={[styles.carSearchTitle, { color: colors.onSurface }]}>
-                        Seleziona Auto
-                      </Text>
-                      <Text style={[styles.carSearchSubtitle, { color: colors.onSurfaceVariant }]}>
-                        Cerca tra migliaia di marche e modelli
-                      </Text>
-                    </>
-                  )}
+              {/* Campi Auto Manuali con Suggerimenti */}
+              <View style={styles.carFormRow}>
+                <View style={[styles.inputWithSuggestion, styles.halfWidth]}>
+                  <TextInput
+                    label="Marca"
+                    value={currentCarData.brand}
+                    onChangeText={(text) => setCurrentCarData({ ...currentCarData, brand: text })}
+                    error={!!errors.brand}
+                    style={styles.input}
+                    mode="outlined"
+                    placeholder="es. Fiat, Volkswagen, BMW"
+                    left={<TextInput.Icon icon="car" />}
+                    right={
+                      <TextInput.Icon
+                        icon="magnify"
+                        onPress={() => openCarSearch()}
+                      />
+                    }
+                  />
+                  <HelperText type="info" visible={true}>
+                    Scrivi manualmente o clicca 🔍 per suggerimenti
+                  </HelperText>
                 </View>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={20}
-                  color={colors.onSurfaceVariant}
+                
+                <View style={[styles.inputWithSuggestion, styles.halfWidth]}>
+                  <TextInput
+                    label="Modello"
+                    value={currentCarData.model}
+                    onChangeText={(text) => setCurrentCarData({ ...currentCarData, model: text })}
+                    error={!!errors.model}
+                    style={styles.input}
+                    mode="outlined"
+                    placeholder="es. Golf, 500, Serie 3"
+                    left={<TextInput.Icon icon="car-side" />}
+                    right={
+                      currentCarData.brand ? (
+                        <TextInput.Icon
+                          icon="magnify"
+                          onPress={() => openCarSearch()}
+                        />
+                      ) : null
+                    }
+                  />
+                  <HelperText type="info" visible={true}>
+                    {currentCarData.brand ? 'Scrivi o cerca modelli per ' + currentCarData.brand : 'Prima inserisci la marca'}
+                  </HelperText>
+                </View>
+              </View>
+
+              <View style={styles.carFormRow}>
+                <TextInput
+                  label="Anno"
+                  value={currentCarData.year}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, year: text })}
+                  keyboardType="numeric"
+                  error={!!errors.year}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                  placeholder="es. 2020"
+                  left={<TextInput.Icon icon="calendar" />}
                 />
-              </TouchableOpacity>
+                <TextInput
+                  label="Cilindrata (opzionale)"
+                  value={currentCarData.engineSize}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, engineSize: text })}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                  placeholder="es. 1.6, 2.0 TDI"
+                  left={<TextInput.Icon icon="engine" />}
+                />
+              </View>
 
               {/* Campi aggiuntivi */}
               <View style={styles.carFormRow}>
@@ -926,6 +948,7 @@ const RegisterScreen: React.FC = () => {
                   style={[styles.input, styles.halfWidth]}
                   mode="outlined"
                   placeholder="17 caratteri"
+                  left={<TextInput.Icon icon="barcode" />}
                 />
                 <TextInput
                   label="Colore (opzionale)"
@@ -934,7 +957,47 @@ const RegisterScreen: React.FC = () => {
                   style={[styles.input, styles.halfWidth]}
                   mode="outlined"
                   placeholder="Rosso"
+                  left={<TextInput.Icon icon="palette" />}
                 />
+              </View>
+
+              {/* Selezione Carburante e Cambio */}
+              <View style={styles.carFormRow}>
+                <View style={styles.halfWidth}>
+                  <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
+                    Tipo Carburante
+                  </Text>
+                  <View style={styles.chipContainer}>
+                    {fuelTypeOptions.map((fuel) => (
+                      <Chip
+                        key={fuel.value}
+                        selected={currentCarData.fuelType === fuel.value}
+                        onPress={() => setCurrentCarData({ ...currentCarData, fuelType: fuel.value })}
+                        style={styles.chip}
+                      >
+                        {fuel.label}
+                      </Chip>
+                    ))}
+                  </View>
+                </View>
+                
+                <View style={styles.halfWidth}>
+                  <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
+                    Trasmissione
+                  </Text>
+                  <View style={styles.chipContainer}>
+                    {transmissionOptions.map((trans) => (
+                      <Chip
+                        key={trans.value}
+                        selected={currentCarData.transmission === trans.value}
+                        onPress={() => setCurrentCarData({ ...currentCarData, transmission: trans.value })}
+                        style={styles.chip}
+                      >
+                        {trans.label}
+                      </Chip>
+                    ))}
+                  </View>
+                </View>
               </View>
 
               <Button
@@ -1228,25 +1291,8 @@ const RegisterScreen: React.FC = () => {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    carSearchButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 16,
-      borderRadius: 12,
-      borderWidth: 1,
-      marginBottom: 16,
-    },
-    carSearchContent: {
-      flex: 1,
-      marginLeft: 12,
-    },
-    carSearchTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    carSearchSubtitle: {
-      fontSize: 12,
-      marginTop: 2,
+    inputWithSuggestion: {
+      position: 'relative',
     },
     finalStepContent: {
       alignItems: 'center',

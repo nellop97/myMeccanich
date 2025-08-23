@@ -156,7 +156,7 @@ const CarSearchModal: React.FC<CarSearchModalProps> = ({
   const handleYearSelect = (year: number) => {
     setSelectedYear(year.toString());
 
-    // Conferma selezione
+    // Conferma selezione come suggerimento
     onSelect({
       brand: selectedBrand,
       model: selectedModel,
@@ -178,10 +178,10 @@ const CarSearchModal: React.FC<CarSearchModalProps> = ({
 
   const getStepTitle = () => {
     switch (step) {
-      case 1: return 'Seleziona Marca';
-      case 2: return `Seleziona Modello per ${selectedBrand}`;
-      case 3: return `Seleziona Anno per ${selectedBrand} ${selectedModel}`;
-      default: return 'Seleziona Auto';
+      case 1: return 'Suggerimenti Marche';
+      case 2: return `Modelli per ${selectedBrand}`;
+      case 3: return `Anni per ${selectedBrand} ${selectedModel}`;
+      default: return 'Suggerimenti Auto';
     }
   };
 
