@@ -1,4 +1,4 @@
-// src/screens/mechanic/MechanicDashboardContent.tsx - AGGIORNATO
+// src/screens/mechanic/MechanicDashboardContent.tsx - AGGIORNATO CON DATI REALI
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -8,9 +8,12 @@ import {
   Dimensions,
   Platform,
   ScrollView,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useMechanicStats } from '../../hooks/useMechanicStats';
 
 const { width: screenWidth } = Dimensions.get('window');
 const isDesktop = Platform.OS === 'web' && screenWidth > 768;
@@ -62,58 +65,8 @@ interface QuickAction {
 }
 
 const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, navigation }) => {
-  const [dashboardStats, setDashboardStats] = useState({
-    carsInWorkshop: 8,
-    appointmentsToday: 3,
-    appointmentsWeek: 12,
-    pendingInvoices: 5,
-    overdueInvoices: 2,
-    monthlyRevenue: 12500.50,
-    monthlyGrowth: 15.2,
-    completedJobs: 156,
-    activeCustomers: 87,
-    averageJobTime: 2.5,
-    customerSatisfaction: 4.8,
-  });
-
-  const [recentActivity, setRecentActivity] = useState([
-    {
-      id: '1',
-      type: 'car_added',
-      title: 'Nuova auto aggiunta',
-      description: 'Fiat 500 - Targa AB123CD',
-      time: '10 minuti fa',
-      icon: 'car-plus',
-      color: theme.success,
-    },
-    {
-      id: '2',
-      type: 'appointment',
-      title: 'Appuntamento confermato',
-      description: 'Tagliando Volkswagen Golf',
-      time: '1 ora fa',
-      icon: 'calendar-check',
-      color: theme.primary,
-    },
-    {
-      id: '3',
-      type: 'invoice',
-      title: 'Fattura emessa',
-      description: 'Fattura #2024-001 - €285.00',
-      time: '2 ore fa',
-      icon: 'receipt',
-      color: theme.warning,
-    },
-    {
-      id: '4',
-      type: 'review',
-      title: 'Nuova recensione',
-      description: '5 stelle da Mario Rossi',
-      time: '3 ore fa',
-      icon: 'star',
-      color: theme.warning,
-    },
-  ]);
+  // Usa l'hook per le statistiche reali
+  const { stats: dashboardStats, recentActivity, isLoading, error, refreshStats } = useMechanicStats();
 
   // Statistiche principali
   const statCards: StatCardData[] = [
@@ -123,8 +76,8 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       subtitle: 'Attualmente in lavorazione',
       icon: 'car-wrench',
       color: theme.primary,
-      trend: 'up',
-      trendValue: '+2 da ieri',
+      trend: dashboardStats.carsInWorkshop > 0 ? 'up' : 'neutral',
+      trendValue: dashboardStats.carsInWorkshop > 0 ? `${dashboardStats.carsInWorkshop} auto` : 'Nessuna auto',
     },
     {
       title: 'Appuntamenti Oggi',
@@ -132,14 +85,14 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       subtitle: `${dashboardStats.appointmentsWeek} questa settimana`,
       icon: 'calendar-today',
       color: theme.accent,
-      trend: 'neutral',
-      trendValue: 'Come previsto',
+      trend: dashboardStats.appointmentsToday > 0 ? 'up' : 'neutral',
+      trendValue: dashboardStats.appointmentsToday > 0 ? 'In programma' : 'Nessuno',
     },
     {
       title: 'Fatture in Sospeso',
       value: dashboardStats.pendingInvoices,
       subtitle: `${dashboardStats.overdueInvoices} scadute`,
-      icon: 'file-document-alert',
+      icon: 'file-document-outline',
       color: theme.warning,
       trend: dashboardStats.overdueInvoices > 0 ? 'down' : 'up',
       trendValue: dashboardStats.overdueInvoices > 0 ? 'Attenzione!' : 'Tutto ok',
@@ -147,11 +100,11 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
     {
       title: 'Fatturato Mensile',
       value: `€${dashboardStats.monthlyRevenue.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`,
-      subtitle: `+${dashboardStats.monthlyGrowth}% vs mese scorso`,
+      subtitle: `${dashboardStats.monthlyGrowth >= 0 ? '+' : ''}${dashboardStats.monthlyGrowth.toFixed(1)}% vs mese scorso`,
       icon: 'trending-up',
       color: theme.success,
-      trend: 'up',
-      trendValue: `+€${(dashboardStats.monthlyRevenue * dashboardStats.monthlyGrowth / 100).toLocaleString('it-IT', { maximumFractionDigits: 0 })}`,
+      trend: dashboardStats.monthlyGrowth >= 0 ? 'up' : 'down',
+      trendValue: dashboardStats.monthlyGrowth >= 0 ? 'In crescita' : 'In calo',
     },
   ];
 
@@ -161,7 +114,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       id: 'add_car',
       title: 'Nuova Auto',
       subtitle: 'Aggiungi veicolo in officina',
-      icon: 'car-plus',
+      icon: 'car',
       color: theme.success,
       gradient: ['#10b981', '#059669'],
       onPress: () => navigation.navigate('NewAppointment'),
@@ -393,6 +346,38 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
     </View>
   );
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary, marginTop: 16 }]}>
+          Caricamento statistiche...
+        </Text>
+      </View>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <View style={[styles.errorContainer, { backgroundColor: theme.background }]}>
+        <MaterialCommunityIcons name="alert-circle" size={48} color={theme.danger} />
+        <Text style={[styles.errorText, { color: theme.danger, marginTop: 16 }]}>
+          {error}
+        </Text>
+        <TouchableOpacity 
+          style={[styles.retryButton, { backgroundColor: theme.primary }]}
+          onPress={refreshStats}
+        >
+          <Text style={[styles.retryButtonText, { color: '#ffffff' }]}>
+            Riprova
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (!mechanicData) {
     return null;
   }
@@ -402,12 +387,35 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       style={styles.container}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl 
+          refreshing={isLoading} 
+          onRefresh={refreshStats}
+          tintColor={theme.primary}
+          colors={[theme.primary]}
+        />
+      }
     >
+      {/* Header con stato sincronizzazione */}
+      <View style={styles.headerContainer}>
+        <View>
+          <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 4 }]}>
+            Panoramica
+          </Text>
+          <Text style={[styles.lastUpdateText, { color: theme.textSecondary }]}>
+            Ultimo aggiornamento: {new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.refreshButton}
+          onPress={refreshStats}
+        >
+          <MaterialCommunityIcons name="refresh" size={20} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
+
       {/* Statistiche Principali */}
       <View style={styles.statsContainer}>
-        <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 16 }]}>
-          Panoramica
-        </Text>
         <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
           {statCards.map((stat, index) => renderStatCard(stat, index))}
         </View>
@@ -439,6 +447,55 @@ const styles = StyleSheet.create({
   content: {
     padding: isDesktop ? 24 : 16,
     paddingBottom: 40,
+  },
+  
+  // Loading and Error States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // Header
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  lastUpdateText: {
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 8,
   },
   
   // Stats Section

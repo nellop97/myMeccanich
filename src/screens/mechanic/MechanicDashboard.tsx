@@ -93,10 +93,15 @@ const MechanicDashboard: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Simula refresh dei dati
-    setTimeout(() => {
+    try {
+      // Il refresh viene gestito dall'hook useMechanicStats nel componente figlio
+      // Qui possiamo aggiungere altri refresh se necessario
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simula caricamento
+    } catch (error) {
+      console.error('Errore durante il refresh:', error);
+    } finally {
       setRefreshing(false);
-    }, 1000);
+    }
   };
 
   const handleTabChange = (tab: string) => {

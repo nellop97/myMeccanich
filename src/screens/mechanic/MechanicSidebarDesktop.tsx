@@ -71,7 +71,7 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
         { id: 'dashboard', label: 'Dashboard', icon: 'view-dashboard', color: theme.primary },
         { id: 'AllCarsInWorkshop', label: 'Auto in Officina', icon: 'car-multiple', badge: 8, color: theme.success },
         { id: 'MechanicCalendar', label: 'Calendario', icon: 'calendar', badge: 3, color: theme.accent },
-        { id: 'NewAppointment', label: 'Nuovo Appuntamento', icon: 'car-plus', color: theme.accent },
+        { id: 'NewAppointment', label: 'Nuovo Appuntamento', icon: 'car', color: theme.accent },
       ] as MenuItem[]
     },
     business: {
