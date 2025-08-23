@@ -68,6 +68,13 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
   // Usa l'hook per le statistiche reali
   const { stats: dashboardStats, recentActivity, isLoading, error, refreshStats } = useMechanicStats();
 
+  // Funzione placeholder per la navigazione alla schermata delle auto in officina
+  const goToWorkshopCars = () => {
+    console.log("Navigating to workshop cars screen...");
+    // Qui andrebbe la navigazione effettiva, es: navigation.navigate('WorkshopCarsScreen');
+    // Per ora, simuliamo solo un log.
+  };
+
   // Statistiche principali
   const statCards: StatCardData[] = [
     {
@@ -121,7 +128,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
     },
     {
       id: 'new_appointment',
-      title: 'Appuntamento',
+      title: ' Appuntamento',
       subtitle: 'Programma nuovo intervento',
       icon: 'calendar-plus',
       color: theme.primary,
@@ -166,24 +173,24 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
             color={stat.color}
           />
         </View>
-        
+
         <View style={styles.statTrend}>
           <MaterialCommunityIcons
             name={
-              stat.trend === 'up' ? 'trending-up' : 
-              stat.trend === 'down' ? 'trending-down' : 
+              stat.trend === 'up' ? 'trending-up' :
+              stat.trend === 'down' ? 'trending-down' :
               'minus'
             }
             size={16}
             color={
-              stat.trend === 'up' ? theme.success : 
-              stat.trend === 'down' ? theme.danger : 
+              stat.trend === 'up' ? theme.success :
+              stat.trend === 'down' ? theme.danger :
               theme.textSecondary
             }
           />
         </View>
       </View>
-      
+
       <View style={styles.statContent}>
         <Text style={[styles.statValue, { color: theme.text }]}>
           {stat.value}
@@ -194,7 +201,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
         <Text style={[styles.statSubtitle, { color: theme.textSecondary }]}>
           {stat.subtitle}
         </Text>
-        
+
         {stat.trendValue && (
           <Text style={[
             styles.statTrendValue,
@@ -269,7 +276,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
           />
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.activityList}>
         {recentActivity.map((activity, index) => (
           <View key={activity.id} style={styles.activityItem}>
@@ -280,7 +287,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
                 color={activity.color}
               />
             </View>
-            
+
             <View style={styles.activityContent}>
               <Text style={[styles.activityTitle, { color: theme.text }]}>
                 {activity.title}
@@ -289,7 +296,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
                 {activity.description}
               </Text>
             </View>
-            
+
             <Text style={[styles.activityTime, { color: theme.textSecondary }]}>
               {activity.time}
             </Text>
@@ -305,7 +312,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
         Performance
       </Text>
-      
+
       <View style={styles.metricsGrid}>
         <View style={styles.metricItem}>
           <Text style={[styles.metricValue, { color: theme.success }]}>
@@ -315,7 +322,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
             Lavori Completati
           </Text>
         </View>
-        
+
         <View style={styles.metricItem}>
           <Text style={[styles.metricValue, { color: theme.primary }]}>
             {dashboardStats.activeCustomers}
@@ -324,7 +331,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
             Clienti Attivi
           </Text>
         </View>
-        
+
         <View style={styles.metricItem}>
           <Text style={[styles.metricValue, { color: theme.warning }]}>
             {dashboardStats.averageJobTime}h
@@ -333,7 +340,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
             Tempo Medio
           </Text>
         </View>
-        
+
         <View style={styles.metricItem}>
           <Text style={[styles.metricValue, { color: theme.warning }]}>
             {dashboardStats.customerSatisfaction}
@@ -366,7 +373,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
         <Text style={[styles.errorText, { color: theme.danger, marginTop: 16 }]}>
           {error}
         </Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: theme.primary }]}
           onPress={refreshStats}
         >
@@ -388,8 +395,8 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl 
-          refreshing={isLoading} 
+        <RefreshControl
+          refreshing={isLoading}
           onRefresh={refreshStats}
           tintColor={theme.primary}
           colors={[theme.primary]}
@@ -406,7 +413,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
             Ultimo aggiornamento: {new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
           </Text>
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.refreshButton}
           onPress={refreshStats}
         >
@@ -417,7 +424,70 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       {/* Statistiche Principali */}
       <View style={styles.statsContainer}>
         <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
-          {statCards.map((stat, index) => renderStatCard(stat, index))}
+          {statCards.map((stat, index) => {
+            if (stat.title === 'Auto in Officina') {
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.statCard,
+                    { backgroundColor: theme.surface },
+                    isDesktop ? styles.statCardDesktop : styles.statCardMobile
+                  ]}
+                  onPress={goToWorkshopCars} // Naviga alla schermata delle auto in officina
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.statCardHeader}>
+                    <View style={[styles.statIcon, { backgroundColor: `${stat.color}15` }]}>
+                      <MaterialCommunityIcons
+                        name={stat.icon as any}
+                        size={24}
+                        color={stat.color}
+                      />
+                    </View>
+
+                    <View style={styles.statTrend}>
+                      <MaterialCommunityIcons
+                        name={
+                          stat.trend === 'up' ? 'trending-up' :
+                          stat.trend === 'down' ? 'trending-down' :
+                          'minus'
+                        }
+                        size={16}
+                        color={
+                          stat.trend === 'up' ? theme.success :
+                          stat.trend === 'down' ? theme.danger :
+                          theme.textSecondary
+                        }
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.statContent}>
+                    <Text style={[styles.statValue, { color: theme.text }]}>
+                      {stat.value}
+                    </Text>
+                    <Text style={[styles.statTitle, { color: theme.textSecondary }]}>
+                      {stat.title}
+                    </Text>
+                    <Text style={[styles.statSubtitle, { color: theme.textSecondary }]}>
+                      {stat.subtitle}
+                    </Text>
+
+                    {stat.trendValue && (
+                      <Text style={[
+                        styles.statTrendValue,
+                        { color: stat.trend === 'up' ? theme.success : stat.trend === 'down' ? theme.danger : theme.textSecondary }
+                      ]}>
+                        {stat.trendValue}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+            return renderStatCard(stat, index);
+          })}
         </View>
       </View>
 
@@ -448,7 +518,7 @@ const styles = StyleSheet.create({
     padding: isDesktop ? 24 : 16,
     paddingBottom: 40,
   },
-  
+
   // Loading and Error States
   loadingContainer: {
     flex: 1,
@@ -481,7 +551,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  
+
   // Header
   headerContainer: {
     flexDirection: 'row',
@@ -497,7 +567,7 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
   },
-  
+
   // Stats Section
   statsContainer: {
     marginBottom: 32,

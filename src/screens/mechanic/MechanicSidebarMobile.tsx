@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
+import { useMechanicStats } from '../../hooks/useMechanicStats';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(screenWidth * 0.85, 320);
@@ -76,21 +77,48 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
     overlay: 'rgba(0, 0, 0, 0.5)',
   };
 
-  // Menu items con badge dinamici
+  // Importa useMechanicStats per ottenere dati reali
+  const { stats } = useMechanicStats();
+
+  // Menu items con badge dinamici basati sui dati reali
   const menuSections = {
     main: {
       title: 'Principale',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: 'view-dashboard', color: theme.primary },
-        { id: 'cars', label: 'Auto in Officina', icon: 'car-multiple', badge: 8, color: theme.success },
-        { id: 'calendar', label: 'Calendario', icon: 'calendar', badge: 3, color: theme.accent },
+        { 
+          id: 'cars', 
+          label: 'Auto in Officina', 
+          icon: 'car-multiple', 
+          badge: stats.carsInWorkshop, 
+          color: theme.success 
+        },
+        { 
+          id: 'calendar', 
+          label: 'Calendario', 
+          icon: 'calendar', 
+          badge: stats.appointmentsToday, 
+          color: theme.accent 
+        },
       ] as MenuItem[]
     },
     business: {
       title: 'Gestione',
       items: [
-        { id: 'invoices', label: 'Fatturazione', icon: 'receipt', badge: 5, color: theme.warning },
-        { id: 'customers', label: 'Clienti', icon: 'account-group', color: theme.primary },
+        { 
+          id: 'invoices', 
+          label: 'Fatturazione', 
+          icon: 'receipt', 
+          badge: stats.pendingInvoices, 
+          color: theme.warning 
+        },
+        { 
+          id: 'customers', 
+          label: 'Clienti', 
+          icon: 'account-group', 
+          badge: stats.activeCustomers,
+          color: theme.primary 
+        },
         { id: 'parts', label: 'Ricambi', icon: 'wrench', color: theme.success },
         { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.accent },
       ] as MenuItem[]
@@ -293,14 +321,14 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
             <View style={styles.quickStat}>
               <MaterialCommunityIcons name="star" size={14} color="#fbbf24" />
               <Text style={styles.quickStatText}>
-                0.0
+                {user?.rating?.toFixed(1) || '0.0'}
               </Text>
             </View>
             
             <View style={styles.quickStat}>
               <MaterialCommunityIcons name="account-group" size={14} color="rgba(255,255,255,0.8)" />
               <Text style={styles.quickStatText}>
-                0 recensioni
+                {user?.reviewsCount || 0} recensioni
               </Text>
             </View>
           </View>

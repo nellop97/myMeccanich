@@ -1,5 +1,6 @@
 // src/screens/mechanic/AllCarsInWorkshopScreen.tsx
 import { useNavigation } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Calendar,
   Car,
@@ -417,7 +418,22 @@ const AllCarsInWorkshopScreen = () => {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
       
-      
+      {/* Header con pulsante indietro */}
+      <View style={[styles.titleContainer, { borderBottomColor: theme.border }]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.text} />
+        </TouchableOpacity>
+        
+        <Text style={[styles.screenTitle, { color: theme.text }]}>
+          Auto in Officina
+        </Text>
+        
+        <View style={styles.placeholder} />
+      </View>
 
       <FlatList
         data={sortedCars}
