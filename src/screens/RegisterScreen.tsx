@@ -33,6 +33,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 // Firebase imports
 import { auth, db, isWeb } from '../services/firebase';
+
+// Car data imports
+import CarSearchModal from '../components/CarSearchModal';
+import { carDataService } from '../services/CarDataService';
 import {
   createUserWithEmailAndPassword,
   signInWithPopup,
@@ -184,6 +188,10 @@ const RegisterScreen: React.FC = () => {
 
   // Menù per specializzazioni
   const [showSpecializationsMenu, setShowSpecializationsMenu] = useState(false);
+  
+  // Car search modal
+  const [showCarSearchModal, setShowCarSearchModal] = useState(false);
+  const [currentCarIndex, setCurrentCarIndex] = useState(-1);
 
   // Opzioni disponibili
   const specializationOptions = [
@@ -320,6 +328,13 @@ const RegisterScreen: React.FC = () => {
           if (carDataList.length === 0) {
             newErrors.cars = 'Aggiungi almeno una auto';
           }
+          
+          // Validazione dati auto
+          carDataList.forEach((car, index) => {
+            if (!car.brand || !car.model || !car.year) {
+              newErrors[`car_${index}`] = 'Dati auto incompleti';
+            }
+          });
         }
         break;
 
@@ -464,7 +479,7 @@ const RegisterScreen: React.FC = () => {
   };
 
   // Gestione auto
-  const addCar = () => {
+  const addCar = async () => {
     const newErrors: Record<string, string> = {};
 
     if (!currentCarData.brand) newErrors.brand = 'Marca obbligatoria';
@@ -476,6 +491,24 @@ const RegisterScreen: React.FC = () => {
       newErrors.licensePlate = 'Formato targa non valido (es: AB123CD)';
     }
     if (!currentCarData.kilometers) newErrors.kilometers = 'Chilometraggio obbligatorio';
+
+    // Validazione dati auto con API
+    if (currentCarData.brand && currentCarData.model && currentCarData.year) {
+      try {
+        const isValid = await carDataService.validateCarData(
+          currentCarData.brand,
+          currentCarData.model,
+          parseInt(currentCarData.year)
+        );
+        
+        if (!isValid) {
+          newErrors.brand = 'Combinazione marca/modello/anno non valida';
+        }
+      } catch (error) {
+        console.warn('Impossibile validare dati auto:', error);
+        // Continua comunque senza bloccare l'utente
+      }
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -500,6 +533,36 @@ const RegisterScreen: React.FC = () => {
 
   const removeCar = (index: number) => {
     setCarDataList(carDataList.filter((_, i) => i !== index));
+  };
+
+  // Gestisce apertura modal ricerca auto
+  const openCarSearch = (index: number = -1) => {
+    setCurrentCarIndex(index);
+    setShowCarSearchModal(true);
+  };
+
+  // Gestisce selezione auto dal modal
+  const handleCarSelection = (selectedCar: { brand: string; model: string; year: string }) => {
+    if (currentCarIndex === -1) {
+      // Nuovo auto
+      setCurrentCarData({
+        ...currentCarData,
+        brand: selectedCar.brand,
+        model: selectedCar.model,
+        year: selectedCar.year,
+      });
+    } else {
+      // Modifica auto esistente
+      const updatedCars = [...carDataList];
+      updatedCars[currentCarIndex] = {
+        ...updatedCars[currentCarIndex],
+        brand: selectedCar.brand,
+        model: selectedCar.model,
+        year: selectedCar.year,
+      };
+      setCarDataList(updatedCars);
+    }
+    setShowCarSearchModal(false);
   };
 
   // Navigazione tra step
@@ -791,35 +854,49 @@ const RegisterScreen: React.FC = () => {
 
           <View style={styles.inputsContainer}>
             <View style={styles.addCarForm}>
-              <View style={styles.carFormRow}>
-                <TextInput
-                  label="Marca"
-                  value={currentCarData.brand}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, brand: text })}
-                  error={!!errors.brand}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
+              {/* Selezione Auto con Ricerca */}
+              <TouchableOpacity
+                style={[styles.carSearchButton, { backgroundColor: colors.primaryContainer, borderColor: colors.outline }]}
+                onPress={() => openCarSearch()}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="car-search"
+                  size={24}
+                  color={colors.primary}
                 />
-                <TextInput
-                  label="Modello"
-                  value={currentCarData.model}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, model: text })}
-                  error={!!errors.model}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
+                <View style={styles.carSearchContent}>
+                  {currentCarData.brand && currentCarData.model ? (
+                    <>
+                      <Text style={[styles.carSearchTitle, { color: colors.onSurface }]}>
+                        {currentCarData.brand} {currentCarData.model}
+                      </Text>
+                      {currentCarData.year && (
+                        <Text style={[styles.carSearchSubtitle, { color: colors.onSurfaceVariant }]}>
+                          Anno: {currentCarData.year}
+                        </Text>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Text style={[styles.carSearchTitle, { color: colors.onSurface }]}>
+                        Seleziona Auto
+                      </Text>
+                      <Text style={[styles.carSearchSubtitle, { color: colors.onSurfaceVariant }]}>
+                        Cerca tra migliaia di marche e modelli
+                      </Text>
+                    </>
+                  )}
+                </View>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={20}
+                  color={colors.onSurfaceVariant}
                 />
-              </View>
+              </TouchableOpacity>
 
+              {/* Campi aggiuntivi */}
               <View style={styles.carFormRow}>
-                <TextInput
-                  label="Anno"
-                  value={currentCarData.year}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, year: text })}
-                  keyboardType="numeric"
-                  error={!!errors.year}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
-                />
                 <TextInput
                   label="Targa"
                   value={currentCarData.licensePlate}
@@ -827,6 +904,36 @@ const RegisterScreen: React.FC = () => {
                   error={!!errors.licensePlate}
                   style={[styles.input, styles.halfWidth]}
                   mode="outlined"
+                  placeholder="AB123CD"
+                />
+                <TextInput
+                  label="Chilometri"
+                  value={currentCarData.kilometers}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, kilometers: text })}
+                  keyboardType="numeric"
+                  error={!!errors.kilometers}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                  placeholder="50000"
+                />
+              </View>
+
+              <View style={styles.carFormRow}>
+                <TextInput
+                  label="VIN (opzionale)"
+                  value={currentCarData.vin}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, vin: text.toUpperCase() })}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                  placeholder="17 caratteri"
+                />
+                <TextInput
+                  label="Colore (opzionale)"
+                  value={currentCarData.color}
+                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, color: text })}
+                  style={[styles.input, styles.halfWidth]}
+                  mode="outlined"
+                  placeholder="Rosso"
                 />
               </View>
 
@@ -863,19 +970,37 @@ const RegisterScreen: React.FC = () => {
                 </Text>
                 {carDataList.map((car, index) => (
                   <View key={index} style={[styles.carItem, { borderColor: colors.outline }]}>
-                    <View style={styles.carInfo}>
+                    <TouchableOpacity
+                      style={styles.carInfo}
+                      onPress={() => openCarSearch(index)}
+                      activeOpacity={0.7}
+                    >
                       <Text style={[styles.carTitle, { color: colors.onSurface }]}>
                         {car.brand} {car.model} ({car.year})
                       </Text>
                       <Text style={[styles.carSubtitle, { color: colors.onSurfaceVariant }]}>
                         {car.licensePlate} - {car.kilometers} km
                       </Text>
+                      {car.color && (
+                        <Text style={[styles.carDetails, { color: colors.onSurfaceVariant }]}>
+                          Colore: {car.color}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.carActions}>
+                      <IconButton
+                        icon="pencil"
+                        onPress={() => openCarSearch(index)}
+                        iconColor={colors.primary}
+                        size={20}
+                      />
+                      <IconButton
+                        icon="delete"
+                        onPress={() => removeCar(index)}
+                        iconColor={colors.error}
+                        size={20}
+                      />
                     </View>
-                    <IconButton
-                      icon="delete"
-                      onPress={() => removeCar(index)}
-                      iconColor={colors.error}
-                    />
                   </View>
                 ))}
               </View>
@@ -1105,6 +1230,34 @@ const RegisterScreen: React.FC = () => {
       fontSize: 12,
       marginTop: 2,
     },
+    carDetails: {
+      fontSize: 11,
+      marginTop: 1,
+    },
+    carActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    carSearchButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 16,
+    },
+    carSearchContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    carSearchTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    carSearchSubtitle: {
+      fontSize: 12,
+      marginTop: 2,
+    },
     finalStepContent: {
       alignItems: 'center',
       marginTop: 40,
@@ -1147,6 +1300,17 @@ const RegisterScreen: React.FC = () => {
           {renderNavigationButtons()}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Car Search Modal */}
+      <CarSearchModal
+        visible={showCarSearchModal}
+        onClose={() => setShowCarSearchModal(false)}
+        onSelect={handleCarSelection}
+        initialData={
+          currentCarIndex >= 0 ? carDataList[currentCarIndex] : currentCarData
+        }
+        isDark={isDark}
+      />
     </View>
   );
 };
