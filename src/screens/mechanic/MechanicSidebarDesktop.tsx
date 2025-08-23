@@ -69,15 +69,16 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
       title: 'Principale',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: 'view-dashboard', color: theme.primary },
-        { id: 'cars', label: 'Auto in Officina', icon: 'car-multiple', badge: 8, color: theme.success },
-        { id: 'calendar', label: 'Calendario', icon: 'calendar', badge: 3, color: theme.accent },
+        { id: 'AllCarsInWorkshop', label: 'Auto in Officina', icon: 'car-multiple', badge: 8, color: theme.success },
+        { id: 'MechanicCalendar', label: 'Calendario', icon: 'calendar', badge: 3, color: theme.accent },
+        { id: 'NewAppointment', label: 'Nuovo Appuntamento', icon: 'car-plus', color: theme.accent },
       ] as MenuItem[]
     },
     business: {
       title: 'Gestione',
       items: [
-        { id: 'invoices', label: 'Fatturazione', icon: 'receipt', badge: 5, color: theme.warning },
-        { id: 'customers', label: 'Clienti', icon: 'account-group', color: theme.primary },
+        { id: 'InvoicingDashboard', label: 'Fatturazione', icon: 'receipt', badge: 5, color: theme.warning },
+        { id: 'CustomersList', label: 'Clienti', icon: 'account-group', color: theme.primary },
         { id: 'parts', label: 'Ricambi', icon: 'wrench', color: theme.success },
         { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.accent },
       ] as MenuItem[]
@@ -85,7 +86,7 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
     account: {
       title: 'Account',
       items: [
-        { id: 'profile', label: 'Il Mio Profilo', icon: 'account', color: theme.text },
+        { id: 'Profile', label: 'Il Mio Profilo', icon: 'account', color: theme.text },
         { id: 'settings', label: 'Impostazioni', icon: 'cog', color: theme.textSecondary },
       ] as MenuItem[]
     }
@@ -97,6 +98,37 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
         ? prev.filter(id => id !== sectionId)
         : [...prev, sectionId]
     );
+  };
+
+  const handleMenuNavigation = (itemId: string) => {
+    // For now, just handle the main dashboard items
+    // You can extend this based on your navigation needs
+    switch (itemId) {
+      case 'dashboard':
+        // Stay on current dashboard - no navigation needed
+        break;
+      case 'AllCarsInWorkshop':
+        onTabChange('cars'); // This will change the tab in the dashboard
+        break;
+      case 'MechanicCalendar':
+        onTabChange('calendar'); // This will change the tab in the dashboard
+        break;
+      case 'NewAppointment':
+        // Navigate to the actual NewAppointment screen
+        // You might need to pass navigation prop or use a different method
+        break;
+      case 'InvoicingDashboard':
+        onTabChange('invoices'); // This will change the tab in the dashboard
+        break;
+      case 'CustomersList':
+        onTabChange('customers'); // This will change the tab in the dashboard
+        break;
+      case 'Profile':
+        // Navigate to profile screen
+        break;
+      default:
+        console.log('Navigation not implemented for:', itemId);
+    }
   };
 
   const handleLogout = () => {
@@ -224,7 +256,7 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
         styles.menuItem,
         isActive && { backgroundColor: theme.primaryLight },
       ]}
-      onPress={() => onTabChange(item.id)}
+      onPress={() => handleMenuNavigation(item.id)}
       activeOpacity={0.7}
     >
       <View style={styles.menuItemContent}>

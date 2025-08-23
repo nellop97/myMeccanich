@@ -29,6 +29,7 @@ import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 import CalendarAppointmentPicker from './CalendarAppointmentPicker';
 import UserSearchModal from '../../components/UserSearchModal';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width: screenWidth } = Dimensions.get('window');
 
