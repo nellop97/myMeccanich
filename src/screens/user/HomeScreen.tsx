@@ -1,4 +1,5 @@
-// src/screens/user/HomeScreen.tsx - VERSIONE TEMATIZZATA E RESPONSIVE
+
+// src/screens/user/HomeScreen.tsx - VERSIONE CON DATI REALI DA FIREBASE
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
@@ -48,8 +49,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 // Importa il nuovo sistema di temi
 import { useAppThemeManager, useThemedStyles } from '../../hooks/useTheme';
 
-// ✅ USA SOLO FIREBASE AUTH
+// ✅ USA SOLO FIREBASE AUTH E USERDATA
 import { useAuth } from '../../hooks/useAuth';
+import { useUserData } from '../../hooks/useUserData';
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -59,8 +61,22 @@ const HomeScreen: React.FC = () => {
   const { colors, isDark, toggleTheme } = useAppThemeManager();
   const { dynamicStyles } = useThemedStyles();
   
-  // ✅ USA SOLO USEAUTH - FONTE SICURA
+  // ✅ USA HOOKS PER DATI REALI
   const { user, logout, loading: authLoading } = useAuth();
+  const { 
+    vehicles,
+    recentMaintenance, 
+    upcomingReminders, 
+    recentFuelRecords, 
+    recentExpenses,
+    loading: dataLoading, 
+    error: dataError,
+    refreshData,
+    stats,
+    hasVehicles,
+    hasReminders,
+    hasOverdueReminders
+  } = useUserData();
   
   // Responsive hooks
   const [screenData, setScreenData] = useState(Dimensions.get('window'));
@@ -109,15 +125,14 @@ const HomeScreen: React.FC = () => {
     setRefreshing(true);
     
     try {
-      // Simula il caricamento dei dati
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await refreshData();
       console.log('✅ HomeScreen: onRefresh completato');
     } catch (error) {
       console.error('❌ HomeScreen: onRefresh errore:', error);
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [refreshData]);
 
   // 🚪 Gestione logout
   const handleLogout = useCallback(async () => {
@@ -162,8 +177,8 @@ const HomeScreen: React.FC = () => {
   }, [navigation]);
 
   // ✅ CONTROLLO DI SICUREZZA DOPO TUTTI GLI HOOKS
-  if (!user) {
-    console.log('⚠️ HomeScreen: user is undefined, showing loading...');
+  if (!user || dataLoading || authLoading) {
+    console.log('⚠️ HomeScreen: loading state, showing loading...');
     return (
       <View style={{ 
         flex: 1, 
@@ -177,7 +192,7 @@ const HomeScreen: React.FC = () => {
           color: colors.onBackground,
           fontSize: 16 
         }}>
-          Caricamento profilo...
+          {!user ? 'Caricamento profilo...' : 'Caricamento dati...'}
         </Text>
       </View>
     );
@@ -189,69 +204,74 @@ const HomeScreen: React.FC = () => {
                   user?.email?.split('@')[0] ||
                   'Utente';
 
-  // Dati mockup per le statistiche
+  // ✅ DATI REALI DA FIREBASE - sostituisce userStats mockup
   const userStats = {
-    totalCars: 2,
-    totalMaintenance: 12,
-    totalExpenses: 2450.50,
-    upcomingMaintenance: 3,
-    overdueItems: 1,
-    lastMaintenanceDate: '15 Nov 2024',
-    nextServiceDate: '15 Dic 2024',
-    monthlyExpenses: 350.75,
+    totalCars: stats.vehiclesCount,
+    totalMaintenance: stats.maintenanceCount,
+    totalExpenses: stats.totalExpenses + stats.totalFuelCost, // Combina spese e carburante
+    upcomingMaintenance: stats.remindersCount,
+    overdueItems: stats.overdueReminders,
+    lastMaintenanceDate: recentMaintenance[0] ? new Date(recentMaintenance[0].completedDate?.toDate?.() || recentMaintenance[0].completedDate).toLocaleDateString('it-IT') : 'N/A',
+    nextServiceDate: upcomingReminders[0] ? new Date(upcomingReminders[0].dueDate?.toDate?.() || upcomingReminders[0].dueDate).toLocaleDateString('it-IT') : 'N/A',
+    monthlyExpenses: stats.totalExpenses, // Spese del mese
   };
 
+  // ✅ ATTIVITÀ RECENTI REALI DA FIREBASE
   const recentActivities = [
-    {
-      id: 1,
+    // Manutenzioni recenti
+    ...recentMaintenance.slice(0, 2).map((maintenance, index) => ({
+      id: `maintenance_${maintenance.id}`,
       type: 'maintenance',
-      title: 'Cambio olio motore',
-      car: 'BMW X3',
-      date: '2024-11-15',
-      cost: 85.50,
+      title: maintenance.description || maintenance.type,
+      car: vehicles.find(v => v.id === maintenance.vehicleId)?.make + ' ' + vehicles.find(v => v.id === maintenance.vehicleId)?.model || 'Auto',
+      date: new Date(maintenance.completedDate?.toDate?.() || maintenance.completedDate).toLocaleDateString('it-IT'),
+      cost: maintenance.cost || 0,
       icon: Wrench,
       color: colors.primary,
-    },
-    {
-      id: 2,
+    })),
+    
+    // Rifornimenti recenti
+    ...recentFuelRecords.slice(0, 1).map((fuel, index) => ({
+      id: `fuel_${fuel.id}`,
       type: 'fuel',
       title: 'Rifornimento',
-      car: 'Audi A4',
-      date: '2024-11-12',
-      cost: 65.20,
+      car: vehicles.find(v => v.id === fuel.vehicleId)?.make + ' ' + vehicles.find(v => v.id === fuel.vehicleId)?.model || 'Auto',
+      date: new Date(fuel.date?.toDate?.() || fuel.date).toLocaleDateString('it-IT'),
+      cost: fuel.totalCost || 0,
       icon: Fuel,
       color: colors.tertiary,
-    },
-    {
-      id: 3,
+    })),
+    
+    // Spese recenti
+    ...recentExpenses.slice(0, 1).map((expense, index) => ({
+      id: `expense_${expense.id}`,
       type: 'expense',
-      title: 'Assicurazione',
-      car: 'BMW X3',
-      date: '2024-11-10',
-      cost: 450.00,
-      icon: Shield,
+      title: expense.description || expense.category,
+      car: vehicles.find(v => v.id === expense.vehicleId)?.make + ' ' + vehicles.find(v => v.id === expense.vehicleId)?.model || 'Auto',
+      date: new Date(expense.date?.toDate?.() || expense.date).toLocaleDateString('it-IT'),
+      cost: expense.amount || 0,
+      icon: DollarSign,
       color: colors.secondary,
-    },
-  ];
+    })),
+  ].slice(0, 3); // Mostra solo le prime 3 attività
 
-  const upcomingMaintenances = [
-    {
-      id: 1,
-      title: 'Revisione periodica',
-      car: 'BMW X3',
-      dueDate: '2024-12-15',
-      type: 'scheduled',
-      priority: 'medium',
-    },
-    {
-      id: 2,
-      title: 'Cambio gomme invernali',
-      car: 'Audi A4',
-      dueDate: '2024-12-01',
-      type: 'seasonal',
-      priority: 'high',
-    },
-  ];
+  // ✅ MANUTENZIONI IN SCADENZA REALI DA FIREBASE
+  const upcomingMaintenances = upcomingReminders.slice(0, 3).map(reminder => ({
+    id: reminder.id,
+    title: reminder.title,
+    car: vehicles.find(v => v.id === reminder.vehicleId)?.make + ' ' + vehicles.find(v => v.id === reminder.vehicleId)?.model || 'Auto',
+    dueDate: new Date(reminder.dueDate?.toDate?.() || reminder.dueDate).toLocaleDateString('it-IT'),
+    type: reminder.type || 'scheduled',
+    priority: reminder.priority || 'medium',
+  }));
+
+  // ✅ FORMATO MONETA ITALIANO
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('it-IT', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount);
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -495,6 +515,24 @@ const HomeScreen: React.FC = () => {
       color: colors.onSurfaceVariant,
     },
 
+    // Empty state
+    emptyState: {
+      alignItems: 'center',
+      padding: 40,
+    },
+    emptyStateText: {
+      fontSize: 16,
+      color: colors.onSurfaceVariant,
+      textAlign: 'center',
+      marginTop: 16,
+    },
+    emptyStateSubtext: {
+      fontSize: 14,
+      color: colors.onSurfaceVariant,
+      textAlign: 'center',
+      marginTop: 8,
+    },
+
     // FAB
     fab: {
       position: 'absolute',
@@ -537,7 +575,7 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.activitySubtitle}>{activity.car}</Text>
         <View style={styles.activityMeta}>
           <Text style={styles.activityDate}>{activity.date}</Text>
-          <Text style={styles.activityCost}>€{activity.cost.toFixed(2)}</Text>
+          <Text style={styles.activityCost}>{formatCurrency(activity.cost)}</Text>
         </View>
       </View>
       <ChevronRight size={20} color={colors.onSurfaceVariant} />
@@ -576,6 +614,15 @@ const HomeScreen: React.FC = () => {
     );
   };
 
+  // Componente EmptyState
+  const EmptyState = ({ icon: Icon, title, subtitle }: any) => (
+    <View style={styles.emptyState}>
+      <Icon size={48} color={colors.onSurfaceVariant} />
+      <Text style={styles.emptyStateText}>{title}</Text>
+      <Text style={styles.emptyStateSubtext}>{subtitle}</Text>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       {/* Background Gradient */}
@@ -601,18 +648,22 @@ const HomeScreen: React.FC = () => {
               Ciao, {userName.split(' ')[0]}! 👋
             </Text>
             <Text style={styles.headerSubtitle}>
-              Gestisci le tue automobili
+              {hasVehicles ? `${stats.vehiclesCount} ${stats.vehiclesCount === 1 ? 'auto registrata' : 'auto registrate'}` : 'Inizia registrando la tua prima auto'}
             </Text>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
               style={styles.notificationButton}
-              onPress={() => Alert.alert('Notifiche', 'Funzione in sviluppo')}
+              onPress={() => handleNavigation('Reminders')}
             >
               <Bell size={20} color={colors.primary} />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationCount}>3</Text>
-              </View>
+              {stats.remindersCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationCount}>
+                    {stats.remindersCount > 99 ? '99+' : stats.remindersCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -654,26 +705,26 @@ const HomeScreen: React.FC = () => {
             <StatCard
               icon={Car}
               number={userStats.totalCars}
-              label="Auto"
+              label={userStats.totalCars === 1 ? "Auto" : "Auto"}
               color={colors.primary}
             />
             <StatCard
               icon={Wrench}
               number={userStats.totalMaintenance}
-              label="Manutenzioni"
+              label={userStats.totalMaintenance === 1 ? "Manutenzione" : "Manutenzioni"}
               color={colors.secondary}
             />
             <StatCard
               icon={DollarSign}
-              number={`€${userStats.totalExpenses}`}
+              number={formatCurrency(userStats.totalExpenses)}
               label="Spese Totali"
               color={colors.tertiary}
             />
             <StatCard
-              icon={Clock}
+              icon={hasOverdueReminders ? AlertCircle : Clock}
               number={userStats.upcomingMaintenance}
-              label="Scadenze"
-              color={colors.warning}
+              label={hasOverdueReminders ? "Scadute" : "Scadenze"}
+              color={hasOverdueReminders ? colors.error : colors.warning}
             />
           </View>
         </View>
@@ -712,25 +763,66 @@ const HomeScreen: React.FC = () => {
         {/* Recent Activities */}
         <View style={styles.activitiesSection}>
           <Text style={styles.sectionTitle}>Attività recenti</Text>
-          {recentActivities.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} />
-          ))}
+          {recentActivities.length > 0 ? (
+            recentActivities.map((activity) => (
+              <ActivityCard key={activity.id} activity={activity} />
+            ))
+          ) : (
+            <EmptyState
+              icon={Activity}
+              title="Nessuna attività recente"
+              subtitle="Le tue manutenzioni e rifornimenti appariranno qui"
+            />
+          )}
         </View>
 
         {/* Upcoming Maintenance */}
         <View style={styles.maintenanceSection}>
-          <Text style={styles.sectionTitle}>Manutenzioni in scadenza</Text>
-          {upcomingMaintenances.map((maintenance) => (
-            <MaintenanceCard key={maintenance.id} maintenance={maintenance} />
-          ))}
+          <Text style={styles.sectionTitle}>
+            {hasOverdueReminders ? "Scadenze importanti" : "Prossime scadenze"}
+          </Text>
+          {upcomingMaintenances.length > 0 ? (
+            upcomingMaintenances.map((maintenance) => (
+              <MaintenanceCard key={maintenance.id} maintenance={maintenance} />
+            ))
+          ) : (
+            <EmptyState
+              icon={Calendar}
+              title="Nessuna scadenza programmata"
+              subtitle="Aggiungi promemoria per non dimenticare le manutenzioni"
+            />
+          )}
         </View>
+
+        {/* Messaggio di errore se presente */}
+        {dataError && (
+          <Card style={{ backgroundColor: colors.errorContainer, margin: 16, padding: 16 }}>
+            <Text style={{ color: colors.onErrorContainer }}>
+              Errore nel caricamento dati: {dataError}
+            </Text>
+            <Button 
+              mode="text" 
+              onPress={refreshData}
+              textColor={colors.onErrorContainer}
+              style={{ marginTop: 8 }}
+            >
+              Riprova
+            </Button>
+          </Card>
+        )}
       </ScrollView>
 
       {/* Floating Action Button */}
       <FAB
         icon="plus"
         style={styles.fab}
-        onPress={() => Alert.alert('Menu Rapido', 'Funzione in sviluppo')}
+        onPress={() => Alert.alert('Menu Rapido', 'Scegli cosa aggiungere', [
+          { text: 'Nuova Auto', onPress: () => handleNavigation('AddCar') },
+          { text: 'Manutenzione', onPress: () => handleNavigation('AddMaintenance') },
+          { text: 'Rifornimento', onPress: () => handleNavigation('AddFuel') },
+          { text: 'Spesa', onPress: () => handleNavigation('AddExpense') },
+          { text: 'Annulla', style: 'cancel' },
+        ])}
         color={colors.onPrimary}
       />
     </View>
