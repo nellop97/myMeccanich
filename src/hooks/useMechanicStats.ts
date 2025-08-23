@@ -1,4 +1,3 @@
-
 // src/hooks/useMechanicStats.ts - Hook per statistiche meccanico da Firebase
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
@@ -13,6 +12,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useFirebaseInvoices } from './useFirebaseInvoices';
 
 export interface MechanicStats {
   carsInWorkshop: number;
@@ -54,16 +54,19 @@ export const useMechanicStats = () => {
     averageJobTime: 0,
     customerSatisfaction: 0,
   });
-  
+
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Carica dati fatturazione da Firebase
+  const { stats: invoiceStats, loading: invoicesLoading } = useFirebaseInvoices();
 
   // Utility per formattare il tempo
   const formatTimeAgo = useCallback((date: Date): string => {
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
+
     if (diffInSeconds < 60) return 'ora';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minuti fa`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} ore fa`;
@@ -79,7 +82,7 @@ export const useMechanicStats = () => {
         where('mechanicId', '==', mechanicId),
         where('status', 'in', ['in_progress', 'waiting_parts', 'ready_for_pickup'])
       );
-      
+
       const carsSnapshot = await getDocs(carsQuery);
       return carsSnapshot.size;
     } catch (error) {
@@ -103,7 +106,7 @@ export const useMechanicStats = () => {
         where('date', '<', Timestamp.fromDate(tomorrow)),
         where('status', '!=', 'cancelled')
       );
-      
+
       const appointmentsSnapshot = await getDocs(appointmentsQuery);
       return appointmentsSnapshot.size;
     } catch (error) {
@@ -119,7 +122,7 @@ export const useMechanicStats = () => {
       const weekStart = new Date(today);
       weekStart.setDate(today.getDate() - today.getDay());
       weekStart.setHours(0, 0, 0, 0);
-      
+
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 7);
 
@@ -130,7 +133,7 @@ export const useMechanicStats = () => {
         where('date', '<', Timestamp.fromDate(weekEnd)),
         where('status', '!=', 'cancelled')
       );
-      
+
       const appointmentsSnapshot = await getDocs(appointmentsQuery);
       return appointmentsSnapshot.size;
     } catch (error) {
@@ -147,7 +150,7 @@ export const useMechanicStats = () => {
         where('mechanicId', '==', mechanicId),
         where('status', '==', 'pending')
       );
-      
+
       const invoicesSnapshot = await getDocs(invoicesQuery);
       const invoices = invoicesSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -178,11 +181,11 @@ export const useMechanicStats = () => {
   const loadMonthlyRevenue = useCallback(async (mechanicId: string): Promise<{ revenue: number, growth: number }> => {
     try {
       const today = new Date();
-      
+
       // Mese corrente
       const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      
+
       // Mese precedente
       const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
@@ -293,7 +296,7 @@ export const useMechanicStats = () => {
   const loadRecentActivity = useCallback(async (mechanicId: string): Promise<RecentActivity[]> => {
     try {
       const activities: RecentActivity[] = [];
-      
+
       // Auto aggiunte recentemente
       const recentCarsQuery = query(
         collection(db, 'workshop_cars'),
@@ -450,8 +453,7 @@ export const useMechanicStats = () => {
 
   return {
     stats,
-    recentActivity,
-    isLoading,
+    loading: isLoading || invoicesLoading,
     error,
     refreshStats,
   };

@@ -13,6 +13,9 @@ import {
   Search,
   TrendingUp,
   Users,
+  AlertTriangle,
+  CheckCircle,
+  Send,
 } from 'lucide-react-native';
 import React, { useState, useMemo } from 'react';
 import {
@@ -29,14 +32,34 @@ import {
   View,
 } from 'react-native';
 import { useStore } from '../../store';
-import { useInvoicingStore, Invoice, InvoiceStatus } from '../../store/invoicingStore';
+import {
+  useInvoicingStore,
+  InvoiceItem,
+  Customer,
+  InvoiceType,
+  PaymentMethod,
+} from '../../store/invoicingStore';
+import { useFirebaseInvoices } from '../../hooks/useFirebaseInvoices';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const InvoicingDashboardScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
-  const { invoices, customers, getInvoiceStats, updateInvoiceStatus } = useInvoicingStore();
+
+  // Usa dati Firebase per fatture
+  const {
+    invoices: firebaseInvoices,
+    loading: invoicesLoading,
+    error: invoicesError,
+    stats: invoiceStats,
+    markAsPaid,
+    getInvoicesByStatus,
+    searchInvoices,
+  } = useFirebaseInvoices();
+
+  // Mantiene Zustand solo per clienti (per ora)
+  const { customers } = useInvoicingStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | 'all'>('all');
@@ -56,21 +79,18 @@ const InvoicingDashboardScreen = () => {
     error: '#ef4444',
   };
 
-  const stats = useMemo(() => getInvoiceStats(), [invoices]);
+  const stats = invoiceStats;
 
   // Filtra le fatture
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter(invoice => {
-      const matchesSearch =
-        invoice.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        invoice.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        invoice.notes?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredInvoices = firebaseInvoices.filter(invoice => {
+    const matchesSearch = !searchQuery ||
+      invoice.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.customerName.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesFilter = filterStatus === 'all' || invoice.status === filterStatus;
+    const matchesFilter = filterStatus === 'all' || invoice.status === filterStatus;
 
-      return matchesSearch && matchesFilter;
-    });
-  }, [invoices, searchQuery, filterStatus]);
+    return matchesSearch && matchesFilter;
+  });
 
   const getStatusColor = (status: InvoiceStatus) => {
     switch (status) {
@@ -95,7 +115,7 @@ const InvoicingDashboardScreen = () => {
   };
 
   const handleMarkAsPaid = (invoiceId: string) => {
-    updateInvoiceStatus(invoiceId, 'paid');
+    markAsPaid(invoiceId);
   };
 
   const formatCurrency = (amount: number) => {
@@ -141,75 +161,67 @@ const InvoicingDashboardScreen = () => {
     </View>
   );
 
-  const renderInvoiceCard = ({ item: invoice }: { item: Invoice }) => {
-    const customer = customers.find(c => c.id === invoice.customerId);
-    const isOverdue = invoice.status === 'sent' && new Date(invoice.dueDate) < new Date();
+  const renderInvoiceCard = ({ item }: { item: any }) => {
+    const isOverdue = item.status === 'sent' && new Date(item.dueDate) < new Date();
+    const statusColor = getStatusColor(isOverdue ? 'overdue' : item.status);
 
     return (
-      <TouchableOpacity
-        style={[styles.invoiceCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-        onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={[styles.invoiceCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+        onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: item.id })}
+        activeOpacity={0.7}>
         <View style={styles.invoiceCardHeader}>
           <View style={styles.invoiceMainInfo}>
             <Text style={[styles.invoiceNumber, { color: theme.text }]}>
-              {invoice.number}
+              {item.invoiceNumber}
             </Text>
-            <Text style={[styles.customerName, { color: theme.textSecondary }]}>
-              {invoice.customerName}
+            <Text style={[styles.customerName, { color: theme.text }]}>
+              {item.customerName}
             </Text>
             <Text style={[styles.invoiceDate, { color: theme.textSecondary }]}>
-              {formatDate(invoice.issueDate)}
+              Emessa il {formatDate(item.issueDate)}
             </Text>
           </View>
 
           <View style={styles.invoiceAmountContainer}>
             <Text style={[styles.invoiceAmount, { color: theme.text }]}>
-              {formatCurrency(invoice.totalAmount)}
+              {formatCurrency(item.totalAmount)}
             </Text>
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(invoice.status) + '20' }
-            ]}>
-              <Text style={[
-                styles.statusText,
-                { color: getStatusColor(invoice.status) }
-              ]}>
-                {getStatusText(invoice.status)}
+            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+              <Text style={[styles.statusText, { color: statusColor }]}>
+                {getStatusText(isOverdue ? 'overdue' : item.status)}
               </Text>
             </View>
           </View>
         </View>
 
         {isOverdue && (
-          <View style={[styles.overdueWarning, { backgroundColor: theme.error + '20' }]}>
-            <AlertCircle size={16} color={theme.error} />
+          <View style={[styles.overdueWarning, { backgroundColor: theme.error + '10' }]}>
+            <AlertTriangle size={16} color={theme.error} />
             <Text style={[styles.overdueText, { color: theme.error }]}>
-              Scaduta il {formatDate(invoice.dueDate)}
+              Scaduta da {Math.ceil((Date.now() - new Date(item.dueDate).getTime()) / (1000 * 60 * 60 * 24))} giorni
             </Text>
           </View>
         )}
 
-        <View style={styles.invoiceActions}>
-          {invoice.status === 'sent' && (
+        {item.status === 'sent' && (
+          <View style={styles.invoiceActions}>
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: theme.success }]}
-              onPress={() => handleMarkAsPaid(invoice.id)}
+              onPress={() => handleMarkAsPaid(item.id)}
             >
-              <CreditCard size={16} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Segna come Pagata</Text>
+              <CheckCircle size={16} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Segna Pagata</Text>
             </TouchableOpacity>
-          )}
 
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryAction, { borderColor: theme.border }]}
-            onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
-          >
-            <FileText size={16} color={theme.accent} />
-            <Text style={[styles.secondaryActionText, { color: theme.accent }]}>Dettagli</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryAction, { borderColor: theme.border }]}
+              onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: item.id })}
+            >
+              <Send size={16} color={theme.text} />
+              <Text style={[styles.actionButtonText, { color: theme.text }]}>Invia</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -284,7 +296,7 @@ const InvoicingDashboardScreen = () => {
             value={formatCurrency(stats.totalRevenue)}
             subtitle={`${stats.totalInvoices} fatture`}
             icon={DollarSign}
-            iconBg={darkMode ? '#065f46' : '#d1fae5'}
+            iconBg={darkMode ? '#065f46' : '#10b981'}
             iconColor={darkMode ? '#10b981' : '#059669'}
             trend={growthRate}
           />
@@ -388,7 +400,19 @@ const InvoicingDashboardScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {filteredInvoices.length === 0 ? (
+          {invoicesLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+                Caricamento fatture...
+              </Text>
+            </View>
+          ) : invoicesError ? (
+            <View style={styles.errorContainer}>
+              <Text style={[styles.errorText, { color: theme.error }]}>
+                Errore nel caricamento: {invoicesError}
+              </Text>
+            </View>
+          ) : filteredInvoices.length === 0 ? (
             <View style={styles.emptyState}>
               <FileText size={48} color={theme.textSecondary} />
               <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
@@ -719,6 +743,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
 
