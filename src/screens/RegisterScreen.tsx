@@ -32,7 +32,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // Firebase imports
-import { auth, db, isWeb, getFirebaseErrorMessage } from '../services/firebase';
+import { auth, db, isWeb } from '../services/firebase';
 
 // Car data imports
 import CarSearchModal from '../components/CarSearchModal';
@@ -44,16 +44,7 @@ import {
   GoogleAuthProvider,
   User as FirebaseUser
 } from 'firebase/auth';
-import { 
-  doc, 
-  setDoc, 
-  serverTimestamp, 
-  collection, 
-  query, 
-  where, 
-  limit, 
-  getDocs 
-} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Importa il nuovo sistema di temi
 import { useAppThemeManager, useThemedStyles } from '../hooks/useTheme';
@@ -456,33 +447,6 @@ const RegisterScreen: React.FC = () => {
     }
   };
 
-  // Controllo se email esiste già
-  const checkEmailExists = useCallback(async (email: string): Promise<boolean> => {
-    try {
-      // Primo controllo: verifica se esiste un utente con questa email in Firestore
-      const usersQuery = query(
-        collection(db, 'users'),
-        where('email', '==', email.toLowerCase().trim()),
-        limit(1)
-      );
-      
-      const querySnapshot = await getDocs(usersQuery);
-      
-      if (!querySnapshot.empty) {
-        return true; // Email già registrata in Firestore
-      }
-
-      // Secondo controllo: usa Firebase Auth per verificare
-      // Questo è un po' più complicato perché Firebase Auth non ha un metodo diretto
-      // Ma il tentativo di registrazione ci dirà se l'email esiste già
-      return false;
-      
-    } catch (error: any) {
-      console.error('Errore controllo email:', error);
-      return false; // In caso di errore, procedi con la registrazione normale
-    }
-  }, []);
-
   // Gestione registrazione con email
   const handleEmailRegister = async () => {
     if (!validateStep(1) || !validateStep(2) || !validateStep(3) || !validateStep(4)) {
@@ -492,19 +456,6 @@ const RegisterScreen: React.FC = () => {
     setLoading(true);
 
     try {
-      // Controlla se l'email esiste già
-      const emailExists = await checkEmailExists(formData.email);
-      
-      if (emailExists) {
-        Alert.alert(
-          'Email già registrata',
-          'Questa email è già associata a un account esistente. Prova a effettuare il login o usa un\'altra email.',
-          [{ text: 'OK' }]
-        );
-        setLoading(false);
-        return;
-      }
-
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
@@ -521,16 +472,7 @@ const RegisterScreen: React.FC = () => {
 
     } catch (error: any) {
       console.error('❌ Errore registrazione:', error);
-      
-      // Gestisci specificamente l'errore di email già in uso
-      if (error.code === 'auth/email-already-in-use') {
-        Alert.alert(
-          'Email già registrata',
-          'Questa email è già associata a un account esistente. Prova a effettuare il login o usa un\'altra email.'
-        );
-      } else {
-        Alert.alert('Errore', getFirebaseErrorMessage(error));
-      }
+      Alert.alert('Errore', error.message);
     } finally {
       setLoading(false);
     }
