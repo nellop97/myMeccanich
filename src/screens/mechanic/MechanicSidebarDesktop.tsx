@@ -96,9 +96,16 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('🚪 Desktop Sidebar: Iniziando logout...');
               await logout();
+              console.log('✅ Desktop Sidebar: Logout completato');
             } catch (error) {
-              console.error('Errore durante il logout:', error);
+              console.error('❌ Desktop Sidebar: Errore durante il logout:', error);
+              Alert.alert(
+                'Errore',
+                'Si è verificato un errore durante il logout. Riprova.',
+                [{ text: 'OK' }]
+              );
             }
           }
         }

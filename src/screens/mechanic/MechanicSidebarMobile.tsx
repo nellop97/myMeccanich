@@ -147,11 +147,20 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           text: 'Esci', 
           style: 'destructive',
           onPress: async () => {
-            closeDrawer();
             try {
+              console.log('🚪 Mobile Sidebar: Iniziando logout...');
               await logout();
+              console.log('✅ Mobile Sidebar: Logout completato');
+              // Chiudi il drawer solo dopo il logout riuscito
+              closeDrawer();
             } catch (error) {
-              console.error('Errore durante il logout:', error);
+              console.error('❌ Mobile Sidebar: Errore durante il logout:', error);
+              Alert.alert(
+                'Errore',
+                'Si è verificato un errore durante il logout. Riprova.',
+                [{ text: 'OK' }]
+              );
+              // Non chiudere il drawer se c'è un errore
             }
           }
         }

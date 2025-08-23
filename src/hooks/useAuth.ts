@@ -508,11 +508,28 @@ export const useAuth = (): AuthContextType => {
   const logout = useCallback(async (): Promise<void> => {
     try {
       console.log('🚪 Logout in corso...');
+      setLoading(true);
+      
+      // Esegui il logout da Firebase
       await signOut(auth);
-      console.log('✅ Logout completato');
+      
+      // Reset manuale dello stato se necessario
+      setUser(null);
+      
+      console.log('✅ Logout completato con successo');
     } catch (error: any) {
       console.error('❌ Errore durante il logout:', error);
-      showError(getFirebaseErrorMessage(error));
+      
+      // In caso di errore, forza comunque il reset dell'utente
+      setUser(null);
+      
+      const errorMessage = getFirebaseErrorMessage(error);
+      showError(`Errore durante il logout: ${errorMessage}`);
+      
+      // Re-throw l'errore per permettere ai componenti di gestirlo
+      throw error;
+    } finally {
+      setLoading(false);
     }
   }, [showError]);
 
