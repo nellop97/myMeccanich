@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
 import { useMechanicStats } from '../../hooks/useMechanicStats';
+import { useAppThemeManager } from '../../hooks/useTheme';
 
 const SIDEBAR_WIDTH = 280;
 
@@ -31,19 +32,21 @@ interface MenuItem {
 
 const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
-  const store = useStore();
-  const { darkMode } = store;
+  const { darkMode } = useStore();
+  const { toggleTheme, isDark } = useAppThemeManager();
   
-  // Funzione sicura per toggle dark mode
+  // Funzione per toggle dark mode usando il nuovo hook
   const handleToggleDarkMode = () => {
     try {
-      if (store && typeof store.toggleDarkMode === 'function') {
-        store.toggleDarkMode();
-      } else {
-        console.warn('toggleDarkMode function not available');
-      }
+      console.log('🎨 Toggling theme from:', isDark ? 'dark' : 'light');
+      toggleTheme();
+      console.log('✅ Theme toggled successfully');
     } catch (error) {
-      console.error('Error toggling dark mode:', error);
+      console.error('❌ Error toggling dark mode:', error);
+      // Fallback per web
+      if (typeof window !== 'undefined') {
+        document.body.classList.toggle('dark-theme');
+      }
     }
   };
   const [expandedSections, setExpandedSections] = useState<string[]>(['main']);
@@ -160,57 +163,77 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Sei sicuro di voler uscire?',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        { 
-          text: 'Esci', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🚪 Desktop Sidebar: Iniziando logout...');
-              
-              // Verifica che la funzione logout esista
-              if (!logout || typeof logout !== 'function') {
-                throw new Error('Logout function not available');
-              }
-              
-              await logout();
-              console.log('✅ Desktop Sidebar: Logout completato con successo');
-              
-            } catch (error) {
-              console.error('❌ Desktop Sidebar: Errore durante il logout:', error);
-              
-              // Forza il reload della pagina se siamo su web come fallback
-              if (typeof window !== 'undefined' && window.location) {
-                console.log('🔄 Forcing page reload as fallback...');
-                window.location.reload();
-              } else {
-                Alert.alert(
-                  'Errore Logout',
-                  'Si è verificato un errore durante il logout. L\'app verrà riavviata.',
-                  [{ 
-                    text: 'OK',
-                    onPress: () => {
-                      // Forza restart dell'app su mobile se possibile
-                      if (typeof require !== 'undefined') {
-                        try {
-                          require('react-native').NativeModules.DevSettings?.reload?.();
-                        } catch (e) {
-                          console.log('Could not restart app');
-                        }
-                      }
-                    }
-                  }]
-                );
-              }
-            }
-          }
+    // Determina se siamo su web
+    const isWeb = typeof window !== 'undefined' && window.confirm;
+    
+    const performLogout = async () => {
+      try {
+        console.log('🚪 Desktop Sidebar: Iniziando logout...');
+        
+        // Verifica che la funzione logout esista
+        if (!logout || typeof logout !== 'function') {
+          throw new Error('Logout function not available');
         }
-      ]
-    );
+        
+        await logout();
+        console.log('✅ Desktop Sidebar: Logout completato con successo');
+        
+        // Su web, forza il reload per assicurarsi che la sessione sia completamente pulita
+        if (typeof window !== 'undefined' && window.location) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        }
+        
+      } catch (error) {
+        console.error('❌ Desktop Sidebar: Errore durante il logout:', error);
+        
+        // Fallback per web
+        if (typeof window !== 'undefined' && window.location) {
+          console.log('🔄 Forcing page reload as fallback...');
+          window.location.reload();
+        } else {
+          // Fallback per mobile
+          Alert.alert(
+            'Errore Logout',
+            'Si è verificato un errore durante il logout. L\'app verrà riavviata.',
+            [{ 
+              text: 'OK',
+              onPress: () => {
+                if (typeof require !== 'undefined') {
+                  try {
+                    require('react-native').NativeModules.DevSettings?.reload?.();
+                  } catch (e) {
+                    console.log('Could not restart app');
+                  }
+                }
+              }
+            }]
+          );
+        }
+      }
+    };
+    
+    if (isWeb) {
+      // Su web usa window.confirm
+      if (window.confirm('Sei sicuro di voler uscire?')) {
+        performLogout();
+      }
+    } else {
+      // Su mobile usa Alert
+      Alert.alert(
+        'Logout',
+        'Sei sicuro di voler uscire?',
+        [
+          { text: 'Annulla', style: 'cancel' },
+          { 
+            text: 'Esci', 
+            style: 'destructive',
+            onPress: performLogout
+          }
+        ]
+      );
+    }
   };
 
   // Render dell'header
