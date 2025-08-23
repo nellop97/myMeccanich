@@ -1,432 +1,707 @@
-// src/screens/mechanic/MechanicSidebarMobile.tsx - VERSIONE CORRETTA COMPLETA
-
-import { useNavigation } from '@react-navigation/native';
+// src/components/mechanic/MechanicSidebarMobile.tsx - AGGIORNATO
+import React, { useState, useRef, useEffect } from 'react';
 import {
-    Bell,
-    Calendar,
-    Car,
-    FileText,
-    Menu,
-    PlusCircle,
-    Settings,
-    Wrench,
-    X,
-} from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
-import {
-    Animated,
-    Dimensions,
-    Modal,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Animated,
+  Dimensions,
+  PanResponder,
+  StatusBar,
+  Modal,
+  Alert,
 } from 'react-native';
-
-// ✅ USA FIREBASE AUTH INVECE DI STORE PER DATI UTENTE
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
-import { useWorkshopStore } from '../../store/workshopStore';
 
-const { width: screenWidth } = Dimensions.get('window');
-const SIDEBAR_WIDTH = 280;
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const DRAWER_WIDTH = Math.min(screenWidth * 0.85, 320);
 
-interface MechanicSidebarMobileProps {
+interface SidebarProps {
   children: React.ReactNode;
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
-const MechanicSidebarMobile: React.FC<MechanicSidebarMobileProps> = ({
-  children,
-  activeTab,
-  onTabChange,
-}) => {
-  const navigation = useNavigation();
-  
-  // ✅ USA FIREBASE AUTH PER DATI UTENTE
-  const { user } = useAuth();
-  
-  // ✅ USA STORE SOLO PER DATI APP (TEMA, ECC.)
-  const { darkMode, setDarkMode } = useStore();
-  const { addCar } = useWorkshopStore();
-  
-  // ✅ TUTTI GLI HOOKS DEVONO ESSERE CHIAMATI SEMPRE
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const sidebarAnimation = useRef(new Animated.Value(0)).current;
-  
-  // ✅ FUNZIONE PER GESTIRE TOGGLE DEL DARK MODE
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-  };
+interface MenuItem {
+  id: string;
+  label: string;
+  icon: string;
+  badge?: number;
+  color?: string;
+}
 
-  // ✅ COSTRUISCI IL NOME UTENTE CON FALLBACK SICURO
-  const userName = user?.displayName || 
-                  `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
-                  user?.email?.split('@')[0] ||
-                  'Meccanico';
+const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, onTabChange }) => {
+  const { user, logout } = useAuth();
+  const { darkMode, toggleDarkMode } = useStore();
   
-  useEffect(() => {
-    Animated.timing(sidebarAnimation, {
-      toValue: sidebarVisible ? 1 : 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [sidebarVisible]);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<string[]>(['main']);
+  
+  const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
 
-  // ✅ CONTROLLO DI SICUREZZA DOPO TUTTI GLI HOOKS
-  if (!user) {
-    console.log('⚠️ MechanicSidebarMobile: user is undefined, showing loading...');
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Caricamento profilo...</Text>
-      </View>
-    );
-  }
-
+  // Tema dinamico
   const theme = {
-    background: darkMode ? '#1f2937' : '#ffffff',
-    sidebarBackground: darkMode ? '#1f2937' : '#1e40af',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
+    background: darkMode ? '#0f172a' : '#ffffff',
+    surface: darkMode ? '#1e293b' : '#f8fafc',
+    card: darkMode ? '#334155' : '#ffffff',
+    primary: '#3b82f6',
+    primaryLight: darkMode ? '#1e40af' : '#dbeafe',
+    text: darkMode ? '#f1f5f9' : '#0f172a',
+    textSecondary: darkMode ? '#94a3b8' : '#64748b',
+    border: darkMode ? '#334155' : '#e2e8f0',
+    success: '#10b981',
+    warning: '#f59e0b',
+    danger: '#ef4444',
+    accent: darkMode ? '#7c3aed' : '#a855f7',
     overlay: 'rgba(0, 0, 0, 0.5)',
   };
 
-  const toggleSidebar = () => {
-    setSidebarVisible(!sidebarVisible);
-  };
-
-  const closeSidebar = () => {
-    setSidebarVisible(false);
-  };
-
-  const handleNavigation = (screen: string) => {
-    closeSidebar();
-    onTabChange(screen);
-    
-    switch (screen) {
-      case 'appointments':
-        navigation.navigate('NewAppointment' as never);
-        break;
-      case 'invoices':
-        navigation.navigate('InvoicingDashboard' as never);
-        break;
-      case 'archive':
-        console.log('Navigazione ad Archivio Auto');
-        break;
-      case 'settings':
-        console.log('Navigazione a Impostazioni');
-        break;
-      default:
-        // Dashboard - resta sulla schermata corrente
-        break;
+  // Menu items con badge dinamici
+  const menuSections = {
+    main: {
+      title: 'Principale',
+      items: [
+        { id: 'dashboard', label: 'Dashboard', icon: 'view-dashboard', color: theme.primary },
+        { id: 'cars', label: 'Auto in Officina', icon: 'car-multiple', badge: 8, color: theme.success },
+        { id: 'calendar', label: 'Calendario', icon: 'calendar', badge: 3, color: theme.accent },
+      ] as MenuItem[]
+    },
+    business: {
+      title: 'Gestione',
+      items: [
+        { id: 'invoices', label: 'Fatturazione', icon: 'receipt', badge: 5, color: theme.warning },
+        { id: 'customers', label: 'Clienti', icon: 'account-group', color: theme.primary },
+        { id: 'parts', label: 'Ricambi', icon: 'wrench', color: theme.success },
+        { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.accent },
+      ] as MenuItem[]
+    },
+    account: {
+      title: 'Account',
+      items: [
+        { id: 'profile', label: 'Il Mio Profilo', icon: 'account', color: theme.text },
+        { id: 'settings', label: 'Impostazioni', icon: 'cog', color: theme.textSecondary },
+      ] as MenuItem[]
     }
   };
 
-  const SidebarButton = ({ title, icon: Icon, isActive, onPress }: any) => (
-    <TouchableOpacity
-      style={[
-        styles.sidebarButton,
-        { backgroundColor: isActive ? (darkMode ? '#374151' : '#1d4ed8') : 'transparent' }
-      ]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Icon size={20} color="#ffffff" />
-      <Text style={styles.sidebarButtonText}>{title}</Text>
-    </TouchableOpacity>
-  );
-
-  const Sidebar = () => (
-    <Animated.View 
-      style={[
-        styles.sidebar, 
-        { 
-          backgroundColor: theme.sidebarBackground,
-          transform: [{
-            translateX: sidebarAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-SIDEBAR_WIDTH, 0],
-            })
-          }]
+  // Pan Responder per il drag del drawer
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (isDrawerOpen && gestureState.dx < 0) {
+          // Chiusura del drawer
+          const newTranslateX = Math.max(-DRAWER_WIDTH, gestureState.dx);
+          translateX.setValue(newTranslateX);
+        } else if (!isDrawerOpen && gestureState.dx > 0) {
+          // Apertura del drawer
+          const newTranslateX = Math.min(0, -DRAWER_WIDTH + gestureState.dx);
+          translateX.setValue(newTranslateX);
         }
-      ]}
-    >
-      <View style={styles.sidebarHeader}>
-        <View style={styles.sidebarTitleContainer}>
-          <Text style={styles.sidebarTitle}>AutoGestione</Text>
-          <TouchableOpacity onPress={closeSidebar} style={styles.closeButton}>
-            <X size={24} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.sidebarSubtitle}>Pannello Officina</Text>
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (Math.abs(gestureState.dx) > DRAWER_WIDTH / 3) {
+          if (gestureState.dx > 0) {
+            openDrawer();
+          } else {
+            closeDrawer();
+          }
+        } else {
+          // Ripristina posizione originale
+          Animated.spring(translateX, {
+            toValue: isDrawerOpen ? 0 : -DRAWER_WIDTH,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  const openDrawer = () => {
+    setIsDrawerOpen(true);
+    Animated.parallel([
+      Animated.spring(translateX, {
+        toValue: 0,
+        tension: 100,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const closeDrawer = () => {
+    Animated.parallel([
+      Animated.spring(translateX, {
+        toValue: -DRAWER_WIDTH,
+        tension: 100,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsDrawerOpen(false);
+    });
+  };
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => 
+      prev.includes(sectionId)
+        ? prev.filter(id => id !== sectionId)
+        : [...prev, sectionId]
+    );
+  };
+
+  const handleMenuItemPress = (itemId: string) => {
+    onTabChange(itemId);
+    closeDrawer();
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Sei sicuro di voler uscire?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        { 
+          text: 'Esci', 
+          style: 'destructive',
+          onPress: async () => {
+            closeDrawer();
+            try {
+              await logout();
+            } catch (error) {
+              console.error('Errore durante il logout:', error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Render dell'header principale con hamburger menu
+  const renderMainHeader = () => (
+    <View style={[styles.mainHeader, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+      <TouchableOpacity
+        style={styles.hamburgerButton}
+        onPress={openDrawer}
+        activeOpacity={0.7}
+      >
+        <MaterialCommunityIcons
+          name="menu"
+          size={24}
+          color={theme.text}
+        />
+      </TouchableOpacity>
+      
+      <View style={styles.headerTitle}>
+        <Text style={[styles.headerTitleText, { color: theme.text }]}>
+          MyMeccanic
+        </Text>
+        <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+          {user?.workshopName || 'Officina 1'}
+        </Text>
       </View>
       
-      <ScrollView style={styles.sidebarNav} showsVerticalScrollIndicator={false}>
-        <SidebarButton
-          title="Dashboard"
-          icon={Wrench}
-          isActive={activeTab === 'dashboard'}
-          onPress={() => handleNavigation('dashboard')}
-        />
-        <SidebarButton
-          title="Appuntamenti"
-          icon={Calendar}
-          isActive={activeTab === 'appointments'}
-          onPress={() => handleNavigation('appointments')}
-        />
-        <SidebarButton
-          title="Fatturazione"
-          icon={FileText}
-          isActive={activeTab === 'invoices'}
-          onPress={() => handleNavigation('invoices')}
-        />
-        <SidebarButton
-          title="Archivio Auto"
-          icon={Car}
-          isActive={activeTab === 'archive'}
-          onPress={() => handleNavigation('archive')}
-        />
-        <SidebarButton
-          title="Impostazioni"
-          icon={Settings}
-          isActive={activeTab === 'settings'}
-          onPress={() => handleNavigation('settings')}
-        />
-      </ScrollView>
-      
-      <View style={styles.sidebarFooter}>
-        <View style={styles.userProfile}>
-          <View style={styles.userAvatar}>
-            <Text style={styles.userAvatarText}>
-              {/* ✅ CORREZIONE: Usa userName costruito sopra */}
-              {userName.substring(0, 2).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.userInfo}>
-            {/* ✅ CORREZIONE: Usa userName costruito sopra */}
-            <Text style={styles.userName}>{userName}</Text>
-            <Text style={styles.userRole}>
-              {/* ✅ CORREZIONE: Controllo sicuro */}
-              {user?.userType === 'mechanic' ? 'Meccanico' : 'Utente'}
-            </Text>
-          </View>
-        </View>
+      <View style={styles.headerActions}>
+        {/* Notification Bell */}
+        <TouchableOpacity style={styles.notificationButton}>
+          <MaterialCommunityIcons
+            name="bell"
+            size={22}
+            color={theme.textSecondary}
+          />
+          <View style={[styles.notificationDot, { backgroundColor: theme.danger }]} />
+        </TouchableOpacity>
         
-        <TouchableOpacity
-          style={styles.themeButton}
-          onPress={toggleDarkMode}
-          activeOpacity={0.7}
+        {/* User Avatar */}
+        <TouchableOpacity 
+          style={[styles.userAvatarSmall, { backgroundColor: theme.primaryLight }]}
+          onPress={openDrawer}
         >
-          <Text style={styles.themeButtonText}>
-            {darkMode ? 'Modalità Chiara' : 'Modalità Scura'}
+          <Text style={[styles.userAvatarSmallText, { color: theme.primary }]}>
+            {user?.firstName?.charAt(0)?.toUpperCase() || 'M'}
           </Text>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+
+  // Render del profilo utente nel drawer
+  const renderUserProfile = () => (
+    <View style={[styles.userProfile, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+      <LinearGradient
+        colors={[theme.primary, '#1d4ed8']}
+        style={styles.profileGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      
+      <View style={styles.profileContent}>
+        <View style={[styles.userAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+          <Text style={styles.userAvatarText}>
+            {user?.firstName?.charAt(0)?.toUpperCase() || 'M'}
+            {user?.lastName?.charAt(0)?.toUpperCase() || 'G'}
+          </Text>
+        </View>
+        
+        <View style={styles.userInfo}>
+          <View style={styles.userNameRow}>
+            <Text style={[styles.userName, { color: '#ffffff' }]}>
+              {user?.firstName || 'Meccanico'} {user?.lastName || 'G'}
+            </Text>
+            {user?.verified && (
+              <MaterialCommunityIcons 
+                name="check-decagram" 
+                size={16} 
+                color="#ffffff" 
+              />
+            )}
+          </View>
+          
+          <Text style={[styles.workshopName, { color: 'rgba(255,255,255,0.9)' }]}>
+            {user?.workshopName || 'Officina 1'}
+          </Text>
+          
+          <View style={styles.quickStats}>
+            <View style={styles.quickStat}>
+              <MaterialCommunityIcons name="star" size={14} color="#fbbf24" />
+              <Text style={styles.quickStatText}>
+                {(user?.rating || 0).toFixed(1)}
+              </Text>
+            </View>
+            
+            <View style={styles.quickStat}>
+              <MaterialCommunityIcons name="account-group" size={14} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.quickStatText}>
+                {user?.reviewsCount || 0} recensioni
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+
+  // Render di un menu item
+  const renderMenuItem = (item: MenuItem, isActive: boolean) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[
+        styles.menuItem,
+        isActive && { backgroundColor: theme.primaryLight },
+      ]}
+      onPress={() => handleMenuItemPress(item.id)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.menuItemContent}>
+        <View style={[styles.menuItemIcon, isActive && { backgroundColor: theme.primary }]}>
+          <MaterialCommunityIcons
+            name={item.icon as any}
+            size={22}
+            color={isActive ? '#ffffff' : (item.color || theme.textSecondary)}
+          />
+        </View>
+        
+        <Text
+          style={[
+            styles.menuItemText,
+            { color: isActive ? theme.primary : theme.text }
+          ]}
+        >
+          {item.label}
+        </Text>
+      </View>
+      
+      {item.badge && item.badge > 0 && (
+        <View style={[styles.badge, { backgroundColor: theme.danger }]}>
+          <Text style={styles.badgeText}>
+            {item.badge > 99 ? '99+' : item.badge}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  // Render di una sezione di menu
+  const renderMenuSection = (sectionId: string, section: any) => {
+    const isExpanded = expandedSections.includes(sectionId);
+    
+    return (
+      <View key={sectionId} style={styles.menuSection}>
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={() => toggleSection(sectionId)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            {section.title}
+          </Text>
+          <MaterialCommunityIcons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={theme.textSecondary}
+          />
+        </TouchableOpacity>
+        
+        {isExpanded && (
+          <View style={styles.sectionItems}>
+            {section.items.map((item: MenuItem) => 
+              renderMenuItem(item, activeTab === item.id)
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Render del drawer content
+  const renderDrawerContent = () => (
+    <Animated.View
+      style={[
+        styles.drawer,
+        { 
+          backgroundColor: theme.background,
+          transform: [{ translateX }]
+        }
+      ]}
+      {...panResponder.panHandlers}
+    >
+      <SafeAreaView style={styles.drawerContent}>
+        {/* Profilo utente */}
+        {renderUserProfile()}
+        
+        {/* Menu di navigazione */}
+        <ScrollView 
+          style={styles.menuContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {Object.entries(menuSections).map(([sectionId, section]) =>
+            renderMenuSection(sectionId, section)
+          )}
+        </ScrollView>
+        
+        {/* Footer con azioni */}
+        <View style={[styles.drawerFooter, { borderTopColor: theme.border }]}>
+          <TouchableOpacity
+            style={styles.footerButton}
+            onPress={() => {
+              toggleDarkMode();
+              closeDrawer();
+            }}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name={darkMode ? 'weather-sunny' : 'weather-night'}
+              size={20}
+              color={theme.textSecondary}
+            />
+            <Text style={[styles.footerButtonText, { color: theme.textSecondary }]}>
+              {darkMode ? 'Tema Chiaro' : 'Tema Scuro'}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.footerButton}
+            onPress={handleLogout}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="logout"
+              size={20}
+              color={theme.danger}
+            />
+            <Text style={[styles.footerButtonText, { color: theme.danger }]}>
+              Esci
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     </Animated.View>
   );
 
   return (
-    <>
-      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-      
-      {/* Header Mobile */}
-      <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={toggleSidebar} style={styles.menuButton}>
-            <Menu size={24} color={theme.text} />
-          </TouchableOpacity>
-          <View>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              {/* ✅ CORREZIONE: Usa userName costruito sopra */}
-              Buongiorno, {userName.split(' ')[0] || 'Meccanico'}!
-            </Text>
-            <View style={styles.notificationBadge}>
-              <Bell size={14} color="#d97706" />
-              <TouchableOpacity onPress={() => alert("ci stiamo lavorando")}>
-                <Text style={styles.notificationText}>3 notifiche</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-        
-        <TouchableOpacity
-          style={styles.addButtonMobile}
-          onPress={() => navigation.navigate('NewAppointment')}
-        >
-          <PlusCircle size={20} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Main Content */}
-      <View style={styles.content}>
+    <View style={styles.container}>
+      {/* Contenuto principale */}
+      <View style={styles.mainContent}>
+        {renderMainHeader()}
         {children}
       </View>
-
-      {/* Sidebar Modal */}
+      
+      {/* Modal per il drawer */}
       <Modal
-        visible={sidebarVisible}
-        transparent={true}
+        visible={isDrawerOpen}
+        transparent
         animationType="none"
-        onRequestClose={closeSidebar}
+        onRequestClose={closeDrawer}
       >
-        <View style={styles.overlay}>
-          <TouchableOpacity 
-            style={[styles.overlayTouchable, { backgroundColor: theme.overlay }]}
-            onPress={closeSidebar}
-            activeOpacity={1}
-          />
-          <Sidebar />
+        <View style={styles.modalContainer}>
+          {/* Overlay */}
+          <Animated.View
+            style={[
+              styles.overlay,
+              { opacity: overlayOpacity }
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.overlayTouch}
+              activeOpacity={1}
+              onPress={closeDrawer}
+            />
+          </Animated.View>
+          
+          {/* Drawer */}
+          {renderDrawerContent()}
         </View>
       </Modal>
-    </>
+    </View>
   );
 };
 
-// ✅ STILI DEL COMPONENTE
 const styles = StyleSheet.create({
-  headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  container: {
     flex: 1,
   },
-  menuButton: {
-    marginRight: 12,
-    padding: 8,
+  mainContent: {
+    flex: 1,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  notificationBadge: {
+  mainHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
   },
-  notificationText: {
-    fontSize: 12,
-    color: '#d97706',
-    marginLeft: 4,
-  },
-  addButtonMobile: {
-    backgroundColor: '#007AFF',
-    borderRadius: 20,
+  hamburgerButton: {
     padding: 8,
+    marginRight: 12,
   },
-  content: {
+  headerTitle: {
+    flex: 1,
+  },
+  headerTitleText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  notificationButton: {
+    padding: 6,
+    position: 'relative',
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  userAvatarSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userAvatarSmallText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modalContainer: {
     flex: 1,
   },
   overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  overlayTouch: {
     flex: 1,
-    flexDirection: 'row',
   },
-  overlayTouchable: {
+  drawer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: DRAWER_WIDTH,
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  drawerContent: {
     flex: 1,
-  },
-  sidebar: {
-    width: SIDEBAR_WIDTH,
-    height: '100%',
-    paddingTop: 40,
-  },
-  sidebarHeader: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  sidebarTitleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sidebarTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  sidebarSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 4,
-  },
-  sidebarNav: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 20,
-  },
-  sidebarButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginVertical: 2,
-    borderRadius: 8,
-  },
-  sidebarButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 12,
-  },
-  sidebarFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   userProfile: {
+    position: 'relative',
+    borderBottomWidth: 1,
+    overflow: 'hidden',
+  },
+  profileGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  profileContent: {
+    padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
   },
   userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   userAvatarText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   userInfo: {
     flex: 1,
   },
-  userName: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+  userNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  userRole: {
-    color: 'rgba(255, 255, 255, 0.7)',
+  userName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginRight: 8,
+  },
+  workshopName: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  quickStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quickStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quickStatText: {
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 12,
   },
-  themeButton: {
+  menuContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 6,
   },
-  themeButtonText: {
+  menuSection: {
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionItems: {
+    gap: 4,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 2,
+  },
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  menuItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
     color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  drawerFooter: {
+    borderTopWidth: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  footerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  footerButtonText: {
     fontSize: 14,
-    textAlign: 'center',
+    marginLeft: 12,
+    fontWeight: '500',
   },
 });
 
