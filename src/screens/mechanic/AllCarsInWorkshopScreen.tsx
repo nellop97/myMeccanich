@@ -417,23 +417,7 @@ const AllCarsInWorkshopScreen = () => {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
       
-      {/* Header titolo */}
-      <View style={[styles.titleContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <ChevronRight 
-            size={24} 
-            color={theme.text}
-            style={{ transform: [{ rotate: '180deg' }] }}
-          />
-        </TouchableOpacity>
-        <Text style={[styles.screenTitle, { color: theme.text }]}>
-          Auto in Officina
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+      
 
       <FlatList
         data={sortedCars}

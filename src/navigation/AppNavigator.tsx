@@ -189,14 +189,17 @@ export default function AppNavigator() {
               component={AllCarsInWorkshopScreen}
               options={{
                 title: 'Auto in Officina',
-                headerShown: false,
+                headerShown: true,
+                headerBackTitle: 'Home'
               }}
             />
             <Stack.Screen 
               name="RepairPartsManagement" 
               component={RepairPartsManagementScreen}
               options={{
-                headerShown: false,
+                title: 'Gestione Ricambi',
+                headerShown: true,
+                headerBackTitle: 'Indietro'
               }}
             />
             <Stack.Screen
@@ -204,14 +207,17 @@ export default function AppNavigator() {
               component={NewAppointmentScreen}
               options={{ 
                 title: 'Nuovo Appuntamento',
-                headerShown: false
+                headerShown: true,
+                headerBackTitle: 'Home'
               }}
             />
             <Stack.Screen 
               name="MechanicCalendar" 
               component={MechanicCalendarScreen}
               options={{
-                headerShown: false,
+                title: 'Calendario',
+                headerShown: true,
+                headerBackTitle: 'Home'
               }}
             />
             
@@ -219,35 +225,45 @@ export default function AppNavigator() {
               name="InvoicingDashboard"
               component={InvoicingDashboardScreen}
               options={{
-                headerShown: false,
+                title: 'Fatturazione',
+                headerShown: true,
+                headerBackTitle: 'Home'
               }}
             />
             <Stack.Screen
               name="CreateInvoice"
               component={CreateInvoiceScreen}
               options={{
-                headerShown: false,
+                title: 'Crea Fattura',
+                headerShown: true,
+                headerBackTitle: 'Indietro'
               }}
             />
             <Stack.Screen
               name="CustomersList"
               component={CustomersListScreen}
               options={{
-                headerShown: false,
+                title: 'Clienti',
+                headerShown: true,
+                headerBackTitle: 'Indietro'
               }}
             />
             <Stack.Screen
               name="AddCustomer"
               component={AddCustomerScreen}
               options={{
-                headerShown: false,
+                title: 'Aggiungi Cliente',
+                headerShown: true,
+                headerBackTitle: 'Indietro'
               }}
             />
             <Stack.Screen
               name="EditCustomer"
               component={AddCustomerScreen}
               options={{
-                headerShown: false,
+                title: 'Modifica Cliente',
+                headerShown: true,
+                headerBackTitle: 'Indietro'
               }}
             />
             
