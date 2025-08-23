@@ -1,5 +1,5 @@
-// src/components/mechanic/MechanicSidebarMobile.tsx - AGGIORNATO
-import React, { useState, useRef, useEffect } from 'react';
+// src/screens/mechanic/MechanicSidebarMobile.tsx - COMPONENTE COMPLETO
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,6 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  PanResponder,
-  StatusBar,
   Modal,
   Alert,
 } from 'react-native';
@@ -90,42 +88,6 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
       ] as MenuItem[]
     }
   };
-
-  // Pan Responder per il drag del drawer
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        if (isDrawerOpen && gestureState.dx < 0) {
-          // Chiusura del drawer
-          const newTranslateX = Math.max(-DRAWER_WIDTH, gestureState.dx);
-          translateX.setValue(newTranslateX);
-        } else if (!isDrawerOpen && gestureState.dx > 0) {
-          // Apertura del drawer
-          const newTranslateX = Math.min(0, -DRAWER_WIDTH + gestureState.dx);
-          translateX.setValue(newTranslateX);
-        }
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (Math.abs(gestureState.dx) > DRAWER_WIDTH / 3) {
-          if (gestureState.dx > 0) {
-            openDrawer();
-          } else {
-            closeDrawer();
-          }
-        } else {
-          // Ripristina posizione originale
-          Animated.spring(translateX, {
-            toValue: isDrawerOpen ? 0 : -DRAWER_WIDTH,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-    })
-  ).current;
 
   const openDrawer = () => {
     setIsDrawerOpen(true);
@@ -217,7 +179,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           MyMeccanic
         </Text>
         <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-          {user?.workshopName || 'Officina 1'}
+          {user?.workshopName || 'officina 1'}
         </Text>
       </View>
       
@@ -232,24 +194,21 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           <View style={[styles.notificationDot, { backgroundColor: theme.danger }]} />
         </TouchableOpacity>
         
-        {/* User Avatar */}
-        <TouchableOpacity 
-          style={[styles.userAvatarSmall, { backgroundColor: theme.primaryLight }]}
-          onPress={openDrawer}
-        >
-          <Text style={[styles.userAvatarSmallText, { color: theme.primary }]}>
-            {user?.firstName?.charAt(0)?.toUpperCase() || 'M'}
+        {/* User Avatar Small */}
+        <View style={[styles.userAvatarSmall, { backgroundColor: theme.primary }]}>
+          <Text style={[styles.userAvatarSmallText, { color: '#ffffff' }]}>
+            M
           </Text>
-        </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
 
   // Render del profilo utente nel drawer
   const renderUserProfile = () => (
-    <View style={[styles.userProfile, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+    <View style={[styles.userProfile, { borderBottomColor: theme.border }]}>
       <LinearGradient
-        colors={[theme.primary, '#1d4ed8']}
+        colors={[theme.primary, theme.accent]}
         style={styles.profileGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -257,16 +216,13 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
       
       <View style={styles.profileContent}>
         <View style={[styles.userAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-          <Text style={styles.userAvatarText}>
-            {user?.firstName?.charAt(0)?.toUpperCase() || 'M'}
-            {user?.lastName?.charAt(0)?.toUpperCase() || 'G'}
-          </Text>
+          <Text style={styles.userAvatarText}>MG</Text>
         </View>
         
         <View style={styles.userInfo}>
           <View style={styles.userNameRow}>
-            <Text style={[styles.userName, { color: '#ffffff' }]}>
-              {user?.firstName || 'Meccanico'} {user?.lastName || 'G'}
+            <Text style={[styles.userName, { color: 'rgba(255,255,255,0.9)' }]}>
+              meccanico g
             </Text>
             {user?.verified && (
               <MaterialCommunityIcons 
@@ -278,21 +234,21 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           </View>
           
           <Text style={[styles.workshopName, { color: 'rgba(255,255,255,0.9)' }]}>
-            {user?.workshopName || 'Officina 1'}
+            {user?.workshopName || 'officina 1'}
           </Text>
           
           <View style={styles.quickStats}>
             <View style={styles.quickStat}>
               <MaterialCommunityIcons name="star" size={14} color="#fbbf24" />
               <Text style={styles.quickStatText}>
-                {(user?.rating || 0).toFixed(1)}
+                0.0
               </Text>
             </View>
             
             <View style={styles.quickStat}>
               <MaterialCommunityIcons name="account-group" size={14} color="rgba(255,255,255,0.8)" />
               <Text style={styles.quickStatText}>
-                {user?.reviewsCount || 0} recensioni
+                0 recensioni
               </Text>
             </View>
           </View>
@@ -383,7 +339,6 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           transform: [{ translateX }]
         }
       ]}
-      {...panResponder.panHandlers}
     >
       <SafeAreaView style={styles.drawerContent}>
         {/* Profilo utente */}
@@ -439,36 +394,38 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Header principale sempre visibile */}
+      {renderMainHeader()}
+      
       {/* Contenuto principale */}
-      <View style={styles.mainContent}>
-        {renderMainHeader()}
+      <View style={[styles.contentContainer, { backgroundColor: theme.background }]}>
         {children}
       </View>
       
       {/* Modal per il drawer */}
       <Modal
+        transparent={true}
         visible={isDrawerOpen}
-        transparent
         animationType="none"
         onRequestClose={closeDrawer}
       >
         <View style={styles.modalContainer}>
-          {/* Overlay */}
-          <Animated.View
+          {/* Overlay di sfondo */}
+          <Animated.View 
             style={[
               styles.overlay,
               { opacity: overlayOpacity }
             ]}
           >
-            <TouchableOpacity
-              style={styles.overlayTouch}
-              activeOpacity={1}
+            <TouchableOpacity 
+              style={styles.overlayTouch} 
               onPress={closeDrawer}
+              activeOpacity={1}
             />
           </Animated.View>
           
-          {/* Drawer */}
+          {/* Drawer content */}
           {renderDrawerContent()}
         </View>
       </Modal>
@@ -480,15 +437,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  mainContent: {
-    flex: 1,
-  },
+  
+  // Header principale
   mainHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
     paddingHorizontal: 16,
+    paddingVertical: 12, // Ridotto per rimuovere spazio extra
     borderBottomWidth: 1,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   hamburgerButton: {
     padding: 8,
@@ -533,6 +494,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  
+  // Contenuto principale
+  contentContainer: {
+    flex: 1,
+  },
+  
+  // Modal e Drawer
   modalContainer: {
     flex: 1,
   },
@@ -562,6 +530,8 @@ const styles = StyleSheet.create({
   drawerContent: {
     flex: 1,
   },
+  
+  // Profilo utente nel drawer
   userProfile: {
     position: 'relative',
     borderBottomWidth: 1,
@@ -623,6 +593,8 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     fontSize: 12,
   },
+  
+  // Menu di navigazione
   menuContainer: {
     flex: 1,
     paddingHorizontal: 16,
@@ -686,6 +658,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
+  
+  // Footer del drawer
   drawerFooter: {
     borderTopWidth: 1,
     paddingVertical: 16,

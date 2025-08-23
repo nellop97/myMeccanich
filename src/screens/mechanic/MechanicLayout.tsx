@@ -1,4 +1,4 @@
-// src/components/mechanic/MechanicLayout.tsx - AGGIORNATO
+// src/screens/mechanic/MechanicLayout.tsx - CON MENU LATERALE RIPRISTINATO
 import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
@@ -10,6 +10,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
 import { useAuth } from '../../hooks/useAuth';
+
+// Import dei componenti sidebar completi
 import MechanicSidebarDesktop from './MechanicSidebarDesktop';
 import MechanicSidebarMobile from './MechanicSidebarMobile';
 
@@ -73,7 +75,7 @@ const MechanicLayout: React.FC<MechanicLayoutProps> = ({
     }
   }, [darkMode, theme.surface]);
 
-  // Render per Desktop
+  // Render per Desktop - CON SIDEBAR FISSA
   const renderDesktopLayout = () => (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.desktopContainer}>
@@ -110,10 +112,10 @@ const MechanicLayout: React.FC<MechanicLayoutProps> = ({
     </View>
   );
 
-  // Render per Mobile
+  // Render per Mobile - CON DRAWER LATERALE
   const renderMobileLayout = () => (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Layout mobile con drawer sidebar */}
         <MechanicSidebarMobile 
           activeTab={activeTab}
@@ -141,9 +143,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  safeArea: {
-    flex: 1,
-  },
   
   // Desktop Layout
   desktopContainer: {
@@ -152,138 +151,88 @@ const styles = StyleSheet.create({
   },
   desktopContent: {
     flex: 1,
-    minHeight: '100%',
   },
   contentWrapper: {
     flex: 1,
-    minHeight: '100vh',
+    paddingTop: 0, // Rimuovi padding extra che crea spazio bianco
   },
   
   // Tablet Layout
+  safeArea: {
+    flex: 1,
+  },
   tabletContent: {
     flex: 1,
-    paddingHorizontal: 16, // Più padding sui tablet
+    paddingTop: 0, // Rimuovi padding extra
   },
   
   // Mobile Layout
   mobileContent: {
     flex: 1,
+    paddingTop: 0, // Rimuovi padding extra che crea spazio bianco
   },
-
-  // Responsive Grid System per contenuti
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    padding: 16,
-  },
-  gridItem: {
-    flex: 1,
-    minWidth: 280, // Larghezza minima per desktop
-  },
-  
-  // Responsive Typography
-  titleLarge: {
-    fontSize: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 32 : screenWidth >= BREAKPOINT_TABLET ? 28 : 24,
-      default: 24,
-    }),
-    fontWeight: 'bold',
-  },
-  titleMedium: {
-    fontSize: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 24 : screenWidth >= BREAKPOINT_TABLET ? 22 : 20,
-      default: 20,
-    }),
-    fontWeight: '600',
-  },
-  titleSmall: {
-    fontSize: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 18 : screenWidth >= BREAKPOINT_TABLET ? 16 : 16,
-      default: 16,
-    }),
-    fontWeight: '500',
-  },
-  
-  // Responsive Spacing
-  paddingResponsive: {
-    padding: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 24 : screenWidth >= BREAKPOINT_TABLET ? 20 : 16,
-      default: 16,
-    }),
-  },
-  marginResponsive: {
-    margin: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 16 : screenWidth >= BREAKPOINT_TABLET ? 12 : 8,
-      default: 8,
-    }),
-  },
-  
-  // Card Responsive Styling
-  cardResponsive: {
-    borderRadius: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 16 : 12,
-      default: 12,
-    }),
-    padding: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 24 : screenWidth >= BREAKPOINT_TABLET ? 20 : 16,
-      default: 16,
-    }),
-    marginBottom: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 24 : screenWidth >= BREAKPOINT_TABLET ? 20 : 16,
-      default: 16,
-    }),
-    elevation: Platform.select({
-      web: 0,
-      default: 2,
-    }),
-    shadowColor: '#000',
-    shadowOffset: { 
-      width: 0, 
-      height: Platform.select({
-        web: screenWidth >= BREAKPOINT_DESKTOP ? 4 : 2,
-        default: 2,
-      })
-    },
-    shadowOpacity: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 0.1 : 0.05,
-      default: 0.1,
-    }),
-    shadowRadius: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 8 : 4,
-      default: 4,
-    }),
-  },
-  
-  // Button Responsive Styling
-  buttonResponsive: {
-    paddingHorizontal: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 24 : screenWidth >= BREAKPOINT_TABLET ? 20 : 16,
-      default: 16,
-    }),
-    paddingVertical: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 16 : screenWidth >= BREAKPOINT_TABLET ? 14 : 12,
-      default: 12,
-    }),
-    borderRadius: Platform.select({
-      web: screenWidth >= BREAKPOINT_DESKTOP ? 12 : 10,
-      default: 10,
-    }),
-  },
-  
-  // Icon Responsive Sizing
-  iconSmall: Platform.select({
-    web: screenWidth >= BREAKPOINT_DESKTOP ? 20 : screenWidth >= BREAKPOINT_TABLET ? 18 : 16,
-    default: 16,
-  }),
-  iconMedium: Platform.select({
-    web: screenWidth >= BREAKPOINT_DESKTOP ? 28 : screenWidth >= BREAKPOINT_TABLET ? 24 : 22,
-    default: 22,
-  }),
-  iconLarge: Platform.select({
-    web: screenWidth >= BREAKPOINT_DESKTOP ? 36 : screenWidth >= BREAKPOINT_TABLET ? 32 : 28,
-    default: 28,
-  }),
 });
+
+// Responsive utilities
+export const getResponsiveStyle = (dimensions: any) => {
+  const { width: screenWidth } = dimensions;
+  
+  return StyleSheet.create({
+    // Container Responsive - PADDING RIDOTTO
+    containerResponsive: {
+      paddingHorizontal: Platform.select({
+        web: screenWidth >= BREAKPOINT_DESKTOP ? 0 : 0,
+        default: 0,
+      }),
+      paddingVertical: Platform.select({
+        web: screenWidth >= BREAKPOINT_DESKTOP ? 0 : 0,
+        default: 0,
+      }),
+    },
+    
+    // Text Responsive
+    textLarge: {
+      fontSize: Platform.select({
+        web: screenWidth >= BREAKPOINT_DESKTOP ? 28 : screenWidth >= BREAKPOINT_TABLET ? 24 : 22,
+        default: 22,
+      }),
+      fontWeight: '700',
+    },
+    textMedium: {
+      fontSize: Platform.select({
+        web: screenWidth >= BREAKPOINT_DESKTOP ? 18 : screenWidth >= BREAKPOINT_TABLET ? 16 : 15,
+        default: 15,
+      }),
+      fontWeight: '500',
+    },
+    textSmall: {
+      fontSize: Platform.select({
+        web: screenWidth >= BREAKPOINT_DESKTOP ? 16 : screenWidth >= BREAKPOINT_TABLET ? 14 : 13,
+        default: 13,
+      }),
+    },
+    
+    // Card con ombra responsive
+    cardShadow: {
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: Platform.select({
+          web: screenWidth >= BREAKPOINT_DESKTOP ? 4 : 2,
+          default: 2,
+        })
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: Platform.select({
+        web: screenWidth >= BREAKPOINT_DESKTOP ? 8 : 4,
+        default: 4,
+      }),
+      elevation: Platform.select({
+        web: 0,
+        default: 3,
+      }),
+    },
+  });
+};
 
 export default MechanicLayout;

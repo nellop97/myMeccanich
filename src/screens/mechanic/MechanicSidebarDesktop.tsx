@@ -1,5 +1,5 @@
-// src/components/mechanic/MechanicSidebarDesktop.tsx - AGGIORNATO
-import React, { useState, useEffect } from 'react';
+// src/screens/mechanic/MechanicSidebarDesktop.tsx - COMPONENTE COMPLETO
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -106,82 +106,63 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
     );
   };
 
-  // Render del logo e header
+  // Render dell'header
   const renderHeader = () => (
-    <View style={[styles.header, { backgroundColor: theme.surface }]}>
-      <LinearGradient
-        colors={[theme.primary, '#1d4ed8']}
-        style={styles.logoContainer}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <MaterialCommunityIcons 
-          name="car-wrench" 
-          size={28} 
-          color="#ffffff" 
-        />
-      </LinearGradient>
+    <View style={[styles.header, { borderBottomColor: theme.border }]}>
+      <View style={[styles.logoContainer, { backgroundColor: theme.primary }]}>
+        <MaterialCommunityIcons name="car-wrench" size={28} color="#ffffff" />
+      </View>
       
       <View style={styles.headerText}>
-        <Text style={[styles.appName, { color: theme.text }]}>
-          MyMeccanic
-        </Text>
-        <Text style={[styles.appSubtitle, { color: theme.textSecondary }]}>
-          Pannello Meccanico
-        </Text>
+        <Text style={[styles.logoText, { color: theme.text }]}>MyMeccanic</Text>
+        <Text style={[styles.logoSubtext, { color: theme.textSecondary }]}>Dashboard</Text>
       </View>
     </View>
   );
 
   // Render del profilo utente
   const renderUserProfile = () => (
-    <View style={[styles.userProfile, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <View style={[styles.userAvatar, { backgroundColor: theme.primaryLight }]}>
-        <Text style={[styles.userAvatarText, { color: theme.primary }]}>
-          {user?.firstName?.charAt(0)?.toUpperCase() || 'M'}
-          {user?.lastName?.charAt(0)?.toUpperCase() || 'G'}
-        </Text>
-      </View>
+    <View style={[styles.userProfile, { borderBottomColor: theme.border }]}>
+      <LinearGradient
+        colors={[theme.primary, theme.accent]}
+        style={styles.profileGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       
-      <View style={styles.userInfo}>
-        <View style={styles.userNameRow}>
-          <Text style={[styles.userName, { color: theme.text }]}>
-            {user?.firstName || 'Meccanico'} {user?.lastName || 'G'}
-          </Text>
-          {user?.verified && (
-            <MaterialCommunityIcons 
-              name="check-decagram" 
-              size={16} 
-              color={theme.success} 
-            />
-          )}
+      <View style={styles.profileContent}>
+        <View style={[styles.userAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+          <Text style={styles.userAvatarText}>MG</Text>
         </View>
         
-        <Text style={[styles.workshopName, { color: theme.primary }]}>
-          {user?.workshopName || 'Officina 1'}
-        </Text>
-        
-        <View style={styles.userStats}>
-          <View style={styles.statItem}>
-            <MaterialCommunityIcons 
-              name="star" 
-              size={12} 
-              color={theme.warning} 
-            />
-            <Text style={[styles.statText, { color: theme.textSecondary }]}>
-              {(user?.rating || 0).toFixed(1)}
+        <View style={styles.userInfo}>
+          <View style={styles.userNameRow}>
+            <Text style={[styles.userName, { color: 'rgba(255,255,255,0.95)' }]}>
+              meccanico g
             </Text>
+            {user?.verified && (
+              <MaterialCommunityIcons 
+                name="check-decagram" 
+                size={16} 
+                color="#ffffff" 
+              />
+            )}
           </View>
           
-          <View style={styles.statItem}>
-            <MaterialCommunityIcons 
-              name="account-group" 
-              size={12} 
-              color={theme.textSecondary} 
-            />
-            <Text style={[styles.statText, { color: theme.textSecondary }]}>
-              {user?.reviewsCount || 0} recensioni
-            </Text>
+          <Text style={[styles.workshopName, { color: 'rgba(255,255,255,0.8)' }]}>
+            {user?.workshopName || 'officina 1'}
+          </Text>
+          
+          <View style={styles.quickStats}>
+            <View style={styles.quickStat}>
+              <MaterialCommunityIcons name="star" size={14} color="#fbbf24" />
+              <Text style={styles.quickStatText}>0.0</Text>
+            </View>
+            
+            <View style={styles.quickStat}>
+              <MaterialCommunityIcons name="account-group" size={14} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.quickStatText}>0 recensioni</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -195,17 +176,19 @@ const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange
       style={[
         styles.menuItem,
         isActive && { backgroundColor: theme.primaryLight },
-        { borderColor: theme.border }
       ]}
       onPress={() => onTabChange(item.id)}
       activeOpacity={0.7}
     >
       <View style={styles.menuItemContent}>
-        <MaterialCommunityIcons
-          name={item.icon as any}
-          size={20}
-          color={isActive ? theme.primary : (item.color || theme.textSecondary)}
-        />
+        <View style={[styles.menuItemIcon, isActive && { backgroundColor: theme.primary }]}>
+          <MaterialCommunityIcons
+            name={item.icon as any}
+            size={20}
+            color={isActive ? '#ffffff' : (item.color || theme.textSecondary)}
+          />
+        </View>
+        
         <Text
           style={[
             styles.menuItemText,
@@ -328,12 +311,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
+  
+  // Header
   header: {
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   logoContainer: {
     width: 48,
@@ -346,19 +330,30 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
   },
-  appName: {
+  logoText: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
-  appSubtitle: {
+  logoSubtext: {
     fontSize: 12,
     marginTop: 2,
   },
+  
+  // Profilo utente
   userProfile: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+    position: 'relative',
+    borderBottomWidth: 1,
+    overflow: 'hidden',
+  },
+  profileGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  profileContent: {
+    padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -371,7 +366,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   userAvatarText: {
-    fontSize: 16,
+    color: '#ffffff',
+    fontSize: 18,
     fontWeight: 'bold',
   },
   userInfo: {
@@ -380,7 +376,7 @@ const styles = StyleSheet.create({
   userNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   userName: {
     fontSize: 14,
@@ -388,38 +384,42 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   workshopName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  userStats: {
+  quickStats: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
-  statItem: {
+  quickStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
-  statText: {
+  quickStatText: {
+    color: 'rgba(255,255,255,0.8)',
     fontSize: 11,
   },
+  
+  // Menu di navigazione
   menuContainer: {
     flex: 1,
     paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   menuSection: {
-    marginBottom: 8,
+    marginBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 4,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -432,36 +432,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   menuItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+  menuItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   menuItemText: {
     fontSize: 14,
     fontWeight: '500',
-    marginLeft: 12,
   },
   badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 6,
   },
   badgeText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
   },
+  
+  // Footer
   footer: {
     borderTopWidth: 1,
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     gap: 8,
   },
@@ -469,10 +478,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
   footerButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     marginLeft: 12,
     fontWeight: '500',
   },
