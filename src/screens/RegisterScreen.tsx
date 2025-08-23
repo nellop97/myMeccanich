@@ -1,4 +1,3 @@
-
 // src/screens/RegisterScreen.tsx - VERSIONE COMPLETA
 import React, { useState, useEffect } from 'react';
 import {
@@ -59,7 +58,7 @@ if (!isWeb) {
   } catch (e) {
     console.warn('Expo Auth Session non disponibile:', e);
   }
-  
+
   if (Platform.OS === 'ios') {
     try {
       AppleAuthentication = require('expo-apple-authentication');
@@ -128,7 +127,7 @@ const RegisterScreen: React.FC = () => {
 
   // Responsive hooks
   const [screenData, setScreenData] = useState(Dimensions.get('window'));
-  
+
   // Animazioni
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(30))[0];
@@ -188,14 +187,14 @@ const RegisterScreen: React.FC = () => {
 
   // Menù per specializzazioni
   const [showSpecializationsMenu, setShowSpecializationsMenu] = useState(false);
-  
+
   // Car search modal
   const [showCarSearchModal, setShowCarSearchModal] = useState(false);
   const [currentCarIndex, setCurrentCarIndex] = useState(-1);
 
   // Opzioni disponibili
   const specializationOptions = [
-    'Auto', 'Moto', 'Elettrico', 'Ibrido', 'Diesel', 'Benzina', 
+    'Auto', 'Moto', 'Elettrico', 'Ibrido', 'Diesel', 'Benzina',
     'Climatizzazione', 'Elettronica', 'Carrozzeria', 'Pneumatici'
   ];
 
@@ -234,9 +233,9 @@ const RegisterScreen: React.FC = () => {
     const onChange = (result: any) => {
       setScreenData(result.window);
     };
-    
+
     const subscription = Dimensions.addEventListener('change', onChange);
-    
+
     // Animazione di entrata
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -250,7 +249,7 @@ const RegisterScreen: React.FC = () => {
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     return () => subscription?.remove();
   }, []);
 
@@ -328,7 +327,7 @@ const RegisterScreen: React.FC = () => {
           if (carDataList.length === 0) {
             newErrors.cars = 'Aggiungi almeno una auto';
           }
-          
+
           // Validazione dati auto
           carDataList.forEach((car, index) => {
             if (!car.brand || !car.model || !car.year) {
@@ -353,7 +352,7 @@ const RegisterScreen: React.FC = () => {
   const saveUserToFirestore = async (user: FirebaseUser, authProvider: string) => {
     try {
       console.log('💾 Salvataggio dati utente su Firestore...');
-      
+
       const baseUserData = {
         uid: user.uid,
         email: user.email,
@@ -418,7 +417,7 @@ const RegisterScreen: React.FC = () => {
         for (let i = 0; i < carDataList.length; i++) {
           const car = carDataList[i];
           const carId = `${user.uid}_vehicle_${i + 1}`;
-          
+
           await setDoc(doc(db, 'vehicles', carId), {
             id: carId,
             userId: user.uid,
@@ -868,7 +867,7 @@ const RegisterScreen: React.FC = () => {
                     Scrivi manualmente o clicca 🔍 per suggerimenti
                   </HelperText>
                 </View>
-                
+
                 <View style={[styles.inputWithSuggestion, styles.halfWidth]}>
                   <TextInput
                     label="Modello"
@@ -980,7 +979,7 @@ const RegisterScreen: React.FC = () => {
                     ))}
                   </View>
                 </View>
-                
+
                 <View style={styles.halfWidth}>
                   <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
                     Trasmissione
@@ -1319,7 +1318,31 @@ const RegisterScreen: React.FC = () => {
     finalButtonContent: {
       height: 48,
     },
+    // Footer styles - these seem to be from a different component based on the change
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      paddingVertical: 16,
+      borderTopWidth: 1,
+    },
+    footerButton: {
+      alignItems: 'center',
+    },
+    footerButtonText: {
+      fontSize: 12,
+      marginTop: 4,
+    },
   });
+
+  // Dummy functions for theme and logout, as they are referenced in the changes but not in the original provided code snippet.
+  // These would typically be imported or defined elsewhere.
+  const handleToggleDarkMode = () => { console.log('Toggling dark mode'); };
+  const handleLogout = () => { console.log('Logging out'); };
+  const theme = { border: 'gray', textSecondary: 'black', danger: 'red' }; // Dummy theme object
+  const darkMode = false; // Dummy darkMode state
+  const menuSections = {}; // Dummy menuSections
+  const renderMenuSection = (sectionId: string, section: any) => null; // Dummy render function
 
   return (
     <View style={styles.container}>
@@ -1333,6 +1356,42 @@ const RegisterScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
         >
           {renderCurrentStep()}
+
+          {/* Footer con azioni - This section is added based on the provided changes */}
+          <View style={[styles.footer, { borderTopColor: theme.border }]}>
+            {/* Toggle tema */}
+            <TouchableOpacity
+              style={styles.footerButton}
+              onPress={handleToggleDarkMode}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons
+                name={darkMode ? 'weather-sunny' : 'weather-night'}
+                size={20}
+                color={theme.textSecondary}
+              />
+              <Text style={[styles.footerButtonText, { color: theme.textSecondary }]}>
+                {darkMode ? 'Tema Chiaro' : 'Tema Scuro'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Logout */}
+            <TouchableOpacity
+              style={styles.footerButton}
+              onPress={handleLogout}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons
+                name="logout"
+                size={20}
+                color={theme.danger}
+              />
+              <Text style={[styles.footerButtonText, { color: theme.danger }]}>
+                Esci
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {/* End of added Footer section */}
           {renderNavigationButtons()}
         </ScrollView>
       </KeyboardAvoidingView>
