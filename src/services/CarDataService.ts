@@ -32,7 +32,9 @@ class CarDataService {
     'Volvo', 'Saab', 'Skoda', 'Seat', 'Opel', 'Chevrolet', 'Jeep', 'Land Rover',
     'Jaguar', 'Mini', 'Smart', 'Tesla', 'Subaru', 'Mazda', 'Mitsubishi',
     'Suzuki', 'Dacia', 'Lexus', 'Infiniti', 'Acura', 'Cadillac', 'Buick',
-    'Chrysler', 'Dodge', 'Ram', 'Lincoln'
+    'Chrysler', 'Dodge', 'Ram', 'Lincoln', 'Genesis', 'McLaren', 'Bentley',
+    'Aston Martin', 'Rolls-Royce', 'Koenigsegg', 'Pagani', 'Bugatti',
+    'DS Automobiles', 'Lada', 'Iveco', 'Isuzu', 'Great Wall', 'BYD'
   ].sort();
 
   private fallbackModels: { [brand: string]: string[] } = {
@@ -49,7 +51,10 @@ class CarDataService {
     'Nissan': ['Micra', 'Note', 'Pulsar', 'Qashqai', 'X-Trail', 'Juke', 'Leaf'],
     'Hyundai': ['i10', 'i20', 'i30', 'Elantra', 'Sonata', 'Tucson', 'Santa Fe', 'Kona'],
     'Kia': ['Picanto', 'Rio', 'Ceed', 'Optima', 'Sportage', 'Sorento', 'Stonic', 'Niro'],
-    'Tesla': ['Model 3', 'Model S', 'Model X', 'Model Y']
+    'Tesla': ['Model 3', 'Model S', 'Model X', 'Model Y'],
+    'Jeep': ['Compass', 'Cherokee', 'Grand Cherokee', 'Wrangler', 'Renegade', 'Gladiator', 'Avenger'],
+    'Land Rover': ['Discovery', 'Range Rover', 'Range Rover Sport', 'Range Rover Evoque', 'Defender'],
+    'Alfa Romeo': ['Giulia', 'Stelvio', 'Tonale', 'Giulietta', '4C']
   };
 
   // Ottieni tutte le marche usando NHTSA API (gratuita)

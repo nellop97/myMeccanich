@@ -1,4 +1,3 @@
-
 // src/components/CarSearchModal.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -40,12 +39,12 @@ const CarSearchModal: React.FC<CarSearchModalProps> = ({
   const [selectedBrand, setSelectedBrand] = useState(initialData?.brand || '');
   const [selectedModel, setSelectedModel] = useState(initialData?.model || '');
   const [selectedYear, setSelectedYear] = useState(initialData?.year || '');
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [brands, setBrands] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [years, setYears] = useState<number[]>([]);
-  
+
   const [loading, setLoading] = useState(false);
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -118,7 +117,7 @@ const CarSearchModal: React.FC<CarSearchModalProps> = ({
   // Filtra risultati in base alla ricerca
   const getFilteredResults = () => {
     const query = searchQuery.toLowerCase().trim();
-    
+
     switch (step) {
       case 1:
         return query ? 
@@ -156,14 +155,14 @@ const CarSearchModal: React.FC<CarSearchModalProps> = ({
   // Gestisce selezione anno
   const handleYearSelect = (year: number) => {
     setSelectedYear(year.toString());
-    
+
     // Conferma selezione
     onSelect({
       brand: selectedBrand,
       model: selectedModel,
       year: year.toString(),
     });
-    
+
     onClose();
   };
 
@@ -218,7 +217,7 @@ const CarSearchModal: React.FC<CarSearchModalProps> = ({
               color={theme.text}
             />
           </TouchableOpacity>
-          
+
           <View style={styles.headerCenter}>
             <MaterialCommunityIcons
               name={getStepIcon() as any}
@@ -230,7 +229,7 @@ const CarSearchModal: React.FC<CarSearchModalProps> = ({
               {getStepTitle()}
             </Text>
           </View>
-          
+
           <TouchableOpacity
             style={styles.closeButton}
             onPress={onClose}

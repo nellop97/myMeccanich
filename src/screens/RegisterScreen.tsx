@@ -937,16 +937,6 @@ const RegisterScreen: React.FC = () => {
                 />
               </View>
 
-              <TextInput
-                label="Chilometri"
-                value={currentCarData.kilometers}
-                onChangeText={(text) => setCurrentCarData({ ...currentCarData, kilometers: text })}
-                keyboardType="numeric"
-                error={!!errors.kilometers}
-                style={styles.input}
-                mode="outlined"
-              />
-
               <Button
                 mode="outlined"
                 onPress={addCar}
