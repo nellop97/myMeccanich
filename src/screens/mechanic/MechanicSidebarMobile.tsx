@@ -1,22 +1,22 @@
 // src/screens/mechanic/MechanicSidebarMobile.tsx - COMPONENTE COMPLETO
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   Animated,
   Dimensions,
-  SafeAreaView,
+  Modal,
+  Alert,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
 import { useMechanicStats } from '../../hooks/useMechanicStats';
-import { useAppThemeManager } from '../../hooks/useTheme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(screenWidth * 0.85, 320);
@@ -35,25 +35,28 @@ interface MenuItem {
   color?: string;
 }
 
-const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
+const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
-  const { darkMode } = useStore();
-  const { toggleTheme, isDark } = useAppThemeManager();
-
-  // Funzione per toggle dark mode usando il nuovo hook
+  const store = useStore();
+  const { darkMode } = store;
+  
+  // Funzione sicura per toggle dark mode
   const handleToggleDarkMode = () => {
     try {
-      console.log('🎨 Mobile: Toggling theme from:', isDark ? 'dark' : 'light');
-      toggleTheme();
-      console.log('✅ Mobile: Theme toggled successfully');
+      if (store && typeof store.toggleDarkMode === 'function') {
+        store.toggleDarkMode();
+        closeDrawer();
+      } else {
+        console.warn('toggleDarkMode function not available');
+      }
     } catch (error) {
-      console.error('❌ Mobile: Error toggling dark mode:', error);
+      console.error('Error toggling dark mode:', error);
     }
   };
-
+  
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>(['main']);
-
+  
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
@@ -189,21 +192,21 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
           onPress: async () => {
             try {
               console.log('🚪 Mobile Sidebar: Iniziando logout...');
-
+              
               // Verifica che la funzione logout esista
               if (!logout || typeof logout !== 'function') {
                 throw new Error('Logout function not available');
               }
-
+              
               await logout();
               console.log('✅ Mobile Sidebar: Logout completato con successo');
-
+              
               // Chiudi il drawer solo dopo il logout riuscito
               closeDrawer();
-
+              
             } catch (error) {
               console.error('❌ Mobile Sidebar: Errore durante il logout:', error);
-
+              
               // Forza il reload della pagina se siamo su web come fallback
               if (typeof window !== 'undefined' && window.location) {
                 console.log('🔄 Forcing page reload as fallback...');
@@ -250,7 +253,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
           color={theme.text}
         />
       </TouchableOpacity>
-
+      
       <View style={styles.headerTitle}>
         <Text style={[styles.headerTitleText, { color: theme.text }]}>
           MyMeccanic
@@ -259,7 +262,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
           {user?.workshopName || 'officina 1'}
         </Text>
       </View>
-
+      
       <View style={styles.headerActions}>
         {/* Notification Bell */}
         <TouchableOpacity style={styles.notificationButton}>
@@ -270,7 +273,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
           />
           <View style={[styles.notificationDot, { backgroundColor: theme.danger }]} />
         </TouchableOpacity>
-
+        
         {/* User Avatar Small */}
         <View style={[styles.userAvatarSmall, { backgroundColor: theme.primary }]}>
           <Text style={[styles.userAvatarSmallText, { color: '#ffffff' }]}>
@@ -290,12 +293,12 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-
+      
       <View style={styles.profileContent}>
         <View style={[styles.userAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
           <Text style={styles.userAvatarText}>MG</Text>
         </View>
-
+        
         <View style={styles.userInfo}>
           <View style={styles.userNameRow}>
             <Text style={[styles.userName, { color: 'rgba(255,255,255,0.9)' }]}>
@@ -309,11 +312,11 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
               />
             )}
           </View>
-
+          
           <Text style={[styles.workshopName, { color: 'rgba(255,255,255,0.9)' }]}>
             {user?.workshopName || 'officina 1'}
           </Text>
-
+          
           <View style={styles.quickStats}>
             <View style={styles.quickStat}>
               <MaterialCommunityIcons name="star" size={14} color="#fbbf24" />
@@ -321,7 +324,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
                 {user?.rating?.toFixed(1) || '0.0'}
               </Text>
             </View>
-
+            
             <View style={styles.quickStat}>
               <MaterialCommunityIcons name="account-group" size={14} color="rgba(255,255,255,0.8)" />
               <Text style={styles.quickStatText}>
@@ -353,7 +356,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
             color={isActive ? '#ffffff' : (item.color || theme.textSecondary)}
           />
         </View>
-
+        
         <Text
           style={[
             styles.menuItemText,
@@ -363,7 +366,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
           {item.label}
         </Text>
       </View>
-
+      
       {item.badge && item.badge > 0 && (
         <View style={[styles.badge, { backgroundColor: theme.danger }]}>
           <Text style={styles.badgeText}>
@@ -377,7 +380,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
   // Render di una sezione di menu
   const renderMenuSection = (sectionId: string, section: any) => {
     const isExpanded = expandedSections.includes(sectionId);
-
+    
     return (
       <View key={sectionId} style={styles.menuSection}>
         <TouchableOpacity
@@ -394,7 +397,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
             color={theme.textSecondary}
           />
         </TouchableOpacity>
-
+        
         {isExpanded && (
           <View style={styles.sectionItems}>
             {section.items.map((item: MenuItem) => 
@@ -420,7 +423,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
       <SafeAreaView style={styles.drawerContent}>
         {/* Profilo utente */}
         {renderUserProfile()}
-
+        
         {/* Menu di navigazione */}
         <ScrollView 
           style={styles.menuContainer}
@@ -430,7 +433,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
             renderMenuSection(sectionId, section)
           )}
         </ScrollView>
-
+        
         {/* Footer con azioni */}
         <View style={[styles.drawerFooter, { borderTopColor: theme.border }]}>
           <TouchableOpacity
@@ -447,7 +450,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
               {darkMode ? 'Tema Chiaro' : 'Tema Scuro'}
             </Text>
           </TouchableOpacity>
-
+          
           <TouchableOpacity
             style={styles.footerButton}
             onPress={handleLogout}
@@ -471,12 +474,12 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header principale sempre visibile */}
       {renderMainHeader()}
-
+      
       {/* Contenuto principale */}
       <View style={[styles.contentContainer, { backgroundColor: theme.background }]}>
         {children}
       </View>
-
+      
       {/* Modal per il drawer */}
       <Modal
         transparent={true}
@@ -498,7 +501,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ activeTab, onTabChange 
               activeOpacity={1}
             />
           </Animated.View>
-
+          
           {/* Drawer content */}
           {renderDrawerContent()}
         </View>
@@ -511,7 +514,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-
+  
   // Header principale
   mainHeader: {
     flexDirection: 'row',
@@ -568,12 +571,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-
+  
   // Contenuto principale
   contentContainer: {
     flex: 1,
   },
-
+  
   // Modal e Drawer
   modalContainer: {
     flex: 1,
@@ -604,7 +607,7 @@ const styles = StyleSheet.create({
   drawerContent: {
     flex: 1,
   },
-
+  
   // Profilo utente nel drawer
   userProfile: {
     position: 'relative',
@@ -667,7 +670,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     fontSize: 12,
   },
-
+  
   // Menu di navigazione
   menuContainer: {
     flex: 1,
@@ -732,7 +735,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-
+  
   // Footer del drawer
   drawerFooter: {
     borderTopWidth: 1,
