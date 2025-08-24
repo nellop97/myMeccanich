@@ -1,51 +1,27 @@
-// src/store/index.ts - VERSIONE SICURA SENZA GESTIONE AUTH
+// src/store/index.ts - Store Principale con Gestione Utente
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 🔒 INTERFACCE SENZA DATI DI AUTENTICAZIONE
-export interface Car {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  licensePlate: string;
-  vin?: string;
-  color?: string;
-  engineType?: string;
-  transmission?: string;
-  mileage?: number;
-  lastService?: string;
-  nextService?: string;
-  insuranceExpiry?: string;
-  inspectionExpiry?: string;
-  notes?: string;
-  maintenanceHistory?: MaintenanceRecord[];
-}
+// ====================================
+// INTERFACCE E TIPI
+// ====================================
 
-export interface MaintenanceRecord {
-  id: string;
-  date: string;
-  type: string;
-  description: string;
-  cost?: number;
-  mileage?: number;
-  mechanicId?: string;
-  mechanicName?: string;
-  workshopName?: string;
-  nextServiceDate?: string;
-  nextServiceMileage?: number;
-  parts?: Part[];
-  notes?: string;
-}
-
-export interface Part {
+export interface User {
   id: string;
   name: string;
-  brand?: string;
-  partNumber?: string;
-  quantity: number;
-  cost?: number;
+  email: string;
+  isLoggedIn: boolean;
+  photoURL?: string;
+  isMechanic?: boolean;
+  phoneNumber?: string;
+  emailVerified?: boolean;
+  createdAt?: string;
+  lastLoginAt?: string;
+  // Dati specifici per meccanici
+  workshopName?: string;
+  workshopAddress?: string;
+  vatNumber?: string;
 }
 
 export interface UserPreferences {
@@ -73,44 +49,44 @@ export interface AppSettings {
   onboardingCompleted?: boolean;
 }
 
-// 🏪 STORE SOLO PER DATI DELL'APP - NON AUTH
+// ====================================
+// INTERFACCIA DELLO STORE
+// ====================================
+
 interface StoreState {
-  // ✅ STATO DELL'APP (NON AUTH)
+  // === STATO UTENTE ===
+  user: User | null;
+  
+  // === STATO DELL'APP ===
   darkMode: boolean;
   preferences: UserPreferences;
   appSettings: AppSettings;
-  cars: Car[];
   isLoading: boolean;
   error: string | null;
 
-  // ✅ ACTIONS DELL'APP (NON AUTH)
-  // Gestione tema e preferenze
+  // === ACTIONS PER UTENTE ===
+  setUser: (user: User | null) => void;
+  updateUser: (updates: Partial<User>) => void;
+  
+  // === ACTIONS PER L'APP ===
   setDarkMode: (darkMode: boolean) => void;
   updatePreferences: (preferences: Partial<UserPreferences>) => void;
   updateAppSettings: (settings: Partial<AppSettings>) => void;
-
-  // Gestione auto
-  addCar: (car: Car) => void;
-  updateCar: (carId: string, updates: Partial<Car>) => void;
-  removeCar: (carId: string) => void;
-  getCar: (carId: string) => Car | undefined;
-
-  // Gestione manutenzioni
-  addMaintenanceRecord: (carId: string, record: MaintenanceRecord) => void;
-  updateMaintenanceRecord: (carId: string, recordId: string, updates: Partial<MaintenanceRecord>) => void;
-  removeMaintenanceRecord: (carId: string, recordId: string) => void;
-  getMaintenanceHistory: (carId: string) => MaintenanceRecord[];
-
-  // Gestione stato
+  
+  // === GESTIONE STATO ===
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
-
-  // Reset e pulizia
-  resetAppData: () => void;
+  
+  // === RESET E PULIZIA ===
+  resetStore: () => void;
+  logout: () => void;
 }
 
-// Valori di default
+// ====================================
+// VALORI DI DEFAULT
+// ====================================
+
 const defaultPreferences: UserPreferences = {
   theme: 'auto',
   language: 'it',
@@ -135,228 +111,169 @@ const defaultAppSettings: AppSettings = {
   onboardingCompleted: false,
 };
 
+// ====================================
+// CREAZIONE DELLO STORE
+// ====================================
+
 export const useStore = create<StoreState>()(
-    persist(
-        (set, get) => ({
-          // ✅ STATO INIZIALE DELL'APP
+  persist(
+    (set, get) => ({
+      // === STATO INIZIALE ===
+      user: null,
+      darkMode: false,
+      preferences: defaultPreferences,
+      appSettings: defaultAppSettings,
+      isLoading: false,
+      error: null,
+
+      // === GESTIONE UTENTE ===
+      setUser: (user) => {
+        console.log('📱 Store: Setting user:', user?.email);
+        set({ 
+          user,
+          error: null 
+        });
+      },
+
+      updateUser: (updates) => {
+        const currentUser = get().user;
+        if (currentUser) {
+          set({
+            user: { ...currentUser, ...updates },
+            error: null
+          });
+        }
+      },
+
+      // === GESTIONE TEMA E PREFERENZE ===
+      setDarkMode: (darkMode) => {
+        set({ darkMode });
+        // Aggiorna anche nelle preferenze
+        const currentPreferences = get().preferences;
+        set({
+          preferences: {
+            ...currentPreferences,
+            theme: darkMode ? 'dark' : 'light',
+          },
+        });
+      },
+
+      updatePreferences: (preferences) => {
+        const currentPreferences = get().preferences;
+        set({
+          preferences: { ...currentPreferences, ...preferences },
+          error: null,
+        });
+      },
+
+      updateAppSettings: (settings) => {
+        const currentSettings = get().appSettings;
+        set({
+          appSettings: { ...currentSettings, ...settings },
+          error: null,
+        });
+      },
+
+      // === GESTIONE STATO ===
+      setLoading: (loading) => {
+        set({ isLoading: loading });
+      },
+
+      setError: (error) => {
+        set({ error });
+      },
+
+      clearError: () => {
+        set({ error: null });
+      },
+
+      // === RESET E PULIZIA ===
+      resetStore: () => {
+        set({
+          user: null,
           darkMode: false,
           preferences: defaultPreferences,
-          appSettings: defaultAppSettings,
-          cars: [],
+          appSettings: { ...defaultAppSettings, firstLaunch: false },
           isLoading: false,
           error: null,
+        });
+      },
 
-          // ✅ GESTIONE TEMA E PREFERENZE
-          setDarkMode: (darkMode) => {
-            set({ darkMode });
-            // Aggiorna anche nelle preferenze
-            const currentPreferences = get().preferences;
-            set({
-              preferences: {
-                ...currentPreferences,
-                theme: darkMode ? 'dark' : 'light'
-              }
-            });
-          },
-
-          updatePreferences: (newPreferences) => {
-            const currentPreferences = get().preferences;
-            const updatedPreferences = { ...currentPreferences, ...newPreferences };
-            set({ preferences: updatedPreferences });
-
-            // Aggiorna il darkMode se il tema è cambiato
-            if (newPreferences.theme) {
-              const systemDarkMode = false; // Qui potresti usare Appearance.getColorScheme()
-              const shouldUseDarkMode = newPreferences.theme === 'dark' ||
-                  (newPreferences.theme === 'auto' && systemDarkMode);
-              set({ darkMode: shouldUseDarkMode });
-            }
-          },
-
-          updateAppSettings: (newSettings) => {
-            const currentSettings = get().appSettings;
-            set({ appSettings: { ...currentSettings, ...newSettings } });
-          },
-
-          // ✅ GESTIONE AUTO
-          addCar: (car) => {
-            const cars = get().cars;
-            set({
-              cars: [...cars, car],
-              error: null
-            });
-          },
-
-          updateCar: (carId, updates) => {
-            const cars = get().cars;
-            const updatedCars = cars.map(car =>
-                car.id === carId ? { ...car, ...updates } : car
-            );
-            set({
-              cars: updatedCars,
-              error: null
-            });
-          },
-
-          removeCar: (carId) => {
-            const cars = get().cars;
-            const updatedCars = cars.filter(car => car.id !== carId);
-            set({
-              cars: updatedCars,
-              error: null
-            });
-          },
-
-          getCar: (carId) => {
-            const cars = get().cars;
-            return cars.find(car => car.id === carId);
-          },
-
-          // ✅ GESTIONE MANUTENZIONI
-          addMaintenanceRecord: (carId, record) => {
-            const cars = get().cars;
-            const updatedCars = cars.map(car => {
-              if (car.id === carId) {
-                return {
-                  ...car,
-                  maintenanceHistory: [...(car.maintenanceHistory || []), record]
-                };
-              }
-              return car;
-            });
-            set({
-              cars: updatedCars,
-              error: null
-            });
-          },
-
-          updateMaintenanceRecord: (carId, recordId, updates) => {
-            const cars = get().cars;
-            const updatedCars = cars.map(car => {
-              if (car.id === carId && car.maintenanceHistory) {
-                const updatedHistory = car.maintenanceHistory.map(record =>
-                    record.id === recordId ? { ...record, ...updates } : record
-                );
-                return { ...car, maintenanceHistory: updatedHistory };
-              }
-              return car;
-            });
-            set({
-              cars: updatedCars,
-              error: null
-            });
-          },
-
-          removeMaintenanceRecord: (carId, recordId) => {
-            const cars = get().cars;
-            const updatedCars = cars.map(car => {
-              if (car.id === carId && car.maintenanceHistory) {
-                const updatedHistory = car.maintenanceHistory.filter(
-                    record => record.id !== recordId
-                );
-                return { ...car, maintenanceHistory: updatedHistory };
-              }
-              return car;
-            });
-            set({
-              cars: updatedCars,
-              error: null
-            });
-          },
-
-          getMaintenanceHistory: (carId) => {
-            const car = get().getCar(carId);
-            return car?.maintenanceHistory || [];
-          },
-
-          // ✅ GESTIONE STATO
-          setLoading: (loading) => {
-            set({ isLoading: loading });
-          },
-
-          setError: (error) => {
-            set({ error });
-          },
-
-          clearError: () => {
-            set({ error: null });
-          },
-
-          // ✅ RESET E PULIZIA
-          resetAppData: () => {
-            set({
-              cars: [],
-              preferences: defaultPreferences,
-              appSettings: { ...defaultAppSettings, firstLaunch: false },
-              isLoading: false,
-              error: null,
-            });
-          },
-        }),
-        {
-          name: 'auto-manager-storage',
-          storage: createJSONStorage(() => AsyncStorage),
-          // 🔒 PERSISTI SOLO DATI DELL'APP, NON AUTH
-          partialize: (state) => ({
-            darkMode: state.darkMode,
-            preferences: state.preferences,
-            appSettings: state.appSettings,
-            cars: state.cars,
-            // ❌ NON persistere isLoading, error (stati temporanei)
-          }),
-          // Gestione migrazione versioni
-          version: 1,
-          migrate: (persistedState: any, version: number) => {
-            // Se il formato cambia in futuro, gestisci la migrazione qui
-            if (version === 0) {
-              // Migrazione dalla versione 0 alla 1
-              return {
-                ...persistedState,
-                preferences: { ...defaultPreferences, ...persistedState.preferences },
-                appSettings: { ...defaultAppSettings, ...persistedState.appSettings },
-              };
-            }
-            return persistedState;
-          },
+      logout: () => {
+        console.log('🚪 Store: Logging out user');
+        set({
+          user: null,
+          isLoading: false,
+          error: null,
+        });
+      },
+    }),
+    {
+      name: 'auto-manager-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      
+      // Persisti solo dati essenziali
+      partialize: (state) => ({
+        darkMode: state.darkMode,
+        preferences: state.preferences,
+        appSettings: state.appSettings,
+        // NON persistere user, isLoading, error (stati temporanei)
+      }),
+      
+      // Gestione migrazione versioni
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 2) {
+          // Migrazione dalla versione 1 alla 2
+          // Rimuovi eventuali dati utente persistiti per errore
+          const { user, ...rest } = persistedState;
+          return {
+            ...rest,
+            preferences: { ...defaultPreferences, ...persistedState.preferences },
+            appSettings: { ...defaultAppSettings, ...persistedState.appSettings },
+          };
         }
-    )
+        return persistedState;
+      },
+    }
+  )
 );
 
-// 🔧 HOOK UTILITY PER DATI UTENTE DA FIREBASE
-import { useAuth } from '../hooks/useAuth';
+// ====================================
+// HOOKS DI UTILITÀ
+// ====================================
 
-export const useUserData = () => {
-  const { user } = useAuth(); // Prendi solo da Firebase
+// Hook per accesso rapido all'utente
+export const useUser = () => {
+  const { user } = useStore();
+  return user;
+};
 
+// Hook per accesso rapido al tema
+export const useTheme = () => {
+  const { darkMode } = useStore();
   return {
-    userId: user?.uid,
-    userName: user?.displayName || user?.firstName || 'Utente',
-    userEmail: user?.email,
-    isMechanic: user?.userType === 'mechanic',
-    isEmailVerified: user?.emailVerified,
-    photoURL: user?.photoURL,
-    phoneNumber: user?.phoneNumber,
-
-    // Dati specifici meccanico
-    workshopName: user?.workshopName,
-    workshopAddress: user?.address,
-    vatNumber: user?.vatNumber,
-
-    // Stati
-    isAuthenticated: !!user,
-    profileComplete: user?.profileComplete || false,
+    darkMode,
+    colors: {
+      background: darkMode ? '#111827' : '#f3f4f6',
+      cardBackground: darkMode ? '#1f2937' : '#ffffff',
+      text: darkMode ? '#ffffff' : '#000000',
+      textSecondary: darkMode ? '#9ca3af' : '#6b7280',
+      border: darkMode ? '#374151' : '#e5e7eb',
+      primary: '#2563eb',
+      success: '#10b981',
+      warning: '#f59e0b',
+      error: '#ef4444',
+    }
   };
 };
 
-// 🎛️ HOOK UTILITY PER CONTROLLI VELOCI
+// Hook per stato dell'app
 export const useAppState = () => {
   const { isLoading, error, clearError } = useStore();
-  const { user, loading: authLoading } = useAuth();
-
   return {
-    isLoading: isLoading || authLoading,
+    isLoading,
     error,
     clearError,
-    isAuthenticated: !!user,
   };
 };

@@ -1,8 +1,27 @@
-// src/store/workshopStore.ts
+// src/store/workshopStore.ts - Store Officina con integrazione Firestore
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  getDoc,
+  limit
+} from 'firebase/firestore';
+import { db } from '../services/firebase';
 
-export type Part = {
+// ====================================
+// INTERFACCE E TIPI
+// ====================================
+
+export interface Part {
   id: string;
   name: string;
   quantity: number;
@@ -11,458 +30,648 @@ export type Part = {
   brand?: string;
   partNumber?: string;
   supplier?: string;
-};
+}
 
-export type Repair = {
+export interface Repair {
   id: string;
   description: string;
   scheduledDate: string;
-  deliveryDate: string;
+  deliveryDate?: string;
   totalCost: number;
-  laborCost: number; // Costo manodopera
-  status: 'pending' | 'in-progress' | 'completed';
+  laborCost: number;
+  status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
   parts: Part[];
   notes?: string;
   mechanicId?: string;
   estimatedHours?: number;
   actualHours?: number;
-};
+  createdAt?: any;
+  updatedAt?: any;
+}
 
-export type Car = {
+export interface WorkshopCar {
   id: string;
+  make?: string;
   model: string;
   vin: string;
   licensePlate?: string;
   owner?: string;
   ownerPhone?: string;
   ownerEmail?: string;
+  ownerId?: string; // ID utente Firebase
   year?: string;
   color?: string;
   mileage?: number;
   repairs: Repair[];
-};
-
-export type FormData = {
-  model: string;
-  vin: string;
-  licensePlate?: string;
-  owner?: string;
-  repairs: Omit<Repair, 'id' | 'parts'>[];
-};
-
-interface WorkshopStore {
-  cars: Car[];
-  // Metodi di ricerca
-  getRepairDetails: (carId: string, repairId: string) => Repair | undefined;
-  getCarById: (carId: string) => Car | undefined;
-  // Metodi di modifica
-  addCar: (car: Omit<Car, 'id' | 'repairs'>) => string;
-  addAppointment: (newAppointment: FormData) => string;
-  addRepairToCar: (carId: string, repair: Omit<Repair, 'id' | 'parts'>) => string;
-  addPartToRepair: (carId: string, repairId: string, part: Omit<Part, 'id'>) => string;
-  updateRepairStatus: (carId: string, repairId: string, status: Repair['status']) => void;
-  updateRepair: (carId: string, repairId: string, repairData: Partial<Omit<Repair, 'id'>>) => void;
-  updatePartInRepair: (carId: string, repairId: string, partId: string, partData: Partial<Omit<Part, 'id'>>) => void;
-  removePartFromRepair: (carId: string, repairId: string, partId: string) => void;
+  workshopId: string;
+  entryDate?: string;
+  exitDate?: string;
+  isActive: boolean;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
-export const useWorkshopStore = create<WorkshopStore>()(
-  persist(
-    (set, get) => ({
-      cars: [
-        // Auto esistente - Tesla
-        {
-          id: '1',
-          model: 'Tesla Model 3',
-          vin: '5YJ3E1EAXKF123456',
-          licensePlate: 'AB123CD',
-          owner: 'Mario Rossi',
-          ownerPhone: '+39 334 1234567',
-          ownerEmail: 'mario.rossi@email.com',
-          year: '2021',
-          color: 'Bianco',
-          mileage: 45000,
-          repairs: [
-            {
-              id: '1',
-              description: 'Sostituzione batteria trazione',
-              scheduledDate: '2025-05-15',
-              deliveryDate: '2025-05-20',
-              totalCost: 1200,
-              laborCost: 200,
-              status: 'in-progress',
-              estimatedHours: 4,
-              actualHours: 3.5,
-              notes: 'Batteria sotto garanzia, sostituire modulo principale',
-              parts: [
-                { 
-                  id: '1', 
-                  name: 'Batteria 75kWh', 
-                  quantity: 1, 
-                  unitCost: 1000,
-                  category: 'ricambio',
-                  brand: 'Tesla',
-                  partNumber: 'TSL-BAT-75KWH',
-                  supplier: 'Tesla Motors'
-                },
-                { 
-                  id: '2', 
-                  name: 'Kit installazione', 
-                  quantity: 1, 
-                  unitCost: 200,
-                  category: 'accessorio',
-                  brand: 'Tesla',
-                  partNumber: 'TSL-KIT-INST',
-                  supplier: 'Tesla Motors'
-                },
-              ],
-            },
-          ],
-        },
-        // Nuova auto - Fiat con manutenzione ordinaria
-        {
-          id: '2',
-          model: 'Fiat Panda',
-          vin: 'ZFA3120000J789012',
-          licensePlate: 'CD456EF',
-          owner: 'Anna Verdi',
-          ownerPhone: '+39 347 9876543',
-          ownerEmail: 'anna.verdi@email.com',
-          year: '2019',
-          color: 'Azzurro',
-          mileage: 78500,
-          repairs: [
-            {
-              id: '2',
-              description: 'Tagliando completo - cambio olio e filtri',
-              scheduledDate: '2025-06-01',
-              deliveryDate: '2025-06-01',
-              totalCost: 150,
-              laborCost: 50,
-              status: 'pending',
-              estimatedHours: 2,
-              notes: 'Tagliando a 80.000 km - controllare anche cinghie',
-              parts: [
-                {
-                  id: '3',
-                  name: 'Olio motore 5W-30',
-                  quantity: 4,
-                  unitCost: 8.50,
-                  category: 'fluido',
-                  brand: 'Castrol',
-                  partNumber: 'CTR-5W30-1L',
-                  supplier: 'Ricambi Auto SpA'
-                },
-                {
-                  id: '4',
-                  name: 'Filtro olio',
-                  quantity: 1,
-                  unitCost: 12.00,
-                  category: 'consumabile',
-                  brand: 'Mann',
-                  partNumber: 'MAN-W610/3',
-                  supplier: 'Ricambi Auto SpA'
-                },
-                {
-                  id: '5',
-                  name: 'Filtro aria',
-                  quantity: 1,
-                  unitCost: 15.00,
-                  category: 'consumabile',
-                  brand: 'Bosch',
-                  partNumber: 'BSH-1457433589',
-                  supplier: 'Ricambi Auto SpA'
-                },
-                {
-                  id: '6',
-                  name: 'Filtro abitacolo',
-                  quantity: 1,
-                  unitCost: 18.00,
-                  category: 'consumabile',
-                  brand: 'Mahle',
-                  partNumber: 'MHL-LAK285',
-                  supplier: 'Ricambi Auto SpA'
-                }
-              ],
-            },
-            {
-              id: '3',
-              description: 'Sostituzione pastiglie freno anteriori',
-              scheduledDate: '2025-06-03',
-              deliveryDate: '2025-06-03',
-              totalCost: 120,
-              laborCost: 40,
-              status: 'pending',
-              estimatedHours: 1.5,
-              notes: 'Controllare anche dischi, potrebbero necessitare spianatura',
-              parts: [
-                {
-                  id: '7',
-                  name: 'Pastiglie freno anteriori',
-                  quantity: 1,
-                  unitCost: 45.00,
-                  category: 'ricambio',
-                  brand: 'Brembo',
-                  partNumber: 'BRM-P23098',
-                  supplier: 'Brembo Direct'
-                },
-                {
-                  id: '8',
-                  name: 'Liquido freni DOT4',
-                  quantity: 1,
-                  unitCost: 12.00,
-                  category: 'fluido',
-                  brand: 'Bosch',
-                  partNumber: 'BSH-DOT4-500ML',
-                  supplier: 'Ricambi Auto SpA'
-                },
-                {
-                  id: '9',
-                  name: 'Grasso per guide',
-                  quantity: 1,
-                  unitCost: 8.00,
-                  category: 'consumabile',
-                  brand: 'Textar',
-                  partNumber: 'TXT-81000400',
-                  supplier: 'Ricambi Auto SpA'
-                }
-              ],
-            }
-          ],
-        },
-        // Auto esistente - Fiat 500
-        {
-          id: '3',
-          model: 'Fiat 500',
-          vin: 'ZFA3120000J123456',
-          licensePlate: 'XY789ZW',
-          owner: 'Laura Bianchi',
-          ownerPhone: '+39 328 5551234',
-          ownerEmail: 'laura.bianchi@email.com',
-          year: '2020',
-          color: 'Rosso',
-          mileage: 32000,
-          repairs: [
-            {
-              id: '4',
-              description: 'Tagliando completo',
-              scheduledDate: '2025-05-21',
-              deliveryDate: '2025-05-22',
-              totalCost: 350,
-              laborCost: 80,
-              status: 'pending',
-              estimatedHours: 3,
-              parts: [],
-            },
-          ],
-        },
-        // Auto esistente - Golf
-        {
-          id: '4',
-          model: 'Volkswagen Golf',
-          vin: 'WVWZZZ1KZAW123456',
-          licensePlate: 'EF456GH',
-          owner: 'Giovanni Verdi',
-          ownerPhone: '+39 339 7778899',
-          ownerEmail: 'giovanni.verdi@email.com',
-          year: '2018',
-          color: 'Grigio',
-          mileage: 95000,
-          repairs: [
-            {
-              id: '5',
-              description: 'Sostituzione frizione',
-              scheduledDate: '2025-05-18',
-              deliveryDate: '2025-05-25',
-              totalCost: 720,
-              laborCost: 200,
-              status: 'completed',
-              estimatedHours: 6,
-              actualHours: 5.5,
-              parts: [],
-            },
-          ],
-        },
-      ],
+export interface Appointment {
+  id: string;
+  carId?: string;
+  customerId?: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  vehicleInfo: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  estimatedDuration: number; // in minuti
+  serviceType: string;
+  notes?: string;
+  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
+  workshopId: string;
+  mechanicId?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
 
-      getCarById: (carId) => {
-        return get().cars.find(car => car.id === carId);
-      },
+// ====================================
+// INTERFACCIA DELLO STORE
+// ====================================
 
-      getRepairDetails: (carId, repairId) => {
-        const car = get().cars.find(c => c.id === carId);
-        return car?.repairs.find(r => r.id === repairId);
-      },
+interface WorkshopStore {
+  // Stati
+  cars: WorkshopCar[];
+  appointments: Appointment[];
+  isLoading: boolean;
+  error: string | null;
+  currentWorkshopId: string | null;
+  
+  // Listener attivi
+  unsubscribers: (() => void)[];
+  
+  // === METODI PER AUTO IN OFFICINA ===
+  fetchWorkshopCars: (workshopId: string) => Promise<void>;
+  addWorkshopCar: (car: Omit<WorkshopCar, 'id' | 'createdAt' | 'updatedAt' | 'repairs'>) => Promise<string>;
+  updateWorkshopCar: (carId: string, updates: Partial<WorkshopCar>) => Promise<void>;
+  removeWorkshopCar: (carId: string) => Promise<void>;
+  subscribeToWorkshopCars: (workshopId: string) => void;
+  
+  // === METODI PER RIPARAZIONI ===
+  addRepairToCar: (carId: string, repair: Omit<Repair, 'id' | 'parts' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateRepair: (carId: string, repairId: string, updates: Partial<Repair>) => Promise<void>;
+  updateRepairStatus: (carId: string, repairId: string, status: Repair['status']) => Promise<void>;
+  deleteRepair: (carId: string, repairId: string) => Promise<void>;
+  
+  // === METODI PER PARTI ===
+  addPartToRepair: (carId: string, repairId: string, part: Omit<Part, 'id'>) => Promise<string>;
+  updatePartInRepair: (carId: string, repairId: string, partId: string, updates: Partial<Part>) => Promise<void>;
+  removePartFromRepair: (carId: string, repairId: string, partId: string) => Promise<void>;
+  
+  // === METODI PER APPUNTAMENTI ===
+  fetchAppointments: (workshopId: string, date?: string) => Promise<void>;
+  addAppointment: (appointment: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateAppointment: (appointmentId: string, updates: Partial<Appointment>) => Promise<void>;
+  cancelAppointment: (appointmentId: string) => Promise<void>;
+  subscribeToAppointments: (workshopId: string) => void;
+  
+  // === UTILITY ===
+  getCarById: (carId: string) => WorkshopCar | undefined;
+  getRepairDetails: (carId: string, repairId: string) => Repair | undefined;
+  getTodayAppointments: () => Appointment[];
+  getUpcomingAppointments: (days: number) => Appointment[];
+  
+  // === SETUP E CLEANUP ===
+  setWorkshopId: (workshopId: string) => void;
+  cleanup: () => void;
+  resetStore: () => void;
+}
 
-      addCar: (carData) => {
-        const newCarId = Date.now().toString();
-        set(state => ({
-          cars: [...state.cars, {
-            id: newCarId,
-            ...carData,
-            repairs: []
-          }]
-        }));
-        return newCarId;
-      },
+// ====================================
+// CREAZIONE DELLO STORE
+// ====================================
 
-      addAppointment: (newAppointment) => {
-        const newCarId = Date.now().toString();
-        const repairs = newAppointment.repairs.map(repair => ({
-          ...repair,
-          id: `repair-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          parts: [],
-          status: 'pending' as const
-        }));
-
-        set(state => ({
-          cars: [...state.cars, {
-            id: newCarId,
-            model: newAppointment.model,
-            vin: newAppointment.vin,
-            licensePlate: newAppointment.licensePlate,
-            owner: newAppointment.owner,
-            repairs
-          }]
-        }));
+export const useWorkshopStore = create<WorkshopStore>((set, get) => ({
+  // === STATO INIZIALE ===
+  cars: [],
+  appointments: [],
+  isLoading: false,
+  error: null,
+  currentWorkshopId: null,
+  unsubscribers: [],
+  
+  // === METODI PER AUTO IN OFFICINA ===
+  fetchWorkshopCars: async (workshopId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const carsQuery = query(
+        collection(db, 'workshop_cars'),
+        where('workshopId', '==', workshopId),
+        where('isActive', '==', true),
+        orderBy('entryDate', 'desc')
+      );
+      
+      const snapshot = await getDocs(carsQuery);
+      const cars: WorkshopCar[] = [];
+      
+      // Per ogni auto, recupera anche le riparazioni
+      for (const carDoc of snapshot.docs) {
+        const carData = carDoc.data();
         
-        return newCarId;
-      },
-
-      addRepairToCar: (carId, repair) => {
-        const newRepairId = `repair-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Recupera le riparazioni per questa auto
+        const repairsQuery = query(
+          collection(db, 'workshop_cars', carDoc.id, 'repairs'),
+          orderBy('scheduledDate', 'desc')
+        );
         
-        set(state => ({
-          cars: state.cars.map(car => 
-            car.id === carId ? {
-              ...car,
-              repairs: [
-                ...car.repairs, 
-                {
-                  id: newRepairId,
-                  ...repair,
-                  parts: [],
-                  status: 'pending'
-                }
-              ]
-            } : car
-          )
-        }));
+        const repairsSnapshot = await getDocs(repairsQuery);
+        const repairs = repairsSnapshot.docs.map(repairDoc => ({
+          id: repairDoc.id,
+          ...repairDoc.data()
+        })) as Repair[];
         
-        return newRepairId;
-      },
-
-      addPartToRepair: (carId, repairId, part) => {
-        const newPartId = `part-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        set(state => ({
-          cars: state.cars.map(car => 
-            car.id === carId ? {
-              ...car,
-              repairs: car.repairs.map(repair =>
-                repair.id === repairId ? {
-                  ...repair,
-                  parts: [...repair.parts, { id: newPartId, ...part }],
-                  totalCost: repair.totalCost + (part.quantity * part.unitCost)
-                } : repair
-              )
-            } : car
-          )
-        }));
-        
-        return newPartId;
-      },
-
-      updateRepairStatus: (carId, repairId, status) => {
-        set(state => ({
-          cars: state.cars.map(car => 
-            car.id === carId ? {
-              ...car,
-              repairs: car.repairs.map(repair =>
-                repair.id === repairId ? {
-                  ...repair,
-                  status
-                } : repair
-              )
-            } : car
-          )
-        }));
-      },
-
-      updateRepair: (carId: string, repairId: string, repairData: Partial<Omit<Repair, 'id'>>) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId ? {
-              ...car,
-              repairs: car.repairs.map(repair => {
-                if (repair.id === repairId) {
-                  // Applica prima le modifiche parziali alla riparazione
-                  const tempUpdatedRepair = { ...repair, ...repairData };
-
-                  // Se laborCost o l'array parts stesso vengono aggiornati,
-                  // ricalcola totalCost.
-                  if (repairData.laborCost !== undefined || repairData.parts !== undefined) {
-                    const newLaborCost = tempUpdatedRepair.laborCost;
-                    const newParts = tempUpdatedRepair.parts;
-                    tempUpdatedRepair.totalCost = newLaborCost + newParts.reduce((sum, p) => sum + (p.quantity * p.unitCost), 0);
-                  }
-                  return tempUpdatedRepair;
-                }
-                return repair;
-              })
-            } : car
-          )
-        }));
-      },
-
-
-      updatePartInRepair: (carId, repairId, partId, partData) => {
-        set(state => ({
-          cars: state.cars.map(car => 
-            car.id === carId ? {
-              ...car,
-              repairs: car.repairs.map(repair =>
-                repair.id === repairId ? {
-                  ...repair,
-                  parts: repair.parts.map(part =>
-                    part.id === partId ? { ...part, ...partData } : part
-                  ),
-                  totalCost: repair.laborCost + repair.parts.reduce((sum, p) => 
-                    sum + (p.id === partId ? 
-                      (partData.quantity || p.quantity) * (partData.unitCost || p.unitCost) : 
-                      p.quantity * p.unitCost), 0
-                  )
-                } : repair
-              )
-            } : car
-          )
-        }));
-      },
-
-      removePartFromRepair: (carId, repairId, partId) => {
-        set(state => ({
-          cars: state.cars.map(car => 
-            car.id === carId ? {
-              ...car,
-              repairs: car.repairs.map(repair =>
-                repair.id === repairId ? {
-                  ...repair,
-                  parts: repair.parts.filter(part => part.id !== partId),
-                  totalCost: repair.laborCost + repair.parts
-                    .filter(part => part.id !== partId)
-                    .reduce((sum, part) => sum + (part.quantity * part.unitCost), 0)
-                } : repair
-              )
-            } : car
-          )
-        }));
+        cars.push({
+          id: carDoc.id,
+          ...carData,
+          repairs
+        } as WorkshopCar);
       }
-    }),
-    {
-      name: 'workshop-storage',
-      partialize: (state) => ({ 
-        cars: state.cars 
-      }),
+      
+      set({ cars, isLoading: false });
+    } catch (error: any) {
+      console.error('Errore recupero auto officina:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero delle auto',
+        isLoading: false 
+      });
     }
-  )
-);
+  },
+  
+  addWorkshopCar: async (car) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'workshop_cars'), {
+        ...car,
+        repairs: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        isActive: true,
+        entryDate: car.entryDate || new Date().toISOString()
+      });
+      
+      const newCar: WorkshopCar = {
+        ...car,
+        id: docRef.id,
+        repairs: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        cars: [newCar, ...state.cars],
+        isLoading: false
+      }));
+      
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta auto:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta dell\'auto',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateWorkshopCar: async (carId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const carRef = doc(db, 'workshop_cars', carId);
+      await updateDoc(carRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        cars: state.cars.map(car => 
+          car.id === carId ? { ...car, ...updates } : car
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento auto:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento dell\'auto',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  removeWorkshopCar: async (carId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const carRef = doc(db, 'workshop_cars', carId);
+      await updateDoc(carRef, {
+        isActive: false,
+        exitDate: new Date().toISOString(),
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        cars: state.cars.filter(car => car.id !== carId),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore rimozione auto:', error);
+      set({ 
+        error: error.message || 'Errore nella rimozione dell\'auto',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  subscribeToWorkshopCars: (workshopId: string) => {
+    get().cleanup();
+    
+    const carsQuery = query(
+      collection(db, 'workshop_cars'),
+      where('workshopId', '==', workshopId),
+      where('isActive', '==', true),
+      orderBy('entryDate', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(carsQuery, 
+      async (snapshot) => {
+        const cars: WorkshopCar[] = [];
+        
+        for (const carDoc of snapshot.docs) {
+          const carData = carDoc.data();
+          
+          // Recupera riparazioni
+          const repairsQuery = query(
+            collection(db, 'workshop_cars', carDoc.id, 'repairs'),
+            orderBy('scheduledDate', 'desc')
+          );
+          
+          const repairsSnapshot = await getDocs(repairsQuery);
+          const repairs = repairsSnapshot.docs.map(repairDoc => ({
+            id: repairDoc.id,
+            ...repairDoc.data()
+          })) as Repair[];
+          
+          cars.push({
+            id: carDoc.id,
+            ...carData,
+            repairs
+          } as WorkshopCar);
+        }
+        
+        set({ cars, error: null });
+      },
+      (error) => {
+        console.error('Errore subscription auto:', error);
+        set({ error: error.message });
+      }
+    );
+    
+    set(state => ({
+      unsubscribers: [...state.unsubscribers, unsubscribe]
+    }));
+  },
+  
+  // === METODI PER RIPARAZIONI ===
+  addRepairToCar: async (carId, repair) => {
+    set({ isLoading: true, error: null });
+    try {
+      const repairRef = await addDoc(
+        collection(db, 'workshop_cars', carId, 'repairs'),
+        {
+          ...repair,
+          parts: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }
+      );
+      
+      const newRepair: Repair = {
+        ...repair,
+        id: repairRef.id,
+        parts: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        cars: state.cars.map(car => 
+          car.id === carId 
+            ? { ...car, repairs: [newRepair, ...car.repairs] }
+            : car
+        ),
+        isLoading: false
+      }));
+      
+      return repairRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta riparazione:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta della riparazione',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateRepair: async (carId, repairId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const repairRef = doc(db, 'workshop_cars', carId, 'repairs', repairId);
+      await updateDoc(repairRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        cars: state.cars.map(car => 
+          car.id === carId 
+            ? {
+                ...car,
+                repairs: car.repairs.map(repair =>
+                  repair.id === repairId ? { ...repair, ...updates } : repair
+                )
+              }
+            : car
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento riparazione:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento della riparazione',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateRepairStatus: async (carId, repairId, status) => {
+    return get().updateRepair(carId, repairId, { status });
+  },
+  
+  deleteRepair: async (carId, repairId) => {
+    set({ isLoading: true, error: null });
+    try {
+      await deleteDoc(doc(db, 'workshop_cars', carId, 'repairs', repairId));
+      
+      set(state => ({
+        cars: state.cars.map(car => 
+          car.id === carId 
+            ? {
+                ...car,
+                repairs: car.repairs.filter(repair => repair.id !== repairId)
+              }
+            : car
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore eliminazione riparazione:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione della riparazione',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  // === METODI PER PARTI ===
+  addPartToRepair: async (carId, repairId, part) => {
+    const car = get().getCarById(carId);
+    const repair = car?.repairs.find(r => r.id === repairId);
+    
+    if (!repair) {
+      throw new Error('Riparazione non trovata');
+    }
+    
+    const newPart: Part = {
+      ...part,
+      id: `part_${Date.now()}`
+    };
+    
+    const updatedParts = [...repair.parts, newPart];
+    await get().updateRepair(carId, repairId, { parts: updatedParts });
+    
+    return newPart.id;
+  },
+  
+  updatePartInRepair: async (carId, repairId, partId, updates) => {
+    const car = get().getCarById(carId);
+    const repair = car?.repairs.find(r => r.id === repairId);
+    
+    if (!repair) {
+      throw new Error('Riparazione non trovata');
+    }
+    
+    const updatedParts = repair.parts.map(part =>
+      part.id === partId ? { ...part, ...updates } : part
+    );
+    
+    await get().updateRepair(carId, repairId, { parts: updatedParts });
+  },
+  
+  removePartFromRepair: async (carId, repairId, partId) => {
+    const car = get().getCarById(carId);
+    const repair = car?.repairs.find(r => r.id === repairId);
+    
+    if (!repair) {
+      throw new Error('Riparazione non trovata');
+    }
+    
+    const updatedParts = repair.parts.filter(part => part.id !== partId);
+    await get().updateRepair(carId, repairId, { parts: updatedParts });
+  },
+  
+  // === METODI PER APPUNTAMENTI ===
+  fetchAppointments: async (workshopId, date) => {
+    set({ isLoading: true, error: null });
+    try {
+      let appointmentsQuery;
+      
+      if (date) {
+        // Recupera appuntamenti per una data specifica
+        appointmentsQuery = query(
+          collection(db, 'appointments'),
+          where('workshopId', '==', workshopId),
+          where('scheduledDate', '==', date),
+          orderBy('scheduledTime', 'asc')
+        );
+      } else {
+        // Recupera appuntamenti futuri
+        const today = new Date().toISOString().split('T')[0];
+        appointmentsQuery = query(
+          collection(db, 'appointments'),
+          where('workshopId', '==', workshopId),
+          where('scheduledDate', '>=', today),
+          orderBy('scheduledDate', 'asc'),
+          orderBy('scheduledTime', 'asc'),
+          limit(50)
+        );
+      }
+      
+      const snapshot = await getDocs(appointmentsQuery);
+      const appointments = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Appointment[];
+      
+      set({ appointments, isLoading: false });
+    } catch (error: any) {
+      console.error('Errore recupero appuntamenti:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero degli appuntamenti',
+        isLoading: false 
+      });
+    }
+  },
+  
+  addAppointment: async (appointment) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'appointments'), {
+        ...appointment,
+        status: appointment.status || 'scheduled',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      const newAppointment: Appointment = {
+        ...appointment,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        appointments: [...state.appointments, newAppointment],
+        isLoading: false
+      }));
+      
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta appuntamento:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta dell\'appuntamento',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateAppointment: async (appointmentId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const appointmentRef = doc(db, 'appointments', appointmentId);
+      await updateDoc(appointmentRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        appointments: state.appointments.map(apt =>
+          apt.id === appointmentId ? { ...apt, ...updates } : apt
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento appuntamento:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento dell\'appuntamento',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  cancelAppointment: async (appointmentId) => {
+    return get().updateAppointment(appointmentId, { status: 'cancelled' });
+  },
+  
+  subscribeToAppointments: (workshopId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const appointmentsQuery = query(
+      collection(db, 'appointments'),
+      where('workshopId', '==', workshopId),
+      where('scheduledDate', '>=', today),
+      orderBy('scheduledDate', 'asc'),
+      orderBy('scheduledTime', 'asc'),
+      limit(50)
+    );
+    
+    const unsubscribe = onSnapshot(appointmentsQuery, 
+      (snapshot) => {
+        const appointments = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Appointment[];
+        
+        set({ appointments, error: null });
+      },
+      (error) => {
+        console.error('Errore subscription appuntamenti:', error);
+        set({ error: error.message });
+      }
+    );
+    
+    set(state => ({
+      unsubscribers: [...state.unsubscribers, unsubscribe]
+    }));
+  },
+  
+  // === UTILITY ===
+  getCarById: (carId: string) => {
+    return get().cars.find(car => car.id === carId);
+  },
+  
+  getRepairDetails: (carId: string, repairId: string) => {
+    const car = get().getCarById(carId);
+    return car?.repairs.find(repair => repair.id === repairId);
+  },
+  
+  getTodayAppointments: () => {
+    const today = new Date().toISOString().split('T')[0];
+    return get().appointments.filter(apt => apt.scheduledDate === today);
+  },
+  
+  getUpcomingAppointments: (days: number = 7) => {
+    const today = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(today.getDate() + days);
+    
+    const todayStr = today.toISOString().split('T')[0];
+    const futureDateStr = futureDate.toISOString().split('T')[0];
+    
+    return get().appointments.filter(apt => 
+      apt.scheduledDate >= todayStr && apt.scheduledDate <= futureDateStr
+    );
+  },
+  
+  // === SETUP E CLEANUP ===
+  setWorkshopId: (workshopId: string) => {
+    set({ currentWorkshopId: workshopId });
+  },
+  
+  cleanup: () => {
+    const { unsubscribers } = get();
+    unsubscribers.forEach(unsub => unsub());
+    set({ unsubscribers: [] });
+  },
+  
+  resetStore: () => {
+    get().cleanup();
+    set({
+      cars: [],
+      appointments: [],
+      isLoading: false,
+      error: null,
+      currentWorkshopId: null,
+      unsubscribers: []
+    });
+  }
+}));

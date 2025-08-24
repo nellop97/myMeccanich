@@ -1,71 +1,26 @@
-// src/store/userCarsStore.ts
+// src/store/useCarsStore.ts - Store Auto con integrazione Firestore
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  Timestamp 
+} from 'firebase/firestore';
+import { db } from '../services/firebase';
 
-export interface MaintenanceRecord {
-  id: string;
-  description: string;
-  date: string;
-  mileage: number;
-  cost: number;
-  type: 'routine' | 'repair' | 'inspection' | 'other';
-  notes?: string;
-  nextDueDate?: string;
-  nextDueMileage?: number;
-  workshopName?: string;
-  parts?: string[];
-  status: 'completed' | 'scheduled' | 'overdue';
-}
+// ====================================
+// INTERFACCE E TIPI
+// ====================================
 
-export interface Expense {
-  id: string;
-  description: string;
-  date: string;
-  amount: number;
-  category: 'fuel' | 'maintenance' | 'insurance' | 'parking' | 'toll' | 'other';
-  mileage?: number;
-  notes?: string;
-  receipt?: string; // URL o path dell'immagine dello scontrino
-}
-
-export interface Document {
-  id: string;
-  name: string;
-  type: 'insurance' | 'registration' | 'inspection' | 'warranty' | 'other';
-  issueDate: string;
-  expiryDate?: string;
-  documentNumber?: string;
-  issuer?: string;
-  fileUrl?: string;
-  notes?: string;
-}
-
-export interface FuelRecord {
-  id: string;
-  date: string;
-  mileage: number;
-  liters: number;
-  costPerLiter: number;
-  totalCost: number;
-  fuelType: 'gasoline' | 'diesel' | 'electric' | 'hybrid';
-  isFullTank: boolean;
-  stationName?: string;
-  notes?: string;
-}
-
-export interface Reminder {
-  id: string;
-  title: string;
-  description: string;
-  type: 'maintenance' | 'document' | 'inspection' | 'custom';
-  dueDate?: string;
-  dueMileage?: number;
-  isActive: boolean;
-  createdAt: string;
-  completedAt?: string;
-}
-
-export interface UserCar {
+export interface Vehicle {
   id: string;
   make: string;
   model: string;
@@ -81,767 +36,559 @@ export interface UserCar {
   
   // Stato attuale
   currentMileage: number;
-  lastUpdatedMileage: string; // data ultimo aggiornamento km
+  lastUpdatedMileage?: string;
   
   // Assicurazione
   insuranceCompany?: string;
   insurancePolicy?: string;
   insuranceExpiry?: string;
   
-  // Record collegati
-  maintenanceRecords: MaintenanceRecord[];
-  expenses: Expense[];
-  documents: Document[];
-  fuelRecords: FuelRecord[];
-  reminders: Reminder[];
-  
-  // Metadati
+  // Metadata
+  ownerId: string;
+  sharedWith?: string[];
   isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: any;
+  updatedAt?: any;
   notes?: string;
-  imageUrl?: string; // Foto dell'auto
+  imageUrl?: string;
 }
 
-export interface CarStats {
-  totalExpenses: number;
-  maintenanceCount: number;
-  avgFuelConsumption?: number;
-  totalFuelCost: number;
-  totalMaintenanceCost: number;
-  kmSinceLastMaintenance?: number;
-  nextMaintenanceDate?: string;
-  nextMaintenanceMileage?: number;
+export interface MaintenanceRecord {
+  id: string;
+  vehicleId: string;
+  type: 'routine' | 'repair' | 'inspection' | 'other';
+  description: string;
+  date: string;
+  mileage?: number;
+  cost: number;
+  mechanicId?: string;
+  workshopName?: string;
+  parts?: string[];
+  notes?: string;
+  status: 'completed' | 'scheduled' | 'overdue';
+  nextDueDate?: string;
+  nextDueMileage?: number;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
-interface UserCarsStore {
-  cars: UserCar[];
+export interface FuelRecord {
+  id: string;
+  vehicleId: string;
+  date: string;
+  mileage: number;
+  liters: number;
+  costPerLiter: number;
+  totalCost: number;
+  fuelType: 'gasoline' | 'diesel' | 'electric' | 'hybrid' | 'lpg';
+  isFullTank: boolean;
+  stationName?: string;
+  notes?: string;
+  createdAt?: any;
+}
+
+export interface Expense {
+  id: string;
+  vehicleId: string;
+  category: 'fuel' | 'maintenance' | 'insurance' | 'parking' | 'toll' | 'tax' | 'other';
+  description: string;
+  amount: number;
+  date: string;
+  mileage?: number;
+  notes?: string;
+  receipt?: string;
+  createdAt?: any;
+}
+
+// ====================================
+// INTERFACCIA DELLO STORE
+// ====================================
+
+interface CarsStore {
+  // Stati
+  vehicles: Vehicle[];
+  maintenanceRecords: MaintenanceRecord[];
+  fuelRecords: FuelRecord[];
+  expenses: Expense[];
+  isLoading: boolean;
+  error: string | null;
   
-  // Metodi per auto
-  addCar: (car: Omit<UserCar, 'id' | 'createdAt' | 'updatedAt' | 'maintenanceRecords' | 'expenses' | 'documents' | 'fuelRecords' | 'reminders'>) => string;
-  updateCar: (carId: string, data: Partial<Omit<UserCar, 'id' | 'createdAt'>>) => void;
-  deleteCar: (carId: string) => void;
-  getCarById: (carId: string) => UserCar | undefined;
-  updateMileage: (carId: string, mileage: number) => void;
+  // Listener attivi
+  unsubscribers: (() => void)[];
   
-  // Metodi per manutenzioni
-  addMaintenance: (carId: string, maintenance: Omit<MaintenanceRecord, 'id'>) => string;
-  updateMaintenance: (carId: string, maintenanceId: string, data: Partial<Omit<MaintenanceRecord, 'id'>>) => void;
-  deleteMaintenance: (carId: string, maintenanceId: string) => void;
+  // === METODI PER VEICOLI ===
+  fetchUserVehicles: (userId: string) => Promise<void>;
+  addVehicle: (vehicle: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateVehicle: (vehicleId: string, updates: Partial<Vehicle>) => Promise<void>;
+  deleteVehicle: (vehicleId: string) => Promise<void>;
+  subscribeToVehicles: (userId: string) => void;
   
-  // Metodi per spese
-  addExpense: (carId: string, expense: Omit<Expense, 'id'>) => string;
-  updateExpense: (carId: string, expenseId: string, data: Partial<Omit<Expense, 'id'>>) => void;
-  deleteExpense: (carId: string, expenseId: string) => void;
+  // === METODI PER MANUTENZIONI ===
+  fetchMaintenanceRecords: (vehicleId: string) => Promise<void>;
+  addMaintenanceRecord: (record: Omit<MaintenanceRecord, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateMaintenanceRecord: (recordId: string, updates: Partial<MaintenanceRecord>) => Promise<void>;
+  deleteMaintenanceRecord: (recordId: string) => Promise<void>;
   
-  // Metodi per carburante
-  addFuelRecord: (carId: string, fuelRecord: Omit<FuelRecord, 'id'>) => string;
-  updateFuelRecord: (carId: string, fuelRecordId: string, data: Partial<Omit<FuelRecord, 'id'>>) => void;
-  deleteFuelRecord: (carId: string, fuelRecordId: string) => void;
+  // === METODI PER CARBURANTE ===
+  fetchFuelRecords: (vehicleId: string) => Promise<void>;
+  addFuelRecord: (record: Omit<FuelRecord, 'id' | 'createdAt'>) => Promise<string>;
+  updateFuelRecord: (recordId: string, updates: Partial<FuelRecord>) => Promise<void>;
+  deleteFuelRecord: (recordId: string) => Promise<void>;
   
-  // Metodi per documenti
-  addDocument: (carId: string, document: Omit<Document, 'id'>) => string;
-  updateDocument: (carId: string, documentId: string, data: Partial<Omit<Document, 'id'>>) => void;
-  deleteDocument: (carId: string, documentId: string) => void;
+  // === METODI PER SPESE ===
+  fetchExpenses: (vehicleId: string) => Promise<void>;
+  addExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => Promise<string>;
+  updateExpense: (expenseId: string, updates: Partial<Expense>) => Promise<void>;
+  deleteExpense: (expenseId: string) => Promise<void>;
   
-  // Metodi per promemoria
-  addReminder: (carId: string, reminder: Omit<Reminder, 'id' | 'createdAt'>) => string;
-  updateReminder: (carId: string, reminderId: string, data: Partial<Omit<Reminder, 'id' | 'createdAt'>>) => void;
-  deleteReminder: (carId: string, reminderId: string) => void;
-  completeReminder: (carId: string, reminderId: string) => void;
-  
-  // Metodi di analisi e statistiche
-  getCarStats: (carId: string) => CarStats;
-  getAllCarsStats: () => {
-    totalCars: number;
+  // === UTILITY ===
+  getVehicleById: (vehicleId: string) => Vehicle | undefined;
+  getVehicleStats: (vehicleId: string) => {
     totalExpenses: number;
-    totalMileage: number;
-    avgExpensePerCar: number;
-    carsNeedingAttention: number;
-    activeReminders: number;
+    maintenanceCount: number;
+    avgFuelConsumption: number;
+    totalFuelCost: number;
   };
   
-  // Metodi per manutenzioni scadute/prossime
-  getOverdueMaintenance: (carId?: string) => MaintenanceRecord[];
-  getUpcomingMaintenance: (carId?: string, daysAhead?: number) => MaintenanceRecord[];
-  getExpiringDocuments: (carId?: string, daysAhead?: number) => Document[];
-  getActiveReminders: (carId?: string) => Reminder[];
-  
-  // Metodi per calcoli carburante
-  calculateFuelEfficiency: (carId: string) => number | null;
-  getFuelTrends: (carId: string, months?: number) => Array<{
-    month: string;
-    consumption: number;
-    cost: number;
-  }>;
+  // === CLEANUP ===
+  cleanup: () => void;
+  resetStore: () => void;
 }
 
-export const useUserCarsStore = create<UserCarsStore>()(
-  persist(
-    (set, get) => ({
-      cars: [
-        // Auto di esempio
-        {
-          id: '1',
-          make: 'Fiat',
-          model: '500',
-          year: 2019,
-          color: 'Bianco',
-          licensePlate: 'AB123CD',
-          vin: 'ZFA3120000J123456',
-          purchaseDate: '2019-03-15',
-          purchasePrice: 18000,
-          purchaseMileage: 0,
-          currentMileage: 45000,
-          lastUpdatedMileage: '2025-06-01',
-          insuranceCompany: 'UnipolSai',
-          insuranceExpiry: '2025-12-15',
-          maintenanceRecords: [
-            {
-              id: '1',
-              description: 'Tagliando 40.000 km',
-              date: '2025-02-10',
-              mileage: 40000,
-              cost: 250,
-              type: 'routine',
-              status: 'completed',
-              workshopName: 'Officina Rossi',
-              nextDueDate: '2025-08-10',
-              nextDueMileage: 50000,
-            }
-          ],
-          expenses: [
-            {
-              id: '1',
-              description: 'Rifornimento',
-              date: '2025-06-01',
-              amount: 55.50,
-              category: 'fuel',
-              mileage: 45000,
-            }
-          ],
-          documents: [
-            {
-              id: '1',
-              name: 'Assicurazione RCA',
-              type: 'insurance',
-              issueDate: '2024-12-15',
-              expiryDate: '2025-12-15',
-              documentNumber: 'POL123456789',
-              issuer: 'UnipolSai',
-            }
-          ],
-          fuelRecords: [
-            {
-              id: '1',
-              date: '2025-06-01',
-              mileage: 45000,
-              liters: 38.5,
-              costPerLiter: 1.44,
-              totalCost: 55.50,
-              fuelType: 'gasoline',
-              isFullTank: true,
-              stationName: 'Eni',
-            }
-          ],
-          reminders: [
-            {
-              id: '1',
-              title: 'Prossimo tagliando',
-              description: 'Tagliando programmato a 50.000 km',
-              type: 'maintenance',
-              dueMileage: 50000,
-              isActive: true,
-              createdAt: '2025-02-10',
-            }
-          ],
-          isActive: true,
-          createdAt: '2019-03-15',
-          updatedAt: '2025-06-01',
-        },
-        {
-          id: '2',
-          make: 'Tesla',
-          model: 'Model 3',
-          year: 2021,
-          color: 'Nero',
-          licensePlate: 'CD456EF',
-          currentMileage: 28000,
-          lastUpdatedMileage: '2025-06-01',
-          maintenanceRecords: [],
-          expenses: [],
-          documents: [],
-          fuelRecords: [],
-          reminders: [],
-          isActive: true,
-          createdAt: '2021-05-20',
-          updatedAt: '2025-06-01',
-        }
-      ],
+// ====================================
+// CREAZIONE DELLO STORE
+// ====================================
 
-      addCar: (carData) => {
-        const newId = Date.now().toString();
-        const now = new Date().toISOString();
-        
-        const newCar: UserCar = {
-          id: newId,
-          ...carData,
-          maintenanceRecords: [],
-          expenses: [],
-          documents: [],
-          fuelRecords: [],
-          reminders: [],
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        set(state => ({
-          cars: [...state.cars, newCar],
-        }));
-
-        return newId;
-      },
-
-      updateCar: (carId, data) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? { ...car, ...data, updatedAt: new Date().toISOString() }
-              : car
-          ),
-        }));
-      },
-
-      deleteCar: (carId) => {
-        set(state => ({
-          cars: state.cars.filter(car => car.id !== carId),
-        }));
-      },
-
-      getCarById: (carId) => {
-        return get().cars.find(car => car.id === carId);
-      },
-
-      updateMileage: (carId, mileage) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  currentMileage: mileage,
-                  lastUpdatedMileage: new Date().toISOString().split('T')[0],
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      addMaintenance: (carId, maintenanceData) => {
-        const newId = Date.now().toString();
-        const newMaintenance: MaintenanceRecord = {
-          id: newId,
-          ...maintenanceData,
-        };
-
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  maintenanceRecords: [...car.maintenanceRecords, newMaintenance],
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-
-        return newId;
-      },
-
-      updateMaintenance: (carId, maintenanceId, data) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  maintenanceRecords: car.maintenanceRecords.map(maintenance =>
-                    maintenance.id === maintenanceId ? { ...maintenance, ...data } : maintenance
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      deleteMaintenance: (carId, maintenanceId) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  maintenanceRecords: car.maintenanceRecords.filter(maintenance => maintenance.id !== maintenanceId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      addExpense: (carId, expenseData) => {
-        const newId = Date.now().toString();
-        const newExpense: Expense = {
-          id: newId,
-          ...expenseData,
-        };
-
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  expenses: [...car.expenses, newExpense],
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-
-        return newId;
-      },
-
-      updateExpense: (carId, expenseId, data) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  expenses: car.expenses.map(expense =>
-                    expense.id === expenseId ? { ...expense, ...data } : expense
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      deleteExpense: (carId, expenseId) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  expenses: car.expenses.filter(expense => expense.id !== expenseId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      addFuelRecord: (carId, fuelRecordData) => {
-        const newId = Date.now().toString();
-        const newFuelRecord: FuelRecord = {
-          id: newId,
-          ...fuelRecordData,
-        };
-
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  fuelRecords: [...car.fuelRecords, newFuelRecord],
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-
-        return newId;
-      },
-
-      updateFuelRecord: (carId, fuelRecordId, data) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  fuelRecords: car.fuelRecords.map(fuelRecord =>
-                    fuelRecord.id === fuelRecordId ? { ...fuelRecord, ...data } : fuelRecord
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      deleteFuelRecord: (carId, fuelRecordId) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  fuelRecords: car.fuelRecords.filter(fuelRecord => fuelRecord.id !== fuelRecordId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      addDocument: (carId, documentData) => {
-        const newId = Date.now().toString();
-        const newDocument: Document = {
-          id: newId,
-          ...documentData,
-        };
-
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  documents: [...car.documents, newDocument],
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-
-        return newId;
-      },
-
-      updateDocument: (carId, documentId, data) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  documents: car.documents.map(document =>
-                    document.id === documentId ? { ...document, ...data } : document
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      deleteDocument: (carId, documentId) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  documents: car.documents.filter(document => document.id !== documentId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      addReminder: (carId, reminderData) => {
-        const newId = Date.now().toString();
-        const now = new Date().toISOString();
-        const newReminder: Reminder = {
-          id: newId,
-          ...reminderData,
-          createdAt: now,
-        };
-
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  reminders: [...car.reminders, newReminder],
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-
-        return newId;
-      },
-
-      updateReminder: (carId, reminderId, data) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  reminders: car.reminders.map(reminder =>
-                    reminder.id === reminderId ? { ...reminder, ...data } : reminder
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      deleteReminder: (carId, reminderId) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  reminders: car.reminders.filter(reminder => reminder.id !== reminderId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      completeReminder: (carId, reminderId) => {
-        set(state => ({
-          cars: state.cars.map(car =>
-            car.id === carId
-              ? {
-                  ...car,
-                  reminders: car.reminders.map(reminder =>
-                    reminder.id === reminderId
-                      ? { ...reminder, isActive: false, completedAt: new Date().toISOString() }
-                      : reminder
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : car
-          ),
-        }));
-      },
-
-      getCarStats: (carId) => {
-        const car = get().cars.find(c => c.id === carId);
-        if (!car) return {
-          totalExpenses: 0,
-          maintenanceCount: 0,
-          totalFuelCost: 0,
-          totalMaintenanceCost: 0,
-        };
-
-        const totalExpenses = car.expenses.reduce((sum, expense) => sum + expense.amount, 0);
-        const maintenanceCount = car.maintenanceRecords.length;
-        const totalFuelCost = car.expenses
-          .filter(expense => expense.category === 'fuel')
-          .reduce((sum, expense) => sum + expense.amount, 0);
-        const totalMaintenanceCost = car.expenses
-          .filter(expense => expense.category === 'maintenance')
-          .reduce((sum, expense) => sum + expense.amount, 0);
-
-        // Calcolo consumo medio carburante
-        const fuelRecords = car.fuelRecords.filter(record => record.isFullTank);
-        let avgFuelConsumption: number | undefined;
-        
-        if (fuelRecords.length >= 2) {
-          const consumptions = [];
-          for (let i = 1; i < fuelRecords.length; i++) {
-            const prevRecord = fuelRecords[i - 1];
-            const currRecord = fuelRecords[i];
-            const kmDiff = currRecord.mileage - prevRecord.mileage;
-            if (kmDiff > 0) {
-              const consumption = (currRecord.liters / kmDiff) * 100;
-              consumptions.push(consumption);
-            }
-          }
-          if (consumptions.length > 0) {
-            avgFuelConsumption = consumptions.reduce((sum, cons) => sum + cons, 0) / consumptions.length;
-          }
-        }
-
-        // Prossima manutenzione
-        const activeMaintenance = car.maintenanceRecords
-          .filter(record => record.nextDueDate || record.nextDueMileage)
-          .sort((a, b) => {
-            if (a.nextDueDate && b.nextDueDate) {
-              return new Date(a.nextDueDate).getTime() - new Date(b.nextDueDate).getTime();
-            }
-            if (a.nextDueMileage && b.nextDueMileage) {
-              return a.nextDueMileage - b.nextDueMileage;
-            }
-            return 0;
-          })[0];
-
-        return {
-          totalExpenses,
-          maintenanceCount,
-          avgFuelConsumption,
-          totalFuelCost,
-          totalMaintenanceCost,
-          kmSinceLastMaintenance: car.maintenanceRecords.length > 0
-            ? car.currentMileage - Math.max(...car.maintenanceRecords.map(r => r.mileage))
-            : undefined,
-          nextMaintenanceDate: activeMaintenance?.nextDueDate,
-          nextMaintenanceMileage: activeMaintenance?.nextDueMileage,
-        };
-      },
-
-      getAllCarsStats: () => {
-        const cars = get().cars.filter(car => car.isActive);
-        
-        const totalExpenses = cars.reduce((sum, car) => 
-          sum + car.expenses.reduce((carSum, expense) => carSum + expense.amount, 0), 0
-        );
-        
-        const totalMileage = cars.reduce((sum, car) => sum + car.currentMileage, 0);
-        
-        const carsNeedingAttention = cars.filter(car => {
-          const overdue = get().getOverdueMaintenance(car.id);
-          const expiring = get().getExpiringDocuments(car.id, 30);
-          return overdue.length > 0 || expiring.length > 0;
-        }).length;
-        
-        const activeReminders = cars.reduce((sum, car) => 
-          sum + car.reminders.filter(reminder => reminder.isActive).length, 0
-        );
-
-        return {
-          totalCars: cars.length,
-          totalExpenses,
-          totalMileage,
-          avgExpensePerCar: cars.length > 0 ? totalExpenses / cars.length : 0,
-          carsNeedingAttention,
-          activeReminders,
-        };
-      },
-
-      getOverdueMaintenance: (carId) => {
-        const today = new Date();
-        const cars = carId ? [get().getCarById(carId)] : get().cars;
-        
-        return cars
-          .filter(car => car)
-          .flatMap(car => 
-            car!.maintenanceRecords.filter(record => {
-              if (record.status === 'completed') return false;
-              
-              if (record.nextDueDate) {
-                return new Date(record.nextDueDate) < today;
-              }
-              
-              if (record.nextDueMileage && car!.currentMileage >= record.nextDueMileage) {
-                return true;
-              }
-              
-              return false;
-            })
-          );
-      },
-
-      getUpcomingMaintenance: (carId, daysAhead = 30) => {
-        const today = new Date();
-        const futureDate = new Date(today.getTime() + daysAhead * 24 * 60 * 60 * 1000);
-        const cars = carId ? [get().getCarById(carId)] : get().cars;
-        
-        return cars
-          .filter(car => car)
-          .flatMap(car => 
-            car!.maintenanceRecords.filter(record => {
-              if (record.status === 'completed') return false;
-              
-              if (record.nextDueDate) {
-                const dueDate = new Date(record.nextDueDate);
-                return dueDate >= today && dueDate <= futureDate;
-              }
-              
-              return false;
-            })
-          );
-      },
-
-      getExpiringDocuments: (carId, daysAhead = 30) => {
-        const today = new Date();
-        const futureDate = new Date(today.getTime() + daysAhead * 24 * 60 * 60 * 1000);
-        const cars = carId ? [get().getCarById(carId)] : get().cars;
-        
-        return cars
-          .filter(car => car)
-          .flatMap(car => 
-            car!.documents.filter(document => {
-              if (!document.expiryDate) return false;
-              const expiryDate = new Date(document.expiryDate);
-              return expiryDate >= today && expiryDate <= futureDate;
-            })
-          );
-      },
-
-      getActiveReminders: (carId) => {
-        const cars = carId ? [get().getCarById(carId)] : get().cars;
-        
-        return cars
-          .filter(car => car)
-          .flatMap(car => car!.reminders.filter(reminder => reminder.isActive));
-      },
-
-      calculateFuelEfficiency: (carId) => {
-        const car = get().getCarById(carId);
-        if (!car) return null;
-
-        const fuelRecords = car.fuelRecords
-          .filter(record => record.isFullTank)
-          .sort((a, b) => a.mileage - b.mileage);
-
-        if (fuelRecords.length < 2) return null;
-
-        const consumptions = [];
-        for (let i = 1; i < fuelRecords.length; i++) {
-          const prevRecord = fuelRecords[i - 1];
-          const currRecord = fuelRecords[i];
-          const kmDiff = currRecord.mileage - prevRecord.mileage;
-          if (kmDiff > 0) {
-            const consumption = (currRecord.liters / kmDiff) * 100;
-            consumptions.push(consumption);
-          }
-        }
-
-        return consumptions.length > 0
-          ? consumptions.reduce((sum, cons) => sum + cons, 0) / consumptions.length
-          : null;
-      },
-
-      getFuelTrends: (carId, months = 12) => {
-        const car = get().getCarById(carId);
-        if (!car) return [];
-
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setMonth(startDate.getMonth() - months);
-
-        const monthlyData: { [key: string]: { consumption: number[], cost: number } } = {};
-
-        car.fuelRecords
-          .filter(record => {
-            const recordDate = new Date(record.date);
-            return recordDate >= startDate && recordDate <= endDate;
-          })
-          .forEach(record => {
-            const monthKey = record.date.substring(0, 7); // YYYY-MM
-            if (!monthlyData[monthKey]) {
-              monthlyData[monthKey] = { consumption: [], cost: 0 };
-            }
-            monthlyData[monthKey].cost += record.totalCost;
-          });
-
-        return Object.entries(monthlyData).map(([month, data]) => ({
-          month,
-          consumption: data.consumption.length > 0
-            ? data.consumption.reduce((sum, cons) => sum + cons, 0) / data.consumption.length
-            : 0,
-          cost: data.cost,
-        }));
-      },
-    }),
-    {
-      name: 'user-cars-storage',
-      partialize: (state) => ({
-        cars: state.cars,
-      }),
+export const useCarsStore = create<CarsStore>((set, get) => ({
+  // === STATO INIZIALE ===
+  vehicles: [],
+  maintenanceRecords: [],
+  fuelRecords: [],
+  expenses: [],
+  isLoading: false,
+  error: null,
+  unsubscribers: [],
+  
+  // === METODI PER VEICOLI ===
+  fetchUserVehicles: async (userId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const vehiclesQuery = query(
+        collection(db, 'vehicles'),
+        where('ownerId', '==', userId),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const snapshot = await getDocs(vehiclesQuery);
+      const vehicles = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Vehicle[];
+      
+      set({ vehicles, isLoading: false });
+    } catch (error: any) {
+      console.error('Errore recupero veicoli:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero dei veicoli',
+        isLoading: false 
+      });
     }
-  )
-);
+  },
+  
+  addVehicle: async (vehicle) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'vehicles'), {
+        ...vehicle,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        isActive: true
+      });
+      
+      // Aggiorna lo stato locale
+      const newVehicle = {
+        ...vehicle,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        vehicles: [newVehicle, ...state.vehicles],
+        isLoading: false
+      }));
+      
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta veicolo:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta del veicolo',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateVehicle: async (vehicleId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const vehicleRef = doc(db, 'vehicles', vehicleId);
+      await updateDoc(vehicleRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      
+      // Aggiorna lo stato locale
+      set(state => ({
+        vehicles: state.vehicles.map(v => 
+          v.id === vehicleId ? { ...v, ...updates } : v
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento veicolo:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento del veicolo',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  deleteVehicle: async (vehicleId) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Soft delete - marca come inattivo invece di eliminare
+      const vehicleRef = doc(db, 'vehicles', vehicleId);
+      await updateDoc(vehicleRef, {
+        isActive: false,
+        updatedAt: serverTimestamp()
+      });
+      
+      // Rimuovi dallo stato locale
+      set(state => ({
+        vehicles: state.vehicles.filter(v => v.id !== vehicleId),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore eliminazione veicolo:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione del veicolo',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  subscribeToVehicles: (userId: string) => {
+    // Cancella listener precedenti
+    get().cleanup();
+    
+    const vehiclesQuery = query(
+      collection(db, 'vehicles'),
+      where('ownerId', '==', userId),
+      where('isActive', '==', true),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(vehiclesQuery, 
+      (snapshot) => {
+        const vehicles = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Vehicle[];
+        
+        set({ vehicles, error: null });
+      },
+      (error) => {
+        console.error('Errore subscription veicoli:', error);
+        set({ error: error.message });
+      }
+    );
+    
+    set(state => ({
+      unsubscribers: [...state.unsubscribers, unsubscribe]
+    }));
+  },
+  
+  // === METODI PER MANUTENZIONI ===
+  fetchMaintenanceRecords: async (vehicleId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const maintenanceQuery = query(
+        collection(db, 'maintenance_records'),
+        where('vehicleId', '==', vehicleId),
+        orderBy('date', 'desc')
+      );
+      
+      const snapshot = await getDocs(maintenanceQuery);
+      const records = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as MaintenanceRecord[];
+      
+      set({ maintenanceRecords: records, isLoading: false });
+    } catch (error: any) {
+      console.error('Errore recupero manutenzioni:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero delle manutenzioni',
+        isLoading: false 
+      });
+    }
+  },
+  
+  addMaintenanceRecord: async (record) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'maintenance_records'), {
+        ...record,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      const newRecord = {
+        ...record,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        maintenanceRecords: [newRecord, ...state.maintenanceRecords],
+        isLoading: false
+      }));
+      
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta manutenzione:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta della manutenzione',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateMaintenanceRecord: async (recordId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const recordRef = doc(db, 'maintenance_records', recordId);
+      await updateDoc(recordRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        maintenanceRecords: state.maintenanceRecords.map(r => 
+          r.id === recordId ? { ...r, ...updates } : r
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento manutenzione:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento della manutenzione',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  deleteMaintenanceRecord: async (recordId) => {
+    set({ isLoading: true, error: null });
+    try {
+      await deleteDoc(doc(db, 'maintenance_records', recordId));
+      
+      set(state => ({
+        maintenanceRecords: state.maintenanceRecords.filter(r => r.id !== recordId),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore eliminazione manutenzione:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione della manutenzione',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  // === METODI PER CARBURANTE (implementazione simile) ===
+  fetchFuelRecords: async (vehicleId: string) => {
+    // Implementazione simile a fetchMaintenanceRecords
+    set({ isLoading: true, error: null });
+    try {
+      const fuelQuery = query(
+        collection(db, 'fuel_records'),
+        where('vehicleId', '==', vehicleId),
+        orderBy('date', 'desc')
+      );
+      
+      const snapshot = await getDocs(fuelQuery);
+      const records = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as FuelRecord[];
+      
+      set({ fuelRecords: records, isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+  
+  addFuelRecord: async (record) => {
+    // Implementazione simile a addMaintenanceRecord
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'fuel_records'), {
+        ...record,
+        createdAt: serverTimestamp()
+      });
+      
+      return docRef.id;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+  
+  updateFuelRecord: async (recordId, updates) => {
+    // Implementazione simile
+    set({ isLoading: true, error: null });
+    try {
+      const recordRef = doc(db, 'fuel_records', recordId);
+      await updateDoc(recordRef, updates);
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+  
+  deleteFuelRecord: async (recordId) => {
+    // Implementazione simile
+    set({ isLoading: true, error: null });
+    try {
+      await deleteDoc(doc(db, 'fuel_records', recordId));
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+  
+  // === METODI PER SPESE (implementazione simile) ===
+  fetchExpenses: async (vehicleId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const expensesQuery = query(
+        collection(db, 'expenses'),
+        where('vehicleId', '==', vehicleId),
+        orderBy('date', 'desc')
+      );
+      
+      const snapshot = await getDocs(expensesQuery);
+      const expenses = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Expense[];
+      
+      set({ expenses, isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+  
+  addExpense: async (expense) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'expenses'), {
+        ...expense,
+        createdAt: serverTimestamp()
+      });
+      
+      return docRef.id;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+  
+  updateExpense: async (expenseId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const expenseRef = doc(db, 'expenses', expenseId);
+      await updateDoc(expenseRef, updates);
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+  
+  deleteExpense: async (expenseId) => {
+    set({ isLoading: true, error: null });
+    try {
+      await deleteDoc(doc(db, 'expenses', expenseId));
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+  
+  // === UTILITY ===
+  getVehicleById: (vehicleId: string) => {
+    return get().vehicles.find(v => v.id === vehicleId);
+  },
+  
+  getVehicleStats: (vehicleId: string) => {
+    const state = get();
+    const maintenance = state.maintenanceRecords.filter(r => r.vehicleId === vehicleId);
+    const fuel = state.fuelRecords.filter(r => r.vehicleId === vehicleId);
+    const expenses = state.expenses.filter(e => e.vehicleId === vehicleId);
+    
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalFuelCost = fuel.reduce((sum, f) => sum + f.totalCost, 0);
+    const maintenanceCount = maintenance.length;
+    
+    // Calcola consumo medio
+    let avgFuelConsumption = 0;
+    if (fuel.length > 1) {
+      const sortedFuel = [...fuel].sort((a, b) => a.mileage - b.mileage);
+      const totalLiters = sortedFuel.reduce((sum, f) => sum + f.liters, 0);
+      const totalDistance = sortedFuel[sortedFuel.length - 1].mileage - sortedFuel[0].mileage;
+      if (totalDistance > 0) {
+        avgFuelConsumption = (totalLiters / totalDistance) * 100; // L/100km
+      }
+    }
+    
+    return {
+      totalExpenses: totalExpenses + totalFuelCost,
+      maintenanceCount,
+      avgFuelConsumption,
+      totalFuelCost,
+    };
+  },
+  
+  // === CLEANUP ===
+  cleanup: () => {
+    const { unsubscribers } = get();
+    unsubscribers.forEach(unsub => unsub());
+    set({ unsubscribers: [] });
+  },
+  
+  resetStore: () => {
+    get().cleanup();
+    set({
+      vehicles: [],
+      maintenanceRecords: [],
+      fuelRecords: [],
+      expenses: [],
+      isLoading: false,
+      error: null,
+      unsubscribers: []
+    });
+  }
+}));

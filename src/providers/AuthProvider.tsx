@@ -2,7 +2,7 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useStore } from '../store';
-import { buildUserDisplayName } from '../hooks/useAuthSync';
+import { buildUserDisplayName } from '../utils/authUtils';
 
 interface AuthProviderProps {
     children: React.ReactNode;
@@ -23,14 +23,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             uid: authUser.uid,
             email: authUser.email,
             displayName: authUser.displayName,
-            firstName: authUser.firstName,
-            lastName: authUser.lastName,
+            name: authUser.name,
             userType: authUser.userType
         } : null);
 
         if (!initializing) {
             if (authUser) {
-                // Costruisci il nome dell'utente
+                // Costruisci il nome dell'utente con null safety
                 const userName = buildUserDisplayName(authUser);
 
                 // Sincronizza i dati Firebase con lo store Zustand
@@ -42,13 +41,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     photoURL: authUser.photoURL || undefined,
                     isMechanic: authUser.userType === 'mechanic',
                     phoneNumber: authUser.phoneNumber || undefined,
-                    emailVerified: authUser.emailVerified,
-                    createdAt: authUser.createdAt,
-                    lastLoginAt: authUser.lastLoginAt,
-                    // Dati specifici per meccanici
-                    workshopName: authUser.workshopName,
-                    workshopAddress: authUser.address,
-                    vatNumber: authUser.vatNumber,
+                    emailVerified: authUser.emailVerified || false,
+                    createdAt: authUser.createdAt || undefined,
+                    lastLoginAt: authUser.lastLoginAt || undefined,
+                    // Dati specifici per meccanici (solo se presenti)
+                    workshopName: authUser.workshopName || authUser.workshopInfo?.name || undefined,
+                    workshopAddress: authUser.address || authUser.workshopInfo?.address || undefined,
+                    vatNumber: authUser.vatNumber || authUser.workshopInfo?.vatNumber || undefined,
                 };
 
                 console.log('✅ Global Auth Sync - Syncing user to store:', {
@@ -84,6 +83,6 @@ export const useCurrentUser = () => {
         user,
         authUser,
         isAuthenticated: !!user?.isLoggedIn,
-        displayName: user?.name || buildUserDisplayName(authUser) || 'Utente'
+        displayName: user?.name || (authUser ? buildUserDisplayName(authUser) : 'Utente')
     };
 };

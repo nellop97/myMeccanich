@@ -165,145 +165,153 @@ export const useAuth = (): AuthContextType => {
     }
   }, []);
 
-  // Funzione per caricare i dati utente da Firestore
-  const loadUserData = useCallback(async (firebaseUser: FirebaseUser): Promise<AuthUser | null> => {
-    try {
-      console.log('🔍 DEBUG - Firebase User UID:', firebaseUser.uid);
-      console.log('🔍 DEBUG - Firebase User Email:', firebaseUser.email);
+const loadUserData = useCallback(async (firebaseUser: FirebaseUser): Promise<AuthUser> => {
+  try {
+    console.log('🔄 Caricamento dati utente per UID:', firebaseUser.uid);
+    
+    // Prima prova a recuperare il documento con l'UID come ID
+    const userDocRef = doc(db, 'users', firebaseUser.uid);
+    const userDoc = await getDoc(userDocRef);
 
-      const userDocRef = doc(db, 'users', firebaseUser.uid);
-      console.log('🔍 DEBUG - Document path:', `users/${firebaseUser.uid}`);
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      console.log('✅ Documento utente trovato:', userData.email);
 
-      const userDoc = await getDoc(userDocRef);
-      console.log('🔍 DEBUG - Document exists:', userDoc.exists());
-
-      if (userDoc.exists()) {
-        console.log('🔍 DEBUG - Document data:', userDoc.data());
-        const userData = userDoc.data();
-
-        // Resto del codice per processare i dati...
-        const processedUserData = {
-          ...userData,
-          createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate().toISOString() : userData.createdAt,
-          lastLoginAt: userData.lastLoginAt?.toDate ? userData.lastLoginAt.toDate().toISOString() : userData.lastLoginAt,
-          emailVerified: userData.isEmailVerified ?? firebaseUser.emailVerified,
-          displayName: userData.name ?? firebaseUser.displayName,
-        };
-
-        const baseUser: AuthUser = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          emailVerified: firebaseUser.emailVerified,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-          phoneNumber: firebaseUser.phoneNumber,
-          isAnonymous: firebaseUser.isAnonymous,
-        };
-
-        return { ...baseUser, ...processedUserData };
-      } else {
-        console.log('❌ Documento utente non trovato in Firestore');
-        console.log('🔍 DEBUG - Cerco altri documenti nella collezione users...');
-
-        // Verifica se esistono altri documenti nella collezione
-        const usersQuery = query(collection(db, 'users'), limit(5));
-        const usersSnapshot = await getDocs(usersQuery);
-
-        console.log('🔍 DEBUG - Documenti trovati nella collezione users:');
-        usersSnapshot.forEach((doc) => {
-          console.log(`  - ID: ${doc.id}, Email: ${doc.data().email}`);
-        });
-
-        // Prova a cercare per email
-        if (firebaseUser.email) {
-          console.log('🔍 DEBUG - Cerco documento per email:', firebaseUser.email);
-          const emailQuery = query(
-              collection(db, 'users'),
-              where('email', '==', firebaseUser.email),
-              limit(1)
-          );
-          const emailSnapshot = await getDocs(emailQuery);
-
-          if (!emailSnapshot.empty) {
-            const foundDoc = emailSnapshot.docs[0];
-            console.log('✅ Trovato documento per email! ID:', foundDoc.id);
-            console.log('⚠️  L\'ID del documento non corrisponde all\'UID Firebase');
-            console.log('   UID Firebase:', firebaseUser.uid);
-            console.log('   ID Documento:', foundDoc.id);
-
-            // Potresti decidere di usare questo documento o crearne uno nuovo
-            return {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              emailVerified: firebaseUser.emailVerified,
-              displayName: firebaseUser.displayName,
-              photoURL: firebaseUser.photoURL,
-              phoneNumber: firebaseUser.phoneNumber,
-              isAnonymous: firebaseUser.isAnonymous,
-              ...foundDoc.data(),
-            };
-          }
-        }
-
-        console.log('🔄 Creo nuovo documento utente...');
-
-        // Base user data
-        const baseUser: AuthUser = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          emailVerified: firebaseUser.emailVerified,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-          phoneNumber: firebaseUser.phoneNumber,
-          isAnonymous: firebaseUser.isAnonymous,
-        };
-
-        // Crea nuovo documento
-        const newUserData = {
-          email: firebaseUser.email,
-          name: firebaseUser.displayName,
-          isEmailVerified: firebaseUser.emailVerified,
-          createdAt: serverTimestamp(),
-          lastLoginAt: serverTimestamp(),
-          isActive: true,
-          userType: 'user',
-          settings: {
-            language: 'it',
-            currency: 'EUR',
-            notifications: {
-              maintenance: true,
-              documents: true,
-              reminders: true,
-              marketing: false,
-            },
-            privacy: {
-              shareDataWithWorkshops: false,
-              allowMarketingEmails: false,
-            },
+      // Costruisci l'oggetto AuthUser con null safety
+      const authUser: AuthUser = {
+        // Dati base da Firebase Auth
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || userData.email || '',
+        emailVerified: firebaseUser.emailVerified || userData.isEmailVerified || false,
+        displayName: userData.displayName || userData.name || firebaseUser.displayName || null,
+        photoURL: userData.photoURL || firebaseUser.photoURL || null,
+        phoneNumber: userData.phoneNumber || userData.phone || firebaseUser.phoneNumber || null,
+        isAnonymous: firebaseUser.isAnonymous || false,
+        
+        // Dati aggiuntivi da Firestore
+        name: userData.name || userData.displayName || null,
+        firstName: userData.firstName || null,
+        lastName: userData.lastName || null,
+        createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate().toISOString() : userData.createdAt || null,
+        lastLoginAt: userData.lastLoginAt?.toDate ? userData.lastLoginAt.toDate().toISOString() : userData.lastLoginAt || null,
+        isActive: userData.isActive !== undefined ? userData.isActive : true,
+        isEmailVerified: userData.isEmailVerified || firebaseUser.emailVerified || false,
+        userType: userData.userType || 'user',
+        profileComplete: userData.profileComplete || false,
+        
+        // Impostazioni utente con defaults
+        settings: userData.settings || {
+          language: 'it',
+          currency: 'EUR',
+          notifications: {
+            maintenance: true,
+            documents: true,
+            reminders: true,
+            marketing: false,
           },
+          privacy: {
+            shareDataWithWorkshops: true,
+            allowMarketingEmails: false,
+          },
+        },
+      };
+
+      // Aggiungi informazioni officina solo se è un meccanico
+      if (userData.userType === 'mechanic') {
+        authUser.workshopInfo = userData.workshopInfo || {
+          name: userData.workshopName || '',
+          address: userData.address || userData.workshopAddress || '',
+          phone: userData.workshopPhone || userData.phone || '',
+          email: userData.workshopEmail || userData.email || '',
+          vatNumber: userData.vatNumber || '',
+          specializations: userData.specializations || [],
+          certifications: userData.certifications || [],
+          workingHours: userData.workingHours || {},
         };
-
-        // Salva il nuovo documento
-        await setDoc(doc(db, 'users', firebaseUser.uid), newUserData);
-        console.log('✅ Nuovo documento utente creato con successo');
-
-        return {
-          ...baseUser,
-          ...newUserData,
-          createdAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-        };
-      }
-    } catch (error) {
-      console.error('❌ Errore nel caricamento dati utente:', error);
-
-      // Controlla il tipo di errore
-      if (error.code === 'permission-denied') {
-        console.error('🚫 ERRORE PERMISSIONS - Controlla le regole Firestore');
-      } else if (error.code === 'unavailable') {
-        console.error('🌐 ERRORE CONNESSIONE - Controlla la connessione internet');
+        
+        // Campi legacy per compatibilità
+        authUser.workshopName = userData.workshopName || userData.workshopInfo?.name;
+        authUser.address = userData.address || userData.workshopInfo?.address;
+        authUser.vatNumber = userData.vatNumber || userData.workshopInfo?.vatNumber;
       }
 
+      return authUser;
+
+    } else {
+      console.log('⚠️ Documento utente non trovato, cerco per email...');
+      
+      // Se non trova il documento con UID, prova a cercare per email
+      if (firebaseUser.email) {
+        const emailQuery = query(
+          collection(db, 'users'),
+          where('email', '==', firebaseUser.email),
+          limit(1)
+        );
+        const emailSnapshot = await getDocs(emailQuery);
+
+        if (!emailSnapshot.empty) {
+          const foundDoc = emailSnapshot.docs[0];
+          const userData = foundDoc.data();
+          console.log('✅ Trovato documento per email, ID:', foundDoc.id);
+
+          // Se troviamo un documento con email corrispondente, usa quello
+          // ma mantieni l'UID di Firebase Auth come principale
+          const authUser: AuthUser = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || userData.email || '',
+            emailVerified: firebaseUser.emailVerified || userData.isEmailVerified || false,
+            displayName: userData.displayName || userData.name || firebaseUser.displayName || null,
+            photoURL: userData.photoURL || firebaseUser.photoURL || null,
+            phoneNumber: userData.phoneNumber || userData.phone || firebaseUser.phoneNumber || null,
+            isAnonymous: firebaseUser.isAnonymous || false,
+            name: userData.name || userData.displayName || null,
+            firstName: userData.firstName || null,
+            lastName: userData.lastName || null,
+            userType: userData.userType || 'user',
+            // ... altri campi come sopra
+          };
+
+          return authUser;
+        }
+      }
+
+      console.log('🔄 Creo nuovo documento utente...');
+
+      // Se non esiste nessun documento, crea un nuovo utente
+      const newUserData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        name: firebaseUser.displayName || extractNameFromEmail(firebaseUser.email),
+        displayName: firebaseUser.displayName || null,
+        isEmailVerified: firebaseUser.emailVerified || false,
+        photoURL: firebaseUser.photoURL || null,
+        phoneNumber: firebaseUser.phoneNumber || null,
+        createdAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp(),
+        isActive: true,
+        userType: 'user', // Default: proprietario auto
+        profileComplete: false,
+        settings: {
+          language: 'it',
+          currency: 'EUR',
+          notifications: {
+            maintenance: true,
+            documents: true,
+            reminders: true,
+            marketing: false,
+          },
+          privacy: {
+            shareDataWithWorkshops: true,
+            allowMarketingEmails: false,
+          },
+        },
+      };
+
+      // Crea il documento in Firestore
+      await setDoc(doc(db, 'users', firebaseUser.uid), newUserData);
+      console.log('✅ Nuovo documento utente creato');
+
+      // Ritorna l'oggetto AuthUser
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -312,11 +320,49 @@ export const useAuth = (): AuthContextType => {
         photoURL: firebaseUser.photoURL,
         phoneNumber: firebaseUser.phoneNumber,
         isAnonymous: firebaseUser.isAnonymous,
-        createdAt: firebaseUser.metadata.creationTime,
-        lastLoginAt: firebaseUser.metadata.lastSignInTime,
+        name: newUserData.name,
+        userType: 'user',
+        isActive: true,
+        profileComplete: false,
+        settings: newUserData.settings,
       };
     }
-  }, []);
+  } catch (error) {
+    console.error('❌ Errore caricamento dati utente:', error);
+    
+    // In caso di errore, ritorna almeno i dati base da Firebase Auth
+    return {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      emailVerified: firebaseUser.emailVerified,
+      displayName: firebaseUser.displayName,
+      photoURL: firebaseUser.photoURL,
+      phoneNumber: firebaseUser.phoneNumber,
+      isAnonymous: firebaseUser.isAnonymous,
+      userType: 'user',
+      isActive: true,
+    };
+  }
+}, [showError]);
+
+/**
+ * Funzione helper per estrarre un nome dall'email
+ */
+const extractNameFromEmail = (email: string | null): string => {
+  if (!email) return 'Utente';
+  
+  const localPart = email.split('@')[0];
+  // Rimuovi numeri e caratteri speciali, capitalizza
+  const cleanName = localPart
+    .replace(/[0-9_.-]/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(part => part.length > 0)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+  
+  return cleanName || localPart.charAt(0).toUpperCase() + localPart.slice(1);
+};
 
   // 🔒 LISTENER SICURO - UNICA FONTE DI VERITÀ
   useEffect(() => {

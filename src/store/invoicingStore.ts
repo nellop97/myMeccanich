@@ -1,13 +1,31 @@
+// src/store/invoicingStore.ts - Store Fatturazione con integrazione Firestore
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  limit,
+  Timestamp
+} from 'firebase/firestore';
+import { db } from '../services/firebase';
 
-export type InvoiceType = 'customer' | 'supplier' | 'expense' | 'other';
+// ====================================
+// INTERFACCE E TIPI
+// ====================================
 
+export type InvoiceType = 'customer' | 'supplier' | 'expense' | 'credit_note';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-
 export type PaymentMethod = 'cash' | 'card' | 'bank_transfer' | 'check' | 'other';
 
-export type InvoiceItem = {
+export interface InvoiceItem {
   id: string;
   description: string;
   quantity: number;
@@ -16,9 +34,9 @@ export type InvoiceItem = {
   discount?: number; // Percentuale sconto
   total: number; // quantity * unitPrice * (1 - discount/100)
   vatAmount: number; // total * vatRate/100
-};
+}
 
-export type Customer = {
+export interface Customer {
   id: string;
   name: string;
   email?: string;
@@ -26,12 +44,20 @@ export type Customer = {
   address?: string;
   city?: string;
   postalCode?: string;
+  province?: string;
+  country?: string;
   vatNumber?: string;
   fiscalCode?: string;
   isCompany: boolean;
-};
+  pec?: string; // Posta Elettronica Certificata
+  sdiCode?: string; // Codice SDI per fatturazione elettronica
+  notes?: string;
+  workshopId: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
 
-export type Invoice = {
+export interface Invoice {
   id: string;
   number: string; // Numero fattura progressivo
   type: InvoiceType;
@@ -62,6 +88,7 @@ export type Invoice = {
   // Pagamento
   paymentMethod?: PaymentMethod;
   paymentTerms?: string; // es. "30 giorni"
+  bankDetails?: string; // IBAN o dettagli bancari
   
   // Note e riferimenti
   notes?: string;
@@ -72,58 +99,76 @@ export type Invoice = {
   repairId?: string;
   
   // Metadati
-  createdAt: string;
-  updatedAt: string;
+  workshopId: string;
   createdBy?: string;
-};
+  createdAt?: any;
+  updatedAt?: any;
+}
 
-export type InvoiceTemplate = {
+export interface InvoiceTemplate {
   id: string;
   name: string;
   type: InvoiceType;
   items: Omit<InvoiceItem, 'id' | 'total' | 'vatAmount'>[];
   defaultPaymentTerms?: string;
   defaultNotes?: string;
-};
+  workshopId: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// ====================================
+// INTERFACCIA DELLO STORE
+// ====================================
 
 interface InvoicingStore {
+  // Stati
   invoices: Invoice[];
   customers: Customer[];
   templates: InvoiceTemplate[];
-  
-  // Contatori
   nextInvoiceNumber: number;
+  isLoading: boolean;
+  error: string | null;
+  currentWorkshopId: string | null;
   
-  // Metodi per fatture
-  addInvoice: (invoice: Omit<Invoice, 'id' | 'number' | 'createdAt' | 'updatedAt'>) => string;
-  updateInvoice: (invoiceId: string, data: Partial<Omit<Invoice, 'id'>>) => void;
-  deleteInvoice: (invoiceId: string) => void;
+  // Listener attivi
+  unsubscribers: (() => void)[];
+  
+  // === METODI PER FATTURE ===
+  fetchInvoices: (workshopId: string, year?: number) => Promise<void>;
+  addInvoice: (invoice: Omit<Invoice, 'id' | 'number' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateInvoice: (invoiceId: string, updates: Partial<Invoice>) => Promise<void>;
+  deleteInvoice: (invoiceId: string) => Promise<void>;
+  subscribeToInvoices: (workshopId: string) => void;
+  
+  // === METODI PER CLIENTI ===
+  fetchCustomers: (workshopId: string) => Promise<void>;
+  addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateCustomer: (customerId: string, updates: Partial<Customer>) => Promise<void>;
+  deleteCustomer: (customerId: string) => Promise<void>;
+  subscribeToCustomers: (workshopId: string) => void;
+  
+  // === METODI PER TEMPLATE ===
+  fetchTemplates: (workshopId: string) => Promise<void>;
+  addTemplate: (template: Omit<InvoiceTemplate, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateTemplate: (templateId: string, updates: Partial<InvoiceTemplate>) => Promise<void>;
+  deleteTemplate: (templateId: string) => Promise<void>;
+  
+  // === UTILITY ===
   getInvoiceById: (invoiceId: string) => Invoice | undefined;
+  getCustomerById: (customerId: string) => Customer | undefined;
   getInvoicesByCustomer: (customerId: string) => Invoice[];
   getInvoicesByRepair: (carId: string, repairId: string) => Invoice[];
-  
-  // Metodi per clienti
-  addCustomer: (customer: Omit<Customer, 'id'>) => string;
-  updateCustomer: (customerId: string, data: Partial<Omit<Customer, 'id'>>) => void;
-  deleteCustomer: (customerId: string) => void;
-  getCustomerById: (customerId: string) => Customer | undefined;
-  
-  // Metodi per template
-  addTemplate: (template: Omit<InvoiceTemplate, 'id'>) => string;
-  updateTemplate: (templateId: string, data: Partial<Omit<InvoiceTemplate, 'id'>>) => void;
-  deleteTemplate: (templateId: string) => void;
-  
-  // Utility
   calculateInvoiceTotals: (items: InvoiceItem[]) => {
     subtotal: number;
     totalVat: number;
     totalAmount: number;
     totalDiscount: number;
   };
-  generateInvoiceFromRepair: (carId: string, repairId: string) => Omit<Invoice, 'id' | 'number' | 'createdAt' | 'updatedAt'> | null;
-  updateInvoiceStatus: (invoiceId: string, status: InvoiceStatus, paidDate?: string) => void;
+  generateNextInvoiceNumber: () => Promise<string>;
+  updateInvoiceStatus: (invoiceId: string, status: InvoiceStatus, paidDate?: string) => Promise<void>;
   
-  // Statistiche
+  // === STATISTICHE ===
   getInvoiceStats: () => {
     totalInvoices: number;
     totalRevenue: number;
@@ -131,431 +176,561 @@ interface InvoicingStore {
     overdueAmount: number;
     thisMonthRevenue: number;
     lastMonthRevenue: number;
+    averageInvoiceValue: number;
   };
+  
+  // === SETUP E CLEANUP ===
+  setWorkshopId: (workshopId: string) => void;
+  cleanup: () => void;
+  resetStore: () => void;
 }
 
-export const useInvoicingStore = create<InvoicingStore>()(
-  persist(
-    (set, get) => ({
-      invoices: [
-        // Fattura di esempio per Tesla
-        {
-          id: '1',
-          number: 'FAT-2025-001',
-          type: 'customer',
-          status: 'paid',
-          issueDate: '2025-05-20',
-          dueDate: '2025-06-19',
-          paidDate: '2025-05-25',
-          customerId: '1',
-          customerName: 'Mario Rossi',
-          customerEmail: 'mario.rossi@email.com',
-          customerAddress: 'Via Roma 123, 20100 Milano',
-          customerFiscalCode: 'RSSMRA80A01F205X',
-          items: [
-            {
-              id: '1',
-              description: 'Sostituzione batteria trazione Tesla Model 3',
-              quantity: 1,
-              unitPrice: 1000.00,
-              vatRate: 22,
-              total: 1000.00,
-              vatAmount: 220.00,
-            },
-            {
-              id: '2',
-              description: 'Manodopera specializzata',
-              quantity: 4,
-              unitPrice: 50.00,
-              vatRate: 22,
-              total: 200.00,
-              vatAmount: 44.00,
-            }
-          ],
-          subtotal: 1200.00,
-          totalVat: 264.00,
-          totalAmount: 1464.00,
-          totalDiscount: 0,
-          paymentMethod: 'bank_transfer',
-          paymentTerms: '30 giorni',
-          notes: 'Intervento in garanzia, solo manodopera a carico del cliente',
-          carId: '1',
-          repairId: '1',
-          createdAt: '2025-05-20T10:00:00Z',
-          updatedAt: '2025-05-25T14:30:00Z',
-        },
-        // Fattura di esempio per Fiat Panda
-        {
-          id: '2',
-          number: 'FAT-2025-002',
-          type: 'customer',
-          status: 'sent',
-          issueDate: '2025-06-01',
-          dueDate: '2025-07-01',
-          customerId: '2',
-          customerName: 'Anna Verdi',
-          customerEmail: 'anna.verdi@email.com',
-          customerAddress: 'Via Milano 45, 20121 Milano',
-          customerFiscalCode: 'VRDNNA85B42F205Y',
-          items: [
-            {
-              id: '3',
-              description: 'Olio motore 5W-30 (4 litri)',
-              quantity: 4,
-              unitPrice: 8.50,
-              vatRate: 22,
-              total: 34.00,
-              vatAmount: 7.48,
-            },
-            {
-              id: '4',
-              description: 'Filtro olio',
-              quantity: 1,
-              unitPrice: 12.00,
-              vatRate: 22,
-              total: 12.00,
-              vatAmount: 2.64,
-            },
-            {
-              id: '5',
-              description: 'Filtro aria',
-              quantity: 1,
-              unitPrice: 15.00,
-              vatRate: 22,
-              total: 15.00,
-              vatAmount: 3.30,
-            },
-            {
-              id: '6',
-              description: 'Filtro abitacolo',
-              quantity: 1,
-              unitPrice: 18.00,
-              vatRate: 22,
-              total: 18.00,
-              vatAmount: 3.96,
-            },
-            {
-              id: '7',
-              description: 'Manodopera tagliando',
-              quantity: 2,
-              unitPrice: 25.00,
-              vatRate: 22,
-              total: 50.00,
-              vatAmount: 11.00,
-            }
-          ],
-          subtotal: 129.00,
-          totalVat: 28.38,
-          totalAmount: 157.38,
-          totalDiscount: 0,
-          paymentMethod: 'card',
-          paymentTerms: '30 giorni',
-          notes: 'Tagliando completo come da programma manutenzione',
-          carId: '2',
-          repairId: '2',
-          createdAt: '2025-06-01T09:15:00Z',
-          updatedAt: '2025-06-01T09:15:00Z',
-        }
-      ],
+// ====================================
+// CREAZIONE DELLO STORE
+// ====================================
+
+export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
+  // === STATO INIZIALE ===
+  invoices: [],
+  customers: [],
+  templates: [],
+  nextInvoiceNumber: 1,
+  isLoading: false,
+  error: null,
+  currentWorkshopId: null,
+  unsubscribers: [],
+  
+  // === METODI PER FATTURE ===
+  fetchInvoices: async (workshopId, year) => {
+    set({ isLoading: true, error: null });
+    try {
+      const currentYear = year || new Date().getFullYear();
+      const startDate = `${currentYear}-01-01`;
+      const endDate = `${currentYear}-12-31`;
       
-      customers: [
-        {
-          id: '1',
-          name: 'Mario Rossi',
-          email: 'mario.rossi@email.com',
-          phone: '+39 334 1234567',
-          address: 'Via Roma 123',
-          city: 'Milano',
-          postalCode: '20100',
-          fiscalCode: 'RSSMRA80A01F205X',
-          isCompany: false,
-        },
-        {
-          id: '2',
-          name: 'Anna Verdi',
-          email: 'anna.verdi@email.com',
-          phone: '+39 347 9876543',
-          address: 'Via Milano 45',
-          city: 'Milano',
-          postalCode: '20121',
-          fiscalCode: 'VRDNNA85B42F205Y',
-          isCompany: false,
-        },
-        {
-          id: '3',
-          name: 'AutoService SpA',
-          email: 'info@autoservice.it',
-          phone: '+39 02 1234567',
-          address: 'Via Industria 12',
-          city: 'Milano',
-          postalCode: '20143',
-          vatNumber: 'IT12345678901',
-          isCompany: true,
-        }
-      ],
+      const invoicesQuery = query(
+        collection(db, 'invoices'),
+        where('workshopId', '==', workshopId),
+        where('issueDate', '>=', startDate),
+        where('issueDate', '<=', endDate),
+        orderBy('issueDate', 'desc'),
+        orderBy('number', 'desc')
+      );
       
-      templates: [
-        {
-          id: '1',
-          name: 'Tagliando Standard',
-          type: 'customer',
-          items: [
-            {
-              description: 'Olio motore (litri variabili)',
-              quantity: 4,
-              unitPrice: 8.50,
-              vatRate: 22,
-            },
-            {
-              description: 'Filtro olio',
-              quantity: 1,
-              unitPrice: 12.00,
-              vatRate: 22,
-            },
-            {
-              description: 'Filtro aria',
-              quantity: 1,
-              unitPrice: 15.00,
-              vatRate: 22,
-            },
-            {
-              description: 'Manodopera tagliando',
-              quantity: 2,
-              unitPrice: 25.00,
-              vatRate: 22,
-            }
-          ],
-          defaultPaymentTerms: '30 giorni',
-          defaultNotes: 'Tagliando come da programma manutenzione',
-        }
-      ],
+      const snapshot = await getDocs(invoicesQuery);
+      const invoices = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Invoice[];
       
-      nextInvoiceNumber: 3,
-
-      addInvoice: (invoiceData) => {
-        const newId = Date.now().toString();
-        const currentYear = new Date().getFullYear(); // Ottieni l'anno corrente
-        const invoiceNumber = `FAT-<span class="math-inline">\{currentYear\}\-</span>{String(get().nextInvoiceNumber).padStart(3, '0')}`; // Usa l'anno corrente
-        const now = new Date().toISOString();
-
-        const totals = get().calculateInvoiceTotals(invoiceData.items);
-
-        const newInvoice: Invoice = {
-          id: newId,
-          number: invoiceNumber,
-          ...invoiceData,
-          ...totals,
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        set(state => ({
-          invoices: [...state.invoices, newInvoice],
-          nextInvoiceNumber: state.nextInvoiceNumber + 1,
-        }));
-
-        return newId;
-      },
-
-      updateInvoice: (invoiceId, data) => {
-        set(state => ({
-          invoices: state.invoices.map(invoice =>
-            invoice.id === invoiceId
-              ? {
-                  ...invoice,
-                  ...data,
-                  ...(data.items ? get().calculateInvoiceTotals(data.items) : {}),
-                  updatedAt: new Date().toISOString(),
-                }
-              : invoice
-          ),
-        }));
-      },
-
-      deleteInvoice: (invoiceId) => {
-        set(state => ({
-          invoices: state.invoices.filter(invoice => invoice.id !== invoiceId),
-        }));
-      },
-
-      getInvoiceById: (invoiceId) => {
-        return get().invoices.find(invoice => invoice.id === invoiceId);
-      },
-
-      getInvoicesByCustomer: (customerId) => {
-        return get().invoices.filter(invoice => invoice.customerId === customerId);
-      },
-
-      getInvoicesByRepair: (carId, repairId) => {
-        return get().invoices.filter(invoice => 
-          invoice.carId === carId && invoice.repairId === repairId
-        );
-      },
-
-      addCustomer: (customerData) => {
-        const newId = Date.now().toString();
-        const newCustomer: Customer = {
-          id: newId,
-          ...customerData,
-        };
-
-        set(state => ({
-          customers: [...state.customers, newCustomer],
-        }));
-
-        return newId;
-      },
-
-      updateCustomer: (customerId, data) => {
-        set(state => ({
-          customers: state.customers.map(customer =>
-            customer.id === customerId ? { ...customer, ...data } : customer
-          ),
-        }));
-      },
-
-      deleteCustomer: (customerId) => {
-        set(state => ({
-          customers: state.customers.filter(customer => customer.id !== customerId),
-        }));
-      },
-
-      getCustomerById: (customerId) => {
-        return get().customers.find(customer => customer.id === customerId);
-      },
-
-      addTemplate: (templateData) => {
-        const newId = Date.now().toString();
-        const newTemplate: InvoiceTemplate = {
-          id: newId,
-          ...templateData,
-        };
-
-        set(state => ({
-          templates: [...state.templates, newTemplate],
-        }));
-
-        return newId;
-      },
-
-      updateTemplate: (templateId, data) => {
-        set(state => ({
-          templates: state.templates.map(template =>
-            template.id === templateId ? { ...template, ...data } : template
-          ),
-        }));
-      },
-
-      deleteTemplate: (templateId) => {
-        set(state => ({
-          templates: state.templates.filter(template => template.id !== templateId),
-        }));
-      },
-
-      calculateInvoiceTotals: (items) => {
-        let subtotal = 0;
-        let totalVat = 0;
-        let totalDiscount = 0;
-
-        items.forEach(item => {
-          const itemTotal = item.quantity * item.unitPrice;
-          const discountAmount = itemTotal * (item.discount || 0) / 100;
-          const totalAfterDiscount = itemTotal - discountAmount;
-          const vatAmount = totalAfterDiscount * item.vatRate / 100;
-
-          subtotal += totalAfterDiscount;
-          totalVat += vatAmount;
-          totalDiscount += discountAmount;
-        });
-
-        return {
-          subtotal,
-          totalVat,
-          totalAmount: subtotal + totalVat,
-          totalDiscount,
-        };
-      },
-
-      generateInvoiceFromRepair: (carId, repairId) => {
-        // Qui dovremmo importare useWorkshopStore, ma per evitare dipendenze circolari
-        // questo metodo sarà implementato nelle schermate
-        return null;
-      },
-
-      updateInvoiceStatus: (invoiceId, status, paidDate) => {
-        set(state => ({
-          invoices: state.invoices.map(invoice =>
-            invoice.id === invoiceId
-              ? {
-                  ...invoice,
-                  status,
-                  paidDate: status === 'paid' ? paidDate || new Date().toISOString().split('T')[0] : undefined,
-                  updatedAt: new Date().toISOString(),
-                }
-              : invoice
-          ),
-        }));
-      },
-
-      getInvoiceStats: () => {
-        const invoices = get().invoices;
-        const now = new Date();
-        const thisMonth = now.getMonth();
-        const thisYear = now.getFullYear();
-        const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
-        const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
-
-        const totalInvoices = invoices.length;
-        const totalRevenue = invoices
-          .filter(inv => inv.status === 'paid')
-          .reduce((sum, inv) => sum + inv.totalAmount, 0);
-
-        const pendingAmount = invoices
-          .filter(inv => inv.status === 'sent')
-          .reduce((sum, inv) => sum + inv.totalAmount, 0);
-
-        const overdueAmount = invoices
-          .filter(inv => {
-            if (inv.status !== 'sent') return false;
-            const dueDate = new Date(inv.dueDate);
-            return dueDate < now;
-          })
-          .reduce((sum, inv) => sum + inv.totalAmount, 0);
-
-        const thisMonthRevenue = invoices
-          .filter(inv => {
-            if (inv.status !== 'paid') return false;
-            const invoiceDate = new Date(inv.paidDate || inv.issueDate);
-            return invoiceDate.getMonth() === thisMonth && invoiceDate.getFullYear() === thisYear;
-          })
-          .reduce((sum, inv) => sum + inv.totalAmount, 0);
-
-        const lastMonthRevenue = invoices
-          .filter(inv => {
-            if (inv.status !== 'paid') return false;
-            const invoiceDate = new Date(inv.paidDate || inv.issueDate);
-            return invoiceDate.getMonth() === lastMonth && invoiceDate.getFullYear() === lastMonthYear;
-          })
-          .reduce((sum, inv) => sum + inv.totalAmount, 0);
-
-        return {
-          totalInvoices,
-          totalRevenue,
-          pendingAmount,
-          overdueAmount,
-          thisMonthRevenue,
-          lastMonthRevenue,
-        };
-      },
-    }),
-    {
-      name: 'invoicing-storage',
-      partialize: (state) => ({
-        invoices: state.invoices,
-        customers: state.customers,
-        templates: state.templates,
-        nextInvoiceNumber: state.nextInvoiceNumber,
-      }),
+      // Calcola il prossimo numero di fattura
+      if (invoices.length > 0) {
+        const lastNumber = parseInt(invoices[0].number.split('-').pop() || '0');
+        set({ nextInvoiceNumber: lastNumber + 1 });
+      }
+      
+      set({ invoices, isLoading: false });
+    } catch (error: any) {
+      console.error('Errore recupero fatture:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero delle fatture',
+        isLoading: false 
+      });
     }
-  )
-);
+  },
+  
+  addInvoice: async (invoice) => {
+    set({ isLoading: true, error: null });
+    try {
+      const invoiceNumber = await get().generateNextInvoiceNumber();
+      
+      const docRef = await addDoc(collection(db, 'invoices'), {
+        ...invoice,
+        number: invoiceNumber,
+        status: invoice.status || 'draft',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      const newInvoice: Invoice = {
+        ...invoice,
+        id: docRef.id,
+        number: invoiceNumber,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        invoices: [newInvoice, ...state.invoices],
+        nextInvoiceNumber: state.nextInvoiceNumber + 1,
+        isLoading: false
+      }));
+      
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore creazione fattura:', error);
+      set({ 
+        error: error.message || 'Errore nella creazione della fattura',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateInvoice: async (invoiceId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const invoiceRef = doc(db, 'invoices', invoiceId);
+      
+      // Ricalcola i totali se gli items sono stati aggiornati
+      let finalUpdates = { ...updates };
+      if (updates.items) {
+        const totals = get().calculateInvoiceTotals(updates.items);
+        finalUpdates = { ...finalUpdates, ...totals };
+      }
+      
+      await updateDoc(invoiceRef, {
+        ...finalUpdates,
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        invoices: state.invoices.map(inv =>
+          inv.id === invoiceId ? { ...inv, ...finalUpdates } : inv
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento fattura:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento della fattura',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  deleteInvoice: async (invoiceId) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Non eliminiamo fisicamente, ma marchiamo come cancellata
+      const invoiceRef = doc(db, 'invoices', invoiceId);
+      await updateDoc(invoiceRef, {
+        status: 'cancelled',
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        invoices: state.invoices.map(inv =>
+          inv.id === invoiceId ? { ...inv, status: 'cancelled' } : inv
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore eliminazione fattura:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione della fattura',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  subscribeToInvoices: (workshopId) => {
+    const currentYear = new Date().getFullYear();
+    const startDate = `${currentYear}-01-01`;
+    
+    const invoicesQuery = query(
+      collection(db, 'invoices'),
+      where('workshopId', '==', workshopId),
+      where('issueDate', '>=', startDate),
+      orderBy('issueDate', 'desc'),
+      limit(100)
+    );
+    
+    const unsubscribe = onSnapshot(invoicesQuery, 
+      (snapshot) => {
+        const invoices = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Invoice[];
+        
+        set({ invoices, error: null });
+      },
+      (error) => {
+        console.error('Errore subscription fatture:', error);
+        set({ error: error.message });
+      }
+    );
+    
+    set(state => ({
+      unsubscribers: [...state.unsubscribers, unsubscribe]
+    }));
+  },
+  
+  // === METODI PER CLIENTI ===
+  fetchCustomers: async (workshopId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const customersQuery = query(
+        collection(db, 'customers'),
+        where('workshopId', '==', workshopId),
+        orderBy('name', 'asc')
+      );
+      
+      const snapshot = await getDocs(customersQuery);
+      const customers = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Customer[];
+      
+      set({ customers, isLoading: false });
+    } catch (error: any) {
+      console.error('Errore recupero clienti:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero dei clienti',
+        isLoading: false 
+      });
+    }
+  },
+  
+  addCustomer: async (customer) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'customers'), {
+        ...customer,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      const newCustomer: Customer = {
+        ...customer,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        customers: [...state.customers, newCustomer],
+        isLoading: false
+      }));
+      
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta cliente:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta del cliente',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateCustomer: async (customerId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const customerRef = doc(db, 'customers', customerId);
+      await updateDoc(customerRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        customers: state.customers.map(cust =>
+          cust.id === customerId ? { ...cust, ...updates } : cust
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento cliente:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento del cliente',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  deleteCustomer: async (customerId) => {
+    set({ isLoading: true, error: null });
+    try {
+      await deleteDoc(doc(db, 'customers', customerId));
+      
+      set(state => ({
+        customers: state.customers.filter(cust => cust.id !== customerId),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore eliminazione cliente:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione del cliente',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  subscribeToCustomers: (workshopId) => {
+    const customersQuery = query(
+      collection(db, 'customers'),
+      where('workshopId', '==', workshopId),
+      orderBy('name', 'asc')
+    );
+    
+    const unsubscribe = onSnapshot(customersQuery, 
+      (snapshot) => {
+        const customers = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Customer[];
+        
+        set({ customers, error: null });
+      },
+      (error) => {
+        console.error('Errore subscription clienti:', error);
+        set({ error: error.message });
+      }
+    );
+    
+    set(state => ({
+      unsubscribers: [...state.unsubscribers, unsubscribe]
+    }));
+  },
+  
+  // === METODI PER TEMPLATE ===
+  fetchTemplates: async (workshopId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const templatesQuery = query(
+        collection(db, 'invoice_templates'),
+        where('workshopId', '==', workshopId),
+        orderBy('name', 'asc')
+      );
+      
+      const snapshot = await getDocs(templatesQuery);
+      const templates = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as InvoiceTemplate[];
+      
+      set({ templates, isLoading: false });
+    } catch (error: any) {
+      console.error('Errore recupero template:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero dei template',
+        isLoading: false 
+      });
+    }
+  },
+  
+  addTemplate: async (template) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'invoice_templates'), {
+        ...template,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      const newTemplate: InvoiceTemplate = {
+        ...template,
+        id: docRef.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        templates: [...state.templates, newTemplate],
+        isLoading: false
+      }));
+      
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta template:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta del template',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  updateTemplate: async (templateId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const templateRef = doc(db, 'invoice_templates', templateId);
+      await updateDoc(templateRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      
+      set(state => ({
+        templates: state.templates.map(tmpl =>
+          tmpl.id === templateId ? { ...tmpl, ...updates } : tmpl
+        ),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore aggiornamento template:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento del template',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  deleteTemplate: async (templateId) => {
+    set({ isLoading: true, error: null });
+    try {
+      await deleteDoc(doc(db, 'invoice_templates', templateId));
+      
+      set(state => ({
+        templates: state.templates.filter(tmpl => tmpl.id !== templateId),
+        isLoading: false
+      }));
+    } catch (error: any) {
+      console.error('Errore eliminazione template:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione del template',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  // === UTILITY ===
+  getInvoiceById: (invoiceId) => {
+    return get().invoices.find(inv => inv.id === invoiceId);
+  },
+  
+  getCustomerById: (customerId) => {
+    return get().customers.find(cust => cust.id === customerId);
+  },
+  
+  getInvoicesByCustomer: (customerId) => {
+    return get().invoices.filter(inv => inv.customerId === customerId);
+  },
+  
+  getInvoicesByRepair: (carId, repairId) => {
+    return get().invoices.filter(inv => 
+      inv.carId === carId && inv.repairId === repairId
+    );
+  },
+  
+  calculateInvoiceTotals: (items) => {
+    let subtotal = 0;
+    let totalVat = 0;
+    let totalDiscount = 0;
+    
+    items.forEach(item => {
+      const itemTotal = item.quantity * item.unitPrice;
+      const discountAmount = itemTotal * (item.discount || 0) / 100;
+      const totalAfterDiscount = itemTotal - discountAmount;
+      const vatAmount = totalAfterDiscount * item.vatRate / 100;
+      
+      subtotal += totalAfterDiscount;
+      totalVat += vatAmount;
+      totalDiscount += discountAmount;
+    });
+    
+    return {
+      subtotal,
+      totalVat,
+      totalAmount: subtotal + totalVat,
+      totalDiscount,
+    };
+  },
+  
+  generateNextInvoiceNumber: async () => {
+    const year = new Date().getFullYear();
+    const number = get().nextInvoiceNumber;
+    const paddedNumber = number.toString().padStart(5, '0');
+    return `FAT-${year}-${paddedNumber}`;
+  },
+  
+  updateInvoiceStatus: async (invoiceId, status, paidDate) => {
+    const updates: Partial<Invoice> = { status };
+    if (status === 'paid' && paidDate) {
+      updates.paidDate = paidDate;
+    }
+    return get().updateInvoice(invoiceId, updates);
+  },
+  
+  // === STATISTICHE ===
+  getInvoiceStats: () => {
+    const invoices = get().invoices;
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+    const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+    
+    const activeInvoices = invoices.filter(inv => inv.status !== 'cancelled');
+    const paidInvoices = activeInvoices.filter(inv => inv.status === 'paid');
+    const pendingInvoices = activeInvoices.filter(inv => 
+      inv.status === 'sent' || inv.status === 'draft'
+    );
+    const overdueInvoices = activeInvoices.filter(inv => {
+      if (inv.status === 'paid' || inv.status === 'cancelled') return false;
+      const dueDate = new Date(inv.dueDate);
+      return dueDate < now;
+    });
+    
+    const totalRevenue = paidInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    
+    // Calcola revenue mensile
+    const thisMonthInvoices = activeInvoices.filter(inv => {
+      const date = new Date(inv.issueDate);
+      return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
+    });
+    const lastMonthInvoices = activeInvoices.filter(inv => {
+      const date = new Date(inv.issueDate);
+      return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
+    });
+    
+    const thisMonthRevenue = thisMonthInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    const lastMonthRevenue = lastMonthInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    
+    const averageInvoiceValue = activeInvoices.length > 0 
+      ? totalRevenue / activeInvoices.length 
+      : 0;
+    
+    return {
+      totalInvoices: activeInvoices.length,
+      totalRevenue,
+      pendingAmount,
+      overdueAmount,
+      thisMonthRevenue,
+      lastMonthRevenue,
+      averageInvoiceValue,
+    };
+  },
+  
+  // === SETUP E CLEANUP ===
+  setWorkshopId: (workshopId) => {
+    set({ currentWorkshopId: workshopId });
+  },
+  
+  cleanup: () => {
+    const { unsubscribers } = get();
+    unsubscribers.forEach(unsub => unsub());
+    set({ unsubscribers: [] });
+  },
+  
+  resetStore: () => {
+    get().cleanup();
+    set({
+      invoices: [],
+      customers: [],
+      templates: [],
+      nextInvoiceNumber: 1,
+      isLoading: false,
+      error: null,
+      currentWorkshopId: null,
+      unsubscribers: []
+    });
+  }
+}));

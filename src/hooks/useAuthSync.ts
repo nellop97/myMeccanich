@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { useStore } from '../store';
+import { buildUserDisplayName } from '../utils/authUtils';
 
 /**
  * Hook per sincronizzare lo stato di autenticazione Firebase con lo store Zustand
@@ -17,8 +18,7 @@ export const useAuthSync = () => {
             uid: authUser.uid,
             email: authUser.email,
             displayName: authUser.displayName,
-            firstName: authUser.firstName,
-            lastName: authUser.lastName,
+            name: authUser.name,
             userType: authUser.userType
         } : null);
 
@@ -40,22 +40,23 @@ export const useAuthSync = () => {
                     name: userName,
                     email: authUser.email || '',
                     isLoggedIn: true,
-                    photoURL: authUser.photoURL,
+                    photoURL: authUser.photoURL || undefined,
                     isMechanic: authUser.userType === 'mechanic',
-                    phoneNumber: authUser.phoneNumber,
-                    emailVerified: authUser.emailVerified,
-                    createdAt: authUser.createdAt,
-                    lastLoginAt: authUser.lastLoginAt,
-                    // Dati specifici per meccanici
-                    workshopName: authUser.workshopName,
-                    workshopAddress: authUser.address,
-                    vatNumber: authUser.vatNumber,
+                    phoneNumber: authUser.phoneNumber || undefined,
+                    emailVerified: authUser.emailVerified || false,
+                    createdAt: authUser.createdAt || undefined,
+                    lastLoginAt: authUser.lastLoginAt || undefined,
+                    // Dati specifici per meccanici (solo se presenti)
+                    workshopName: authUser.workshopName || authUser.workshopInfo?.name || undefined,
+                    workshopAddress: authUser.address || authUser.workshopInfo?.address || undefined,
+                    vatNumber: authUser.vatNumber || authUser.workshopInfo?.vatNumber || undefined,
                 };
 
                 console.log('✅ Auth Sync - Syncing user to store:', {
                     name: syncedUser.name,
                     email: syncedUser.email,
-                    isLoggedIn: syncedUser.isLoggedIn
+                    isLoggedIn: syncedUser.isLoggedIn,
+                    isMechanic: syncedUser.isMechanic
                 });
 
                 setUser(syncedUser);
@@ -77,38 +78,7 @@ export const useAuthSync = () => {
     };
 };
 
-/**
- * Funzione helper per costruire il nome visualizzato dell'utente
- * con fallback multipli per gestire diversi scenari di registrazione
- */
-export const buildUserDisplayName = (authUser: any): string => {
-    // Priorità:
-    // 1. displayName (da Firebase Auth)
-    // 2. firstName + lastName (da Firestore)
-    // 3. firstName solo (da Firestore)
-    // 4. Parte locale dell'email
-    // 5. "Utente" come fallback
 
-    if (authUser.displayName?.trim()) {
-        return authUser.displayName.trim();
-    }
-
-    if (authUser.firstName?.trim() && authUser.lastName?.trim()) {
-        return `${authUser.firstName.trim()} ${authUser.lastName.trim()}`;
-    }
-
-    if (authUser.firstName?.trim()) {
-        return authUser.firstName.trim();
-    }
-
-    if (authUser.email) {
-        const emailLocal = authUser.email.split('@')[0];
-        // Capitalizza la prima lettera e rendi più leggibile
-        return emailLocal.charAt(0).toUpperCase() + emailLocal.slice(1);
-    }
-
-    return 'Utente';
-};
 
 /**
  * Hook semplificato per ottenere i dati utente sincronizzati
@@ -122,6 +92,6 @@ export const useUser = () => {
         authUser,
         loading,
         isAuthenticated,
-        displayName: user?.name || buildUserDisplayName(authUser) || 'Utente'
+        displayName: user?.name || (authUser ? buildUserDisplayName(authUser) : 'Utente')
     };
 };
