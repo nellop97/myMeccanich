@@ -1,28 +1,59 @@
-// App.tsx
+// ===========================================
+// src/App.tsx - VERSIONE AGGIORNATA
+// ===========================================
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, Platform, StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// Firebase
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './src/services/firebase';
-
-// Providers e Context
-
 // Navigation
-import AppNavigator from './src/navigation/AppNavigator';
+import AppNavigator from './navigation/AppNavigator';
 
 // Store
-import { useStore } from './src/store';
+import { useStore } from './store';
 
 // Gestione fonti
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
-import { ThemeProvider } from './src/contexts/ThemeContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+// Firebase - Import condizionale
+let auth: any;
+let onAuthStateChanged: any;
+
+if (Platform.OS === 'web') {
+  // Web: usa Firebase JS SDK
+  import('firebase/app').then(firebase => {
+    import('firebase/auth').then(authModule => {
+      const firebaseConfig = {
+        // INSERISCI QUI LE TUE CONFIG FIREBASE
+        apiKey: "your-api-key",
+        authDomain: "your-auth-domain",
+        projectId: "your-project-id",
+        storageBucket: "your-storage-bucket",
+        messagingSenderId: "your-sender-id",
+        appId: "your-app-id"
+      };
+
+      if (!firebase.getApps().length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+
+      auth = authModule.getAuth();
+      onAuthStateChanged = authModule.onAuthStateChanged;
+    });
+  });
+} else {
+  // Mobile: usa React Native Firebase
+  const firebaseAuth = require('@react-native-firebase/auth').default;
+  auth = firebaseAuth();
+  onAuthStateChanged = (callback: any) => auth.onAuthStateChanged(callback);
+}
+
+// Prevent the splash screen from auto-hiding
+if (Platform.OS !== 'web') {
+  SplashScreen.preventAutoHideAsync();
+}
 
 export default function App() {
   const [isLoadingComplete, setLoadingComplete] = useState(false);
@@ -32,25 +63,26 @@ export default function App() {
   // Store actions
   const { preferences } = useStore();
 
-  // Load fonts and other assets
+  // Load resources
   useEffect(() => {
     async function loadResourcesAndDataAsync() {
       try {
-        // Pre-load fonts, make any API calls you need to do here
-        await Font.loadAsync({
-          // Carica eventuali font personalizzati qui
-          // 'custom-font': require('./assets/fonts/CustomFont.ttf'),
-        });
+        if (Platform.OS !== 'web') {
+          // Load fonts only on mobile
+          await Font.loadAsync({
+            // Carica eventuali font personalizzati qui
+          });
 
-        // Artificial delay to show splash screen
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
+          // Artificial delay for splash screen
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       } catch (e) {
-        // We might want to provide this error information to an error reporting service
         console.warn(e);
       } finally {
         setLoadingComplete(true);
-        await SplashScreen.hideAsync();
+        if (Platform.OS !== 'web') {
+          await SplashScreen.hideAsync();
+        }
       }
     }
 
@@ -59,38 +91,24 @@ export default function App() {
 
   // Firebase Auth listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (!auth || !onAuthStateChanged) {
+      // Firebase non ancora caricato
+      setTimeout(() => {
+        setInitializing(false);
+      }, 1000);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged((user: any) => {
       setUser(user);
       if (initializing) setInitializing(false);
     });
 
-    return unsubscribe; // unsubscribe on unmount
-  }, [initializing]);
+    return unsubscribe;
+  }, [initializing, auth, onAuthStateChanged]);
 
-  // Loading screen durante il caricamento delle risorse
-  if (!isLoadingComplete) {
-    return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        backgroundColor: '#000000' // Dark background per lo splash
-      }}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ 
-          marginTop: 16, 
-          color: '#FFFFFF',
-          fontSize: 16,
-          fontWeight: '500'
-        }}>
-          Caricamento MyMeccanic...
-        </Text>
-      </View>
-    );
-  }
-
-  // Loading screen durante l'inizializzazione di Firebase
-  if (initializing) {
+  // Loading screen
+  if (!isLoadingComplete || initializing) {
     return (
       <ThemeProvider>
         <SafeAreaProvider>
@@ -107,7 +125,7 @@ export default function App() {
               fontSize: 16,
               fontWeight: '500'
             }}>
-              Inizializzazione...
+              {Platform.OS === 'web' ? 'Caricamento Web App...' : 'Caricamento MyMeccanich...'}
             </Text>
           </View>
         </SafeAreaProvider>
@@ -119,6 +137,11 @@ export default function App() {
     <ThemeProvider>
       <SafeAreaProvider>
         <NavigationContainer>
+          {Platform.OS !== 'web' && (
+            <StatusBar 
+              barStyle={preferences.theme === 'dark' ? 'light-content' : 'dark-content'}
+            />
+          )}
           <AppNavigator />
         </NavigationContainer>
       </SafeAreaProvider>

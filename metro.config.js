@@ -1,12 +1,13 @@
-// metro.config.js
+// ===========================================
+// metro.config.js - Aggiorna anche questo
+// ===========================================
 const { getDefaultConfig } = require('expo/metro-config');
 
-const config = getDefaultConfig(__dirname);
+module.exports = (() => {
+  const config = getDefaultConfig(__dirname);
 
-config.resolver = {
-  ...config.resolver,
-  unstable_conditionNames: ['require', 'react-native', 'browser'],
-  unstable_enablePackageExports: true,
-};
+  // Aggiungi estensioni web
+  config.resolver.sourceExts = [...config.resolver.sourceExts, 'web.js', 'web.jsx', 'web.ts', 'web.tsx'];
 
-module.exports = config;
+  return config;
+})();
