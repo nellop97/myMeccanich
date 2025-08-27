@@ -186,7 +186,7 @@ const CarDetailScreen = () => {
           <Eye size={20} color={fallbackTheme.primary} />
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.statsGrid}>
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: fallbackTheme.primary }]}>
@@ -194,14 +194,14 @@ const CarDetailScreen = () => {
           </Text>
           <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>Chilometraggio</Text>
         </View>
-        
+
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: fallbackTheme.success }]}>
             {stats.maintenanceCount}
           </Text>
           <Text style={[styles.statLabel, { color: fallbackTheme.textSecondary }]}>Manutenzioni</Text>
         </View>
-        
+
         <View style={styles.statItem}>
           <Text style={[styles.statValue, { color: fallbackTheme.warning }]}>
             {formatCurrency(stats.totalExpenses)}
@@ -260,7 +260,7 @@ const CarDetailScreen = () => {
               ]} />
             </View>
           ))}
-          
+
           <TouchableOpacity 
             style={styles.viewAllButton}
             onPress={() => navigation.navigate('CarMaintenance', { carId })}
@@ -307,15 +307,31 @@ const CarDetailScreen = () => {
             </Text>
           </View>
         ))}
-        
-        <TouchableOpacity 
-          style={styles.viewAllButton}
-          onPress={() => navigation.navigate('CarExpenses', { carId })}
-        >
-          <Text style={[styles.viewAllText, { color: fallbackTheme.primary }]}>
-            Vedi tutte le spese
-          </Text>
-        </TouchableOpacity>
+
+        <View style={styles.expenseActions}>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: fallbackTheme.primary }]}
+              onPress={() => navigation.navigate('AddFuel', { carId })}
+            >
+              <Text style={styles.actionButtonText}>+ Rifornimento</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: fallbackTheme.warning }]}
+              onPress={() => navigation.navigate('AddExpense', { carId })}
+            >
+              <Text style={styles.actionButtonText}>+ Spesa</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.viewAllButton}
+            onPress={() => navigation.navigate('CarExpenses', { carId })}
+          >
+            <Text style={[styles.viewAllText, { color: fallbackTheme.primary }]}>
+              Vedi tutte le spese
+            </Text>
+          </TouchableOpacity>
       </View>
     </View>
   );
@@ -354,7 +370,7 @@ const CarDetailScreen = () => {
             ]} />
           </View>
         ))}
-        
+
         <TouchableOpacity 
           style={styles.viewAllButton}
           onPress={() => navigation.navigate('CarDocuments', { carId })}
@@ -369,7 +385,7 @@ const CarDetailScreen = () => {
 
   const AlertsCard = () => {
     const hasAlerts = stats.maintenanceCount > 0; // Mock condition
-    
+
     if (!hasAlerts) return null;
 
     return (
@@ -385,7 +401,7 @@ const CarDetailScreen = () => {
             <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>Richiede Attenzione</Text>
           </View>
         </View>
-        
+
         <View style={styles.cardContent}>
           <Text style={[styles.alertText, { color: fallbackTheme.textSecondary }]}>
             2 manutenzioni in scadenza nei prossimi 30 giorni
@@ -413,7 +429,7 @@ const CarDetailScreen = () => {
       ]}
     >
       <View style={styles.bottomSheetHandle} />
-      
+
       <View style={styles.bottomSheetHeader}>
         <Text style={[styles.bottomSheetTitle, { color: fallbackTheme.text }]}>
           Dettagli Completi
@@ -448,6 +464,12 @@ const CarDetailScreen = () => {
             <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.vin}</Text>
           </View>
         )}
+        {car.owner?.name && (
+          <View style={styles.detailRow}>
+            <Text style={[styles.detailLabel, { color: fallbackTheme.textSecondary }]}>Proprietario</Text>
+            <Text style={[styles.detailValue, { color: fallbackTheme.text }]}>{car.owner.name}</Text>
+          </View>
+        )}
       </ScrollView>
     </Animated.View>
   );
@@ -480,6 +502,12 @@ const CarDetailScreen = () => {
             onPress={handleShare}
           >
             <ShareIcon size={20} color={fallbackTheme.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerAction}
+            onPress={() => navigation.navigate('TransferCar', { carId })}
+          >
+            <Car size={20} color={fallbackTheme.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -564,7 +592,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  
+
   // Card Styles
   card: {
     borderRadius: 16,
@@ -604,7 +632,7 @@ const styles = StyleSheet.create({
   cardContent: {
     gap: 12,
   },
-  
+
   // Stats Grid
   statsGrid: {
     flexDirection: 'row',
@@ -623,7 +651,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-  
+
   // List Items
   listItem: {
     flexDirection: 'row',
@@ -651,7 +679,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginLeft: 12,
   },
-  
+
   // Empty State
   emptyState: {
     alignItems: 'center',
@@ -674,7 +702,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  
+
   // View All Button
   viewAllButton: {
     alignItems: 'center',
@@ -685,7 +713,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  
+
   // Alert Card
   alertCard: {
     borderLeftWidth: 4,
@@ -706,7 +734,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  
+
   // FAB
   fabContainer: {
     position: 'absolute',
@@ -725,7 +753,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  
+
   // Bottom Sheet
   bottomSheetOverlay: {
     position: 'absolute',
@@ -789,6 +817,28 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // New styles for expense actions
+  expenseActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+  },
+  actionButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

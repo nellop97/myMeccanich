@@ -1,807 +1,601 @@
-// src/screens/user/AddFuelScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
-    View,
-    Text,
-    TouchableOpacity,
-    TextInput,
-    Switch,
-    StyleSheet,
-    Alert,
-    Platform,
-    StatusBar,
-    KeyboardAvoidingView
+  SafeAreaView,
+  ScrollView,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  Platform,
+  KeyboardAvoidingView
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useForm, Controller } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { 
-    ArrowLeft, 
-    Calendar, 
-    Save, 
-    Droplets, 
-    DollarSign, 
-    Gauge, 
-    MapPin,
-    Fuel,
-    Zap,
-    Calculator
+import {
+  ArrowLeft,
+  Calendar,
+  Fuel,
+  DollarSign,
+  MapPin,
+  Save,
+  Calculator
 } from 'lucide-react-native';
-
-import { useUserCarsStore } from '../../store/useCarsStore';
+import { db, auth } from '../../services/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useStore } from '../../store';
 
 interface FuelFormData {
-    carId: string;
-    date: string;
-    mileage: string;
-    liters: string;
-    costPerLiter: string;
-    totalCost: string;
-    isFullTank: boolean;
-    fuelType: string;
-    stationName: string;
-    notes: string;
+  date: Date;
+  liters: string;
+  totalCost: string;
+  pricePerLiter: string;
+  fuelType: 'gasoline' | 'diesel' | 'lpg' | 'electric';
+  currentMileage: string;
+  gasStation: string;
+  location: string;
+  notes: string;
 }
 
-const FUEL_TYPES = [
-    { id: 'gasoline', name: 'Benzina', icon: Fuel, color: '#FF9500', description: 'Benzina senza piombo' },
-    { id: 'diesel', name: 'Diesel', icon: Fuel, color: '#34C759', description: 'Gasolio per autotrazione' },
-    { id: 'electric', name: 'Elettrica', icon: Zap, color: '#007AFF', description: 'Ricarica elettrica' },
-    { id: 'hybrid', name: 'Ibrida', icon: Fuel, color: '#5AC8FA', description: 'Carburante + elettrico' }
+interface RouteParams {
+  carId: string;
+}
+
+const fuelTypes = [
+  { id: 'gasoline', label: 'Benzina', icon: '⛽' },
+  { id: 'diesel', label: 'Diesel', icon: '🚛' },
+  { id: 'lpg', label: 'GPL', icon: '🔥' },
+  { id: 'electric', label: 'Elettrico', icon: '⚡' }
 ];
 
 const AddFuelScreen = () => {
-    const navigation = useNavigation();
-    const route = useRoute();
-    const { darkMode } = useStore();
-    const { cars, addFuelRecord, getCarById } = useUserCarsStore();
+  const navigation = useNavigation();
+  const route = useRoute();
+  const { carId } = route.params as RouteParams;
+  const { darkMode } = useStore();
 
-    const fallbackTheme = {
-        background: darkMode ? '#121212' : '#f5f5f5',
-        cardBackground: darkMode ? '#1e1e1e' : '#ffffff',
-        text: darkMode ? '#ffffff' : '#000000',
-        textSecondary: darkMode ? '#a0a0a0' : '#666666',
-        border: darkMode ? '#333333' : '#e0e0e0',
-        primary: '#007AFF',
-        error: '#FF3B30',
-        success: '#34C759',
-        warning: '#FF9500',
-        info: '#5AC8FA',
-        placeholder: darkMode ? '#666666' : '#999999'
-    };
+  const [isLoading, setIsLoading] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [consumption, setConsumption] = useState<{kmPerLiter?: number, costPer100km?: number}>({});
 
-    const preselectedCarId = route.params?.carId;
-    const selectedCar = preselectedCarId ? getCarById(preselectedCarId) : null;
+  const theme = {
+    background: darkMode ? '#121212' : '#f5f5f5',
+    cardBackground: darkMode ? '#1e1e1e' : '#ffffff',
+    text: darkMode ? '#ffffff' : '#000000',
+    textSecondary: darkMode ? '#a0a0a0' : '#666666',
+    primary: '#007AFF',
+    border: darkMode ? '#333333' : '#e0e0e0',
+    success: '#34C759'
+  };
 
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [selectedDate, setSelectedDate] = useState(new Date());
-    
-    const { control, handleSubmit, formState: { errors }, watch, setValue } = useForm<FuelFormData>({
-        defaultValues: {
-            carId: preselectedCarId || (cars.length === 1 ? cars[0].id : ''),
-            date: new Date().toISOString().split('T')[0],
-            mileage: selectedCar?.currentMileage.toString() || '',
-            liters: '',
-            costPerLiter: '',
-            totalCost: '',
-            isFullTank: true,
-            fuelType: 'gasoline',
-            stationName: '',
-            notes: '',
-        }
-    });
-    
-    const liters = watch('liters');
-    const costPerLiter = watch('costPerLiter');
-    const totalCost = watch('totalCost');
-    const selectedCarId = watch('carId');
-    const selectedFuelType = watch('fuelType');
+  const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm<FuelFormData>({
+    defaultValues: {
+      date: new Date(),
+      fuelType: 'gasoline',
+      liters: '',
+      totalCost: '',
+      pricePerLiter: '',
+      currentMileage: '',
+      gasStation: '',
+      location: '',
+      notes: ''
+    }
+  });
 
-    const car = selectedCarId ? getCarById(selectedCarId) : null;
+  const watchedValues = watch();
 
-    // Auto-calculate total cost when liters and cost per liter change
-    useEffect(() => {
-        const lit = parseFloat(liters);
-        const cpl = parseFloat(costPerLiter);
-        if (!isNaN(lit) && !isNaN(cpl) && lit > 0 && cpl > 0) {
-            const total = (lit * cpl).toFixed(2);
-            setValue('totalCost', total);
-        }
-    }, [liters, costPerLiter, setValue]);
+  // Calculate price per liter automatically
+  const calculatePricePerLiter = useCallback(() => {
+    const liters = parseFloat(watchedValues.liters);
+    const total = parseFloat(watchedValues.totalCost);
+    if (liters > 0 && total > 0) {
+      const pricePerLiter = (total / liters).toFixed(3);
+      setValue('pricePerLiter', pricePerLiter);
+    }
+  }, [watchedValues.liters, watchedValues.totalCost, setValue]);
 
-    // Auto-calculate liters when total cost and cost per liter change
-    useEffect(() => {
-        const total = parseFloat(totalCost);
-        const cpl = parseFloat(costPerLiter);
-        if (!isNaN(total) && !isNaN(cpl) && total > 0 && cpl > 0) {
-            const lit = (total / cpl).toFixed(2);
-            if (parseFloat(lit) !== parseFloat(liters)) {
-                setValue('liters', lit);
-            }
-        }
-    }, [totalCost, costPerLiter]);
+  // Calculate consumption (mock - would need previous fuel record)
+  const calculateConsumption = useCallback(() => {
+    // This would require previous fuel record from database
+    // For now, showing mock calculation
+    const liters = parseFloat(watchedValues.liters);
+    if (liters > 0) {
+      // Mock calculation - in real app would get distance from last refuel
+      const mockDistance = 500; // km
+      const kmPerLiter = mockDistance / liters;
+      const costPer100km = (parseFloat(watchedValues.totalCost) / mockDistance) * 100;
 
-    const onSubmit = (data: FuelFormData) => {
-        if (!data.carId) {
-            Alert.alert('Errore', 'Seleziona un veicolo');
-            return;
-        }
+      setConsumption({
+        kmPerLiter: parseFloat(kmPerLiter.toFixed(2)),
+        costPer100km: parseFloat(costPer100km.toFixed(2))
+      });
+    }
+  }, [watchedValues.liters, watchedValues.totalCost]);
 
-        if (!data.liters || parseFloat(data.liters) <= 0) {
-            Alert.alert('Errore', 'Inserisci una quantità di carburante valida');
-            return;
-        }
+  React.useEffect(() => {
+    calculatePricePerLiter();
+    calculateConsumption();
+  }, [calculatePricePerLiter, calculateConsumption]);
 
-        if (!data.totalCost || parseFloat(data.totalCost) <= 0) {
-            Alert.alert('Errore', 'Inserisci un costo totale valido');
-            return;
-        }
+  const onSubmit = async (data: FuelFormData) => {
+    if (!auth.currentUser) {
+      Alert.alert('Errore', 'Devi essere autenticato per salvare i dati');
+      return;
+    }
 
-        try {
-            const fuelData = {
-                date: data.date,
-                mileage: parseInt(data.mileage, 10) || car?.currentMileage || 0,
-                liters: parseFloat(data.liters),
-                costPerLiter: parseFloat(data.costPerLiter) || parseFloat(data.totalCost) / parseFloat(data.liters),
-                totalCost: parseFloat(data.totalCost),
-                isFullTank: data.isFullTank,
-                fuelType: data.fuelType as 'gasoline' | 'diesel' | 'electric' | 'hybrid',
-                stationName: data.stationName || undefined,
-                notes: data.notes || undefined,
-            };
+    setIsLoading(true);
 
-            addFuelRecord(data.carId, fuelData);
+    try {
+      const fuelRecord = {
+        carId,
+        userId: auth.currentUser.uid,
+        date: data.date.toISOString(),
+        liters: parseFloat(data.liters),
+        totalCost: parseFloat(data.totalCost),
+        pricePerLiter: parseFloat(data.pricePerLiter),
+        fuelType: data.fuelType,
+        currentMileage: parseInt(data.currentMileage),
+        gasStation: data.gasStation,
+        location: data.location,
+        notes: data.notes,
+        consumption: consumption,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
 
-            Alert.alert('Successo', 'Rifornimento aggiunto con successo!', [
-                { text: 'OK', onPress: () => navigation.goBack() },
-            ]);
-        } catch (error) {
-            Alert.alert('Errore', 'Si è verificato un errore durante il salvataggio.');
-        }
-    };
+      await addDoc(collection(db, 'fuelRecords'), fuelRecord);
 
-    const handleDateChange = (event: any, date?: Date) => {
-        setShowDatePicker(false);
-        if (date) {
-            setSelectedDate(date);
-            setValue('date', date.toISOString().split('T')[0]);
-        }
-    };
+      Alert.alert(
+        'Successo',
+        'Rifornimento salvato con successo!',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      console.error('Error saving fuel record:', error);
+      Alert.alert('Errore', 'Impossibile salvare il rifornimento');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    const formatDate = (dateString: string) => {
-        if (!dateString) return 'Seleziona data';
-        return new Date(dateString).toLocaleDateString('it-IT');
-    };
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <ArrowLeft size={24} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Aggiungi Rifornimento</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
-    // Modern Input Component
-    const ModernInput = ({ 
-        label, 
-        placeholder, 
-        value, 
-        onChangeText, 
-        error, 
-        required = false, 
-        keyboardType = 'default',
-        icon: Icon,
-        suffix,
-        disabled = false
-    }: any) => (
-        <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { color: fallbackTheme.text }]}>
-                {label} {required && <Text style={{ color: fallbackTheme.error }}>*</Text>}
-            </Text>
-            <View style={[
-                styles.inputWrapper, 
-                { 
-                    backgroundColor: disabled ? fallbackTheme.border + '20' : fallbackTheme.cardBackground, 
-                    borderColor: error ? fallbackTheme.error : fallbackTheme.border 
-                }
-            ]}>
-                {Icon && (
-                    <View style={styles.inputIconContainer}>
-                        <Icon size={20} color={fallbackTheme.textSecondary} />
-                    </View>
-                )}
-                <TextInput
-                    style={[
-                        styles.input, 
-                        { color: disabled ? fallbackTheme.textSecondary : fallbackTheme.text }
-                    ]}
-                    placeholder={placeholder}
-                    placeholderTextColor={fallbackTheme.placeholder}
-                    value={value}
-                    onChangeText={onChangeText}
-                    keyboardType={keyboardType}
-                    editable={!disabled}
-                />
-                {suffix && (
-                    <Text style={[styles.inputSuffix, { color: fallbackTheme.textSecondary }]}>
-                        {suffix}
-                    </Text>
-                )}
-            </View>
-            {error && (
-                <Text style={[styles.errorText, { color: fallbackTheme.error }]}>
-                    {error}
-                </Text>
-            )}
-        </View>
-    );
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoid}
+      >
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Date Section */}
+          <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Data e Ora</Text>
 
-    // Fuel Type Selector
-    const FuelTypeSelector = () => (
-        <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-            <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                Tipo di Carburante
-            </Text>
-            <View style={styles.fuelTypeGrid}>
-                {FUEL_TYPES.map((fuelType) => {
-                    const isSelected = selectedFuelType === fuelType.id;
-                    const IconComponent = fuelType.icon;
-                    
-                    return (
-                        <TouchableOpacity
-                            key={fuelType.id}
-                            style={[
-                                styles.fuelTypeCard,
-                                { 
-                                    backgroundColor: isSelected ? fuelType.color + '20' : fallbackTheme.background,
-                                    borderColor: isSelected ? fuelType.color : fallbackTheme.border
-                                }
-                            ]}
-                            onPress={() => setValue('fuelType', fuelType.id)}
-                        >
-                            <View style={[
-                                styles.fuelTypeIcon,
-                                { backgroundColor: isSelected ? fuelType.color : fallbackTheme.border }
-                            ]}>
-                                <IconComponent size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />
-                            </View>
-                            <Text style={[
-                                styles.fuelTypeName,
-                                { color: isSelected ? fuelType.color : fallbackTheme.text }
-                            ]}>
-                                {fuelType.name}
-                            </Text>
-                            <Text style={[
-                                styles.fuelTypeDescription,
-                                { color: isSelected ? fuelType.color : fallbackTheme.textSecondary }
-                            ]}>
-                                {fuelType.description}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-        </View>
-    );
-
-    // Car Selector Component
-    const CarSelector = () => {
-        if (preselectedCarId) return null;
-
-        return (
-            <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                    Seleziona Veicolo
-                </Text>
-                <View style={styles.carGrid}>
-                    {cars.filter(car => car.isActive).map((car) => (
-                        <TouchableOpacity
-                            key={car.id}
-                            style={[
-                                styles.carCard,
-                                { 
-                                    backgroundColor: selectedCarId === car.id ? fallbackTheme.primary + '20' : fallbackTheme.background,
-                                    borderColor: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.border
-                                }
-                            ]}
-                            onPress={() => setValue('carId', car.id)}
-                        >
-                            <View style={styles.carCardHeader}>
-                                <Text style={[
-                                    styles.carCardTitle,
-                                    { color: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.text }
-                                ]}>
-                                    {car.make} {car.model}
-                                </Text>
-                                <Text style={[
-                                    styles.carCardPlate,
-                                    { color: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.textSecondary }
-                                ]}>
-                                    {car.licensePlate}
-                                </Text>
-                            </View>
-                            <Text style={[
-                                styles.carCardMileage,
-                                { color: fallbackTheme.textSecondary }
-                            ]}>
-                                {car.currentMileage.toLocaleString()} km
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-        );
-    };
-
-    return (
-        <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
-            <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-            
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()}>
-                    <ArrowLeft size={24} color={fallbackTheme.text} />
-                </TouchableOpacity>
-                <View style={styles.headerTitles}>
-                    <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>Nuovo Rifornimento</Text>
-                    <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>
-                        {car ? `${car.make} ${car.model}` : 'Registra un rifornimento'}
-                    </Text>
-                </View>
-            </View>
-
-            <KeyboardAvoidingView
-                style={styles.content}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            <TouchableOpacity
+              style={[styles.dateButton, { borderColor: theme.border }]}
+              onPress={() => setShowDatePicker(true)}
             >
-                <ScrollView 
-                    style={styles.scrollContainer} 
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                >
-                    <CarSelector />
-                    <FuelTypeSelector />
+              <Calendar size={20} color={theme.primary} />
+              <Text style={[styles.dateText, { color: theme.text }]}>
+                {watchedValues.date.toLocaleDateString('it-IT')} {watchedValues.date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </TouchableOpacity>
 
-                    {/* Basic Data */}
-                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                            Dati Principali
-                        </Text>
-
-                        <View style={styles.row}>
-                            <View style={styles.halfWidth}>
-                                <Text style={[styles.inputLabel, { color: fallbackTheme.text }]}>
-                                    Data <Text style={{ color: fallbackTheme.error }}>*</Text>
-                                </Text>
-                                <TouchableOpacity 
-                                    style={[styles.dateButton, { backgroundColor: fallbackTheme.cardBackground, borderColor: fallbackTheme.border }]} 
-                                    onPress={() => setShowDatePicker(true)}
-                                >
-                                    <Calendar size={20} color={fallbackTheme.primary} />
-                                    <Text style={[styles.dateButtonText, { color: fallbackTheme.text }]}>
-                                        {formatDate(watch('date'))}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.halfWidth}>
-                                <Controller
-                                    control={control}
-                                    name="mileage"
-                                    rules={{ required: 'Chilometraggio obbligatorio' }}
-                                    render={({ field: { onChange, onBlur, value } }) => (
-                                        <ModernInput
-                                            label="Chilometraggio"
-                                            placeholder="Es: 45000"
-                                            value={value}
-                                            onChangeText={onChange}
-                                            keyboardType="numeric"
-                                            error={errors.mileage?.message}
-                                            required
-                                            icon={Gauge}
-                                            suffix="km"
-                                        />
-                                    )}
-                                />
-                            </View>
-                        </View>
-                    </View>
-
-                    {/* Quantity and Costs */}
-                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                        <View style={styles.cardHeaderWithIcon}>
-                            <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                                Quantità e Costi
-                            </Text>
-                            <View style={[styles.calculatorIcon, { backgroundColor: fallbackTheme.info + '20' }]}>
-                                <Calculator size={16} color={fallbackTheme.info} />
-                            </View>
-                        </View>
-
-                        <View style={styles.row}>
-                            <View style={styles.halfWidth}>
-                                <Controller
-                                    control={control}
-                                    name="liters"
-                                    rules={{ required: 'Litri obbligatori' }}
-                                    render={({ field: { onChange, onBlur, value } }) => (
-                                        <ModernInput
-                                            label="Quantità"
-                                            placeholder="Es: 40.5"
-                                            value={value}
-                                            onChangeText={onChange}
-                                            keyboardType="decimal-pad"
-                                            error={errors.liters?.message}
-                                            required
-                                            icon={Droplets}
-                                            suffix={selectedFuelType === 'electric' ? 'kWh' : 'L'}
-                                        />
-                                    )}
-                                />
-                            </View>
-
-                            <View style={styles.halfWidth}>
-                                <Controller
-                                    control={control}
-                                    name="costPerLiter"
-                                    render={({ field: { onChange, onBlur, value } }) => (
-                                        <ModernInput
-                                            label={selectedFuelType === 'electric' ? 'Prezzo / kWh' : 'Prezzo / Litro'}
-                                            placeholder="Es: 1.85"
-                                            value={value}
-                                            onChangeText={onChange}
-                                            keyboardType="decimal-pad"
-                                            icon={DollarSign}
-                                            suffix="€"
-                                        />
-                                    )}
-                                />
-                            </View>
-                        </View>
-
-                        <Controller
-                            control={control}
-                            name="totalCost"
-                            rules={{ required: 'Costo totale obbligatorio' }}
-                            render={({ field: { onChange, onBlur, value } }) => (
-                                <ModernInput
-                                    label="Costo Totale"
-                                    placeholder="Calcolato automaticamente"
-                                    value={value}
-                                    onChangeText={onChange}
-                                    keyboardType="decimal-pad"
-                                    error={errors.totalCost?.message}
-                                    required
-                                    icon={DollarSign}
-                                    suffix="€"
-                                />
-                            )}
-                        />
-                    </View>
-
-                    {/* Additional Details */}
-                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                            Dettagli Aggiuntivi
-                        </Text>
-
-                        {selectedFuelType !== 'electric' && (
-                            <View style={styles.switchRow}>
-                                <View style={styles.switchInfo}>
-                                    <Text style={[styles.switchLabel, { color: fallbackTheme.text }]}>
-                                        Pieno effettuato?
-                                    </Text>
-                                    <Text style={[styles.switchDescription, { color: fallbackTheme.textSecondary }]}>
-                                        Serbatoio riempito completamente
-                                    </Text>
-                                </View>
-                                <Controller
-                                    control={control}
-                                    name="isFullTank"
-                                    render={({ field: { onChange, value } }) => (
-                                        <Switch
-                                            value={value}
-                                            onValueChange={onChange}
-                                            trackColor={{ false: fallbackTheme.border, true: fallbackTheme.primary + '40' }}
-                                            thumbColor={value ? fallbackTheme.primary : '#f4f3f4'}
-                                        />
-                                    )}
-                                />
-                            </View>
-                        )}
-
-                        <Controller
-                            control={control}
-                            name="stationName"
-                            render={({ field: { onChange, onBlur, value } }) => (
-                                <ModernInput
-                                    label="Stazione di servizio"
-                                    placeholder="Nome distributore (opzionale)"
-                                    value={value}
-                                    onChangeText={onChange}
-                                    icon={MapPin}
-                                />
-                            )}
-                        />
-
-                        <Controller
-                            control={control}
-                            name="notes"
-                            render={({ field: { onChange, onBlur, value } }) => (
-                                <ModernInput
-                                    label="Note"
-                                    placeholder="Note aggiuntive (opzionale)"
-                                    value={value}
-                                    onChangeText={onChange}
-                                />
-                            )}
-                        />
-                    </View>
-
-                    {/* Action Buttons */}
-                    <View style={styles.actionsContainer}>
-                        <TouchableOpacity 
-                            style={[styles.secondaryButton, { backgroundColor: fallbackTheme.border }]}
-                            onPress={() => navigation.goBack()}
-                        >
-                            <Text style={[styles.secondaryButtonText, { color: fallbackTheme.textSecondary }]}>
-                                Annulla
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity 
-                            style={[styles.primaryButton, { backgroundColor: fallbackTheme.primary }]}
-                            onPress={handleSubmit(onSubmit)}
-                        >
-                            <Save size={18} color="#ffffff" />
-                            <Text style={styles.primaryButtonText}>Salva Rifornimento</Text>
-                        </TouchableOpacity>
-                    </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
-
-            {/* Date Picker */}
             {showDatePicker && (
-                <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="default"
-                    onChange={handleDateChange}
-                    maximumDate={new Date()}
-                />
+              <DateTimePicker
+                value={watchedValues.date}
+                mode="datetime"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowDatePicker(false);
+                  if (selectedDate) {
+                    setValue('date', selectedDate);
+                  }
+                }}
+              />
             )}
-        </SafeAreaView>
-    );
+          </View>
+
+          {/* Fuel Type Section */}
+          <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Tipo Carburante</Text>
+
+            <View style={styles.fuelTypeGrid}>
+              {fuelTypes.map((fuel) => (
+                <Controller
+                  key={fuel.id}
+                  control={control}
+                  name="fuelType"
+                  render={({ field: { value, onChange } }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.fuelTypeButton,
+                        { 
+                          borderColor: theme.border,
+                          backgroundColor: value === fuel.id ? theme.primary : 'transparent'
+                        }
+                      ]}
+                      onPress={() => onChange(fuel.id)}
+                    >
+                      <Text style={styles.fuelTypeIcon}>{fuel.icon}</Text>
+                      <Text style={[
+                        styles.fuelTypeLabel, 
+                        { color: value === fuel.id ? '#fff' : theme.text }
+                      ]}>
+                        {fuel.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* Fuel Details Section */}
+          <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Dettagli Rifornimento</Text>
+
+            <View style={styles.inputRow}>
+              <View style={styles.inputHalf}>
+                <Text style={[styles.inputLabel, { color: theme.text }]}>Litri</Text>
+                <Controller
+                  control={control}
+                  name="liters"
+                  rules={{ required: 'Litri obbligatori' }}
+                  render={({ field: { onChange, value } }) => (
+                    <TextInput
+                      style={[styles.input, { 
+                        borderColor: errors.liters ? '#FF3B30' : theme.border,
+                        backgroundColor: theme.cardBackground,
+                        color: theme.text
+                      }]}
+                      value={value}
+                      onChangeText={onChange}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor={theme.textSecondary}
+                    />
+                  )}
+                />
+              </View>
+
+              <View style={styles.inputHalf}>
+                <Text style={[styles.inputLabel, { color: theme.text }]}>Costo Totale (€)</Text>
+                <Controller
+                  control={control}
+                  name="totalCost"
+                  rules={{ required: 'Costo obbligatorio' }}
+                  render={({ field: { onChange, value } }) => (
+                    <TextInput
+                      style={[styles.input, { 
+                        borderColor: errors.totalCost ? '#FF3B30' : theme.border,
+                        backgroundColor: theme.cardBackground,
+                        color: theme.text
+                      }]}
+                      value={value}
+                      onChangeText={onChange}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor={theme.textSecondary}
+                    />
+                  )}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Prezzo al Litro (€)</Text>
+              <Controller
+                control={control}
+                name="pricePerLiter"
+                render={({ field: { value } }) => (
+                  <TextInput
+                    style={[styles.input, { 
+                      borderColor: theme.border,
+                      backgroundColor: theme.cardBackground,
+                      color: theme.text
+                    }]}
+                    value={value}
+                    editable={false}
+                    placeholder="Calcolato automaticamente"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                )}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Chilometraggio Attuale</Text>
+              <Controller
+                control={control}
+                name="currentMileage"
+                rules={{ required: 'Chilometraggio obbligatorio' }}
+                render={({ field: { onChange, value } }) => (
+                  <TextInput
+                    style={[styles.input, { 
+                      borderColor: errors.currentMileage ? '#FF3B30' : theme.border,
+                      backgroundColor: theme.cardBackground,
+                      color: theme.text
+                    }]}
+                    value={value}
+                    onChangeText={onChange}
+                    keyboardType="numeric"
+                    placeholder="km"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                )}
+              />
+            </View>
+          </View>
+
+          {/* Consumption Display */}
+          {(consumption.kmPerLiter || consumption.costPer100km) && (
+            <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+              <View style={styles.sectionHeader}>
+                <Calculator size={20} color={theme.primary} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Consumi Stimati</Text>
+              </View>
+
+              <View style={styles.consumptionGrid}>
+                {consumption.kmPerLiter && (
+                  <View style={styles.consumptionItem}>
+                    <Text style={[styles.consumptionValue, { color: theme.primary }]}>
+                      {consumption.kmPerLiter} km/l
+                    </Text>
+                    <Text style={[styles.consumptionLabel, { color: theme.textSecondary }]}>
+                      Consumo
+                    </Text>
+                  </View>
+                )}
+
+                {consumption.costPer100km && (
+                  <View style={styles.consumptionItem}>
+                    <Text style={[styles.consumptionValue, { color: theme.primary }]}>
+                      €{consumption.costPer100km}/100km
+                    </Text>
+                    <Text style={[styles.consumptionLabel, { color: theme.textSecondary }]}>
+                      Costo
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Location Section */}
+          <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Ubicazione</Text>
+
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Distributore</Text>
+              <Controller
+                control={control}
+                name="gasStation"
+                render={({ field: { onChange, value } }) => (
+                  <TextInput
+                    style={[styles.input, { 
+                      borderColor: theme.border,
+                      backgroundColor: theme.cardBackground,
+                      color: theme.text
+                    }]}
+                    value={value}
+                    onChangeText={onChange}
+                    placeholder="Es. Eni, Shell, IP..."
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                )}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Indirizzo</Text>
+              <Controller
+                control={control}
+                name="location"
+                render={({ field: { onChange, value } }) => (
+                  <TextInput
+                    style={[styles.input, { 
+                      borderColor: theme.border,
+                      backgroundColor: theme.cardBackground,
+                      color: theme.text
+                    }]}
+                    value={value}
+                    onChangeText={onChange}
+                    placeholder="Via, città"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                )}
+              />
+            </View>
+          </View>
+
+          {/* Notes Section */}
+          <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Note (opzionali)</Text>
+
+            <Controller
+              control={control}
+              name="notes"
+              render={({ field: { onChange, value } }) => (
+                <TextInput
+                  style={[styles.textArea, { 
+                    borderColor: theme.border,
+                    backgroundColor: theme.cardBackground,
+                    color: theme.text
+                  }]}
+                  value={value}
+                  onChangeText={onChange}
+                  multiline
+                  numberOfLines={3}
+                  placeholder="Aggiungi note..."
+                  placeholderTextColor={theme.textSecondary}
+                />
+              )}
+            />
+          </View>
+
+          {/* Save Button */}
+          <TouchableOpacity
+            style={[styles.saveButton, { backgroundColor: theme.success }]}
+            onPress={handleSubmit(onSubmit)}
+            disabled={isLoading}
+          >
+            <Save size={20} color="#ffffff" />
+            <Text style={styles.saveButtonText}>
+              {isLoading ? 'Salvataggio...' : 'Salva Rifornimento'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
-    container: { 
-        flex: 1 
-    },
-    header: { 
-        flexDirection: 'row', 
-        alignItems: 'center',
-        paddingHorizontal: 20, 
-        paddingVertical: 16, 
-        borderBottomWidth: 1
-    },
-    headerTitles: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    headerTitle: { 
-        fontSize: 24, 
-        fontWeight: 'bold' 
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        marginTop: 2,
-    },
-    content: { 
-        flex: 1 
-    },
-    scrollContainer: {
-        flex: 1,
-        padding: 16,
-    },
-
-    // Card Styles
-    card: {
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    cardTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 16,
-    },
-    cardHeaderWithIcon: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    calculatorIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-
-    // Fuel Type Grid
-    fuelTypeGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-    },
-    fuelTypeCard: {
-        width: '47%',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 2,
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    fuelTypeIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 8,
-    },
-    fuelTypeName: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        marginBottom: 4,
-        textAlign: 'center',
-    },
-    fuelTypeDescription: {
-        fontSize: 12,
-        textAlign: 'center',
-    },
-
-    // Car Grid
-    carGrid: {
-        gap: 12,
-    },
-    carCard: {
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 2,
-    },
-    carCardHeader: {
-        marginBottom: 8,
-    },
-    carCardTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 2,
-    },
-    carCardPlate: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    carCardMileage: {
-        fontSize: 12,
-    },
-
-    // Input Styles
-    inputContainer: {
-        marginBottom: 16,
-    },
-    inputLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 8,
-    },
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    inputIconContainer: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-        minHeight: 20,
-    },
-    inputSuffix: {
-        fontSize: 16,
-        marginLeft: 8,
-    },
-    errorText: {
-        fontSize: 12,
-        marginTop: 4,
-    },
-
-    // Layout
-    row: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    halfWidth: {
-        flex: 1,
-    },
-
-    // Date Button
-    dateButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderWidth: 1,
-        borderRadius: 12,
-        gap: 12,
-    },
-    dateButtonText: {
-        fontSize: 16,
-    },
-
-    // Switch Row
-    switchRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-        paddingVertical: 8,
-    },
-    switchInfo: {
-        flex: 1,
-        marginRight: 16,
-    },
-    switchLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 2,
-    },
-    switchDescription: {
-        fontSize: 14,
-    },
-
-    // Action Buttons
-    actionsContainer: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 24,
-        marginBottom: 32,
-    },
-    primaryButton: {
-        flex: 2,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        borderRadius: 12,
-        gap: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    primaryButtonText: {
-        color: '#ffffff',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    secondaryButton: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        borderRadius: 12,
-    },
-    secondaryButtonText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
+  container: {
+    flex: 1,
+  },
+  keyboardAvoid: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  section: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    gap: 12,
+  },
+  dateText: {
+    fontSize: 16,
+  },
+  fuelTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  fuelTypeButton: {
+    flex: 1,
+    minWidth: '45%',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    gap: 4,
+  },
+  fuelTypeIcon: {
+    fontSize: 20,
+  },
+  fuelTypeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inputHalf: {
+    flex: 1,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  textArea: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    textAlignVertical: 'top',
+  },
+  consumptionGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  consumptionItem: {
+    alignItems: 'center',
+  },
+  consumptionValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  consumptionLabel: {
+    fontSize: 12,
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 32,
+    gap: 8,
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
 export default AddFuelScreen;

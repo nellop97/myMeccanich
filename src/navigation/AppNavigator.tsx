@@ -74,8 +74,11 @@ export type RootStackParamList = {
   RemindersList: undefined;
   AddReminder: { carId?: string };
   DocumentsList: { carId?: string };
+  AddFuel: undefined; // Nuova schermata per aggiungere rifornimento
+    TransferCar: undefined; // Nuova schermata per trasferire l'auto
+    TransferRequests: undefined; // Nuova schermata per le richieste di trasferimento
 
-  // Schermate Meccanico
+    // Schermate Meccanico
   HomeMechanic: undefined;
   NewAppointment: undefined;
   AllCarsInWorkshop: undefined;
@@ -200,7 +203,7 @@ export default function AppNavigator() {
             <Stack.Screen 
               name="CarDetail" 
               component={CarDetailScreen}
-              options={{ 
+              options={{
                 title: 'Dettaglio Auto',
                 headerShown: true,
                 headerBackTitle: 'Indietro'
@@ -220,8 +223,8 @@ export default function AppNavigator() {
           // Stack per proprietari auto
           <Stack.Group>
             {/* Main Tab Navigator */}
-            <Stack.Screen 
-              name="Main" 
+            <Stack.Screen
+              name="Main"
               component={MainTabNavigator}
               options={{ headerShown: false }}
             />
@@ -230,33 +233,33 @@ export default function AppNavigator() {
             <Stack.Screen
               name="VehicleList"
               component={VehicleListScreen}
-              options={{ 
+              options={{
                 title: 'I Miei Veicoli',
-                headerShown: true 
+                headerShown: true
               }}
             />
             <Stack.Screen
               name="AddVehicle"
               component={AddCarScreen}
-              options={{ 
+              options={{
                 title: 'Aggiungi Veicolo',
-                headerShown: true 
+                headerShown: true
               }}
             />
             <Stack.Screen
               name="CarDetail"
               component={CarDetailScreen}
-              options={{ 
+              options={{
                 title: 'Dettaglio Veicolo',
-                headerShown: true 
+                headerShown: true
               }}
             />
             <Stack.Screen
               name="CarOverview"
               component={CarOverviewScreen}
-              options={{ 
+              options={{
                 title: 'Panoramica Veicolo',
-                headerShown: true 
+                headerShown: true
               }}
             />
 
@@ -264,25 +267,25 @@ export default function AppNavigator() {
             <Stack.Screen
               name="CarMaintenanceScreen"
               component={CarMaintenanceScreen}
-              options={{ 
+              options={{
                 title: 'Manutenzioni',
-                headerShown: true 
+                headerShown: true
               }}
             />
             <Stack.Screen
               name="AddMaintenance"
               component={AddMaintenanceScreen}
-              options={{ 
+              options={{
                 title: 'Aggiungi Manutenzione',
-                headerShown: true 
+                headerShown: true
               }}
             />
             <Stack.Screen
               name="MaintenanceList"
               component={MaintenanceListScreen}
-              options={{ 
+              options={{
                 title: 'Storico Manutenzioni',
-                headerShown: true 
+                headerShown: true
               }}
             />
 
@@ -290,25 +293,25 @@ export default function AppNavigator() {
             <Stack.Screen
               name="ExpenseTracker"
               component={ExpenseTrackerScreen}
-              options={{ 
+              options={{
                 title: 'Tracker Spese',
-                headerShown: true 
+                headerShown: true
               }}
             />
             <Stack.Screen
               name="CarExpenses"
               component={CarExpensesScreen}
-              options={{ 
+              options={{
                 title: 'Spese Veicolo',
-                headerShown: true 
+                headerShown: true
               }}
             />
             <Stack.Screen
               name="AddExpense"
               component={AddExpenseScreen}
-              options={{ 
+              options={{
                 title: 'Aggiungi Spesa',
-                headerShown: true 
+                headerShown: true
               }}
             />
 
@@ -316,68 +319,97 @@ export default function AppNavigator() {
             <Stack.Screen
               name="FuelTracking"
               component={FuelTrackingScreen}
-              options={{ 
+              options={{
                 title: 'Tracking Carburante',
-                headerShown: true 
+                headerShown: true
               }}
             />
-            {/*
-            <Stack.Screen
-              name="AddFuelRecord"
-              component={AddFuelRecordScreen}
-              options={{ 
-                title: 'Aggiungi Rifornimento',
-                headerShown: true 
-              }}
-            />*/}
+              <Stack.Screen
+                  name="AddFuel"
+                  component={require('../screens/user/AddFuelScreen').default}
+                  options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                  name="AddExpense"
+                  component={require('../screens/user/AddExpenseScreen').default}
+                  options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                  name="TransferCar"
+                  component={require('../screens/user/TransferCarScreen').default}
+                  options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                  name="TransferRequests"
+                  component={require('../screens/user/TransferRequestsScreen').default}
+                  options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                  name="CarsListScreen"
+                  component={require('../screens/user/CarsListScreen').default}
+                  options={{
+                      title: 'I Miei Veicoli',
+                      headerShown: true
+                  }}
+              />
+              <Stack.Screen
+                  name="NotificationsScreen"
+                  component={require('../screens/user/NotificationsScreen').default}
+                  options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                  name="ReportsScreen"
+                  component={require('../screens/user/ReportsScreen').default}
+                  options={{ headerShown: false }}
+              />
 
-            {/* Promemoria */}
-            <Stack.Screen
-              name="RemindersList"
-              component={RemindersListScreen}
-              options={{ 
-                title: 'Promemoria',
-                headerShown: true 
-              }}
-            />
-            <Stack.Screen
-              name="AddReminder"
-              component={AddReminderScreen}
-              options={{ 
-                title: 'Aggiungi Promemoria',
-                headerShown: true 
-              }}
-            />
+              {/* Promemoria */}
+              <Stack.Screen
+                  name="RemindersList"
+                  component={RemindersListScreen}
+                  options={{
+                      title: 'Promemoria',
+                      headerShown: true
+                  }}
+              />
+              <Stack.Screen
+                  name="AddReminder"
+                  component={AddReminderScreen}
+                  options={{
+                      title: 'Aggiungi Promemoria',
+                      headerShown: true
+                  }}
+              />
 
-            {/* Documenti */}
-            <Stack.Screen
-              name="DocumentsList"
-              component={DocumentsListScreen}
-              options={{ 
-                title: 'Documenti',
-                headerShown: true 
-              }}
-            />
+              {/* Documenti */}
+              <Stack.Screen
+                  name="DocumentsList"
+                  component={DocumentsListScreen}
+                  options={{
+                      title: 'Documenti',
+                      headerShown: true
+                  }}
+              />
 
-            {/* Profilo */}
-            <Stack.Screen
-              name="Profile"
-              component={ProfileScreen}
-              options={{ 
-                title: 'Profilo',
-                headerShown: true,
-                headerBackTitle: 'Indietro' 
-              }}
-            />
+              {/* Profilo */}
+              <Stack.Screen
+                  name="Profile"
+                  component={ProfileScreen}
+                  options={{
+                      title: 'Profilo',
+                      headerShown: true,
+                      headerBackTitle: 'Indietro'
+                  }}
+              />
           </Stack.Group>
         )
       ) : (
-        // Navigator per autenticazione
-        <Stack.Screen 
-          name="Auth" 
-          component={AuthNavigator}
-          options={{ headerShown: false }}
-        />
+          // Navigator per autenticazione
+          <Stack.Screen
+              name="Auth"
+              component={AuthNavigator}
+              options={{ headerShown: false }}
+          />
       )}
     </Stack.Navigator>
   );
