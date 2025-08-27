@@ -344,6 +344,24 @@ export default function AppNavigator() {
               component={require('../screens/user/TransferRequestsScreen').default}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="CarsListScreen"
+              component={require('../screens/user/CarsListScreen').default}
+              options={{
+                title: 'I Miei Veicoli',
+                headerShown: true
+              }}
+            />
+            <Stack.Screen
+              name="NotificationsScreen"
+              component={require('../screens/user/NotificationsScreen').default}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ReportsScreen"
+              component={require('../screens/user/ReportsScreen').default}
+              options={{ headerShown: false }}
+            />
 
             {/* Promemoria */}
             <Stack.Screen
