@@ -7,15 +7,15 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Navigation
-import AppNavigator from './navigation/AppNavigator';
+import AppNavigator from './src/navigation/AppNavigator';
 
 // Store
-import { useStore } from './store';
+import { useStore } from './src/store';
 
 // Gestione fonti
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
-import { ThemeProvider } from './contexts/ThemeContext';
+import { ThemeProvider } from './src/contexts/ThemeContext';
 
 // Firebase - Import condizionale
 let auth: any;
