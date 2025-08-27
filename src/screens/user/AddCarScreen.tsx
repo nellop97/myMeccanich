@@ -41,7 +41,7 @@ import { db, auth } from '../../services/firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 import { useStore } from '../../store';
-import { useUserCarsStore } from '@/src/store/useCarsStore';
+import { useCarsStore } from '@/src/store/useCarsStore';
 import {userInfo} from "node:os";
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -95,7 +95,7 @@ interface CarFormData {
 const AddCarScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
-  const { addCar: addCarToStore } = useUserCarsStore();
+  const { addVehicle: addCarToStore } = useCarsStore();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined);

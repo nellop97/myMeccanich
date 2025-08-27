@@ -1,212 +1,189 @@
-// src/screens/user/MaintenanceHistoryScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Image,
   Alert,
-  SafeAreaView,
-  Dimensions,
   Platform,
-  ActivityIndicator,
-  RefreshControl
+  StatusBar,
+  Dimensions,
+  SafeAreaView,
+  ActivityIndicator
 } from 'react-native';
 import {
   Text,
   Card,
   Chip,
-  Searchbar,
-  FAB,
-  Menu,
-  Divider,
   IconButton,
+  FAB,
+  Divider,
   Surface,
-  Badge
+  Button,
+  Avatar,
+  Badge,
+  ProgressBar,
+  Portal,
+  Modal
 } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
-  Wrench,
+  Car,
   Calendar,
   MapPin,
-  Euro,
-  Filter,
-  ChevronDown,
-  ChevronUp,
+  Gauge,
+  Settings,
+  Shield,
+  Eye,
+  EyeOff,
+  Camera,
+  Edit,
+  Share,
   Lock,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  User,
-  Package,
-  Car
+  Info,
+  ChevronRight,
+  CheckCircle
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SecurityService } from '../../services/SecurityService';
-import { MaintenanceService } from '../../services/MaintenanceService';
 import { VehicleService } from '../../services/VehicleService';
+import { MaintenanceService } from '../../services/MaintenanceService';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
-import { MaintenanceRecord, Vehicle } from '../../types/database.types';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Vehicle, PrivacySettings } from '../../types/database.types';
 
-export default function MaintenanceHistoryScreen() {
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+export default function CarProfileScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { colors } = useAppThemeManager();
   const { user } = useAuth();
   const security = SecurityService.getInstance();
-  const maintenanceService = MaintenanceService.getInstance();
   const vehicleService = VehicleService.getInstance();
+  const maintenanceService = MaintenanceService.getInstance();
   
   const { carId } = route.params as { carId: string };
   
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
-  const [records, setRecords] = useState<MaintenanceRecord[]>([]);
-  const [filteredRecords, setFilteredRecords] = useState<MaintenanceRecord[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<string>('all');
-  const [expandedRecords, setExpandedRecords] = useState<Set<string>>(new Set());
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [maintenanceStats, setMaintenanceStats] = useState<any>(null);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    // Attiva protezione dati
+    // Attiva protezione screenshot
     security.preventScreenCapture(true);
     
-    // Disabilita context menu su web
-    if (Platform.OS === 'web') {
-      security.disableContextMenu();
-    }
-    
-    // Carica dati
-    loadData();
+    // Carica dati veicolo
+    loadVehicleData();
+
+    // Subscribe to real-time updates
+    const unsubscribe = vehicleService.subscribeToVehicle(carId, (updatedVehicle) => {
+      if (updatedVehicle) {
+        setVehicle(updatedVehicle);
+      }
+    });
 
     return () => {
+      // Cleanup
       security.preventScreenCapture(false);
+      unsubscribe();
     };
   }, [carId]);
 
-  const loadData = async () => {
+  const loadVehicleData = async () => {
     try {
       setLoading(true);
 
-      // Carica veicolo per privacy settings
+      // Carica veicolo
       const vehicleData = await vehicleService.getVehicle(carId);
+      if (!vehicleData) {
+        Alert.alert('Errore', 'Veicolo non trovato');
+        navigation.goBack();
+        return;
+      }
+
       setVehicle(vehicleData);
 
-      if (vehicleData && user?.uid) {
-        // Carica storico manutenzione
-        const maintenanceHistory = await maintenanceService.getVehicleMaintenanceHistory(
-          carId,
-          user.uid
-        );
-        
-        setRecords(maintenanceHistory);
-        setFilteredRecords(maintenanceHistory);
+      // Log accesso
+      if (user?.uid) {
+        await security.logDataAccess(user.uid, carId, 'view_profile');
       }
+
+      // Carica statistiche manutenzione
+      const stats = await maintenanceService.getMaintenanceStats(carId);
+      setMaintenanceStats(stats);
+
     } catch (error) {
-      console.error('Error loading data:', error);
-      Alert.alert('Errore', 'Impossibile caricare lo storico manutenzione');
+      console.error('Error loading vehicle:', error);
+      Alert.alert('Errore', 'Impossibile caricare i dati del veicolo');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadData();
-  };
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultiple: false,
+      quality: 0.8,
+    });
 
-  const filterRecords = async (query: string, filter: string) => {
-    try {
-      let filtered: MaintenanceRecord[] = [];
-
-      if (filter === 'all') {
-        filtered = records;
-      } else {
-        // Filtra per tipo dal server
-        filtered = await maintenanceService.filterMaintenanceByType(carId, filter as any);
-      }
-
-      // Ricerca testuale locale
-      if (query) {
-        filtered = filtered.filter(r => 
-          r.description.toLowerCase().includes(query.toLowerCase()) ||
-          r.workshopName?.toLowerCase().includes(query.toLowerCase()) ||
-          r.mechanicName?.toLowerCase().includes(query.toLowerCase())
+    if (!result.canceled && result.assets[0]) {
+      setUploading(true);
+      try {
+        const isMain = vehicle?.images.length === 0;
+        const uploadedImage = await vehicleService.uploadVehicleImage(
+          carId,
+          result.assets[0].uri,
+          isMain
         );
+        
+        Alert.alert('Successo', 'Immagine caricata con successo');
+        await loadVehicleData(); // Ricarica dati
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        Alert.alert('Errore', 'Impossibile caricare l\'immagine');
+      } finally {
+        setUploading(false);
       }
-
-      setFilteredRecords(filtered);
-    } catch (error) {
-      console.error('Error filtering records:', error);
     }
   };
 
-  const toggleRecordExpansion = (id: string) => {
-    const newExpanded = new Set(expandedRecords);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedRecords(newExpanded);
-  };
+  const togglePrivacySetting = async (key: keyof PrivacySettings) => {
+    if (vehicle) {
+      const newSettings = {
+        ...vehicle.privacySettings,
+        [key]: !vehicle.privacySettings[key]
+      };
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'tagliando': return '#4CAF50';
-      case 'gomme': return '#2196F3';
-      case 'freni': return '#FF9800';
-      case 'carrozzeria': return '#9C27B0';
-      case 'motore': return '#F44336';
-      case 'elettronica': return '#00BCD4';
-      default: return '#757575';
+      try {
+        await vehicleService.updatePrivacySettings(carId, newSettings);
+        setVehicle({
+          ...vehicle,
+          privacySettings: newSettings
+        });
+      } catch (error) {
+        console.error('Error updating privacy:', error);
+        Alert.alert('Errore', 'Impossibile aggiornare le impostazioni');
+      }
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'tagliando': return <Wrench size={20} />;
-      case 'gomme': return <Package size={20} />;
-      case 'freni': return <AlertCircle size={20} />;
-      case 'carrozzeria': return <Car size={20} />;
-      case 'motore': return <Settings size={20} />;
-      case 'elettronica': return <Cpu size={20} />;
-      default: return <Wrench size={20} />;
-    }
+  const handleEditVehicle = () => {
+    navigation.navigate('EditVehicle', { vehicleId: carId });
   };
 
-  const preventExport = () => {
-    Alert.alert(
-      '🔒 Funzione Bloccata',
-      'Per motivi di sicurezza e privacy, lo storico manutenzione può essere consultato solo all\'interno dell\'app e non può essere esportato.',
-      [{ text: 'Ho capito', style: 'default' }]
-    );
-  };
-
-  const handleAddMaintenance = () => {
-    navigation.navigate('AddMaintenance', { vehicleId: carId });
-  };
-
-  if (loading) {
+  if (loading || !vehicle) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={{ marginTop: 16, color: colors.onBackground }}>
-          Caricamento storico...
-        </Text>
-      </View>
-    );
-  }
-
-  if (!vehicle) {
-    return (
-      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
-        <AlertCircle size={48} color={colors.error} />
-        <Text style={[styles.errorText, { color: colors.onBackground }]}>
-          Veicolo non trovato
+          Caricamento veicolo...
         </Text>
       </View>
     );
@@ -214,295 +191,273 @@ export default function MaintenanceHistoryScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header di sicurezza */}
-      <Surface style={styles.securityHeader} elevation={2}>
-        <View style={styles.securityBadge}>
-          <Lock size={16} color="#FF6B35" />
-          <Text style={styles.securityText}>
-            Dati protetti - Visualizzazione sicura
-          </Text>
-        </View>
-        <IconButton
-          icon="information"
-          onPress={() => Alert.alert(
-            'Protezione Dati',
-            'Questi dati sono protetti e non possono essere esportati, condivisi o copiati. La visualizzazione è consentita solo all\'interno dell\'app.'
-          )}
-        />
-      </Surface>
-
-      {/* Barra di ricerca e filtri */}
-      <View style={styles.searchBar}>
-        <Searchbar
-          placeholder="Cerca manutenzione..."
-          onChangeText={(query) => {
-            setSearchQuery(query);
-            filterRecords(query, selectedFilter);
-          }}
-          value={searchQuery}
-          style={styles.searchInput}
-        />
-        
-        <Menu
-          visible={showFilterMenu}
-          onDismiss={() => setShowFilterMenu(false)}
-          anchor={
-            <IconButton
-              icon={() => <Filter size={20} />}
-              onPress={() => setShowFilterMenu(true)}
-              style={styles.filterButton}
-            />
-          }
-        >
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('all');
-              filterRecords(searchQuery, 'all');
-              setShowFilterMenu(false);
-            }}
-            title="Tutti"
-            leadingIcon="all-inclusive"
-          />
-          <Divider />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('tagliando');
-              filterRecords(searchQuery, 'tagliando');
-              setShowFilterMenu(false);
-            }}
-            title="Tagliandi"
-            leadingIcon="wrench"
-          />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('gomme');
-              filterRecords(searchQuery, 'gomme');
-              setShowFilterMenu(false);
-            }}
-            title="Pneumatici"
-            leadingIcon="circle-outline"
-          />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('freni');
-              filterRecords(searchQuery, 'freni');
-              setShowFilterMenu(false);
-            }}
-            title="Freni"
-            leadingIcon="car-brake-alert"
-          />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('carrozzeria');
-              filterRecords(searchQuery, 'carrozzeria');
-              setShowFilterMenu(false);
-            }}
-            title="Carrozzeria"
-            leadingIcon="car"
-          />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('motore');
-              filterRecords(searchQuery, 'motore');
-              setShowFilterMenu(false);
-            }}
-            title="Motore"
-            leadingIcon="engine"
-          />
-        </Menu>
-      </View>
-
-      {/* Timeline manutenzioni */}
-      <ScrollView
-        style={styles.timeline}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-          />
-        }
-        // Disabilita selezione testo su web
-        {...(Platform.OS === 'web' && { style: { ...styles.timeline, userSelect: 'none' } })}
+      <StatusBar barStyle={colors.dark ? 'light-content' : 'dark-content'} />
+      
+      {/* Header con immagine hero */}
+      <LinearGradient
+        colors={['#1e3c72', '#2a5298']}
+        style={styles.headerGradient}
       >
-        {filteredRecords.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Wrench size={48} color={colors.onSurfaceVariant} />
-            <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
-              Nessuna manutenzione registrata
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>
+              {vehicle.make} {vehicle.model}
             </Text>
-            <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>
-              {searchQuery ? 'Prova a modificare i criteri di ricerca' : 'Aggiungi la prima manutenzione'}
+            <Text style={styles.headerSubtitle}>
+              {vehicle.year} • {vehicle.licensePlate}
             </Text>
           </View>
-        ) : (
-          filteredRecords.map((record, index) => (
-            <View key={record.id}>
-              {/* Linea timeline */}
-              {index > 0 && <View style={styles.timelineLine} />}
-              
-              {/* Card manutenzione */}
-              <TouchableOpacity
-                onPress={() => toggleRecordExpansion(record.id)}
-                activeOpacity={0.7}
-              >
-                <Card
-                  style={[
-                    styles.recordCard,
-                    { backgroundColor: colors.surface }
-                  ]}
-                  elevation={2}
-                >
-                  {/* Header card */}
-                  <View style={styles.recordHeader}>
-                    <View
-                      style={[
-                        styles.typeIndicator,
-                        { backgroundColor: getTypeColor(record.type) }
-                      ]}
-                    >
-                      {getTypeIcon(record.type)}
-                    </View>
-                    
-                    <View style={styles.recordInfo}>
-                      <Text style={styles.recordTitle}>
-                        {record.description}
-                      </Text>
-                      <View style={styles.recordMeta}>
-                        <View style={styles.metaItem}>
-                          <Calendar size={14} color="#666" />
-                          <Text style={styles.metaText}>
-                            {new Date(record.date).toLocaleDateString()}
-                          </Text>
-                        </View>
-                        <View style={styles.metaItem}>
-                          <Gauge size={14} color="#666" />
-                          <Text style={styles.metaText}>
-                            {record.mileage.toLocaleString()} km
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    
-                    <View style={styles.recordActions}>
-                      {record.warranty && (
-                        <Badge style={styles.warrantyBadge}>
-                          Garanzia
-                        </Badge>
-                      )}
-                      <IconButton
-                        icon={() => 
-                          expandedRecords.has(record.id) ? 
-                          <ChevronUp size={20} /> : 
-                          <ChevronDown size={20} />
-                        }
-                        size={20}
-                      />
-                    </View>
-                  </View>
+          
+          <View style={styles.headerActions}>
+            <IconButton
+              icon={() => <Shield size={24} color="#fff" />}
+              onPress={() => setShowPrivacyModal(true)}
+            />
+            <IconButton
+              icon={() => <Edit size={24} color="#fff" />}
+              onPress={handleEditVehicle}
+            />
+          </View>
+        </View>
 
-                  {/* Dettagli espansi */}
-                  {expandedRecords.has(record.id) && (
-                    <View style={styles.recordDetails}>
-                      <Divider style={styles.detailsDivider} />
-                      
-                      {record.workshopName && vehicle.privacySettings.showMechanics && (
-                        <DetailRow
-                          icon={<MapPin size={16} />}
-                          label="Officina"
-                          value={record.workshopName}
-                        />
-                      )}
-                      
-                      {record.mechanicName && vehicle.privacySettings.showMechanics && (
-                        <DetailRow
-                          icon={<User size={16} />}
-                          label="Meccanico"
-                          value={record.mechanicName}
-                        />
-                      )}
-                      
-                      {record.cost && vehicle.privacySettings.showCosts && (
-                        <DetailRow
-                          icon={<Euro size={16} />}
-                          label="Costo"
-                          value={`€ ${record.cost.toFixed(2)}`}
-                          secure
-                        />
-                      )}
-                      
-                      {record.parts && record.parts.length > 0 && vehicle.privacySettings.showMaintenanceDetails && (
-                        <View style={styles.partsSection}>
-                          <Text style={styles.partsSectionTitle}>
-                            Ricambi utilizzati:
-                          </Text>
-                          {record.parts.map((part, idx) => (
-                            <View key={idx} style={styles.partItem}>
-                              <Text style={styles.partBullet}>•</Text>
-                              <Text style={styles.partText}>
-                                {part.name} {part.quantity > 1 ? `x${part.quantity}` : ''}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-                      
-                      {record.notes && (
-                        <View style={styles.notesSection}>
-                          <Text style={styles.notesSectionTitle}>Note:</Text>
-                          <Text style={styles.notesText}>{record.notes}</Text>
-                        </View>
-                      )}
-                      
-                      {record.nextServiceDate && (
-                        <View style={styles.nextServiceBanner}>
-                          <Clock size={16} color="#FF6B35" />
-                          <Text style={styles.nextServiceText}>
-                            Prossimo controllo: {new Date(record.nextServiceDate).toLocaleDateString()}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+        {/* Badge Privacy */}
+        <View style={styles.privacyBadge}>
+          <Lock size={16} color="#fff" />
+          <Text style={styles.privacyBadgeText}>
+            Dati protetti - Non esportabili
+          </Text>
+        </View>
+
+        {/* Badge Trasferimento Pendente */}
+        {vehicle.transferPending && (
+          <View style={[styles.privacyBadge, { backgroundColor: '#FF6B35' }]}>
+            <Info size={16} color="#fff" />
+            <Text style={styles.privacyBadgeText}>
+              Trasferimento in corso a {vehicle.transferToEmail}
+            </Text>
+          </View>
+        )}
+      </LinearGradient>
+
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Galleria Immagini */}
+        <Card style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Card.Title title="Foto del veicolo" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.imageGallery}>
+              {vehicle.images.map((img, index) => (
+                <TouchableOpacity key={img.id} style={styles.imageContainer}>
+                  <Image source={{ uri: img.url }} style={styles.carImage} />
+                  {img.isMain && (
+                    <Badge style={styles.mainImageBadge}>Principale</Badge>
                   )}
-                </Card>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity 
+                onPress={pickImage} 
+                style={styles.addImageButton}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <>
+                    <Camera size={32} color={colors.onSurfaceVariant} />
+                    <Text style={{ color: colors.onSurfaceVariant }}>Aggiungi</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
-          ))
+          </ScrollView>
+        </Card>
+
+        {/* Informazioni Generali */}
+        <Card style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Card.Title 
+            title="Informazioni Generali"
+            right={() => (
+              <View style={styles.verifiedBadge}>
+                <CheckCircle size={16} color="#4CAF50" />
+                <Text style={styles.verifiedText}>Verificato</Text>
+              </View>
+            )}
+          />
+          <Card.Content>
+            <View style={styles.infoGrid}>
+              <InfoItem
+                icon={<Car size={20} />}
+                label="Telaio (VIN)"
+                value={vehicle.privacySettings.showDocuments ? vehicle.vin : '••••••••••'}
+                secure={!vehicle.privacySettings.showDocuments}
+              />
+              <InfoItem
+                icon={<Gauge size={20} />}
+                label="Chilometraggio"
+                value={vehicle.privacySettings.showMileage ? 
+                  `${vehicle.mileage.toLocaleString()} km` : '••••••'}
+                secure={!vehicle.privacySettings.showMileage}
+              />
+              <InfoItem
+                icon={<Calendar size={20} />}
+                label="Ultima manutenzione"
+                value={vehicle.privacySettings.showMaintenance && vehicle.lastMaintenanceDate ?
+                  new Date(vehicle.lastMaintenanceDate).toLocaleDateString() : '••••••'}
+                secure={!vehicle.privacySettings.showMaintenance}
+              />
+            </View>
+
+            <Divider style={styles.divider} />
+
+            {/* Specifiche */}
+            <View style={styles.specs}>
+              <SpecChip label="Carburante" value={vehicle.fuel} />
+              <SpecChip label="Cambio" value={vehicle.transmission} />
+              <SpecChip label="Colore" value={vehicle.color} />
+              {vehicle.engineSize && (
+                <SpecChip label="Cilindrata" value={`${vehicle.engineSize}cc`} />
+              )}
+              {vehicle.power && (
+                <SpecChip label="Potenza" value={`${vehicle.power} CV`} />
+              )}
+            </View>
+          </Card.Content>
+        </Card>
+
+        {/* Optional */}
+        {vehicle.optionals.length > 0 && (
+          <Card style={[styles.section, { backgroundColor: colors.surface }]}>
+            <Card.Title title="Dotazioni e Optional" />
+            <Card.Content>
+              <View style={styles.optionalGrid}>
+                {vehicle.optionals.map((optional, index) => (
+                  <Chip
+                    key={index}
+                    style={styles.optionalChip}
+                    textStyle={styles.optionalChipText}
+                  >
+                    {optional}
+                  </Chip>
+                ))}
+              </View>
+            </Card.Content>
+          </Card>
         )}
+
+        {/* Statistiche */}
+        <Card style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Card.Title title="Riepilogo Attività" />
+          <Card.Content>
+            <View style={styles.statsGrid}>
+              <StatCard
+                title="Manutenzioni"
+                value={vehicle.maintenanceCount.toString()}
+                icon={<Settings size={24} />}
+                color="#2196F3"
+                onPress={() => navigation.navigate('MaintenanceHistory', { carId })}
+              />
+              <StatCard
+                title="Documenti"
+                value={vehicle.documentsCount.toString()}
+                icon={<Info size={24} />}
+                color="#4CAF50"
+                locked={!vehicle.privacySettings.showDocuments}
+              />
+            </View>
+            
+            {maintenanceStats && (
+              <View style={styles.maintenancePreview}>
+                <Divider style={{ marginVertical: 12 }} />
+                <Text style={styles.statsTitle}>Prossima Manutenzione</Text>
+                {maintenanceStats.nextMaintenance ? (
+                  <View style={styles.nextMaintenanceBanner}>
+                    <Calendar size={20} color="#FF6B35" />
+                    <Text style={styles.nextMaintenanceText}>
+                      {new Date(maintenanceStats.nextMaintenance).toLocaleDateString()}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.noMaintenanceText}>
+                    Nessuna manutenzione programmata
+                  </Text>
+                )}
+              </View>
+            )}
+          </Card.Content>
+        </Card>
+
+        {/* Azioni Rapide */}
+        <View style={styles.quickActions}>
+          <Button
+            mode="contained"
+            onPress={() => navigation.navigate('PrivacySettings', { carId })}
+            icon="shield"
+            style={[styles.actionButton, { backgroundColor: colors.primary }]}
+          >
+            Gestisci Privacy
+          </Button>
+          
+          <Button
+            mode="outlined"
+            onPress={() => navigation.navigate('OwnershipTransfer', { carId })}
+            icon="account-switch"
+            style={styles.actionButton}
+            disabled={vehicle.transferPending}
+          >
+            {vehicle.transferPending ? 'Trasferimento in corso' : 'Vendi Auto'}
+          </Button>
+        </View>
       </ScrollView>
 
-      {/* FAB per aggiungere e export */}
-      <View style={styles.fabContainer}>
-        <FAB
-          icon="plus"
-          style={[styles.fab, { backgroundColor: colors.primary }]}
-          onPress={handleAddMaintenance}
-        />
-        <FAB
-          icon="export"
-          style={[styles.fabDisabled, { backgroundColor: '#999' }]}
-          onPress={preventExport}
-          label="Export"
-          disabled
-          small
-        />
-      </View>
+      {/* Modal Privacy */}
+      <Portal>
+        <Modal
+          visible={showPrivacyModal}
+          onDismiss={() => setShowPrivacyModal(false)}
+          contentContainerStyle={[styles.modal, { backgroundColor: colors.surface }]}
+        >
+          <Text style={styles.modalTitle}>Impostazioni Privacy Rapide</Text>
+          <Text style={styles.modalSubtitle}>
+            Scegli quali informazioni rendere visibili
+          </Text>
+          
+          <View style={styles.privacyOptions}>
+            <PrivacyOption
+              label="Chilometraggio"
+              value={vehicle.privacySettings.showMileage}
+              onToggle={() => togglePrivacySetting('showMileage')}
+            />
+            <PrivacyOption
+              label="Storico Manutenzioni"
+              value={vehicle.privacySettings.showMaintenanceHistory}
+              onToggle={() => togglePrivacySetting('showMaintenanceHistory')}
+            />
+            <PrivacyOption
+              label="Documenti"
+              value={vehicle.privacySettings.showDocuments}
+              onToggle={() => togglePrivacySetting('showDocuments')}
+            />
+            <PrivacyOption
+              label="Costi"
+              value={vehicle.privacySettings.showCosts}
+              onToggle={() => togglePrivacySetting('showCosts')}
+            />
+          </View>
+          
+          <Button
+            mode="contained"
+            onPress={() => setShowPrivacyModal(false)}
+            style={{ marginTop: 20 }}
+          >
+            Conferma
+          </Button>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
-
-// Componente helper rimane uguale
-const DetailRow = ({ icon, label, value, secure }: any) => (
-  <View style={styles.detailRow}>
-    <View style={styles.detailIcon}>{icon}</View>
-    <Text style={styles.detailLabel}>{label}:</Text>
-    <Text style={[styles.detailValue, secure && styles.secureValue]}>
-      {value}
-    </Text>
-    {secure && <Lock size={12} color="#999" style={{ marginLeft: 4 }} />}
-  </View>
-);
 
 const styles = StyleSheet.create({
   // Stili comuni

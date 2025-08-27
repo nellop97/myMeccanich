@@ -42,7 +42,7 @@ import {
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
-import { useUserCarsStore } from '@/src/store/useCarsStore';
+import { useCarsStore } from '@/src/store/useCarsStore';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -55,7 +55,7 @@ const CarDetailScreen = () => {
   const route = useRoute();
   const { carId } = route.params as RouteParams;
   const { darkMode } = useStore();
-  const { getCarById, getCarStats } = useUserCarsStore();
+  const { getCarById, getCarStats } = useCarsStore();
 
   const [refreshing, setRefreshing] = useState(false);
   const [bottomSheetVisible, setBottomSheetVisible] = useState(false);

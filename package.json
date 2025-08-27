@@ -36,6 +36,7 @@
     "prod:validate": "npm run db:validate"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-native-community/datetimepicker": "^8.4.1",
@@ -64,6 +65,7 @@
     "expo-linear-gradient": "~14.1.5",
     "expo-linking": "~7.1.5",
     "expo-router": "~5.1.5",
+    "expo-screen-capture": "^7.2.0",
     "expo-splash-screen": "~0.30.10",
     "expo-status-bar": "~2.2.3",
     "expo-symbols": "~0.4.5",
