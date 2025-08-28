@@ -1,12 +1,8 @@
-// ===========================================
-// src/components/DatePicker.tsx
-// ===========================================
 import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  Modal,
   TextInput,
   StyleSheet,
   Platform,
@@ -50,7 +46,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   if (Platform.OS === 'web') {
     // Fallback per Web usando input HTML5
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]によって>
+      <View style={[styles.container, { backgroundColor: colors.surface }]}>
         {label && (
           <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
             {label}
@@ -79,7 +75,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     );
   }
 
-  // Native implementation
+  // Native implementation per iOS/Android
   return (
     <TouchableOpacity
       style={[styles.container, { backgroundColor: colors.surface }]}

@@ -1,6 +1,23 @@
 // ===========================================
 // src/components/ImagePicker.tsx
 // ===========================================
+import React from 'react';
+import {
+  TouchableOpacity,
+  Text,
+  Alert,
+  Platform,
+  StyleSheet,
+} from 'react-native';
+import { Camera } from 'lucide-react-native';
+import { useAppThemeManager } from '../hooks/useTheme';
+
+// Import condizionale per Image Picker
+let RNImagePicker: any = null;
+if (Platform.OS !== 'web') {
+  RNImagePicker = require('react-native-image-picker');
+}
+
 interface ImagePickerProps {
   onSelect: (image: any) => void;
   label?: string;
@@ -42,8 +59,10 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
   };
 
   const handleNativePick = async () => {
-    // Lazy load per evitare errori su web
-    const ImagePickerModule = await import('react-native-image-picker');
+    if (!RNImagePicker) {
+      Alert.alert('Errore', 'Image picker non disponibile');
+      return;
+    }
 
     const options = {
       mediaType: 'photo' as const,
@@ -53,18 +72,59 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
       quality: 0.8,
     };
 
-    const picker = mode === 'camera' 
-      ? ImagePickerModule.launchCamera
-      : ImagePickerModule.launchImageLibrary;
+    if (mode === 'both') {
+      // Mostra ActionSheet per scegliere
+      Alert.alert(
+        'Seleziona Immagine',
+        'Scegli da dove prendere l\'immagine',
+        [
+          {
+            text: 'Camera',
+            onPress: () => {
+              RNImagePicker.launchCamera(options, (response: any) => {
+                if (!response.didCancel && !response.errorMessage && response.assets) {
+                  const asset = response.assets[0];
+                  if (asset) {
+                    onSelect(asset);
+                  }
+                }
+              });
+            }
+          },
+          {
+            text: 'Galleria',
+            onPress: () => {
+              RNImagePicker.launchImageLibrary(options, (response: any) => {
+                if (!response.didCancel && !response.errorMessage && response.assets) {
+                  const asset = response.assets[0];
+                  if (asset) {
+                    onSelect(asset);
+                  }
+                }
+              });
+            }
+          },
+          {
+            text: 'Annulla',
+            style: 'cancel'
+          }
+        ]
+      );
+    } else {
+      // Usa direttamente il mode specificato
+      const picker = mode === 'camera' 
+        ? RNImagePicker.launchCamera
+        : RNImagePicker.launchImageLibrary;
 
-    picker(options, (response) => {
-      if (!response.didCancel && !response.errorMessage && response.assets) {
-        const asset = response.assets[0];
-        if (asset) {
-          onSelect(asset);
+      picker(options, (response: any) => {
+        if (!response.didCancel && !response.errorMessage && response.assets) {
+          const asset = response.assets[0];
+          if (asset) {
+            onSelect(asset);
+          }
         }
-      }
-    });
+      });
+    }
   };
 
   return (
@@ -80,7 +140,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({
   );
 };
 
-const pickerStyles = StyleSheet.create({
+const styles = StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -88,6 +148,7 @@ const pickerStyles = StyleSheet.create({
     gap: 8,
     padding: 12,
     borderRadius: 8,
+    minWidth: 120,
   },
   buttonText: {
     fontSize: 14,

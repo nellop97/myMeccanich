@@ -45,7 +45,7 @@ import { useUserData } from '../../hooks/useUserData';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
-import DocumentPicker from 'react-native-document-picker';
+import { DocumentPicker } from '../../components/DocumentPicker';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 interface Document {

@@ -45,8 +45,8 @@ import {
   ChevronRight,
   CheckCircle
 } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { SecurityService } from '../../services/SecurityService';
+import { ImagePicker } from '../../components/ImagePicker';
+import { SecurityService } from '../../security/SecurityService';
 import { VehicleService } from '../../services/VehicleService';
 import { MaintenanceService } from '../../services/MaintenanceService';
 import { useAppThemeManager } from '../../hooks/useTheme';

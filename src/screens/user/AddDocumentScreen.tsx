@@ -14,8 +14,8 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
+import { DocumentPicker } from '../../components/DocumentPicker';
+import { ImagePicker } from '../../components/ImagePicker';
 
 // Icone locali come componenti di testo
 const ArrowLeftIcon = () => (
