@@ -1,13 +1,54 @@
-// ===========================================
-// metro.config.js - Aggiorna anche questo
-// ===========================================
+// metro.config.js - VERSIONE AGGIORNATA
 const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 module.exports = (() => {
   const config = getDefaultConfig(__dirname);
 
-  // Aggiungi estensioni web
-  config.resolver.sourceExts = [...config.resolver.sourceExts, 'web.js', 'web.jsx', 'web.ts', 'web.tsx'];
+  // Aggiungi estensioni per supportare web e mobile
+  config.resolver.sourceExts = [
+    ...config.resolver.sourceExts,
+    'web.js',
+    'web.jsx', 
+    'web.ts',
+    'web.tsx'
+  ];
+
+  // Aggiungi alias per risolvere i percorsi
+  config.resolver.alias = {
+    '@': path.resolve(__dirname, './'),
+    '@components': path.resolve(__dirname, './src/components'),
+    '@screens': path.resolve(__dirname, './src/screens'),
+    '@services': path.resolve(__dirname, './src/services'),
+    '@store': path.resolve(__dirname, './src/store'),
+    '@types': path.resolve(__dirname, './src/types'),
+    '@utils': path.resolve(__dirname, './src/utils'),
+    '@assets': path.resolve(__dirname, './assets'),
+    '@navigation': path.resolve(__dirname, './src/navigation'),
+    '@hooks': path.resolve(__dirname, './src/hooks'),
+  };
+
+  // Configura il transformer per gestire meglio i moduli
+  config.transformer = {
+    ...config.transformer,
+    minifierConfig: {
+      // Evita errori di minificazione con alcune librerie
+      keep_fnames: true,
+      mangle: {
+        keep_fnames: true,
+      },
+    },
+  };
+
+  // Configurazione per Firebase e altre dipendenze problematiche
+  config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
+  
+  // Blocklist per evitare conflitti di dipendenze
+  config.resolver.blockList = [
+    // Evita conflitti con Firebase
+    /.*\/__tests__\/.*/,
+    /.*\/node_modules\/.*\/node_modules\/react-native\/.*/,
+  ];
 
   return config;
 })();

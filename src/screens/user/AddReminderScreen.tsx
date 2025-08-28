@@ -32,8 +32,8 @@ import {
 import { DatePicker } from '../../components/DatePicker';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { db, auth } from '../../services/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const AddReminderScreen = () => {
   const navigation = useNavigation();
@@ -51,7 +51,7 @@ const AddReminderScreen = () => {
     dueDate: new Date(),
     dueMileage: '',
     isRecurring: false,
-    recurringInterval: 365, // giorni
+    recurringInterval: 365,
     notifyDaysBefore: 7,
     isActive: true,
   });
@@ -103,498 +103,391 @@ const AddReminderScreen = () => {
     },
   ];
 
-  const recurringOptions = [
-    { label: 'Settimanale', value: 7 },
-    { label: 'Mensile', value: 30 },
-    { label: 'Trimestrale', value: 90 },
-    { label: 'Semestrale', value: 180 },
-    { label: 'Annuale', value: 365 },
-    { label: 'Biennale', value: 730 },
+  const recurringIntervals = [
+    { value: 90, label: '3 mesi' },
+    { value: 180, label: '6 mesi' },
+    { value: 365, label: '1 anno' },
+    { value: 730, label: '2 anni' },
   ];
 
-  const selectedType = reminderTypes.find(t => t.id === formData.type);
-  const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
+  const notificationOptions = [
+    { value: 1, label: '1 giorno prima' },
+    { value: 3, label: '3 giorni prima' },
+    { value: 7, label: '1 settimana prima' },
+    { value: 14, label: '2 settimane prima' },
+    { value: 30, label: '1 mese prima' },
+  ];
 
-  const validateForm = () => {
-    if (!formData.vehicleId) {
-      Alert.alert('Errore', 'Seleziona un veicolo');
-      return false;
-    }
+  const handleSaveReminder = async () => {
     if (!formData.title.trim()) {
       Alert.alert('Errore', 'Inserisci un titolo per il promemoria');
-      return false;
+      return;
     }
-    if (!formData.type) {
-      Alert.alert('Errore', 'Seleziona un tipo di promemoria');
-      return false;
-    }
-    return true;
-  };
 
-  const handleSave = async () => {
-    if (!validateForm()) return;
+    if (!formData.vehicleId) {
+      Alert.alert('Errore', 'Seleziona un veicolo');
+      return;
+    }
 
     setIsLoading(true);
+
     try {
-      const userId = auth().currentUser?.uid;
+      const userId = auth.currentUser?.uid;
       if (!userId) {
-        Alert.alert('Errore', 'Utente non autenticato');
-        return;
+        throw new Error('Utente non autenticato');
       }
 
       const reminderData = {
         vehicleId: formData.vehicleId,
         title: formData.title.trim(),
-        description: formData.description.trim() || null,
+        description: formData.description.trim() || undefined,
         type: formData.type,
-        dueDate: firestore.Timestamp.fromDate(formData.dueDate),
-        dueMileage: formData.dueMileage ? parseInt(formData.dueMileage) : null,
+        dueDate: formData.dueDate,
+        dueMileage: formData.dueMileage ? parseInt(formData.dueMileage) : undefined,
         isActive: formData.isActive,
         isRecurring: formData.isRecurring,
-        recurringInterval: formData.isRecurring ? formData.recurringInterval : null,
+        recurringInterval: formData.isRecurring ? formData.recurringInterval : undefined,
         notifyDaysBefore: formData.notifyDaysBefore,
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        updatedAt: firestore.FieldValue.serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
         userId: userId,
       };
 
-      await firestore()
-        .collection('users')
-        .doc(userId)
-        .collection('reminders')
-        .add(reminderData);
+      const remindersRef = collection(db, 'users', userId, 'reminders');
+      await addDoc(remindersRef, reminderData);
 
-      await refreshData();
+      Alert.alert('Successo', 'Promemoria creato con successo', [
+        { text: 'OK', onPress: () => navigation.goBack() }
+      ]);
 
-      Alert.alert(
-        'Successo!',
-        'Promemoria creato con successo',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
     } catch (error) {
-      console.error('Errore salvataggio promemoria:', error);
-      Alert.alert('Errore', 'Impossibile salvare il promemoria');
+      console.error('Errore creazione promemoria:', error);
+      Alert.alert('Errore', 'Impossibile creare il promemoria');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const renderStepIndicator = () => (
-    <View style={styles.stepIndicator}>
-      {['Tipo', 'Dettagli', 'Pianifica'].map((step, index) => (
-        <View key={index} style={styles.stepItem}>
-          <View style={[
-            styles.stepCircle,
-            {
-              backgroundColor: currentStep >= index ? colors.primary : colors.surfaceVariant,
-            }
-          ]}>
-            <Text style={[
-              styles.stepNumber,
-              { color: currentStep >= index ? colors.onPrimary : colors.onSurfaceVariant }
-            ]}>
-              {index + 1}
-            </Text>
-          </View>
-          <Text style={[
-            styles.stepLabel,
-            { color: currentStep >= index ? colors.onBackground : colors.onSurfaceVariant }
-          ]}>
-            {step}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-
-  const renderStep = () => {
+  const renderStepContent = () => {
     switch (currentStep) {
       case 0:
-        return renderTypeSelection();
+        return (
+          <View style={styles.stepContent}>
+            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+              Seleziona Tipo di Promemoria
+            </Text>
+            <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
+              Scegli la categoria che meglio descrive il tuo promemoria
+            </Text>
+
+            <View style={styles.typeSelector}>
+              {reminderTypes.map(type => {
+                const Icon = type.icon;
+                const isSelected = formData.type === type.id;
+                
+                return (
+                  <TouchableOpacity
+                    key={type.id}
+                    style={[
+                      styles.typeOption,
+                      {
+                        backgroundColor: isSelected ? type.color + '20' : colors.surface,
+                        borderColor: isSelected ? type.color : colors.outline,
+                      }
+                    ]}
+                    onPress={() => setFormData(prev => ({ ...prev, type: type.id }))}
+                  >
+                    <View style={[styles.typeIcon, { backgroundColor: type.color + '20' }]}>
+                      <Icon size={24} color={type.color} />
+                    </View>
+                    <Text style={[styles.typeLabel, { color: colors.onSurface }]}>
+                      {type.label}
+                    </Text>
+                    <Text style={[styles.typeDescription, { color: colors.onSurfaceVariant }]}>
+                      {type.description}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {formData.type && reminderTypes.find(t => t.id === formData.type)?.suggestions.length > 0 && (
+              <View style={styles.suggestions}>
+                <Text style={[styles.suggestionsTitle, { color: colors.onSurface }]}>
+                  Suggerimenti:
+                </Text>
+                <View style={styles.suggestionsList}>
+                  {reminderTypes.find(t => t.id === formData.type)?.suggestions.map(suggestion => (
+                    <TouchableOpacity
+                      key={suggestion}
+                      style={[styles.suggestionChip, { backgroundColor: colors.surface, borderColor: colors.outline }]}
+                      onPress={() => setFormData(prev => ({ ...prev, title: suggestion }))}
+                    >
+                      <Text style={[styles.suggestionText, { color: colors.onSurface }]}>
+                        {suggestion}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        );
+
       case 1:
-        return renderDetailsForm();
+        return (
+          <View style={styles.stepContent}>
+            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+              Dettagli Promemoria
+            </Text>
+            <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
+              Inserisci i dettagli del tuo promemoria
+            </Text>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Veicolo
+              </Text>
+              <View style={[styles.vehicleSelector, { borderColor: colors.outline }]}>
+                {vehicles.map(vehicle => (
+                  <TouchableOpacity
+                    key={vehicle.id}
+                    style={[
+                      styles.vehicleOption,
+                      {
+                        backgroundColor: formData.vehicleId === vehicle.id ? colors.primary + '20' : colors.surface,
+                        borderColor: formData.vehicleId === vehicle.id ? colors.primary : colors.outline,
+                      }
+                    ]}
+                    onPress={() => setFormData(prev => ({ ...prev, vehicleId: vehicle.id }))}
+                  >
+                    <Car size={20} color={formData.vehicleId === vehicle.id ? colors.primary : colors.onSurfaceVariant} />
+                    <Text style={[
+                      styles.vehicleOptionText,
+                      { color: formData.vehicleId === vehicle.id ? colors.primary : colors.onSurface }
+                    ]}>
+                      {vehicle.brand} {vehicle.model}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Titolo *
+              </Text>
+              <TextInput
+                style={[styles.textInput, { borderColor: colors.outline, color: colors.onSurface }]}
+                value={formData.title}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+                placeholder="Es: Tagliando 10.000 km"
+                placeholderTextColor={colors.onSurfaceVariant}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Descrizione (opzionale)
+              </Text>
+              <TextInput
+                style={[styles.textArea, { borderColor: colors.outline, color: colors.onSurface }]}
+                value={formData.description}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
+                placeholder="Aggiungi dettagli aggiuntivi..."
+                placeholderTextColor={colors.onSurfaceVariant}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Data di Scadenza
+              </Text>
+              <TouchableOpacity
+                style={[styles.dateSelector, { borderColor: colors.outline }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Calendar size={20} color={colors.primary} />
+                <View style={styles.dateSelectorContent}>
+                  <Text style={[styles.dateSelectorLabel, { color: colors.onSurfaceVariant }]}>
+                    Scade il
+                  </Text>
+                  <Text style={[styles.dateSelectorValue, { color: colors.onSurface }]}>
+                    {formData.dueDate.toLocaleDateString('it-IT')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Chilometraggio (opzionale)
+              </Text>
+              <TextInput
+                style={[styles.textInput, { borderColor: colors.outline, color: colors.onSurface }]}
+                value={formData.dueMileage}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, dueMileage: text }))}
+                placeholder="Es: 15000"
+                placeholderTextColor={colors.onSurfaceVariant}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+        );
+
       case 2:
-        return renderScheduleForm();
+        return (
+          <View style={styles.stepContent}>
+            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+              Impostazioni Notifica
+            </Text>
+            <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
+              Configura quando e come ricevere le notifiche
+            </Text>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Notifica con Anticipo
+              </Text>
+              <View style={styles.notifyOptions}>
+                {notificationOptions.map(option => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.notifyOption,
+                      {
+                        backgroundColor: formData.notifyDaysBefore === option.value ? colors.primary + '20' : colors.surface,
+                        borderColor: formData.notifyDaysBefore === option.value ? colors.primary : colors.outline,
+                      }
+                    ]}
+                    onPress={() => setFormData(prev => ({ ...prev, notifyDaysBefore: option.value }))}
+                  >
+                    <Text style={[
+                      styles.notifyOptionText,
+                      { color: formData.notifyDaysBefore === option.value ? colors.primary : colors.onSurface }
+                    ]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={[styles.toggleGroup, { backgroundColor: colors.surface, borderColor: colors.outline }]}>
+              <View style={styles.toggleContent}>
+                <RefreshCw size={20} color={colors.primary} />
+                <View style={styles.toggleText}>
+                  <Text style={[styles.toggleLabel, { color: colors.onSurface }]}>
+                    Promemoria Ricorrente
+                  </Text>
+                  <Text style={[styles.toggleDescription, { color: colors.onSurfaceVariant }]}>
+                    Ripeti automaticamente il promemoria
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={formData.isRecurring}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, isRecurring: value }))}
+                trackColor={{ false: colors.outline, true: colors.primary + '50' }}
+                thumbColor={formData.isRecurring ? colors.primary : colors.onSurfaceVariant}
+              />
+            </View>
+
+            {formData.isRecurring && (
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.onSurface }]}>
+                  Intervallo di Ricorrenza
+                </Text>
+                <View style={styles.recurringOptions}>
+                  {recurringIntervals.map(interval => (
+                    <TouchableOpacity
+                      key={interval.value}
+                      style={[
+                        styles.recurringOption,
+                        {
+                          backgroundColor: formData.recurringInterval === interval.value ? colors.secondary + '20' : colors.surface,
+                          borderColor: formData.recurringInterval === interval.value ? colors.secondary : colors.outline,
+                        }
+                      ]}
+                      onPress={() => setFormData(prev => ({ ...prev, recurringInterval: interval.value }))}
+                    >
+                      <Text style={[
+                        styles.recurringOptionText,
+                        { color: formData.recurringInterval === interval.value ? colors.secondary : colors.onSurface }
+                      ]}>
+                        {interval.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={[styles.toggleGroup, { backgroundColor: colors.surface, borderColor: colors.outline }]}>
+              <View style={styles.toggleContent}>
+                <Bell size={20} color={colors.primary} />
+                <View style={styles.toggleText}>
+                  <Text style={[styles.toggleLabel, { color: colors.onSurface }]}>
+                    Promemoria Attivo
+                  </Text>
+                  <Text style={[styles.toggleDescription, { color: colors.onSurfaceVariant }]}>
+                    Ricevi notifiche per questo promemoria
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={formData.isActive}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, isActive: value }))}
+                trackColor={{ false: colors.outline, true: colors.primary + '50' }}
+                thumbColor={formData.isActive ? colors.primary : colors.onSurfaceVariant}
+              />
+            </View>
+          </View>
+        );
+
       default:
         return null;
     }
   };
 
-  const renderTypeSelection = () => (
-    <View style={styles.stepContent}>
-      <Text style={[styles.stepTitle, { color: colors.onBackground }]}>
-        Che tipo di promemoria vuoi creare?
-      </Text>
-
-      {/* Vehicle Selection */}
-      <View style={styles.vehicleSection}>
-        <Text style={[styles.label, { color: colors.onSurface }]}>
-          Seleziona il veicolo
-        </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {vehicles.map(vehicle => (
-            <TouchableOpacity
-              key={vehicle.id}
-              style={[
-                styles.vehicleCard,
-                {
-                  backgroundColor: formData.vehicleId === vehicle.id ? colors.primaryContainer : colors.surface,
-                  borderColor: formData.vehicleId === vehicle.id ? colors.primary : colors.outline,
-                  borderWidth: 2,
-                }
-              ]}
-              onPress={() => setFormData({ ...formData, vehicleId: vehicle.id })}
-            >
-              <Car size={24} color={formData.vehicleId === vehicle.id ? colors.onPrimaryContainer : colors.onSurface} />
-              <Text style={[
-                styles.vehicleName,
-                { color: formData.vehicleId === vehicle.id ? colors.onPrimaryContainer : colors.onSurface }
-              ]}>
-                {vehicle.make} {vehicle.model}
-              </Text>
-              <Text style={[
-                styles.vehiclePlate,
-                { color: formData.vehicleId === vehicle.id ? colors.onPrimaryContainer : colors.onSurfaceVariant }
-              ]}>
-                {vehicle.licensePlate}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Type Selection */}
-      <Text style={[styles.label, { color: colors.onSurface, marginTop: 24 }]}>
-        Tipo di promemoria
-      </Text>
-      <View style={styles.typeGrid}>
-        {reminderTypes.map(type => {
-          const Icon = type.icon;
-          const isSelected = formData.type === type.id;
-
-          return (
-            <TouchableOpacity
-              key={type.id}
-              style={[
-                styles.typeCard,
-                {
-                  backgroundColor: isSelected ? colors.primaryContainer : colors.surface,
-                  borderColor: isSelected ? colors.primary : colors.outline,
-                  borderWidth: 2,
-                }
-              ]}
-              onPress={() => setFormData({ ...formData, type: type.id })}
-            >
-              <View style={[
-                styles.typeIcon,
-                { backgroundColor: type.color + '20' }
-              ]}>
-                <Icon size={24} color={type.color} />
-              </View>
-              <Text style={[
-                styles.typeLabel,
-                { color: isSelected ? colors.onPrimaryContainer : colors.onSurface }
-              ]}>
-                {type.label}
-              </Text>
-              <Text style={[
-                styles.typeDescription,
-                { color: isSelected ? colors.onPrimaryContainer : colors.onSurfaceVariant }
-              ]}>
-                {type.description}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-
-  const renderDetailsForm = () => (
-    <View style={styles.stepContent}>
-      <Text style={[styles.stepTitle, { color: colors.onBackground }]}>
-        Dettagli del promemoria
-      </Text>
-
-      {/* Suggestions */}
-      {selectedType?.suggestions && selectedType.suggestions.length > 0 && (
-        <View style={styles.suggestionsSection}>
-          <Text style={[styles.label, { color: colors.onSurface }]}>
-            Suggerimenti rapidi
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {selectedType.suggestions.map((suggestion, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[styles.suggestionChip, { backgroundColor: colors.primaryContainer }]}
-                onPress={() => setFormData({ ...formData, title: suggestion })}
-              >
-                <Text style={[styles.suggestionText, { color: colors.onPrimaryContainer }]}>
-                  {suggestion}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Title Input */}
-      <View style={[styles.inputGroup, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-          Titolo *
-        </Text>
-        <TextInput
-          style={[styles.input, { color: colors.onSurface }]}
-          placeholder="Es. Tagliando 60.000 km"
-          placeholderTextColor={colors.onSurfaceVariant}
-          value={formData.title}
-          onChangeText={(text) => setFormData({ ...formData, title: text })}
-        />
-      </View>
-
-      {/* Description Input */}
-      <View style={[styles.inputGroup, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-          Descrizione (opzionale)
-        </Text>
-        <TextInput
-          style={[styles.textArea, { color: colors.onSurface }]}
-          placeholder="Aggiungi note o dettagli..."
-          placeholderTextColor={colors.onSurfaceVariant}
-          value={formData.description}
-          onChangeText={(text) => setFormData({ ...formData, description: text })}
-          multiline
-          numberOfLines={4}
-          textAlignVertical="top"
-        />
-      </View>
-
-      {/* Mileage Input */}
-      <View style={[styles.inputGroup, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-          Chilometraggio (opzionale)
-        </Text>
-        <View style={styles.inputRow}>
-          <Settings size={20} color={colors.onSurfaceVariant} />
-          <TextInput
-            style={[styles.input, { color: colors.onSurface, flex: 1 }]}
-            placeholder="Es. 60000"
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={formData.dueMileage}
-            onChangeText={(text) => setFormData({ ...formData, dueMileage: text })}
-            keyboardType="numeric"
-          />
-          <Text style={[styles.inputSuffix, { color: colors.onSurfaceVariant }]}>km</Text>
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderScheduleForm = () => (
-    <View style={styles.stepContent}>
-      <Text style={[styles.stepTitle, { color: colors.onBackground }]}>
-        Quando vuoi essere avvisato?
-      </Text>
-
-      {/* Due Date */}
-      <TouchableOpacity
-        style={[styles.dateSelector, { backgroundColor: colors.surface }]}
-        onPress={() => setShowDatePicker(true)}
-      >
-        <Calendar size={20} color={colors.primary} />
-        <View style={styles.dateSelectorContent}>
-          <Text style={[styles.dateSelectorLabel, { color: colors.onSurfaceVariant }]}>
-            Data di scadenza
-          </Text>
-          <Text style={[styles.dateSelectorValue, { color: colors.onSurface }]}>
-            {formData.dueDate.toLocaleDateString('it-IT', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </Text>
-        </View>
-      </TouchableOpacity>
-
-      {showDatePicker && (
-        <DatePicker
-          value={formData.dueDate}
-          mode="date"
-          display="default"
-          minimumDate={new Date()}
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(false);
-            if (selectedDate) {
-              setFormData({ ...formData, dueDate: selectedDate });
-            }
-          }}
-        />
-      )}
-
-      {/* Notify Days Before */}
-      <View style={[styles.inputGroup, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-          Avvisami prima di
-        </Text>
-        <View style={styles.notifyOptions}>
-          {[1, 3, 7, 14, 30].map(days => (
-            <TouchableOpacity
-              key={days}
-              style={[
-                styles.notifyOption,
-                {
-                  backgroundColor: formData.notifyDaysBefore === days ? colors.primaryContainer : colors.surfaceVariant,
-                }
-              ]}
-              onPress={() => setFormData({ ...formData, notifyDaysBefore: days })}
-            >
-              <Text style={[
-                styles.notifyOptionText,
-                { color: formData.notifyDaysBefore === days ? colors.onPrimaryContainer : colors.onSurfaceVariant }
-              ]}>
-                {days === 1 ? '1 giorno' : `${days} giorni`}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Recurring Toggle */}
-      <View style={[styles.toggleGroup, { backgroundColor: colors.surface }]}>
-        <View style={styles.toggleContent}>
-          <RefreshCw size={20} color={colors.primary} />
-          <View style={styles.toggleText}>
-            <Text style={[styles.toggleLabel, { color: colors.onSurface }]}>
-              Promemoria ricorrente
-            </Text>
-            <Text style={[styles.toggleDescription, { color: colors.onSurfaceVariant }]}>
-              Si ripete automaticamente
-            </Text>
-          </View>
-        </View>
-        <Switch
-          value={formData.isRecurring}
-          onValueChange={(value) => setFormData({ ...formData, isRecurring: value })}
-          trackColor={{ false: colors.surfaceVariant, true: colors.primary }}
-          thumbColor={formData.isRecurring ? colors.primary : colors.onSurfaceVariant}
-        />
-      </View>
-
-      {/* Recurring Interval */}
-      {formData.isRecurring && (
-        <View style={[styles.inputGroup, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-            Frequenza di ripetizione
-          </Text>
-          <View style={styles.recurringOptions}>
-            {recurringOptions.map(option => (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.recurringOption,
-                  {
-                    backgroundColor: formData.recurringInterval === option.value ? colors.primaryContainer : colors.surfaceVariant,
-                  }
-                ]}
-                onPress={() => setFormData({ ...formData, recurringInterval: option.value })}
-              >
-                <Text style={[
-                  styles.recurringOptionText,
-                  { color: formData.recurringInterval === option.value ? colors.onPrimaryContainer : colors.onSurfaceVariant }
-                ]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Active Toggle */}
-      <View style={[styles.toggleGroup, { backgroundColor: colors.surface }]}>
-        <View style={styles.toggleContent}>
-          <Bell size={20} color={colors.primary} />
-          <View style={styles.toggleText}>
-            <Text style={[styles.toggleLabel, { color: colors.onSurface }]}>
-              Promemoria attivo
-            </Text>
-            <Text style={[styles.toggleDescription, { color: colors.onSurfaceVariant }]}>
-              Ricevi notifiche per questo promemoria
-            </Text>
-          </View>
-        </View>
-        <Switch
-          value={formData.isActive}
-          onValueChange={(value) => setFormData({ ...formData, isActive: value })}
-          trackColor={{ false: colors.surfaceVariant, true: colors.primary }}
-          thumbColor={formData.isActive ? colors.primary : colors.onSurfaceVariant}
-        />
-      </View>
-    </View>
-  );
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} disabled={isLoading}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
           <ArrowLeft size={24} color={colors.onSurface} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
           Nuovo Promemoria
         </Text>
-        <TouchableOpacity 
-          onPress={handleSave} 
-          disabled={isLoading || currentStep !== 2}
-          style={{ opacity: currentStep === 2 ? 1 : 0.3 }}
-        >
-          <Save size={24} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={{ width: 24 }} />
       </View>
 
-      {/* Step Indicator */}
-      {renderStepIndicator()}
-
-      <KeyboardAvoidingView
+      <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.content}
+        style={styles.keyboardContainer}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {renderStep()}
+        <ScrollView style={styles.content}>
+          {renderStepContent()}
         </ScrollView>
 
-        {/* Navigation Buttons */}
         <View style={[styles.navigationButtons, { backgroundColor: colors.background }]}>
           {currentStep > 0 && (
             <TouchableOpacity
-              style={[styles.navButton, { backgroundColor: colors.surfaceVariant }]}
-              onPress={() => setCurrentStep(currentStep - 1)}
-              disabled={isLoading}
+              style={[styles.navButton, { backgroundColor: colors.surface, borderColor: colors.outline }]}
+              onPress={() => setCurrentStep(prev => prev - 1)}
             >
-              <Text style={[styles.navButtonText, { color: colors.onSurfaceVariant }]}>
+              <Text style={[styles.navButtonText, { color: colors.onSurface }]}>
                 Indietro
               </Text>
             </TouchableOpacity>
           )}
-
+          
           {currentStep < 2 ? (
             <TouchableOpacity
-              style={[
-                styles.navButton,
-                styles.primaryButton,
-                { backgroundColor: colors.primary }
-              ]}
-              onPress={() => setCurrentStep(currentStep + 1)}
-              disabled={isLoading}
+              style={[styles.navButton, styles.primaryButton, { backgroundColor: colors.primary }]}
+              onPress={() => setCurrentStep(prev => prev + 1)}
             >
               <Text style={[styles.navButtonText, { color: colors.onPrimary }]}>
                 Avanti
@@ -602,21 +495,25 @@ const AddReminderScreen = () => {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[
-                styles.navButton,
-                styles.primaryButton,
-                { backgroundColor: colors.primary }
-              ]}
-              onPress={handleSave}
+              style={[styles.navButton, styles.primaryButton, { backgroundColor: colors.primary }]}
+              onPress={handleSaveReminder}
               disabled={isLoading}
             >
               <Text style={[styles.navButtonText, { color: colors.onPrimary }]}>
-                {isLoading ? 'Salvataggio...' : 'Crea Promemoria'}
+                {isLoading ? 'Salvataggio...' : 'Salva Promemoria'}
               </Text>
             </TouchableOpacity>
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {showDatePicker && (
+        <DatePicker
+          date={formData.dueDate}
+          onDateChange={(date) => setFormData(prev => ({ ...prev, dueDate: date }))}
+          onClose={() => setShowDatePicker(false)}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -629,150 +526,130 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
   },
-  stepIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 20,
-    paddingHorizontal: 32,
-  },
-  stepItem: {
-    alignItems: 'center',
-  },
-  stepCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  stepNumber: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  stepLabel: {
-    fontSize: 12,
+  keyboardContainer: {
+    flex: 1,
   },
   content: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 100,
   },
   stepContent: {
     padding: 20,
   },
   stepTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  stepSubtitle: {
+    fontSize: 16,
     marginBottom: 24,
   },
-  vehicleSection: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 12,
-  },
-  vehicleCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginRight: 12,
-    minWidth: 140,
-    alignItems: 'center',
-  },
-  vehicleName: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  vehiclePlate: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  typeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  typeSelector: {
     gap: 12,
   },
-  typeCard: {
-    width: '47%',
+  typeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    borderWidth: 2,
   },
   typeIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
+    marginRight: 16,
   },
   typeLabel: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
+    flex: 1,
   },
   typeDescription: {
-    fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 16,
+    fontSize: 14,
+    flex: 2,
   },
-  suggestionsSection: {
-    marginBottom: 20,
+  suggestions: {
+    marginTop: 24,
+  },
+  suggestionsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  suggestionsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   suggestionChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
   },
   suggestionText: {
     fontSize: 14,
   },
-  inputGroup: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
+  formGroup: {
+    marginBottom: 20,
   },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '500',
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 8,
   },
-  input: {
-    fontSize: 16,
-    paddingVertical: 4,
+  vehicleSelector: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 4,
   },
-  textArea: {
-    fontSize: 16,
-    minHeight: 80,
-  },
-  inputRow: {
+  vehicleOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 4,
   },
-  inputSuffix: {
+  vehicleOptionText: {
     fontSize: 16,
+    marginLeft: 12,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+  },
+  textArea: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
   dateSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+    borderWidth: 1,
     borderRadius: 12,
-    marginBottom: 16,
     gap: 12,
   },
   dateSelectorContent: {
@@ -794,6 +671,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
   },
   notifyOptionText: {
     fontSize: 14,
@@ -805,6 +683,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
+    borderWidth: 1,
   },
   toggleContent: {
     flexDirection: 'row',
@@ -832,6 +711,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
   },
   recurringOptionText: {
     fontSize: 14,
@@ -841,16 +721,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 20,
     gap: 12,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
   },
   navButton: {
     flex: 1,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    borderWidth: 1,
   },
   primaryButton: {
     elevation: 2,

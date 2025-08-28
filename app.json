@@ -14,11 +14,18 @@
       "bundleIdentifier": "com.mymeccanich.com",
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Questa app ha bisogno dell'accesso alla fotocamera per scattare foto dei veicoli e dei documenti.",
+        "NSPhotoLibraryUsageDescription": "Questa app ha bisogno dell'accesso alla galleria foto per selezionare immagini dei veicoli e dei documenti."
       }
     },
     "android": {
-      "package": "com.mymeccanich"
+      "package": "com.mymeccanich",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -31,6 +38,9 @@
         {
           "ios": {
             "useFrameworks": "static"
+          },
+          "android": {
+            "minSdkVersion": 21
           }
         }
       ],
@@ -40,8 +50,7 @@
           "iosClientId": "619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com",
           "iosUrlScheme": "com.googleusercontent.apps.619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r"
         }
-      ],
-      "expo-router"
+      ]
     ],
     "experiments": {
       "typedRoutes": false

@@ -1,6 +1,4 @@
-// ===========================================
-// src/App.tsx - VERSIONE AGGIORNATA
-// ===========================================
+// App.tsx - VERSIONE CORRETTA
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, Platform, StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -12,45 +10,27 @@ import AppNavigator from './src/navigation/AppNavigator';
 // Store
 import { useStore } from './src/store';
 
-// Gestione fonti
+// Firebase - Import diretto dal servizio configurato
+import { auth } from './src/services/firebase';
+
+// Gestione fonti e splash screen
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 
-// Firebase - Import condizionale
-let auth: any;
+// Import condizionale per onAuthStateChanged
 let onAuthStateChanged: any;
 
 if (Platform.OS === 'web') {
   // Web: usa Firebase JS SDK
-  import('firebase/app').then(firebase => {
-    import('firebase/auth').then(authModule => {
-      const firebaseConfig = {
-        // INSERISCI QUI LE TUE CONFIG FIREBASE
-        apiKey: "your-api-key",
-        authDomain: "your-auth-domain",
-        projectId: "your-project-id",
-        storageBucket: "your-storage-bucket",
-        messagingSenderId: "your-sender-id",
-        appId: "your-app-id"
-      };
-
-      if (!firebase.getApps().length) {
-        firebase.initializeApp(firebaseConfig);
-      }
-
-      auth = authModule.getAuth();
-      onAuthStateChanged = authModule.onAuthStateChanged;
-    });
-  });
+  const { onAuthStateChanged: webAuthStateChanged } = require('firebase/auth');
+  onAuthStateChanged = webAuthStateChanged;
 } else {
-  // Mobile: usa React Native Firebase
-  const firebaseAuth = require('@react-native-firebase/auth').default;
-  auth = firebaseAuth();
+  // Mobile: usa React Native Firebase (già importato tramite il servizio)
   onAuthStateChanged = (callback: any) => auth.onAuthStateChanged(callback);
 }
 
-// Prevent the splash screen from auto-hiding
+// Prevent the splash screen from auto-hiding (solo su mobile)
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync();
 }
@@ -58,10 +38,27 @@ if (Platform.OS !== 'web') {
 export default function App() {
   const [isLoadingComplete, setLoadingComplete] = useState(false);
   const [initializing, setInitializing] = useState(true);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
 
   // Store actions
   const { preferences } = useStore();
+
+  // Gestione stato di autenticazione
+  useEffect(() => {
+    if (!auth) {
+      console.warn('Auth non disponibile');
+      setInitializing(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
+      console.log('Auth state changed:', user?.uid ? 'User logged in' : 'User logged out');
+      setUser(user);
+      if (initializing) setInitializing(false);
+    });
+
+    return unsubscribe; // Cleanup subscription
+  }, [initializing]);
 
   // Load resources
   useEffect(() => {
@@ -70,18 +67,16 @@ export default function App() {
         if (Platform.OS !== 'web') {
           // Load fonts only on mobile
           await Font.loadAsync({
-            // Carica eventuali font personalizzati qui
+            // Aggiungi qui eventuali fonti personalizzate
+            // 'custom-font': require('./assets/fonts/custom-font.ttf'),
           });
-
-          // Artificial delay for splash screen
-          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       } catch (e) {
-        console.warn(e);
+        console.warn('Error loading resources:', e);
       } finally {
         setLoadingComplete(true);
         if (Platform.OS !== 'web') {
-          await SplashScreen.hideAsync();
+          SplashScreen.hideAsync();
         }
       }
     }
@@ -89,62 +84,37 @@ export default function App() {
     loadResourcesAndDataAsync();
   }, []);
 
-  // Firebase Auth listener
-  useEffect(() => {
-    if (!auth || !onAuthStateChanged) {
-      // Firebase non ancora caricato
-      setTimeout(() => {
-        setInitializing(false);
-      }, 1000);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged((user: any) => {
-      setUser(user);
-      if (initializing) setInitializing(false);
-    });
-
-    return unsubscribe;
-  }, [initializing, auth, onAuthStateChanged]);
-
-  // Loading screen
-  if (!isLoadingComplete || initializing) {
+  // Mostra loading screen durante l'inizializzazione
+  if (initializing || !isLoadingComplete) {
     return (
-      <ThemeProvider>
-        <SafeAreaProvider>
-          <View style={{ 
-            flex: 1, 
-            justifyContent: 'center', 
-            alignItems: 'center',
-            backgroundColor: preferences.theme === 'dark' ? '#000000' : '#FAFAFA'
-          }}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={{ 
-              marginTop: 16, 
-              color: preferences.theme === 'dark' ? '#FFFFFF' : '#000000',
-              fontSize: 16,
-              fontWeight: '500'
-            }}>
-              {Platform.OS === 'web' ? 'Caricamento Web App...' : 'Caricamento MyMeccanich...'}
-            </Text>
-          </View>
-        </SafeAreaProvider>
-      </ThemeProvider>
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        backgroundColor: preferences.theme === 'dark' ? '#121212' : '#ffffff'
+      }}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={{
+          marginTop: 20,
+          color: preferences.theme === 'dark' ? '#ffffff' : '#000000'
+        }}>
+          Caricamento...
+        </Text>
+      </View>
     );
   }
 
   return (
-    <ThemeProvider>
-      <SafeAreaProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
         <NavigationContainer>
-          {Platform.OS !== 'web' && (
-            <StatusBar 
-              barStyle={preferences.theme === 'dark' ? 'light-content' : 'dark-content'}
-            />
-          )}
+          <StatusBar 
+            barStyle={preferences.theme === 'dark' ? 'light-content' : 'dark-content'}
+            backgroundColor={preferences.theme === 'dark' ? '#121212' : '#ffffff'}
+          />
           <AppNavigator />
         </NavigationContainer>
-      </SafeAreaProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

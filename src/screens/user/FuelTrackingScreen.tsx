@@ -40,8 +40,8 @@ import { FAB, Chip, ProgressBar } from 'react-native-paper';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import { db, auth } from '../../services/firebase';
+import { collection, query, where, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -107,18 +107,12 @@ const FuelTrackingScreen = () => {
 
   const loadFuelRecords = async () => {
     try {
-      const userId = auth().currentUser?.uid;
+      const userId = auth.currentUser?.uid;
       if (!userId || !selectedVehicle) return;
 
-      let query = firestore()
-        .collection('users')
-        .doc(userId)
-        .collection('vehicles')
-        .doc(selectedVehicle)
-        .collection('fuelRecords')
-        .orderBy('date', 'desc');
+      const fuelRecordsRef = collection(db, 'users', userId, 'vehicles', selectedVehicle, 'fuelRecords');
+      let q = query(fuelRecordsRef, orderBy('date', 'desc'));
 
-      // Apply period filter
       if (selectedPeriod !== 'all') {
         const now = new Date();
         let startDate = new Date();
@@ -135,20 +129,22 @@ const FuelTrackingScreen = () => {
             break;
         }
 
-        query = query.where('date', '>=', firestore.Timestamp.fromDate(startDate));
+        q = query(q, where('date', '>=', Timestamp.fromDate(startDate)));
       }
 
-      const snapshot = await query.get();
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const records = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          date: doc.data().date?.toDate(),
+          createdAt: doc.data().createdAt?.toDate(),
+          updatedAt: doc.data().updatedAt?.toDate(),
+        })) as FuelRecord[];
 
-      const records = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date?.toDate(),
-        createdAt: doc.data().createdAt?.toDate(),
-        updatedAt: doc.data().updatedAt?.toDate(),
-      })) as FuelRecord[];
+        setFuelRecords(records);
+      });
 
-      setFuelRecords(records);
+      return unsubscribe;
     } catch (error) {
       console.error('Errore caricamento rifornimenti:', error);
       Alert.alert('Errore', 'Impossibile caricare i rifornimenti');
@@ -162,8 +158,7 @@ const FuelTrackingScreen = () => {
     setRefreshing(false);
   };
 
-  // Calculate statistics
-  const fuelStats = useMemo((): FuelStats => {
+  const calculateStats = useMemo((): FuelStats => {
     if (fuelRecords.length === 0) {
       return {
         totalLiters: 0,
@@ -179,51 +174,38 @@ const FuelTrackingScreen = () => {
       };
     }
 
-    // Filter records by fuel type if needed
-    let filteredRecords = fuelRecords;
-    if (selectedFuelType !== 'all') {
-      filteredRecords = fuelRecords.filter(r => r.fuelType === selectedFuelType);
-    }
+    const totalLiters = fuelRecords.reduce((sum, record) => sum + record.liters, 0);
+    const totalCost = fuelRecords.reduce((sum, record) => sum + record.totalCost, 0);
+    const avgPricePerLiter = totalCost / totalLiters;
 
-    const totalLiters = filteredRecords.reduce((sum, r) => sum + r.liters, 0);
-    const totalCost = filteredRecords.reduce((sum, r) => sum + r.totalCost, 0);
-    const avgPricePerLiter = totalCost / totalLiters || 0;
+    const sortedRecords = [...fuelRecords].sort((a, b) => a.mileage - b.mileage);
+    const totalDistance = sortedRecords.length > 1 
+      ? sortedRecords[sortedRecords.length - 1].mileage - sortedRecords[0].mileage 
+      : 0;
 
-    // Calculate consumption (L/100km)
-    const consumptions: number[] = [];
-    for (let i = 0; i < filteredRecords.length - 1; i++) {
-      const current = filteredRecords[i];
-      const next = filteredRecords[i + 1];
-
-      if (current.fullTank && next.mileage < current.mileage) {
-        const distance = current.mileage - next.mileage;
-        if (distance > 0) {
-          const consumption = (current.liters / distance) * 100;
-          consumptions.push(consumption);
-        }
+    const consumptionRecords = [];
+    for (let i = 1; i < sortedRecords.length; i++) {
+      const prevRecord = sortedRecords[i - 1];
+      const currentRecord = sortedRecords[i];
+      const distance = currentRecord.mileage - prevRecord.mileage;
+      
+      if (distance > 0 && currentRecord.fullTank) {
+        const consumption = (currentRecord.liters / distance) * 100;
+        consumptionRecords.push(consumption);
       }
     }
 
-    const avgConsumption = consumptions.length > 0
-      ? consumptions.reduce((sum, c) => sum + c, 0) / consumptions.length
+    const avgConsumption = consumptionRecords.length > 0
+      ? consumptionRecords.reduce((sum, c) => sum + c, 0) / consumptionRecords.length
       : 0;
 
-    const bestConsumption = consumptions.length > 0 ? Math.min(...consumptions) : 0;
-    const worstConsumption = consumptions.length > 0 ? Math.max(...consumptions) : 0;
+    const bestConsumption = consumptionRecords.length > 0 ? Math.min(...consumptionRecords) : 0;
+    const worstConsumption = consumptionRecords.length > 0 ? Math.max(...consumptionRecords) : 0;
 
-    // Calculate total distance
-    const sortedRecords = [...filteredRecords].sort((a, b) => a.mileage - b.mileage);
-    const totalDistance = sortedRecords.length > 1
-      ? sortedRecords[sortedRecords.length - 1].mileage - sortedRecords[0].mileage
+    const monthlyAvgCost = fuelRecords.length > 0 
+      ? totalCost / Math.max(1, Math.ceil(fuelRecords.length / 4))
       : 0;
 
-    // Calculate monthly average
-    const months = new Set(filteredRecords.map(r => 
-      `${r.date.getFullYear()}-${r.date.getMonth()}`
-    )).size || 1;
-    const monthlyAvgCost = totalCost / months;
-
-    // Cost per km
     const costPerKm = totalDistance > 0 ? totalCost / totalDistance : 0;
 
     return {
@@ -232,235 +214,128 @@ const FuelTrackingScreen = () => {
       avgConsumption,
       avgPricePerLiter,
       totalDistance,
-      recordsCount: filteredRecords.length,
+      recordsCount: fuelRecords.length,
       bestConsumption,
       worstConsumption,
       monthlyAvgCost,
       costPerKm,
     };
-  }, [fuelRecords, selectedFuelType]);
-
-  // Prepare chart data
-  const chartData = useMemo(() => {
-    const sortedRecords = [...fuelRecords].sort((a, b) => a.date.getTime() - b.date.getTime());
-    const last6Records = sortedRecords.slice(-6);
-
-    return {
-      labels: last6Records.map(r => r.date.toLocaleDateString('it-IT', { month: 'short', day: 'numeric' })),
-      datasets: [
-        {
-          data: last6Records.map(r => r.pricePerLiter),
-          color: (opacity = 1) => `rgba(134, 65, 244, ${opacity})`,
-          strokeWidth: 2,
-        },
-      ],
-    };
   }, [fuelRecords]);
 
-  const barChartData = useMemo(() => {
-    const monthlyData = new Map<string, number>();
+  const filteredRecords = useMemo(() => {
+    return fuelRecords.filter(record => {
+      const matchesSearch = searchQuery === '' || 
+        record.station?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.notes?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesFuelType = selectedFuelType === 'all' || record.fuelType === selectedFuelType;
+      
+      return matchesSearch && matchesFuelType;
+    });
+  }, [fuelRecords, searchQuery, selectedFuelType]);
 
-    fuelRecords.forEach(record => {
-      const monthKey = record.date.toLocaleDateString('it-IT', { month: 'short' });
-      monthlyData.set(monthKey, (monthlyData.get(monthKey) || 0) + record.totalCost);
+  const chartData = useMemo(() => {
+    const monthlyData = fuelRecords.reduce((acc, record) => {
+      const monthKey = `${record.date.getFullYear()}-${record.date.getMonth() + 1}`;
+      if (!acc[monthKey]) {
+        acc[monthKey] = { cost: 0, liters: 0, count: 0 };
+      }
+      acc[monthKey].cost += record.totalCost;
+      acc[monthKey].liters += record.liters;
+      acc[monthKey].count += 1;
+      return acc;
+    }, {} as Record<string, { cost: number; liters: number; count: number }>);
+
+    const sortedMonths = Object.keys(monthlyData).sort();
+    const labels = sortedMonths.map(month => {
+      const [year, monthNum] = month.split('-');
+      return `${monthNum}/${year.slice(2)}`;
     });
 
-    const entries = Array.from(monthlyData.entries()).slice(-6);
-
     return {
-      labels: entries.map(e => e[0]),
-      datasets: [
-        {
-          data: entries.map(e => e[1]),
-        },
-      ],
+      labels: labels.slice(-6),
+      datasets: [{
+        data: sortedMonths.slice(-6).map(month => monthlyData[month].cost),
+        color: (opacity = 1) => colors.primary + Math.round(opacity * 255).toString(16),
+        strokeWidth: 2,
+      }],
     };
-  }, [fuelRecords]);
+  }, [fuelRecords, colors.primary]);
 
-  const selectedVehicleData = vehicles.find(v => v.id === selectedVehicle);
-
-  const renderStatsCard = (title: string, value: string | number, subtitle?: string, icon?: any, trend?: number) => {
-    const Icon = icon || Info;
-
-    return (
-      <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
-        <View style={styles.statHeader}>
-          <View style={[styles.statIcon, { backgroundColor: colors.primaryContainer }]}>
-            <Icon size={20} color={colors.onPrimaryContainer} />
+  const renderStatsView = () => (
+    <ScrollView style={styles.statsContainer}>
+      <View style={styles.statsGrid}>
+        <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.statIcon}>
+            <DollarSign size={24} color={colors.primary} />
           </View>
-          {trend !== undefined && (
-            <View style={styles.trendContainer}>
-              {trend > 0 ? (
-                <ArrowUp size={16} color={colors.error} />
-              ) : (
-                <ArrowDown size={16} color={colors.success} />
-              )}
-              <Text style={[styles.trendText, { color: trend > 0 ? colors.error : colors.success }]}>
-                {Math.abs(trend)}%
-              </Text>
-            </View>
-          )}
-        </View>
-        <Text style={[styles.statValue, { color: colors.onSurface }]}>{value}</Text>
-        <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>{title}</Text>
-        {subtitle && (
-          <Text style={[styles.statSubtitle, { color: colors.onSurfaceVariant }]}>{subtitle}</Text>
-        )}
-      </View>
-    );
-  };
-
-  const FuelRecordCard = ({ record }: { record: FuelRecord }) => {
-    const fuelType = fuelTypes.find(t => t.id === record.fuelType);
-
-    return (
-      <TouchableOpacity
-        style={[styles.recordCard, { backgroundColor: colors.surface }]}
-        activeOpacity={0.7}
-      >
-        <View style={styles.recordHeader}>
-          <View style={[styles.recordIcon, { backgroundColor: fuelType?.color + '20' }]}>
-            <Text style={styles.recordIconEmoji}>{fuelType?.icon}</Text>
-          </View>
-          <View style={styles.recordInfo}>
-            <Text style={[styles.recordDate, { color: colors.onSurface }]}>
-              {record.date.toLocaleDateString('it-IT', { 
-                weekday: 'short', 
-                day: 'numeric', 
-                month: 'long', 
-                year: 'numeric' 
-              })}
-            </Text>
-            <View style={styles.recordDetails}>
-              <Text style={[styles.recordDetailText, { color: colors.onSurfaceVariant }]}>
-                {record.liters}L • €{record.pricePerLiter.toFixed(3)}/L
-              </Text>
-              {record.station && (
-                <Text style={[styles.recordStation, { color: colors.onSurfaceVariant }]}>
-                  {record.station}
-                </Text>
-              )}
-            </View>
-            <View style={styles.recordMeta}>
-              <View style={styles.metaItem}>
-                <Gauge size={12} color={colors.onSurfaceVariant} />
-                <Text style={[styles.metaText, { color: colors.onSurfaceVariant }]}>
-                  {record.mileage.toLocaleString()} km
-                </Text>
-              </View>
-              {record.fullTank && (
-                <View style={[styles.fullTankBadge, { backgroundColor: colors.successContainer }]}>
-                  <Text style={[styles.fullTankText, { color: colors.onSuccessContainer }]}>
-                    Pieno
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.recordCost}>
-          <Text style={[styles.recordCostValue, { color: colors.primary }]}>
-            €{record.totalCost.toFixed(2)}
+          <Text style={[styles.statValue, { color: colors.onSurface }]}>
+            €{calculateStats.totalCost.toFixed(2)}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>
+            Costo Totale
           </Text>
         </View>
-      </TouchableOpacity>
-    );
-  };
 
-  const renderStatisticsView = () => (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
-      {/* Vehicle Selector */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.vehicleSelector}
-      >
-        {vehicles.map(vehicle => (
-          <TouchableOpacity
-            key={vehicle.id}
-            style={[
-              styles.vehicleChip,
-              {
-                backgroundColor: selectedVehicle === vehicle.id ? colors.primaryContainer : colors.surface,
-                borderColor: selectedVehicle === vehicle.id ? colors.primary : colors.outline,
-              }
-            ]}
-            onPress={() => setSelectedVehicle(vehicle.id)}
-          >
-            <Car size={16} color={selectedVehicle === vehicle.id ? colors.onPrimaryContainer : colors.onSurface} />
-            <Text style={[
-              styles.vehicleChipText,
-              { color: selectedVehicle === vehicle.id ? colors.onPrimaryContainer : colors.onSurface }
-            ]}>
-              {vehicle.make} {vehicle.model}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+        <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.statIcon}>
+            <Fuel size={24} color={colors.secondary} />
+          </View>
+          <Text style={[styles.statValue, { color: colors.onSurface }]}>
+            {calculateStats.totalLiters.toFixed(1)}L
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>
+            Litri Totali
+          </Text>
+        </View>
 
-      {/* Main Stats */}
-      <View style={styles.mainStatsContainer}>
-        <View style={[styles.mainStatCard, { backgroundColor: colors.primaryContainer }]}>
-          <Text style={[styles.mainStatLabel, { color: colors.onPrimaryContainer }]}>
+        <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.statIcon}>
+            <Gauge size={24} color={colors.tertiary} />
+          </View>
+          <Text style={[styles.statValue, { color: colors.onSurface }]}>
+            {calculateStats.avgConsumption.toFixed(1)}L/100km
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>
             Consumo Medio
           </Text>
-          <Text style={[styles.mainStatValue, { color: colors.onPrimaryContainer }]}>
-            {fuelStats.avgConsumption.toFixed(1)}
-          </Text>
-          <Text style={[styles.mainStatUnit, { color: colors.onPrimaryContainer }]}>
-            L/100km
-          </Text>
         </View>
 
-        <View style={[styles.mainStatCard, { backgroundColor: colors.secondaryContainer }]}>
-          <Text style={[styles.mainStatLabel, { color: colors.onSecondaryContainer }]}>
-            Costo Medio
+        <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.statIcon}>
+            <Activity size={24} color={colors.error} />
+          </View>
+          <Text style={[styles.statValue, { color: colors.onSurface }]}>
+            €{calculateStats.avgPricePerLiter.toFixed(3)}
           </Text>
-          <Text style={[styles.mainStatValue, { color: colors.onSecondaryContainer }]}>
-            €{fuelStats.avgPricePerLiter.toFixed(3)}
-          </Text>
-          <Text style={[styles.mainStatUnit, { color: colors.onSecondaryContainer }]}>
-            per litro
+          <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>
+            Prezzo/Litro
           </Text>
         </View>
       </View>
 
-      {/* Stats Grid */}
-      <View style={styles.statsGrid}>
-        {renderStatsCard('Spesa Totale', `€${fuelStats.totalCost.toFixed(2)}`, `${fuelStats.recordsCount} rifornimenti`, DollarSign)}
-        {renderStatsCard('Litri Totali', fuelStats.totalLiters.toFixed(1), 'litri', Fuel)}
-        {renderStatsCard('Distanza', fuelStats.totalDistance.toLocaleString(), 'km percorsi', Activity)}
-        {renderStatsCard('€/km', fuelStats.costPerKm.toFixed(3), 'costo per km', TrendingUp)}
-        {renderStatsCard('Media Mensile', `€${fuelStats.monthlyAvgCost.toFixed(2)}`, 'al mese', Calendar)}
-        {renderStatsCard('Miglior Consumo', fuelStats.bestConsumption.toFixed(1), 'L/100km', TrendingDown)}
-      </View>
-
-      {/* Charts */}
-      {fuelRecords.length > 0 && (
-        <View style={styles.chartsSection}>
-          <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
-            Andamento Prezzi
-          </Text>
+      <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.chartTitle, { color: colors.onSurface }]}>
+          Andamento Spese Mensili
+        </Text>
+        {chartData.labels.length > 0 ? (
           <LineChart
             data={chartData}
-            width={screenWidth - 32}
-            height={220}
+            width={screenWidth - 64}
+            height={200}
             chartConfig={{
               backgroundColor: colors.surface,
               backgroundGradientFrom: colors.surface,
               backgroundGradientTo: colors.surface,
-              decimalPlaces: 3,
-              color: (opacity = 1) => colors.primary,
-              labelColor: (opacity = 1) => colors.onSurface,
+              decimalPlaces: 0,
+              color: (opacity = 1) => colors.primary + Math.round(opacity * 255).toString(16),
+              labelColor: (opacity = 1) => colors.onSurfaceVariant + Math.round(opacity * 255).toString(16),
               style: {
                 borderRadius: 16,
               },
               propsForDots: {
-                r: '6',
+                r: '4',
                 strokeWidth: '2',
                 stroke: colors.primary,
               },
@@ -468,158 +343,212 @@ const FuelTrackingScreen = () => {
             bezier
             style={styles.chart}
           />
-
-          <Text style={[styles.sectionTitle, { color: colors.onBackground, marginTop: 24 }]}>
-            Spesa Mensile
-          </Text>
-          <BarChart
-            data={barChartData}
-            width={screenWidth - 32}
-            height={220}
-            yAxisLabel="€"
-            yAxisSuffix=""
-            chartConfig={{
-              backgroundColor: colors.surface,
-              backgroundGradientFrom: colors.surface,
-              backgroundGradientTo: colors.surface,
-              decimalPlaces: 0,
-              color: (opacity = 1) => colors.primary,
-              labelColor: (opacity = 1) => colors.onSurface,
-              style: {
-                borderRadius: 16,
-              },
-            }}
-            style={styles.chart}
-          />
-        </View>
-      )}
-
-      {/* Recent Records */}
-      <View style={styles.recordsSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
-            Ultimi Rifornimenti
-          </Text>
-          <TouchableOpacity onPress={() => setViewMode('list')}>
-            <Text style={[styles.seeAllText, { color: colors.primary }]}>
-              Vedi tutti
+        ) : (
+          <View style={styles.noDataChart}>
+            <BarChart3 size={48} color={colors.onSurfaceVariant} />
+            <Text style={[styles.noDataText, { color: colors.onSurfaceVariant }]}>
+              Nessun dato disponibile
             </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        )}
+      </View>
 
-        {fuelRecords.slice(0, 5).map(record => (
-          <FuelRecordCard key={record.id} record={record} />
-        ))}
+      <View style={[styles.comparisonCard, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+          Confronto Consumi
+        </Text>
+        <View style={styles.comparisonRow}>
+          <View style={styles.comparisonItem}>
+            <ArrowUp size={20} color={colors.tertiary} />
+            <Text style={[styles.comparisonLabel, { color: colors.onSurfaceVariant }]}>
+              Migliore
+            </Text>
+            <Text style={[styles.comparisonValue, { color: colors.onSurface }]}>
+              {calculateStats.bestConsumption.toFixed(1)}L/100km
+            </Text>
+          </View>
+          <View style={styles.comparisonItem}>
+            <ArrowDown size={20} color={colors.error} />
+            <Text style={[styles.comparisonLabel, { color: colors.onSurfaceVariant }]}>
+              Peggiore
+            </Text>
+            <Text style={[styles.comparisonValue, { color: colors.onSurface }]}>
+              {calculateStats.worstConsumption.toFixed(1)}L/100km
+            </Text>
+          </View>
+        </View>
       </View>
     </ScrollView>
   );
 
   const renderListView = () => (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
-      {/* Search Bar */}
-      <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
-        <Search size={20} color={colors.onSurfaceVariant} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.onSurface }]}
-          placeholder="Cerca rifornimenti..."
-          placeholderTextColor={colors.onSurfaceVariant}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        <TouchableOpacity onPress={() => setShowFilterModal(true)}>
-          <Filter size={20} color={colors.onSurfaceVariant} />
+    <ScrollView style={styles.listContainer}>
+      {filteredRecords.map((record) => (
+        <TouchableOpacity
+          key={record.id}
+          style={[styles.recordCard, { backgroundColor: colors.surface }]}
+          onPress={() => {/* Navigate to edit record */}}
+        >
+          <View style={styles.recordHeader}>
+            <View style={styles.recordIcon}>
+              <Fuel size={20} color={colors.primary} />
+            </View>
+            <View style={styles.recordInfo}>
+              <Text style={[styles.recordDate, { color: colors.onSurface }]}>
+                {record.date.toLocaleDateString('it-IT')}
+              </Text>
+              <Text style={[styles.recordStation, { color: colors.onSurfaceVariant }]}>
+                {record.station || 'Stazione non specificata'}
+              </Text>
+            </View>
+            <View style={styles.recordAmount}>
+              <Text style={[styles.recordCost, { color: colors.onSurface }]}>
+                €{record.totalCost.toFixed(2)}
+              </Text>
+              <Text style={[styles.recordLiters, { color: colors.onSurfaceVariant }]}>
+                {record.liters.toFixed(1)}L
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.recordDetails}>
+            <View style={styles.recordMeta}>
+              <View style={styles.metaItem}>
+                <Gauge size={14} color={colors.onSurfaceVariant} />
+                <Text style={[styles.metaText, { color: colors.onSurfaceVariant }]}>
+                  {record.mileage.toLocaleString()} km
+                </Text>
+              </View>
+              <View style={styles.metaItem}>
+                <DollarSign size={14} color={colors.onSurfaceVariant} />
+                <Text style={[styles.metaText, { color: colors.onSurfaceVariant }]}>
+                  €{record.pricePerLiter.toFixed(3)}/L
+                </Text>
+              </View>
+              {record.location && (
+                <View style={styles.metaItem}>
+                  <MapPin size={14} color={colors.onSurfaceVariant} />
+                  <Text style={[styles.metaText, { color: colors.onSurfaceVariant }]}>
+                    {record.location}
+                  </Text>
+                </View>
+              )}
+            </View>
+            
+            {record.notes && (
+              <Text style={[styles.recordNotes, { color: colors.onSurfaceVariant }]}>
+                {record.notes}
+              </Text>
+            )}
+          </View>
         </TouchableOpacity>
-      </View>
-
-      {/* Records List */}
-      {fuelRecords.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
-          <Fuel size={48} color={colors.onSurfaceVariant} />
-          <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
-            Nessun rifornimento registrato
-          </Text>
-          <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>
-            Inizia ad aggiungere i tuoi rifornimenti per tracciare i consumi
-          </Text>
-        </View>
-      ) : (
-        fuelRecords
-          .filter(record => {
-            if (searchQuery) {
-              return record.station?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                     record.notes?.toLowerCase().includes(searchQuery.toLowerCase());
-            }
-            return true;
-          })
-          .map(record => <FuelRecordCard key={record.id} record={record} />)
-      )}
+      ))}
     </ScrollView>
   );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header Tabs */}
-      <View style={[styles.headerTabs, { backgroundColor: colors.surface }]}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            viewMode === 'stats' && { borderBottomColor: colors.primary, borderBottomWidth: 2 }
-          ]}
-          onPress={() => setViewMode('stats')}
-        >
-          <BarChart3 size={20} color={viewMode === 'stats' ? colors.primary : colors.onSurfaceVariant} />
-          <Text style={[
-            styles.tabText,
-            { color: viewMode === 'stats' ? colors.primary : colors.onSurfaceVariant }
-          ]}>
-            Statistiche
-          </Text>
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <X size={24} color={colors.onSurface} />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            viewMode === 'list' && { borderBottomColor: colors.primary, borderBottomWidth: 2 }
-          ]}
-          onPress={() => setViewMode('list')}
-        >
-          <Fuel size={20} color={viewMode === 'list' ? colors.primary : colors.onSurfaceVariant} />
-          <Text style={[
-            styles.tabText,
-            { color: viewMode === 'list' ? colors.primary : colors.onSurfaceVariant }
-          ]}>
-            Rifornimenti
-          </Text>
+        <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
+          Rifornimenti
+        </Text>
+        <TouchableOpacity onPress={() => setShowFilterModal(true)}>
+          <Filter size={24} color={colors.onSurface} />
         </TouchableOpacity>
       </View>
 
-      {/* Period Selector */}
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false}
-        style={[styles.periodSelector, { backgroundColor: colors.background }]}
+        style={styles.vehicleSelector}
+        contentContainerStyle={styles.vehicleSelectorContent}
       >
-        {['week', 'month', 'year', 'all'].map(period => (
-          <Chip
-            key={period}
-            selected={selectedPeriod === period}
-            onPress={() => setSelectedPeriod(period as any)}
-            style={styles.periodChip}
+        {vehicles.map(vehicle => (
+          <TouchableOpacity
+            key={vehicle.id}
+            style={[
+              styles.vehicleChip,
+              { 
+                backgroundColor: selectedVehicle === vehicle.id ? colors.primary : colors.surface,
+                borderColor: colors.outline 
+              }
+            ]}
+            onPress={() => setSelectedVehicle(vehicle.id)}
           >
-            {period === 'week' ? 'Settimana' :
-             period === 'month' ? 'Mese' :
-             period === 'year' ? 'Anno' : 'Tutto'}
-          </Chip>
+            <Text style={[
+              styles.vehicleChipText,
+              { color: selectedVehicle === vehicle.id ? colors.onPrimary : colors.onSurface }
+            ]}>
+              {vehicle.brand} {vehicle.model}
+            </Text>
+          </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {/* Content */}
-      {viewMode === 'stats' ? renderStatisticsView() : renderListView()}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.periodSelector}
+        contentContainerStyle={styles.periodSelectorContent}
+      >
+        {(['week', 'month', 'year', 'all'] as const).map(period => (
+          <TouchableOpacity
+            key={period}
+            style={[
+              styles.periodChip,
+              { 
+                backgroundColor: selectedPeriod === period ? colors.secondary : colors.surface,
+                borderColor: colors.outline 
+              }
+            ]}
+            onPress={() => setSelectedPeriod(period)}
+          >
+            <Text style={[
+              styles.periodChipText,
+              { color: selectedPeriod === period ? colors.onSecondary : colors.onSurface }
+            ]}>
+              {period === 'week' ? 'Settimana' : 
+               period === 'month' ? 'Mese' :
+               period === 'year' ? 'Anno' : 'Tutto'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-      {/* FAB */}
+      <View style={styles.viewToggle}>
+        {(['stats', 'list'] as const).map(mode => (
+          <TouchableOpacity
+            key={mode}
+            style={[
+              styles.toggleButton,
+              { 
+                backgroundColor: viewMode === mode ? colors.primary : colors.surface,
+                borderColor: colors.outline 
+              }
+            ]}
+            onPress={() => setViewMode(mode)}
+          >
+            {mode === 'stats' ? 
+              <BarChart3 size={18} color={viewMode === mode ? colors.onPrimary : colors.onSurface} /> :
+              <Calendar size={18} color={viewMode === mode ? colors.onPrimary : colors.onSurface} />
+            }
+            <Text style={[
+              styles.toggleButtonText,
+              { color: viewMode === mode ? colors.onPrimary : colors.onSurface }
+            ]}>
+              {mode === 'stats' ? 'Statistiche' : 'Lista'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <RefreshControl refreshing={refreshing} onRefresh={onRefresh}>
+        {viewMode === 'stats' ? renderStatsView() : renderListView()}
+      </RefreshControl>
+
       <FAB
         icon="plus"
         style={[styles.fab, { backgroundColor: colors.primary }]}
@@ -633,203 +562,216 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerTabs: {
-    flexDirection: 'row',
-    elevation: 2,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  tab: {
-    flex: 1,
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  periodSelector: {
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  periodChip: {
-    marginRight: 8,
-  },
-  scrollContent: {
-    paddingBottom: 100,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
   },
   vehicleSelector: {
+    marginVertical: 8,
+  },
+  vehicleSelectorContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    maxHeight: 60,
   },
   vehicleChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    marginRight: 8,
     borderWidth: 1,
-    marginRight: 12,
   },
   vehicleChipText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  mainStatsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  mainStatCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  mainStatLabel: {
-    fontSize: 12,
+  periodSelector: {
     marginBottom: 8,
   },
-  mainStatValue: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 4,
+  periodSelectorContent: {
+    paddingHorizontal: 16,
   },
-  mainStatUnit: {
+  periodChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+  },
+  periodChipText: {
     fontSize: 14,
+    fontWeight: '500',
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    margin: 16,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  toggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderWidth: 1,
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  statsContainer: {
+    flex: 1,
+    padding: 16,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 10,
     gap: 12,
+    marginBottom: 16,
   },
   statCard: {
     flex: 1,
     minWidth: '45%',
     padding: 16,
     borderRadius: 12,
+    alignItems: 'center',
     elevation: 1,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
   statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  trendContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  trendText: {
-    fontSize: 12,
-    fontWeight: '500',
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
+    textAlign: 'center',
   },
-  statSubtitle: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  chartsSection: {
+  chartCard: {
     padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    elevation: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  sectionTitle: {
-    fontSize: 18,
+  chartTitle: {
+    fontSize: 16,
     fontWeight: '600',
     marginBottom: 16,
+    textAlign: 'center',
   },
   chart: {
     borderRadius: 16,
-    marginVertical: 8,
   },
-  recordsSection: {
-    padding: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  noDataChart: {
     alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noDataText: {
+    fontSize: 16,
+    marginTop: 12,
+  },
+  comparisonCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    elevation: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 16,
   },
-  seeAllText: {
-    fontSize: 14,
-    fontWeight: '500',
+  comparisonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  comparisonItem: {
+    alignItems: 'center',
+  },
+  comparisonLabel: {
+    fontSize: 12,
+    marginVertical: 4,
+  },
+  comparisonValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  listContainer: {
+    flex: 1,
+    padding: 16,
   },
   recordCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
     elevation: 1,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 2,
   },
   recordHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    flex: 1,
-    gap: 12,
+    alignItems: 'center',
+    marginBottom: 12,
   },
   recordIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
     alignItems: 'center',
-  },
-  recordIconEmoji: {
-    fontSize: 20,
+    justifyContent: 'center',
+    marginRight: 12,
   },
   recordInfo: {
     flex: 1,
   },
   recordDate: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  recordDetails: {
-    marginBottom: 4,
-  },
-  recordDetailText: {
-    fontSize: 12,
+    fontSize: 16,
+    fontWeight: '600',
   },
   recordStation: {
-    fontSize: 12,
+    fontSize: 14,
     marginTop: 2,
   },
+  recordAmount: {
+    alignItems: 'flex-end',
+  },
+  recordCost: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  recordLiters: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  recordDetails: {},
   recordMeta: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 8,
   },
   metaItem: {
     flexDirection: 'row',
@@ -837,52 +779,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    fontSize: 11,
+    fontSize: 12,
   },
-  fullTankBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  fullTankText: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  recordCost: {
-    alignItems: 'flex-end',
-  },
-  recordCostValue: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    margin: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-  },
-  emptyState: {
-    margin: 16,
-    padding: 32,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
+  recordNotes: {
     fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
+    fontStyle: 'italic',
   },
   fab: {
     position: 'absolute',

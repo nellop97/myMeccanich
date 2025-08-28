@@ -1,12 +1,7 @@
-// src/services/firebase.ts
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+// src/services/firebase.ts - VERSIONE AGGIORNATA E CROSS-PLATFORM
 import { Platform } from 'react-native';
 
-// Import condizionali per evitare errori
-import { getAuth, initializeAuth } from 'firebase/auth';
-
-// Configurazione Firebase
+// Configurazione Firebase (uguale per tutte le piattaforme)
 const firebaseConfig = {
   apiKey: "AIzaSyC-AmP6d3a_VVXJnCWVHB1WmU_wPHF0ISI",
   authDomain: "mymecanich.firebaseapp.com",
@@ -17,36 +12,78 @@ const firebaseConfig = {
   measurementId: "G-FS1LZ8SWL1"
 };
 
-// Inizializza Firebase
-const app = initializeApp(firebaseConfig);
+// Variabili per l'esportazione
+let app: any;
+let auth: any;
+let db: any;
 
-// Inizializza Firestore
-export const db = getFirestore(app);
-
-// Inizializza Auth in modo cross-platform
-let auth;
-
+// Inizializzazione cross-platform
 if (Platform.OS === 'web') {
-  // Su web usa la configurazione standard
-  auth = getAuth(app);
-} else {
-  // Su mobile usa la persistenza React Native
+  // ============================================
+  // CONFIGURAZIONE WEB - Firebase JS SDK v9+
+  // ============================================
   try {
-    // Import dinamico per React Native
-    const { getReactNativePersistence } = require('firebase/auth/react-native');
-    const ReactNativeAsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const { initializeApp } = require('firebase/app');
+    const { getFirestore } = require('firebase/firestore');
+    const { getAuth } = require('firebase/auth');
 
-    auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-    });
-  } catch (error) {
-    console.warn('Fallback to default auth config:', error);
-    // Fallback alla configurazione di default se la persistenza React Native non è disponibile
+    // Inizializza Firebase App
+    app = initializeApp(firebaseConfig);
+    
+    // Inizializza servizi
+    db = getFirestore(app);
     auth = getAuth(app);
+
+    console.log('✅ Firebase Web SDK inizializzato correttamente');
+  } catch (error) {
+    console.error('❌ Errore nell\'inizializzazione Firebase Web:', error);
+  }
+} else {
+  // ============================================
+  // CONFIGURAZIONE MOBILE - React Native Firebase
+  // ============================================
+  try {
+    // React Native Firebase si auto-configura dal google-services.json/GoogleService-Info.plist
+    const firebaseAuth = require('@react-native-firebase/auth').default;
+    const firebaseFirestore = require('@react-native-firebase/firestore').default;
+
+    auth = firebaseAuth();
+    db = firebaseFirestore();
+
+    console.log('✅ React Native Firebase inizializzato correttamente');
+  } catch (error) {
+    console.error('❌ Errore nell\'inizializzazione React Native Firebase:', error);
+    
+    // Fallback: prova a usare Firebase JS SDK anche su mobile (meno efficiente)
+    try {
+      const { initializeApp } = require('firebase/app');
+      const { getFirestore } = require('firebase/firestore');
+      const { getAuth, initializeAuth } = require('firebase/auth');
+
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+
+      // Prova a usare la persistenza React Native se disponibile
+      try {
+        const { getReactNativePersistence } = require('firebase/auth/react-native');
+        const ReactNativeAsyncStorage = require('@react-native-async-storage/async-storage').default;
+
+        auth = initializeAuth(app, {
+          persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+        });
+        console.log('✅ Firebase JS SDK con persistenza React Native inizializzato');
+      } catch (persistenceError) {
+        console.warn('⚠️ Persistenza React Native non disponibile, usando auth di default');
+        auth = getAuth(app);
+      }
+    } catch (fallbackError) {
+      console.error('❌ Anche il fallback Firebase JS SDK ha fallito:', fallbackError);
+    }
   }
 }
 
-export { auth };
+// Esportazioni
+export { auth, db };
 
 // Utility per platform detection
 export const isWeb = Platform.OS === 'web';
@@ -56,46 +93,68 @@ export const isMobile = Platform.OS !== 'web';
 export const getFirebaseErrorMessage = (error: any): string => {
   const errorCode = error.code;
 
-  switch (errorCode) {
-    case 'auth/user-not-found':
-      return 'Utente non trovato';
-    case 'auth/wrong-password':
-      return 'Password non corretta';
-    case 'auth/invalid-email':
-      return 'Email non valida';
-    case 'auth/email-already-in-use':
-      return 'Questa email è già registrata';
-    case 'auth/weak-password':
-      return 'La password è troppo debole';
-    case 'auth/user-disabled':
-      return 'Account disabilitato';
-    case 'auth/invalid-credential':
-      return 'Credenziali non valide';
-    case 'auth/network-request-failed':
-      return 'Errore di connessione. Verifica la tua connessione internet.';
-    case 'auth/too-many-requests':
-      return 'Troppi tentativi. Riprova più tardi.';
-    case 'auth/popup-closed-by-user':
-      return 'Accesso annullato dall\'utente';
-    case 'auth/cancelled-popup-request':
-      return 'Richiesta di accesso annullata';
-    case 'auth/popup-blocked':
-      return 'Popup bloccato dal browser. Consenti i popup per questo sito.';
-    case 'auth/configuration-not-found':
-      return 'Configurazione OAuth non trovata. Controlla la configurazione Google.';
-    case 'auth/invalid-oauth-provider':
-      return 'Provider OAuth non valido';
-    case 'auth/invalid-oauth-client-id':
-      return 'Client ID OAuth non valido';
-    default:
-      console.error('Firebase Error:', error);
-      return error.message || 'Si è verificato un errore. Riprova.';
+  const errorMessages: { [key: string]: string } = {
+    'auth/user-not-found': 'Utente non trovato',
+    'auth/wrong-password': 'Password non corretta',
+    'auth/invalid-email': 'Email non valida',
+    'auth/email-already-in-use': 'Questa email è già registrata',
+    'auth/weak-password': 'La password è troppo debole (minimo 6 caratteri)',
+    'auth/user-disabled': 'Account disabilitato',
+    'auth/invalid-credential': 'Credenziali non valide',
+    'auth/network-request-failed': 'Errore di connessione. Verifica la tua connessione internet.',
+    'auth/too-many-requests': 'Troppi tentativi. Riprova più tardi.',
+    'auth/popup-closed-by-user': 'Accesso annullato dall\'utente',
+    'auth/cancelled-popup-request': 'Richiesta di accesso annullata',
+    'auth/popup-blocked': 'Popup bloccato dal browser. Consenti i popup per questo sito.',
+    'auth/configuration-not-found': 'Configurazione OAuth non trovata. Controlla la configurazione Google.',
+    'auth/missing-client-id': 'Client ID mancante nella configurazione OAuth',
+    'auth/invalid-client-id': 'Client ID non valido',
+    'firestore/permission-denied': 'Accesso negato. Verifica i permessi.',
+    'firestore/unavailable': 'Servizio temporaneamente non disponibile.',
+    'firestore/cancelled': 'Operazione annullata.',
+    'firestore/data-loss': 'Perdita di dati non recuperabile.',
+    'firestore/deadline-exceeded': 'Timeout dell\'operazione.',
+    'firestore/already-exists': 'Il documento esiste già.',
+    'firestore/resource-exhausted': 'Quota esaurita.',
+    'firestore/failed-precondition': 'Operazione respinta perché il sistema non è nello stato richiesto.',
+    'firestore/aborted': 'Operazione interrotta a causa di un conflitto.',
+    'firestore/out-of-range': 'Operazione tentata fuori dal range valido.',
+    'firestore/unimplemented': 'Operazione non implementata.',
+    'firestore/internal': 'Errore interno.',
+    'firestore/unauthenticated': 'Richiesta non autenticata.',
+  };
+
+  return errorMessages[errorCode] || `Errore: ${error.message || 'Errore sconosciuto'}`;
+};
+
+// Test di connessione Firebase
+export const testFirebaseConnection = async (): Promise<boolean> => {
+  try {
+    if (!db) {
+      console.error('❌ Database Firestore non inizializzato');
+      return false;
+    }
+
+    // Test di connessione semplice
+    if (isWeb) {
+      const { doc, getDoc } = require('firebase/firestore');
+      await getDoc(doc(db, 'test', 'connection'));
+    } else {
+      // Per React Native Firebase
+      await db.doc('test/connection').get();
+    }
+
+    console.log('✅ Connessione Firebase funzionante');
+    return true;
+  } catch (error) {
+    console.error('❌ Test connessione Firebase fallito:', getFirebaseErrorMessage(error));
+    return false;
   }
 };
 
-// Debug info in sviluppo
-if (__DEV__) {
-  console.log('🔥 Firebase initialized for platform:', Platform.OS);
-  console.log('🔥 Auth persistence configured:', Platform.OS !== 'web' ? 'AsyncStorage' : 'Web Storage');
-  console.log('🔥 Project ID:', firebaseConfig.projectId);
+// Log dello stato di inizializzazione
+if (auth && db) {
+  console.log('🔥 Firebase inizializzato con successo per', Platform.OS);
+} else {
+  console.error('❌ Firebase non è stato inizializzato correttamente');
 }
