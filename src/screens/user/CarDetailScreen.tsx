@@ -42,7 +42,7 @@ import {
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
-import { useCarsStore } from '@/src/store/useCarsStore';
+import { useCarsStore } from '../../store/useCarsStore';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 

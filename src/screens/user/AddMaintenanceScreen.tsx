@@ -1,4 +1,4 @@
-// src/screens/user/AddMaintenanceScreen.tsx
+// src/screens/user/AddMaintenanceScreen.tsx - COMPONENTE COMPLETO
 import React, { useState } from 'react';
 import {
     SafeAreaView,
@@ -14,7 +14,8 @@ import {
     Switch,
     TextInput,
     Animated,
-    Dimensions
+    Dimensions,
+    Modal
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
@@ -37,13 +38,19 @@ import {
     Filter,
     Battery,
     Thermometer,
-    Gauge
+    Gauge,
+    ChevronDown,
+    X
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
-import { useUserCarsStore } from '@/src/store/useCarsStore';
+import { useCarsStore } from '../../store/useCarsStore';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+// ====================================
+// INTERFACES
+// ====================================
 
 interface MaintenanceFormData {
     carId: string;
@@ -60,26 +67,195 @@ interface MaintenanceFormData {
     reminderDays: string;
 }
 
+interface RouteParams {
+    carId?: string;
+    category?: string;
+}
+
+// ====================================
+// CONSTANTS
+// ====================================
+
 const MAINTENANCE_CATEGORIES = [
-    { id: 'oil', name: 'Cambio Olio', icon: 'droplet', color: '#FF9500', description: 'Olio motore e filtri' },
-    { id: 'brakes', name: 'Freni', icon: 'disc', color: '#FF3B30', description: 'Pastiglie e dischi' },
-    { id: 'tires', name: 'Pneumatici', icon: 'circle', color: '#34C759', description: 'Gomme e cerchi' },
-    { id: 'engine', name: 'Motore', icon: 'cpu', color: '#007AFF', description: 'Controlli motore' },
-    { id: 'electrical', name: 'Elettrico', icon: 'zap', color: '#5856D6', description: 'Impianto elettrico' },
-    { id: 'battery', name: 'Batteria', icon: 'battery', color: '#FF9500', description: 'Batteria auto' },
-    { id: 'cooling', name: 'Raffreddamento', icon: 'thermometer', color: '#5AC8FA', description: 'Sistema raffreddamento' },
-    { id: 'transmission', name: 'Trasmissione', icon: 'settings', color: '#8E8E93', description: 'Cambio e frizione' },
-    { id: 'inspection', name: 'Revisione', icon: 'shield', color: '#34C759', description: 'Controllo periodico' },
-    { id: 'other', name: 'Altro', icon: 'wrench', color: '#8E8E93', description: 'Altro intervento' }
+    { 
+        id: 'oil', 
+        name: 'Cambio Olio', 
+        icon: 'droplet', 
+        color: '#FF9500', 
+        description: 'Olio motore e filtri',
+        IconComponent: Filter
+    },
+    { 
+        id: 'brakes', 
+        name: 'Freni', 
+        icon: 'disc', 
+        color: '#FF3B30', 
+        description: 'Pastiglie e dischi',
+        IconComponent: AlertTriangle
+    },
+    { 
+        id: 'tires', 
+        name: 'Pneumatici', 
+        icon: 'circle', 
+        color: '#34C759', 
+        description: 'Gomme e cerchi',
+        IconComponent: Car
+    },
+    { 
+        id: 'engine', 
+        name: 'Motore', 
+        icon: 'cpu', 
+        color: '#007AFF', 
+        description: 'Controlli motore',
+        IconComponent: Settings
+    },
+    { 
+        id: 'electrical', 
+        name: 'Elettrico', 
+        icon: 'zap', 
+        color: '#5856D6', 
+        description: 'Impianto elettrico',
+        IconComponent: Zap
+    },
+    { 
+        id: 'battery', 
+        name: 'Batteria', 
+        icon: 'battery', 
+        color: '#FF9500', 
+        description: 'Batteria auto',
+        IconComponent: Battery
+    },
+    { 
+        id: 'cooling', 
+        name: 'Raffreddamento', 
+        icon: 'thermometer', 
+        color: '#5AC8FA', 
+        description: 'Sistema raffreddamento',
+        IconComponent: Thermometer
+    },
+    { 
+        id: 'transmission', 
+        name: 'Trasmissione', 
+        icon: 'settings', 
+        color: '#8E8E93', 
+        description: 'Cambio e frizione',
+        IconComponent: Settings
+    },
+    { 
+        id: 'inspection', 
+        name: 'Revisione', 
+        icon: 'shield', 
+        color: '#34C759', 
+        description: 'Controllo periodico',
+        IconComponent: Shield
+    },
+    { 
+        id: 'other', 
+        name: 'Altro', 
+        icon: 'wrench', 
+        color: '#8E8E93', 
+        description: 'Altro intervento',
+        IconComponent: Wrench
+    }
 ];
+
+// ====================================
+// CUSTOM COMPONENTS
+// ====================================
+
+interface ModernInputProps {
+    label: string;
+    placeholder: string;
+    value: string;
+    onChangeText: (text: string) => void;
+    keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad';
+    multiline?: boolean;
+    numberOfLines?: number;
+    icon?: any;
+    error?: string;
+}
+
+const ModernInput: React.FC<ModernInputProps> = ({
+    label,
+    placeholder,
+    value,
+    onChangeText,
+    keyboardType = 'default',
+    multiline = false,
+    numberOfLines = 1,
+    icon: IconComponent,
+    error
+}) => {
+    const { darkMode } = useStore();
+    const theme = {
+        cardBackground: darkMode ? '#1e1e1e' : '#ffffff',
+        text: darkMode ? '#ffffff' : '#000000',
+        textSecondary: darkMode ? '#a0a0a0' : '#666666',
+        border: darkMode ? '#333333' : '#e0e0e0',
+        primary: '#007AFF',
+        error: '#FF3B30'
+    };
+
+    return (
+        <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>{label}</Text>
+            <View style={[
+                styles.inputWrapper,
+                { 
+                    backgroundColor: theme.cardBackground,
+                    borderColor: error ? theme.error : theme.border
+                }
+            ]}>
+                {IconComponent && (
+                    <IconComponent size={20} color={theme.textSecondary} style={styles.inputIcon} />
+                )}
+                <TextInput
+                    style={[
+                        styles.textInput,
+                        { 
+                            color: theme.text,
+                            flex: 1,
+                            textAlignVertical: multiline ? 'top' : 'center'
+                        }
+                    ]}
+                    placeholder={placeholder}
+                    placeholderTextColor={theme.textSecondary}
+                    value={value}
+                    onChangeText={onChangeText}
+                    keyboardType={keyboardType}
+                    multiline={multiline}
+                    numberOfLines={numberOfLines}
+                />
+            </View>
+            {error && (
+                <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+            )}
+        </View>
+    );
+};
+
+// ====================================
+// MAIN COMPONENT
+// ====================================
 
 const AddMaintenanceScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { darkMode } = useStore();
-    const { cars, getCarById, addMaintenance, addReminder, updateMileage } = useUserCarsStore();
+    
+    const { 
+        vehicles: cars,
+        getCarById, 
+        addMaintenance,
+        addReminder,
+        updateMileage
+    } = useCarsStore();
 
-    const fallbackTheme = {
+    // Route params
+    const { carId: preselectedCarId, category: preselectedCategory } = route.params as RouteParams || {};
+
+    // Theme
+    const theme = {
         background: darkMode ? '#121212' : '#f5f5f5',
         cardBackground: darkMode ? '#1e1e1e' : '#ffffff',
         text: darkMode ? '#ffffff' : '#000000',
@@ -93,15 +269,15 @@ const AddMaintenanceScreen = () => {
         placeholder: darkMode ? '#666666' : '#999999'
     };
 
-    const preselectedCarId = route.params?.carId;
-    const preselectedCategory = route.params?.category;
-
+    // State
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showNextDuePicker, setShowNextDuePicker] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [selectedNextDueDate, setSelectedNextDueDate] = useState(new Date());
-    const [currentStep, setCurrentStep] = useState(0);
+    const [showCategoryModal, setShowCategoryModal] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
+    // Form
     const { control, handleSubmit, formState: { errors }, watch, setValue } = useForm<MaintenanceFormData>({
         defaultValues: {
             carId: preselectedCarId || (cars.length === 1 ? cars[0].id : ''),
@@ -124,7 +300,9 @@ const AddMaintenanceScreen = () => {
     const reminder = watch('reminder');
 
     const selectedCar = selectedCarId ? getCarById(selectedCarId) : null;
+    const selectedCategoryData = MAINTENANCE_CATEGORIES.find(cat => cat.id === selectedCategory);
 
+    // Helper Functions
     const getMaintenanceType = (category: string) => {
         switch (category) {
             case 'oil':
@@ -145,7 +323,16 @@ const AddMaintenanceScreen = () => {
         }
     };
 
-    const onSubmit = (data: MaintenanceFormData) => {
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString('it-IT', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    };
+
+    // Event Handlers
+    const onSubmit = async (data: MaintenanceFormData) => {
         if (!data.carId) {
             Alert.alert('Errore', 'Seleziona un veicolo');
             return;
@@ -159,7 +346,10 @@ const AddMaintenanceScreen = () => {
             return;
         }
 
+        setIsLoading(true);
+
         try {
+            // Prepara i dati della manutenzione
             const maintenanceData = {
                 description: data.description.trim(),
                 date: data.date,
@@ -173,12 +363,15 @@ const AddMaintenanceScreen = () => {
                 status: 'completed' as const
             };
 
-            const maintenanceId = addMaintenance(data.carId, maintenanceData);
+            // Aggiungi manutenzione
+            const maintenanceId = await addMaintenance(data.carId, maintenanceData);
 
-            if (data.mileage && parseInt(data.mileage) > 0) {
-                updateMileage(data.carId, parseInt(data.mileage));
+            // Aggiorna chilometraggio se fornito
+            if (data.mileage && parseInt(data.mileage) > (selectedCar?.currentMileage || 0)) {
+                await updateMileage(data.carId, parseInt(data.mileage));
             }
 
+            // Crea promemoria se richiesto
             if (data.reminder && (data.nextDueDate || data.nextDueMileage)) {
                 const reminderData = {
                     title: `Prossima manutenzione: ${data.description}`,
@@ -189,269 +382,232 @@ const AddMaintenanceScreen = () => {
                     isActive: true
                 };
 
-                addReminder(data.carId, reminderData);
+                await addReminder(data.carId, reminderData);
             }
 
             Alert.alert(
                 'Successo', 
-                'Manutenzione aggiunta con successo!', 
-                [{ 
-                    text: 'OK', 
-                    onPress: () => navigation.goBack() 
-                }]
+                'Manutenzione aggiunta con successo!',
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
-        } catch (error) {
-            console.error('Errore durante il salvataggio:', error);
-            Alert.alert('Errore', 'Si è verificato un errore durante il salvataggio');
+
+        } catch (error: any) {
+            console.error('Errore aggiunta manutenzione:', error);
+            Alert.alert(
+                'Errore',
+                error.message || 'Errore durante il salvataggio della manutenzione'
+            );
+        } finally {
+            setIsLoading(false);
         }
     };
 
-    const handleDateChange = (event: any, date?: Date) => {
+    const handleDateChange = (event: any, selectedDate?: Date) => {
         setShowDatePicker(false);
-        if (date) {
-            setSelectedDate(date);
-            setValue('date', date.toISOString().split('T')[0]);
+        if (selectedDate) {
+            setSelectedDate(selectedDate);
+            setValue('date', selectedDate.toISOString().split('T')[0]);
         }
     };
 
-    const handleNextDueDateChange = (event: any, date?: Date) => {
+    const handleNextDueDateChange = (event: any, selectedDate?: Date) => {
         setShowNextDuePicker(false);
-        if (date) {
-            setSelectedNextDueDate(date);
-            setValue('nextDueDate', date.toISOString().split('T')[0]);
+        if (selectedDate) {
+            setSelectedNextDueDate(selectedDate);
+            setValue('nextDueDate', selectedDate.toISOString().split('T')[0]);
         }
     };
 
-    const formatDate = (dateString: string) => {
-        if (!dateString) return 'Seleziona data';
-        return new Date(dateString).toLocaleDateString('it-IT');
-    };
-
-    // Modern Input Component
-    const ModernInput = ({ 
-        label, 
-        placeholder, 
-        value, 
-        onChangeText, 
-        error, 
-        required = false, 
-        keyboardType = 'default',
-        multiline = false,
-        icon: Icon
-    }: any) => (
-        <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { color: fallbackTheme.text }]}>
-                {label} {required && <Text style={{ color: fallbackTheme.error }}>*</Text>}
-            </Text>
-            <View style={[
-                styles.inputWrapper, 
-                { 
-                    backgroundColor: fallbackTheme.cardBackground, 
-                    borderColor: error ? fallbackTheme.error : fallbackTheme.border 
-                },
-                multiline && styles.textAreaWrapper
-            ]}>
-                {Icon && (
-                    <View style={styles.inputIconContainer}>
-                        <Icon size={20} color={fallbackTheme.textSecondary} />
-                    </View>
-                )}
-                <TextInput
-                    style={[
-                        styles.input, 
-                        { color: fallbackTheme.text },
-                        multiline && styles.textAreaInput
-                    ]}
-                    placeholder={placeholder}
-                    placeholderTextColor={fallbackTheme.placeholder}
-                    value={value}
-                    onChangeText={onChangeText}
-                    keyboardType={keyboardType}
-                    multiline={multiline}
-                    numberOfLines={multiline ? 4 : 1}
-                    textAlignVertical={multiline ? 'top' : 'center'}
-                />
-            </View>
-            {error && (
-                <Text style={[styles.errorText, { color: fallbackTheme.error }]}>
-                    {error}
-                </Text>
-            )}
-        </View>
-    );
-
-    // Category Selector Component
-    const CategorySelector = () => (
-        <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-            <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                Tipo di Manutenzione
-            </Text>
-            <View style={styles.categoryGrid}>
-                {MAINTENANCE_CATEGORIES.map((category) => {
-                    const isSelected = selectedCategory === category.id;
-                    
-                    return (
-                        <TouchableOpacity
-                            key={category.id}
-                            style={[
-                                styles.categoryCard,
-                                { 
-                                    backgroundColor: isSelected ? category.color + '20' : fallbackTheme.background,
-                                    borderColor: isSelected ? category.color : fallbackTheme.border
-                                }
-                            ]}
-                            onPress={() => setValue('category', category.id)}
-                        >
-                            <View style={[
-                                styles.categoryIcon,
-                                { backgroundColor: isSelected ? category.color : fallbackTheme.border }
-                            ]}>
-                                {category.id === 'oil' && <Zap size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'brakes' && <AlertTriangle size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'tires' && <Car size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'engine' && <Settings size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'electrical' && <Zap size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'battery' && <Battery size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'cooling' && <Thermometer size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'transmission' && <Settings size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'inspection' && <Shield size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                                {category.id === 'other' && <Wrench size={20} color={isSelected ? '#ffffff' : fallbackTheme.textSecondary} />}
-                            </View>
-                            <Text style={[
-                                styles.categoryName,
-                                { color: isSelected ? category.color : fallbackTheme.text }
-                            ]}>
-                                {category.name}
-                            </Text>
-                            <Text style={[
-                                styles.categoryDescription,
-                                { color: isSelected ? category.color : fallbackTheme.textSecondary }
-                            ]}>
-                                {category.description}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-        </View>
-    );
-
-    // Car Selector Component
-    const CarSelector = () => {
-        if (preselectedCarId) return null;
-
-        return (
-            <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                    Seleziona Veicolo
-                </Text>
-                <View style={styles.carGrid}>
-                    {cars.filter(car => car.isActive).map((car) => (
-                        <TouchableOpacity
-                            key={car.id}
-                            style={[
-                                styles.carCard,
-                                { 
-                                    backgroundColor: selectedCarId === car.id ? fallbackTheme.primary + '20' : fallbackTheme.background,
-                                    borderColor: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.border
-                                }
-                            ]}
-                            onPress={() => setValue('carId', car.id)}
-                        >
-                            <View style={styles.carCardHeader}>
-                                <Text style={[
-                                    styles.carCardTitle,
-                                    { color: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.text }
-                                ]}>
-                                    {car.make} {car.model}
-                                </Text>
-                                <Text style={[
-                                    styles.carCardPlate,
-                                    { color: selectedCarId === car.id ? fallbackTheme.primary : fallbackTheme.textSecondary }
-                                ]}>
-                                    {car.licensePlate}
-                                </Text>
-                            </View>
-                            <Text style={[
-                                styles.carCardMileage,
-                                { color: fallbackTheme.textSecondary }
-                            ]}>
-                                {car.currentMileage.toLocaleString()} km
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-        );
-    };
-
+    // Render
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: fallbackTheme.background }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: fallbackTheme.cardBackground, borderBottomColor: fallbackTheme.border }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <ArrowLeft size={24} color={fallbackTheme.text} />
-                </TouchableOpacity>
-                <View style={styles.headerTitles}>
-                    <Text style={[styles.headerTitle, { color: fallbackTheme.text }]}>
-                        Nuova Manutenzione
+            
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.flex}
+            >
+                {/* Header */}
+                <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                    <TouchableOpacity 
+                        onPress={() => navigation.goBack()}
+                        style={styles.backButton}
+                    >
+                        <ArrowLeft size={24} color={theme.text} />
+                    </TouchableOpacity>
+                    
+                    <Text style={[styles.headerTitle, { color: theme.text }]}>
+                        Aggiungi Manutenzione
                     </Text>
-                    <Text style={[styles.headerSubtitle, { color: fallbackTheme.textSecondary }]}>
-                        {selectedCar ? `${selectedCar.make} ${selectedCar.model}` : 'Registra un intervento'}
-                    </Text>
+                    
+                    <TouchableOpacity 
+                        onPress={handleSubmit(onSubmit)}
+                        style={[
+                            styles.saveButton, 
+                            { 
+                                backgroundColor: theme.primary,
+                                opacity: isLoading ? 0.6 : 1
+                            }
+                        ]}
+                        disabled={isLoading}
+                    >
+                        <Save size={20} color="white" />
+                    </TouchableOpacity>
                 </View>
-            </View>
 
-            <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <ScrollView 
-                    style={styles.scrollContainer} 
-                    showsVerticalScrollIndicator={false} 
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <CarSelector />
-                    <CategorySelector />
+                <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                    
+                    {/* Car Selection */}
+                    {!preselectedCarId && cars.length > 1 && (
+                        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>Veicolo</Text>
+                            <Controller
+                                control={control}
+                                name="carId"
+                                rules={{ required: 'Seleziona un veicolo' }}
+                                render={({ field: { onChange, value } }) => (
+                                    <View>
+                                        {cars.map((car) => (
+                                            <TouchableOpacity
+                                                key={car.id}
+                                                style={[
+                                                    styles.carOption,
+                                                    { borderColor: theme.border },
+                                                    value === car.id && { 
+                                                        backgroundColor: theme.primary + '20', 
+                                                        borderColor: theme.primary 
+                                                    }
+                                                ]}
+                                                onPress={() => onChange(car.id)}
+                                            >
+                                                <Car size={20} color={value === car.id ? theme.primary : theme.textSecondary} />
+                                                <Text style={[
+                                                    styles.carOptionText,
+                                                    { color: value === car.id ? theme.primary : theme.text }
+                                                ]}>
+                                                    {car.make} {car.model} - {car.licensePlate}
+                                                </Text>
+                                                {value === car.id && (
+                                                    <CheckCircle size={20} color={theme.primary} />
+                                                )}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                            />
+                        </View>
+                    )}
+
+                    {/* Selected Car Info */}
+                    {selectedCar && (
+                        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>Veicolo Selezionato</Text>
+                            <View style={styles.selectedCarInfo}>
+                                <Car size={24} color={theme.primary} />
+                                <View style={styles.selectedCarDetails}>
+                                    <Text style={[styles.selectedCarText, { color: theme.text }]}>
+                                        {selectedCar.make} {selectedCar.model}
+                                    </Text>
+                                    <Text style={[styles.selectedCarPlate, { color: theme.textSecondary }]}>
+                                        {selectedCar.licensePlate}
+                                    </Text>
+                                </View>
+                                <View style={styles.selectedCarMileage}>
+                                    <Text style={[styles.mileageValue, { color: theme.text }]}>
+                                        {selectedCar.currentMileage?.toLocaleString() || '0'} km
+                                    </Text>
+                                    <Text style={[styles.mileageLabel, { color: theme.textSecondary }]}>
+                                        Chilometraggio
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Category Selection */}
+                    <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>Categoria Manutenzione</Text>
+                        <Controller
+                            control={control}
+                            name="category"
+                            rules={{ required: 'Seleziona una categoria' }}
+                            render={({ field: { onChange, value } }) => (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.categorySelector,
+                                        { borderColor: theme.border, backgroundColor: theme.cardBackground }
+                                    ]}
+                                    onPress={() => setShowCategoryModal(true)}
+                                >
+                                    {selectedCategoryData ? (
+                                        <View style={styles.selectedCategoryContent}>
+                                            <View style={[
+                                                styles.categoryIcon,
+                                                { backgroundColor: selectedCategoryData.color + '20' }
+                                            ]}>
+                                                <selectedCategoryData.IconComponent 
+                                                    size={20} 
+                                                    color={selectedCategoryData.color} 
+                                                />
+                                            </View>
+                                            <View style={styles.categoryText}>
+                                                <Text style={[styles.categoryName, { color: theme.text }]}>
+                                                    {selectedCategoryData.name}
+                                                </Text>
+                                                <Text style={[styles.categoryDescription, { color: theme.textSecondary }]}>
+                                                    {selectedCategoryData.description}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <Text style={[styles.placeholderText, { color: theme.placeholder }]}>
+                                            Seleziona categoria
+                                        </Text>
+                                    )}
+                                    <ChevronDown size={20} color={theme.textSecondary} />
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
 
                     {/* Basic Information */}
-                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                            Dettagli Intervento
-                        </Text>
-
+                    <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>Informazioni Base</Text>
+                        
                         <Controller
                             control={control}
                             name="description"
-                            rules={{ required: 'Descrizione obbligatoria' }}
+                            rules={{ required: 'Inserisci una descrizione' }}
                             render={({ field: { onChange, value } }) => (
-                                <ModernInput
-                                    label="Descrizione Intervento"
-                                    placeholder="Es: Cambio olio motore e filtri"
-                                    value={value}
-                                    onChangeText={onChange}
-                                    error={errors.description?.message}
-                                    required
+                                <ModernInput 
+                                    label="Descrizione *" 
+                                    placeholder="Descrivi l'intervento eseguito" 
+                                    value={value} 
+                                    onChangeText={onChange} 
                                     icon={FileText}
+                                    error={errors.description?.message}
                                 />
                             )}
                         />
 
-                        <View style={styles.row}>
-                            <View style={styles.halfWidth}>
-                                <Text style={[styles.inputLabel, { color: fallbackTheme.text }]}>
-                                    Data Intervento <Text style={{ color: fallbackTheme.error }}>*</Text>
+                        {/* Date Selection */}
+                        <View style={styles.inputContainer}>
+                            <Text style={[styles.inputLabel, { color: theme.text }]}>Data Intervento</Text>
+                            <TouchableOpacity
+                                style={[
+                                    styles.dateSelector,
+                                    { borderColor: theme.border, backgroundColor: theme.cardBackground }
+                                ]}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Calendar size={20} color={theme.textSecondary} />
+                                <Text style={[styles.dateText, { color: theme.text }]}>
+                                    {formatDate(selectedDate)}
                                 </Text>
-                                <TouchableOpacity
-                                    style={[styles.dateButton, { backgroundColor: fallbackTheme.cardBackground, borderColor: fallbackTheme.border }]}
-                                    onPress={() => setShowDatePicker(true)}
-                                >
-                                    <Calendar size={20} color={fallbackTheme.primary} />
-                                    <Text style={[styles.dateButtonText, { color: fallbackTheme.text }]}>
-                                        {formatDate(watch('date'))}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                            </TouchableOpacity>
+                        </View>
 
+                        <View style={styles.row}>
                             <View style={styles.halfWidth}>
                                 <Controller
                                     control={control}
@@ -462,15 +618,13 @@ const AddMaintenanceScreen = () => {
                                             placeholder="0.00" 
                                             value={value} 
                                             onChangeText={onChange} 
-                                            keyboardType="decimal-pad" 
-                                            icon={DollarSign} 
+                                            keyboardType="numeric"
+                                            icon={DollarSign}
                                         />
                                     )}
                                 />
                             </View>
-                        </View>
 
-                        <View style={styles.row}>
                             <View style={styles.halfWidth}>
                                 <Controller
                                     control={control}
@@ -487,23 +641,21 @@ const AddMaintenanceScreen = () => {
                                     )}
                                 />
                             </View>
-
-                            <View style={styles.halfWidth}>
-                                <Controller
-                                    control={control}
-                                    name="workshop"
-                                    render={({ field: { onChange, value } }) => (
-                                        <ModernInput 
-                                            label="Officina" 
-                                            placeholder="Nome officina" 
-                                            value={value} 
-                                            onChangeText={onChange} 
-                                            icon={MapPin} 
-                                        />
-                                    )}
-                                />
-                            </View>
                         </View>
+
+                        <Controller
+                            control={control}
+                            name="workshop"
+                            render={({ field: { onChange, value } }) => (
+                                <ModernInput 
+                                    label="Officina" 
+                                    placeholder="Nome officina (opzionale)" 
+                                    value={value} 
+                                    onChangeText={onChange} 
+                                    icon={MapPin} 
+                                />
+                            )}
+                        />
 
                         <Controller
                             control={control}
@@ -514,32 +666,35 @@ const AddMaintenanceScreen = () => {
                                     placeholder="Note aggiuntive sull'intervento..." 
                                     value={value} 
                                     onChangeText={onChange} 
-                                    multiline 
+                                    multiline={true}
+                                    numberOfLines={3}
+                                    icon={FileText}
                                 />
                             )}
                         />
                     </View>
 
                     {/* Next Maintenance */}
-                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                            Prossimo Intervento
-                        </Text>
-
+                    <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>Prossima Manutenzione</Text>
+                        
                         <View style={styles.row}>
                             <View style={styles.halfWidth}>
-                                <Text style={[styles.inputLabel, { color: fallbackTheme.text }]}>
-                                    Data Scadenza
-                                </Text>
-                                <TouchableOpacity
-                                    style={[styles.dateButton, { backgroundColor: fallbackTheme.cardBackground, borderColor: fallbackTheme.border }]}
-                                    onPress={() => setShowNextDuePicker(true)}
-                                >
-                                    <Calendar size={20} color={fallbackTheme.textSecondary} />
-                                    <Text style={[styles.dateButtonText, { color: fallbackTheme.text }]}>
-                                        {formatDate(watch('nextDueDate'))}
-                                    </Text>
-                                </TouchableOpacity>
+                                <View style={styles.inputContainer}>
+                                    <Text style={[styles.inputLabel, { color: theme.text }]}>Prossima Data</Text>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.dateSelector,
+                                            { borderColor: theme.border, backgroundColor: theme.cardBackground }
+                                        ]}
+                                        onPress={() => setShowNextDuePicker(true)}
+                                    >
+                                        <Calendar size={20} color={theme.textSecondary} />
+                                        <Text style={[styles.dateText, { color: theme.text }]}>
+                                            {watch('nextDueDate') ? formatDate(selectedNextDueDate) : 'Opzionale'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
 
                             <View style={styles.halfWidth}>
@@ -548,8 +703,8 @@ const AddMaintenanceScreen = () => {
                                     name="nextDueMileage"
                                     render={({ field: { onChange, value } }) => (
                                         <ModernInput 
-                                            label="Chilometraggio Scadenza" 
-                                            placeholder="Es: 15000" 
+                                            label="Prossimo Chilometraggio" 
+                                            placeholder="km (opzionale)" 
                                             value={value} 
                                             onChangeText={onChange} 
                                             keyboardType="numeric"
@@ -562,33 +717,31 @@ const AddMaintenanceScreen = () => {
                     </View>
 
                     {/* Reminder Settings */}
-                    <View style={[styles.card, { backgroundColor: fallbackTheme.cardBackground }]}>
-                        <Text style={[styles.cardTitle, { color: fallbackTheme.text }]}>
-                            Promemoria
-                        </Text>
-
-                        <View style={styles.switchRow}>
-                            <View style={styles.switchInfo}>
-                                <Text style={[styles.switchLabel, { color: fallbackTheme.text }]}>
-                                    Attiva Promemoria
-                                </Text>
-                                <Text style={[styles.switchDescription, { color: fallbackTheme.textSecondary }]}>
-                                    Ricevi notifiche prima della scadenza
-                                </Text>
-                            </View>
-                            <Controller
-                                control={control}
-                                name="reminder"
-                                render={({ field: { onChange, value } }) => (
-                                    <Switch 
-                                        value={value} 
-                                        onValueChange={onChange} 
-                                        trackColor={{ false: fallbackTheme.border, true: fallbackTheme.primary + '40' }} 
-                                        thumbColor={value ? fallbackTheme.primary : '#f4f3f4'} 
+                    <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>Promemoria</Text>
+                        
+                        <Controller
+                            control={control}
+                            name="reminder"
+                            render={({ field: { onChange, value } }) => (
+                                <View style={styles.switchRow}>
+                                    <View style={styles.switchLabel}>
+                                        <Text style={[styles.switchText, { color: theme.text }]}>
+                                            Crea promemoria
+                                        </Text>
+                                        <Text style={[styles.switchDescription, { color: theme.textSecondary }]}>
+                                            Ti avviseremo quando sarà il momento della prossima manutenzione
+                                        </Text>
+                                    </View>
+                                    <Switch
+                                        value={value}
+                                        onValueChange={onChange}
+                                        trackColor={{ false: theme.border, true: theme.primary + '40' }}
+                                        thumbColor={value ? theme.primary : theme.textSecondary}
                                     />
-                                )}
-                            />
-                        </View>
+                                </View>
+                            )}
+                        />
 
                         {reminder && (
                             <Controller
@@ -596,65 +749,118 @@ const AddMaintenanceScreen = () => {
                                 name="reminderDays"
                                 render={({ field: { onChange, value } }) => (
                                     <ModernInput 
-                                        label="Giorni di Anticipo" 
+                                        label="Giorni di anticipo" 
                                         placeholder="7" 
                                         value={value} 
                                         onChangeText={onChange} 
-                                        keyboardType="numeric" 
-                                        icon={Clock} 
+                                        keyboardType="numeric"
+                                        icon={Clock}
                                     />
                                 )}
                             />
                         )}
                     </View>
 
-                    {/* Action Buttons */}
-                    <View style={styles.actionsContainer}>
-                        <TouchableOpacity 
-                            style={[styles.secondaryButton, { backgroundColor: fallbackTheme.border }]}
-                            onPress={() => navigation.goBack()}
-                        >
-                            <Text style={[styles.secondaryButtonText, { color: fallbackTheme.textSecondary }]}>
-                                Annulla
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity 
-                            style={[styles.primaryButton, { backgroundColor: fallbackTheme.primary }]}
-                            onPress={handleSubmit(onSubmit)}
-                        >
-                            <Save size={20} color="#ffffff" />
-                            <Text style={styles.primaryButtonText}>Salva Manutenzione</Text>
-                        </TouchableOpacity>
-                    </View>
+                    {/* Bottom Spacing */}
+                    <View style={styles.bottomSpacing} />
                 </ScrollView>
-            </KeyboardAvoidingView>
 
-            {/* Date Pickers */}
-            {showDatePicker && (
-                <DateTimePicker 
-                    value={selectedDate} 
-                    mode="date" 
-                    display="default" 
-                    onChange={handleDateChange} 
-                    maximumDate={new Date()} 
-                />
-            )}
-            {showNextDuePicker && (
-                <DateTimePicker 
-                    value={selectedNextDueDate} 
-                    mode="date" 
-                    display="default" 
-                    onChange={handleNextDueDateChange} 
-                    minimumDate={new Date()} 
-                />
-            )}
+                {/* Date Pickers */}
+                {showDatePicker && (
+                    <DateTimePicker
+                        value={selectedDate}
+                        mode="date"
+                        display="default"
+                        onChange={handleDateChange}
+                    />
+                )}
+
+                {showNextDuePicker && (
+                    <DateTimePicker
+                        value={selectedNextDueDate}
+                        mode="date"
+                        display="default"
+                        onChange={handleNextDueDateChange}
+                    />
+                )}
+
+                {/* Category Modal */}
+                <Modal
+                    visible={showCategoryModal}
+                    animationType="slide"
+                    presentationStyle="pageSheet"
+                >
+                    <SafeAreaView style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+                        <View style={[styles.modalHeader, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                            <Text style={[styles.modalTitle, { color: theme.text }]}>
+                                Seleziona Categoria
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => setShowCategoryModal(false)}
+                                style={styles.closeButton}
+                            >
+                                <X size={24} color={theme.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.modalContent}>
+                            {MAINTENANCE_CATEGORIES.map((category) => (
+                                <TouchableOpacity
+                                    key={category.id}
+                                    style={[
+                                        styles.categoryOption,
+                                        { 
+                                            backgroundColor: theme.cardBackground,
+                                            borderColor: theme.border
+                                        },
+                                        selectedCategory === category.id && {
+                                            backgroundColor: category.color + '20',
+                                            borderColor: category.color
+                                        }
+                                    ]}
+                                    onPress={() => {
+                                        setValue('category', category.id);
+                                        setShowCategoryModal(false);
+                                    }}
+                                >
+                                    <View style={[
+                                        styles.categoryIcon,
+                                        { backgroundColor: category.color + '20' }
+                                    ]}>
+                                        <category.IconComponent 
+                                            size={24} 
+                                            color={category.color} 
+                                        />
+                                    </View>
+                                    <View style={styles.categoryText}>
+                                        <Text style={[styles.categoryName, { color: theme.text }]}>
+                                            {category.name}
+                                        </Text>
+                                        <Text style={[styles.categoryDescription, { color: theme.textSecondary }]}>
+                                            {category.description}
+                                        </Text>
+                                    </View>
+                                    {selectedCategory === category.id && (
+                                        <CheckCircle size={20} color={category.color} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </SafeAreaView>
+                </Modal>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };
 
+// ====================================
+// STYLES
+// ====================================
+
 const styles = StyleSheet.create({
     container: {
+        flex: 1,
+    },
+    flex: {
         flex: 1,
     },
     header: {
@@ -665,215 +871,215 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
     },
     backButton: {
-        marginRight: 12,
-    },
-    headerTitles: {
-        flex: 1,
+        padding: 4,
     },
     headerTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
+        flex: 1,
+        fontSize: 18,
+        fontWeight: '600',
+        marginLeft: 16,
     },
-    headerSubtitle: {
-        fontSize: 14,
-        marginTop: 2,
+    saveButton: {
+        padding: 8,
+        borderRadius: 8,
     },
     content: {
         flex: 1,
+        paddingHorizontal: 20,
+        paddingTop: 20,
     },
-    scrollContainer: {
-        flex: 1,
-        padding: 16,
-    },
-    
-    // Card Styles
     card: {
-        borderRadius: 16,
-        padding: 20,
+        borderRadius: 12,
+        padding: 16,
         marginBottom: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
         shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
-    cardTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 16,
-    },
-    
-    // Category Grid
-    categoryGrid: {
-        gap: 12,
-    },
-    categoryCard: {
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 2,
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    categoryIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 8,
-    },
-    categoryName: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        marginBottom: 4,
-        textAlign: 'center',
-    },
-    categoryDescription: {
-        fontSize: 12,
-        textAlign: 'center',
-    },
-    
-    // Car Grid
-    carGrid: {
-        gap: 12,
-    },
-    carCard: {
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 2,
-    },
-    carCardHeader: {
-        marginBottom: 8,
-    },
-    carCardTitle: {
+    sectionTitle: {
         fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 2,
+        fontWeight: '600',
+        marginBottom: 12,
     },
-    carCardPlate: {
+    carOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderWidth: 1,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    carOptionText: {
+        marginLeft: 12,
+        fontSize: 16,
+        flex: 1,
+    },
+    selectedCarInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    selectedCarDetails: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    selectedCarText: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    selectedCarPlate: {
         fontSize: 14,
+        marginTop: 2,
+    },
+    selectedCarMileage: {
+        alignItems: 'flex-end',
+    },
+    mileageValue: {
+        fontSize: 16,
         fontWeight: '600',
     },
-    carCardMileage: {
+    mileageLabel: {
         fontSize: 12,
+        marginTop: 2,
     },
-    
-    // Input Styles
+    categorySelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderWidth: 1,
+        borderRadius: 8,
+        minHeight: 50,
+    },
+    selectedCategoryContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    categoryIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    categoryText: {
+        marginLeft: 12,
+        flex: 1,
+    },
+    categoryName: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    categoryDescription: {
+        fontSize: 14,
+        marginTop: 2,
+    },
+    placeholderText: {
+        fontSize: 16,
+        flex: 1,
+    },
     inputContainer: {
         marginBottom: 16,
     },
     inputLabel: {
         fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 8,
+        fontWeight: '500',
+        marginBottom: 6,
     },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        minHeight: 50,
     },
-    textAreaWrapper: {
-        alignItems: 'flex-start',
-        paddingVertical: 16,
+    inputIcon: {
+        marginRight: 8,
     },
-    inputIconContainer: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
+    textInput: {
         fontSize: 16,
-        minHeight: 20,
-    },
-    textAreaInput: {
-        minHeight: 80,
-        textAlignVertical: 'top',
+        paddingVertical: 12,
     },
     errorText: {
         fontSize: 12,
         marginTop: 4,
     },
-    
-    // Layout
+    dateSelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderWidth: 1,
+        borderRadius: 8,
+        minHeight: 50,
+    },
+    dateText: {
+        marginLeft: 8,
+        fontSize: 16,
+    },
     row: {
         flexDirection: 'row',
-        gap: 12,
+        marginHorizontal: -6,
     },
     halfWidth: {
         flex: 1,
+        marginHorizontal: 6,
     },
-    
-    // Date Button
-    dateButton: {
+    switchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    switchLabel: {
+        flex: 1,
+        marginRight: 12,
+    },
+    switchText: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    switchDescription: {
+        fontSize: 14,
+        marginTop: 2,
+    },
+    bottomSpacing: {
+        height: 40,
+    },
+    // Modal Styles
+    modalContainer: {
+        flex: 1,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+    },
+    closeButton: {
+        padding: 4,
+    },
+    modalContent: {
+        flex: 1,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+    },
+    categoryOption: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
         borderWidth: 1,
         borderRadius: 12,
-        gap: 12,
-    },
-    dateButtonText: {
-        fontSize: 16,
-    },
-    
-    // Switch Row
-    switchRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    switchInfo: {
-        flex: 1,
-        marginRight: 16,
-    },
-    switchLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 2,
-    },
-    switchDescription: {
-        fontSize: 14,
-    },
-    
-    // Action Buttons
-    actionsContainer: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 24,
-        marginBottom: 32,
-    },
-    primaryButton: {
-        flex: 2,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        borderRadius: 12,
-        gap: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    primaryButtonText: {
-        color: '#ffffff',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    secondaryButton: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        borderRadius: 12,
-    },
-    secondaryButtonText: {
-        fontSize: 16,
-        fontWeight: 'bold',
+        marginBottom: 12,
     },
 });
 

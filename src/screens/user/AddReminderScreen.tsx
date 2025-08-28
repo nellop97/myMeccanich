@@ -29,7 +29,7 @@ import {
   AlertTriangle,
   Info,
 } from 'lucide-react-native';
-import { DateTimePicker } from '../components/DatePicker';
+import { DatePicker } from '../../components/DatePicker';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
 import firestore from '@react-native-firebase/firestore';
@@ -423,7 +423,7 @@ const AddReminderScreen = () => {
       </TouchableOpacity>
 
       {showDatePicker && (
-        <DateTimePicker
+        <DatePicker
           value={formData.dueDate}
           mode="date"
           display="default"

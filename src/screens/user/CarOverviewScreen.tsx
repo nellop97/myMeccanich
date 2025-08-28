@@ -21,7 +21,7 @@ import {
 } from 'lucide-react-native';
 
 import { useStore } from '../../store';
-import { useUserCarsStore } from '@/src/store/useCarsStore';
+import { useCarsStore } from '../../store/useCarsStore';
 
 interface RouteParams {
   carId: string;
@@ -32,7 +32,7 @@ const CarOverviewScreen = () => {
   const route = useRoute();
   const { carId } = route.params as RouteParams;
   const { darkMode } = useStore();
-  const { getCarById, getCarStats } = useUserCarsStore();
+  const { getCarById, getCarStats } = useCarsStore();
 
   const [refreshing, setRefreshing] = useState(false);
 

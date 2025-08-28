@@ -41,7 +41,7 @@ import { db, auth } from '../../services/firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 import { useStore } from '../../store';
-import { useCarsStore } from '@/src/store/useCarsStore';
+import { useCarsStore } from '../../store/useCarsStore';
 import {userInfo} from "node:os";
 
 const { width: screenWidth } = Dimensions.get('window');

@@ -1,4 +1,4 @@
-// src/store/useCarsStore.ts - Store Auto con integrazione Firestore
+// src/store/useCarsStore.ts - Store Auto con integrazione Firestore SISTEMATO
 import { create } from 'zustand';
 import { 
   collection, 
@@ -100,12 +100,19 @@ export interface Expense {
   createdAt?: any;
 }
 
+export interface VehicleStats {
+  totalExpenses: number;
+  maintenanceCount: number;
+  avgFuelConsumption: number;
+  totalFuelCost: number;
+}
+
 // ====================================
 // INTERFACCIA DELLO STORE
 // ====================================
 
 interface CarsStore {
-  // Stati
+  // === STATI ===
   vehicles: Vehicle[];
   maintenanceRecords: MaintenanceRecord[];
   fuelRecords: FuelRecord[];
@@ -142,13 +149,19 @@ interface CarsStore {
   deleteExpense: (expenseId: string) => Promise<void>;
   
   // === UTILITY ===
+  // Funzioni principali per recuperare dati
   getVehicleById: (vehicleId: string) => Vehicle | undefined;
-  getVehicleStats: (vehicleId: string) => {
-    totalExpenses: number;
-    maintenanceCount: number;
-    avgFuelConsumption: number;
-    totalFuelCost: number;
-  };
+  getVehicleStats: (vehicleId: string) => VehicleStats;
+  
+  // Alias per compatibilità (funzioni deprecate ma mantenute per compatibilità)
+  getCarById: (vehicleId: string) => Vehicle | undefined;
+  getCarStats: (vehicleId: string) => VehicleStats;
+  getCars: () => Vehicle[];
+  
+  // Funzioni specifiche per AddMaintenanceScreen
+  addMaintenance: (vehicleId: string, maintenanceData: any) => Promise<string>;
+  updateMileage: (vehicleId: string, newMileage: number) => Promise<void>;
+  addReminder: (vehicleId: string, reminderData: any) => Promise<string>;
   
   // === CLEANUP ===
   cleanup: () => void;
@@ -414,9 +427,8 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
     }
   },
   
-  // === METODI PER CARBURANTE (implementazione simile) ===
+  // === METODI PER CARBURANTE ===
   fetchFuelRecords: async (vehicleId: string) => {
-    // Implementazione simile a fetchMaintenanceRecords
     set({ isLoading: true, error: null });
     try {
       const fuelQuery = query(
@@ -433,12 +445,15 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
       
       set({ fuelRecords: records, isLoading: false });
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore recupero carburante:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero dei record carburante',
+        isLoading: false 
+      });
     }
   },
   
   addFuelRecord: async (record) => {
-    // Implementazione simile a addMaintenanceRecord
     set({ isLoading: true, error: null });
     try {
       const docRef = await addDoc(collection(db, 'fuel_records'), {
@@ -446,39 +461,70 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
         createdAt: serverTimestamp()
       });
       
+      const newRecord = {
+        ...record,
+        id: docRef.id,
+        createdAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        fuelRecords: [newRecord, ...state.fuelRecords],
+        isLoading: false
+      }));
+      
       return docRef.id;
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore aggiunta carburante:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta del record carburante',
+        isLoading: false 
+      });
       throw error;
     }
   },
   
   updateFuelRecord: async (recordId, updates) => {
-    // Implementazione simile
     set({ isLoading: true, error: null });
     try {
       const recordRef = doc(db, 'fuel_records', recordId);
       await updateDoc(recordRef, updates);
-      set({ isLoading: false });
+      
+      set(state => ({
+        fuelRecords: state.fuelRecords.map(r => 
+          r.id === recordId ? { ...r, ...updates } : r
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore aggiornamento carburante:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento del record carburante',
+        isLoading: false 
+      });
       throw error;
     }
   },
   
   deleteFuelRecord: async (recordId) => {
-    // Implementazione simile
     set({ isLoading: true, error: null });
     try {
       await deleteDoc(doc(db, 'fuel_records', recordId));
-      set({ isLoading: false });
+      
+      set(state => ({
+        fuelRecords: state.fuelRecords.filter(r => r.id !== recordId),
+        isLoading: false
+      }));
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore eliminazione carburante:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione del record carburante',
+        isLoading: false 
+      });
       throw error;
     }
   },
   
-  // === METODI PER SPESE (implementazione simile) ===
+  // === METODI PER SPESE ===
   fetchExpenses: async (vehicleId: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -496,7 +542,11 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
       
       set({ expenses, isLoading: false });
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore recupero spese:', error);
+      set({ 
+        error: error.message || 'Errore nel recupero delle spese',
+        isLoading: false 
+      });
     }
   },
   
@@ -508,9 +558,24 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
         createdAt: serverTimestamp()
       });
       
+      const newExpense = {
+        ...expense,
+        id: docRef.id,
+        createdAt: new Date().toISOString()
+      };
+      
+      set(state => ({
+        expenses: [newExpense, ...state.expenses],
+        isLoading: false
+      }));
+      
       return docRef.id;
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore aggiunta spesa:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta della spesa',
+        isLoading: false 
+      });
       throw error;
     }
   },
@@ -520,9 +585,19 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
     try {
       const expenseRef = doc(db, 'expenses', expenseId);
       await updateDoc(expenseRef, updates);
-      set({ isLoading: false });
+      
+      set(state => ({
+        expenses: state.expenses.map(e => 
+          e.id === expenseId ? { ...e, ...updates } : e
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore aggiornamento spesa:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiornamento della spesa',
+        isLoading: false 
+      });
       throw error;
     }
   },
@@ -531,16 +606,25 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await deleteDoc(doc(db, 'expenses', expenseId));
-      set({ isLoading: false });
+      
+      set(state => ({
+        expenses: state.expenses.filter(e => e.id !== expenseId),
+        isLoading: false
+      }));
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      console.error('Errore eliminazione spesa:', error);
+      set({ 
+        error: error.message || 'Errore nell\'eliminazione della spesa',
+        isLoading: false 
+      });
       throw error;
     }
   },
   
-  // === UTILITY ===
+  // === UTILITY - FUNZIONI PRINCIPALI ===
   getVehicleById: (vehicleId: string) => {
-    return get().vehicles.find(v => v.id === vehicleId);
+    const state = get();
+    return state.vehicles.find(v => v.id === vehicleId);
   },
   
   getVehicleStats: (vehicleId: string) => {
@@ -553,7 +637,7 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
     const totalFuelCost = fuel.reduce((sum, f) => sum + f.totalCost, 0);
     const maintenanceCount = maintenance.length;
     
-    // Calcola consumo medio
+    // Calcola consumo medio carburante
     let avgFuelConsumption = 0;
     if (fuel.length > 1) {
       const sortedFuel = [...fuel].sort((a, b) => a.mileage - b.mileage);
@@ -570,6 +654,65 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
       avgFuelConsumption,
       totalFuelCost,
     };
+  },
+
+  // === FUNZIONI SPECIFICHE PER AddMaintenanceScreen ===
+  
+  // Aggiunge manutenzione con signature compatibile
+  addMaintenance: async (vehicleId: string, maintenanceData: any) => {
+    const record = {
+      vehicleId,
+      ...maintenanceData
+    };
+    return get().addMaintenanceRecord(record);
+  },
+
+  // Aggiorna solo il chilometraggio di un veicolo
+  updateMileage: async (vehicleId: string, newMileage: number) => {
+    return get().updateVehicle(vehicleId, {
+      currentMileage: newMileage,
+      lastUpdatedMileage: new Date().toISOString()
+    });
+  },
+
+  // Aggiunge promemoria collegato a un veicolo
+  addReminder: async (vehicleId: string, reminderData: any) => {
+    set({ isLoading: true, error: null });
+    try {
+      const docRef = await addDoc(collection(db, 'reminders'), {
+        vehicleId,
+        ...reminderData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      console.log(`Promemoria aggiunto per veicolo ${vehicleId}:`, docRef.id);
+      set({ isLoading: false });
+      return docRef.id;
+    } catch (error: any) {
+      console.error('Errore aggiunta promemoria:', error);
+      set({ 
+        error: error.message || 'Errore nell\'aggiunta del promemoria',
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  // === ALIAS PER COMPATIBILITÀ (DEPRECATI) ===
+  getCarById: (vehicleId: string) => {
+    // Alias per compatibilità - usa getVehicleById
+    return get().getVehicleById(vehicleId);
+  },
+  
+  getCarStats: (vehicleId: string) => {
+    // Alias per compatibilità - usa getVehicleStats
+    return get().getVehicleStats(vehicleId);
+  },
+
+  // Funzione per ottenere `cars` come alias di `vehicles` (per compatibilità AddMaintenanceScreen)
+  getCars: () => {
+    return get().vehicles;
   },
   
   // === CLEANUP ===
@@ -592,3 +735,7 @@ export const useCarsStore = create<CarsStore>((set, get) => ({
     });
   }
 }));
+
+// === EXPORT PER COMPATIBILITÀ ===
+// Alias deprecato ma mantenuto per compatibilità
+export const useUserCarsStore = useCarsStore;
