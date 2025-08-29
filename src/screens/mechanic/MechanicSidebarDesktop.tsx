@@ -1,475 +1,599 @@
-// src/screens/mechanic/MechanicSidebarDesktop.tsx
-import React, { useState } from "react";
+// src/screens/mechanic/MechanicSidebarDesktop.tsx - COMPONENTE COMPLETO
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Platform,
-  Pressable,
-} from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useStore } from "../../store";
-import { useAuth } from "../../hooks/useAuth";
-import { Portal, Dialog, Button } from "react-native-paper";
+  Alert,
+} from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '../../hooks/useAuth';
+import { useStore } from '../../store';
+import { useMechanicStats } from '../../hooks/useMechanicStats';
 
-interface MechanicSidebarDesktopProps {
+const SIDEBAR_WIDTH = 280;
+
+interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
-// Menu items configuration
-const menuSections = [
-  {
-    id: "main",
-    title: "Dashboard",
-    items: [{ id: "dashboard", label: "Dashboard", icon: "view-dashboard" }],
-  },
-  {
-    id: "workshop",
-    title: "Officina",
-    items: [
-      {
-        id: "AllCarsInWorkshop",
-        label: "Auto in Officina",
-        icon: "car-multiple",
-      },
-      { id: "MechanicCalendar", label: "Calendario", icon: "calendar-month" },
-      {
-        id: "NewAppointment",
-        label: "Nuovo Appuntamento",
-        icon: "calendar-plus",
-      },
-    ],
-  },
-  {
-    id: "invoicing",
-    title: "Fatturazione",
-    items: [
-      {
-        id: "InvoicingDashboard",
-        label: "Dashboard Fatture",
-        icon: "file-document-multiple",
-      },
-      {
-        id: "CreateInvoice",
-        label: "Nuova Fattura",
-        icon: "file-document-edit",
-      },
-      { id: "CustomersList", label: "Clienti", icon: "account-group" },
-    ],
-  },
-  {
-    id: "reports",
-    title: "Report",
-    items: [
-      { id: "statistics", label: "Statistiche", icon: "chart-bar" },
-      { id: "revenue", label: "Ricavi", icon: "cash-multiple" },
-    ],
-  },
-];
+interface MenuItem {
+  id: string;
+  label: string;
+  icon: string;
+  badge?: number;
+  color?: string;
+}
 
-const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
-  activeTab,
-  onTabChange,
-}) => {
-  const { darkMode, toggleDarkMode } = useStore();
+const MechanicSidebarDesktop: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
-  const [expandedSections, setExpandedSections] = useState<string[]>([
-    "main",
-    "workshop",
-    "invoicing",
-  ]);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const store = useStore();
+  const { darkMode } = store;
+  
+  // Funzione sicura per toggle dark mode
+  const handleToggleDarkMode = () => {
+    try {
+      if (store && typeof store.toggleDarkMode === 'function') {
+        store.toggleDarkMode();
+      } else {
+        console.warn('toggleDarkMode function not available');
+      }
+    } catch (error) {
+      console.error('Error toggling dark mode:', error);
+    }
+  };
+  const [expandedSections, setExpandedSections] = useState<string[]>(['main']);
 
   // Tema dinamico
   const theme = {
-    background: darkMode ? "#1e293b" : "#ffffff",
-    surface: darkMode ? "#334155" : "#f8fafc",
-    text: darkMode ? "#f1f5f9" : "#0f172a",
-    textSecondary: darkMode ? "#94a3b8" : "#64748b",
-    border: darkMode ? "#334155" : "#e2e8f0",
-    primary: "#3b82f6",
-    danger: "#ef4444",
-    hover: darkMode ? "#334155" : "#f1f5f9",
-    activeBackground: darkMode ? "#3b82f6" : "#eff6ff",
-    activeText: darkMode ? "#ffffff" : "#3b82f6",
+    background: darkMode ? '#0f172a' : '#ffffff',
+    surface: darkMode ? '#1e293b' : '#f8fafc',
+    card: darkMode ? '#334155' : '#ffffff',
+    primary: '#3b82f6',
+    primaryLight: darkMode ? '#1e40af' : '#dbeafe',
+    text: darkMode ? '#f1f5f9' : '#0f172a',
+    textSecondary: darkMode ? '#94a3b8' : '#64748b',
+    border: darkMode ? '#334155' : '#e2e8f0',
+    success: '#10b981',
+    warning: '#f59e0b',
+    danger: '#ef4444',
+    accent: darkMode ? '#7c3aed' : '#a855f7',
+  };
+
+  // Importa useMechanicStats per ottenere dati reali
+  const { stats } = useMechanicStats();
+
+  // Menu items con badge dinamici basati sui dati reali
+  const menuSections = {
+    main: {
+      title: 'Principale',
+      items: [
+        { id: 'dashboard', label: 'Dashboard', icon: 'view-dashboard', color: theme.primary },
+        { 
+          id: 'AllCarsInWorkshop', 
+          label: 'Auto in Officina', 
+          icon: 'car-multiple', 
+          badge: stats.carsInWorkshop, 
+          color: theme.success 
+        },
+        { 
+          id: 'MechanicCalendar', 
+          label: 'Calendario', 
+          icon: 'calendar', 
+          badge: stats.appointmentsToday, 
+          color: theme.accent 
+        },
+        { id: 'NewAppointment', label: 'Nuovo Appuntamento', icon: 'car', color: theme.accent },
+      ] as MenuItem[]
+    },
+    business: {
+      title: 'Gestione',
+      items: [
+        { 
+          id: 'InvoicingDashboard', 
+          label: 'Fatturazione', 
+          icon: 'receipt', 
+          badge: stats.pendingInvoices, 
+          color: theme.warning 
+        },
+        { 
+          id: 'CustomersList', 
+          label: 'Clienti', 
+          icon: 'account-group', 
+          badge: stats.activeCustomers,
+          color: theme.primary 
+        },
+        { id: 'parts', label: 'Ricambi', icon: 'wrench', color: theme.success },
+        { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.accent },
+      ] as MenuItem[]
+    },
+    account: {
+      title: 'Account',
+      items: [
+        { id: 'Profile', label: 'Il Mio Profilo', icon: 'account', color: theme.text },
+        { id: 'settings', label: 'Impostazioni', icon: 'cog', color: theme.textSecondary },
+      ] as MenuItem[]
+    }
   };
 
   const toggleSection = (sectionId: string) => {
-    setExpandedSections((prev) =>
+    setExpandedSections(prev => 
       prev.includes(sectionId)
-        ? prev.filter((id) => id !== sectionId)
-        : [...prev, sectionId],
+        ? prev.filter(id => id !== sectionId)
+        : [...prev, sectionId]
     );
   };
 
   const handleMenuNavigation = (itemId: string) => {
+    // For now, just handle the main dashboard items
+    // You can extend this based on your navigation needs
     switch (itemId) {
-      case "dashboard":
+      case 'dashboard':
+        // Stay on current dashboard - no navigation needed
         break;
-      case "AllCarsInWorkshop":
-        onTabChange("cars");
+      case 'AllCarsInWorkshop':
+        onTabChange('cars'); // This will change the tab in the dashboard
         break;
-      case "MechanicCalendar":
-        onTabChange("calendar");
+      case 'MechanicCalendar':
+        onTabChange('calendar'); // This will change the tab in the dashboard
         break;
-      case "NewAppointment":
+      case 'NewAppointment':
+        // Navigate to the actual NewAppointment screen
+        // You might need to pass navigation prop or use a different method
         break;
-      case "InvoicingDashboard":
-        onTabChange("invoices");
+      case 'InvoicingDashboard':
+        onTabChange('invoices'); // This will change the tab in the dashboard
         break;
-      case "CustomersList":
-        onTabChange("customers");
+      case 'CustomersList':
+        onTabChange('customers'); // This will change the tab in the dashboard
         break;
-      case "Profile":
+      case 'Profile':
+        // Navigate to profile screen
         break;
       default:
-        console.log("Navigation not implemented for:", itemId);
+        console.log('Navigation not implemented for:', itemId);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      console.log("🚪 Desktop Sidebar: Iniziando logout...");
-
-      if (!logout || typeof logout !== "function") {
-        throw new Error("Logout function not available");
-      }
-
-      await logout();
-      console.log("✅ Desktop Sidebar: Logout completato con successo");
-      setShowLogoutDialog(false);
-    } catch (error) {
-      console.error("❌ Desktop Sidebar: Errore durante il logout:", error);
-
-      if (typeof window !== "undefined" && window.location) {
-        console.log("🔄 Forcing page reload as fallback...");
-        window.location.reload();
-      }
-    }
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Sei sicuro di voler uscire?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        { 
+          text: 'Esci', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🚪 Desktop Sidebar: Iniziando logout...');
+              
+              // Verifica che la funzione logout esista
+              if (!logout || typeof logout !== 'function') {
+                throw new Error('Logout function not available');
+              }
+              
+              await logout();
+              console.log('✅ Desktop Sidebar: Logout completato con successo');
+              
+            } catch (error) {
+              console.error('❌ Desktop Sidebar: Errore durante il logout:', error);
+              
+              // Forza il reload della pagina se siamo su web come fallback
+              if (typeof window !== 'undefined' && window.location) {
+                console.log('🔄 Forcing page reload as fallback...');
+                window.location.reload();
+              } else {
+                Alert.alert(
+                  'Errore Logout',
+                  'Si è verificato un errore durante il logout. L\'app verrà riavviata.',
+                  [{ 
+                    text: 'OK',
+                    onPress: () => {
+                      // Forza restart dell'app su mobile se possibile
+                      if (typeof require !== 'undefined') {
+                        try {
+                          require('react-native').NativeModules.DevSettings?.reload?.();
+                        } catch (e) {
+                          console.log('Could not restart app');
+                        }
+                      }
+                    }
+                  }]
+                );
+              }
+            }
+          }
+        }
+      ]
+    );
   };
 
-  const getUserInitials = () => {
-    if (user?.displayName) {
-      return user.displayName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase();
-    }
-    if (user?.email) {
-      return user.email[0].toUpperCase();
-    }
-    return "U";
-  };
+  // Render dell'header
+  const renderHeader = () => (
+    <View style={[styles.header, { borderBottomColor: theme.border }]}>
+      <View style={[styles.logoContainer, { backgroundColor: theme.primary }]}>
+        <MaterialCommunityIcons name="car-wrench" size={28} color="#ffffff" />
+      </View>
+      
+      <View style={styles.headerText}>
+        <Text style={[styles.logoText, { color: theme.text }]}>MyMeccanic</Text>
+        <Text style={[styles.logoSubtext, { color: theme.textSecondary }]}>Dashboard</Text>
+      </View>
+    </View>
+  );
 
-  return (
-    <>
-      <View
-        style={[
-          styles.sidebar,
-          { backgroundColor: theme.background, borderRightColor: theme.border },
-        ]}
-      >
-        {/* Header */}
-        <View style={[styles.header, { borderBottomColor: theme.border }]}>
-          <View style={styles.logoContainer}>
-            <MaterialCommunityIcons
-              name="wrench"
-              size={28}
-              color={theme.primary}
-            />
-            <Text style={[styles.logoText, { color: theme.text }]}>
-              MyMechanic
+  // Render del profilo utente
+  const renderUserProfile = () => (
+    <View style={[styles.userProfile, { borderBottomColor: theme.border }]}>
+      <LinearGradient
+        colors={[theme.primary, theme.accent]}
+        style={styles.profileGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      
+      <View style={styles.profileContent}>
+        <View style={[styles.userAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+          <Text style={styles.userAvatarText}>MG</Text>
+        </View>
+        
+        <View style={styles.userInfo}>
+          <View style={styles.userNameRow}>
+            <Text style={[styles.userName, { color: 'rgba(255,255,255,0.95)' }]}>
+              meccanico g
             </Text>
+            {user?.verified && (
+              <MaterialCommunityIcons 
+                name="check-decagram" 
+                size={16} 
+                color="#ffffff" 
+              />
+            )}
+          </View>
+          
+          <Text style={[styles.workshopName, { color: 'rgba(255,255,255,0.8)' }]}>
+            {user?.workshopName || 'officina 1'}
+          </Text>
+          
+          <View style={styles.quickStats}>
+            <View style={styles.quickStat}>
+              <MaterialCommunityIcons name="star" size={14} color="#fbbf24" />
+              <Text style={styles.quickStatText}>{user?.rating?.toFixed(1) || '0.0'}</Text>
+            </View>
+            
+            <View style={styles.quickStat}>
+              <MaterialCommunityIcons name="account-group" size={14} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.quickStatText}>
+                {user?.reviewsCount || 0} recensioni
+              </Text>
+            </View>
           </View>
         </View>
+      </View>
+    </View>
+  );
 
-        {/* User Profile Section */}
-        <TouchableOpacity
-          style={[styles.profileSection, { backgroundColor: theme.surface }]}
-          onPress={() => handleMenuNavigation("Profile")}
-        >
-          <View style={[styles.userAvatar, { backgroundColor: theme.primary }]}>
-            <Text style={styles.userAvatarText}>{getUserInitials()}</Text>
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={[styles.userName, { color: theme.text }]}>
-              {user?.displayName || "Meccanico"}
-            </Text>
-            <Text style={[styles.userRole, { color: theme.textSecondary }]}>
-              Amministratore
-            </Text>
-          </View>
+  // Render di un menu item
+  const renderMenuItem = (item: MenuItem, isActive: boolean) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[
+        styles.menuItem,
+        isActive && { backgroundColor: theme.primaryLight },
+      ]}
+      onPress={() => handleMenuNavigation(item.id)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.menuItemContent}>
+        <View style={[styles.menuItemIcon, isActive && { backgroundColor: theme.primary }]}>
           <MaterialCommunityIcons
-            name="chevron-right"
+            name={item.icon as any}
             size={20}
+            color={isActive ? '#ffffff' : (item.color || theme.textSecondary)}
+          />
+        </View>
+        
+        <Text
+          style={[
+            styles.menuItemText,
+            { color: isActive ? theme.primary : theme.text }
+          ]}
+        >
+          {item.label}
+        </Text>
+      </View>
+      
+      {item.badge && item.badge > 0 && (
+        <View style={[styles.badge, { backgroundColor: theme.danger }]}>
+          <Text style={styles.badgeText}>
+            {item.badge > 99 ? '99+' : item.badge}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  // Render di una sezione di menu
+  const renderMenuSection = (sectionId: string, section: any) => {
+    const isExpanded = expandedSections.includes(sectionId);
+    
+    return (
+      <View key={sectionId} style={styles.menuSection}>
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={() => toggleSection(sectionId)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            {section.title}
+          </Text>
+          <MaterialCommunityIcons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={16}
             color={theme.textSecondary}
           />
         </TouchableOpacity>
-
-        {/* Menu Items */}
-        <ScrollView
-          style={styles.menuContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {menuSections.map((section) => (
-            <View key={section.id} style={styles.menuSection}>
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => toggleSection(section.id)}
-              >
-                <Text
-                  style={[styles.sectionTitle, { color: theme.textSecondary }]}
-                >
-                  {section.title}
-                </Text>
-                <MaterialCommunityIcons
-                  name={
-                    expandedSections.includes(section.id)
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
-                  size={18}
-                  color={theme.textSecondary}
-                />
-              </TouchableOpacity>
-
-              {expandedSections.includes(section.id) && (
-                <View style={styles.sectionItems}>
-                  {section.items.map((item) => {
-                    const isActive = activeTab === item.id;
-
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={[
-                          styles.menuItem,
-                          isActive && [
-                            styles.menuItemActive,
-                            { backgroundColor: theme.activeBackground },
-                          ],
-                        ]}
-                        onPress={() => handleMenuNavigation(item.id)}
-                      >
-                        <MaterialCommunityIcons
-                          name={item.icon as any}
-                          size={20}
-                          color={
-                            isActive ? theme.activeText : theme.textSecondary
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.menuItemText,
-                            { color: isActive ? theme.activeText : theme.text },
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* Footer Actions */}
-        <View style={[styles.footer, { borderTopColor: theme.border }]}>
-          <TouchableOpacity
-            style={styles.footerButton}
-            onPress={toggleDarkMode}
-          >
-            <MaterialCommunityIcons
-              name={darkMode ? "weather-sunny" : "weather-night"}
-              size={20}
-              color={theme.textSecondary}
-            />
-            <Text
-              style={[styles.footerButtonText, { color: theme.textSecondary }]}
-            >
-              {darkMode ? "Tema Chiaro" : "Tema Scuro"}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Pulsante Logout con Pressable per web */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.footerButton,
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={() => setShowLogoutDialog(true)}
-          >
-            <MaterialCommunityIcons
-              name="logout"
-              size={20}
-              color={theme.danger}
-            />
-            <Text style={[styles.footerButtonText, { color: theme.danger }]}>
-              Esci
-            </Text>
-          </Pressable>
-        </View>
+        
+        {isExpanded && (
+          <View style={styles.sectionItems}>
+            {section.items.map((item: MenuItem) => 
+              renderMenuItem(item, activeTab === item.id)
+            )}
+          </View>
+        )}
       </View>
+    );
+  };
 
-      {/* Dialog di conferma logout con Portal */}
-      <Portal>
-        <Dialog
-          visible={showLogoutDialog}
-          onDismiss={() => setShowLogoutDialog(false)}
-          style={styles.dialogContainer}
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Header */}
+      {renderHeader()}
+      
+      {/* Profilo utente */}
+      {renderUserProfile()}
+      
+      {/* Menu di navigazione */}
+      <ScrollView 
+        style={styles.menuContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {Object.entries(menuSections).map(([sectionId, section]) =>
+          renderMenuSection(sectionId, section)
+        )}
+      </ScrollView>
+      
+      {/* Footer con azioni */}
+      <View style={[styles.footer, { borderTopColor: theme.border }]}>
+        {/* Toggle tema */}
+        <TouchableOpacity
+          style={styles.footerButton}
+          onPress={handleToggleDarkMode}
+          activeOpacity={0.7}
         >
-          <Dialog.Title>Conferma Logout</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ color: theme.text }}>
-              Sei sicuro di voler uscire dall'applicazione?
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button
-              onPress={() => setShowLogoutDialog(false)}
-              textColor={theme.textSecondary}
-            >
-              Annulla
-            </Button>
-            <Button onPress={handleLogout} textColor={theme.danger}>
-              Esci
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </>
+          <MaterialCommunityIcons
+            name={darkMode ? 'weather-sunny' : 'weather-night'}
+            size={20}
+            color={theme.textSecondary}
+          />
+          <Text style={[styles.footerButtonText, { color: theme.textSecondary }]}>
+            {darkMode ? 'Tema Chiaro' : 'Tema Scuro'}
+          </Text>
+        </TouchableOpacity>
+        
+        {/* Logout */}
+        <TouchableOpacity
+          style={styles.footerButton}
+          onPress={handleLogout}
+
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons
+            name="logout"
+            size={20}
+            color={theme.danger}
+          />
+          <Text style={[styles.footerButtonText, { color: theme.danger }]}>
+            Esci
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  sidebar: {
-    position: "absolute",
+  container: {
+    position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    width: 280,
-    borderRightWidth: 1,
-    zIndex: 100,
+    width: SIDEBAR_WIDTH,
+    zIndex: 1000,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-
+  
   // Header
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
     borderBottomWidth: 1,
   },
   logoContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  headerText: {
+    flex: 1,
   },
   logoText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginLeft: 10,
+    fontSize: 18,
+    fontWeight: '700',
   },
-
-  // Profile Section
-  profileSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    marginHorizontal: 12,
-    marginVertical: 8,
-    borderRadius: 12,
+  logoSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  
+  // Profilo utente
+  userProfile: {
+    position: 'relative',
+    borderBottomWidth: 1,
+    overflow: 'hidden',
+  },
+  profileGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  profileContent: {
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   userAvatarText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "bold",
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   userInfo: {
     flex: 1,
   },
+  userNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   userName: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
+    marginRight: 6,
   },
-  userRole: {
+  workshopName: {
     fontSize: 12,
-    marginTop: 2,
+    fontWeight: '500',
+    marginBottom: 8,
   },
-
-  // Menu
+  quickStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quickStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quickStatText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+  },
+  
+  // Menu di navigazione
   menuContainer: {
     flex: 1,
+    paddingHorizontal: 16,
     paddingVertical: 8,
   },
   menuSection: {
-    marginBottom: 8,
+    marginBottom: 16,
   },
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   sectionItems: {
-    paddingHorizontal: 12,
+    gap: 2,
   },
   menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    marginBottom: 2,
+    marginBottom: 1,
   },
-  menuItemActive: {
-    marginHorizontal: 0,
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  menuItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   menuItemText: {
     fontSize: 14,
-    marginLeft: 12,
-    flex: 1,
+    fontWeight: '500',
   },
-
+  badge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  
   // Footer
   footer: {
     borderTopWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   footerButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
   footerButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     marginLeft: 12,
-  },
-
-  // Dialog
-  dialogContainer: {
-    maxWidth: 400,
-    alignSelf: "center",
+    fontWeight: '500',
   },
 });
 
