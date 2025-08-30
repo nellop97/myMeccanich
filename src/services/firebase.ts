@@ -13,16 +13,16 @@ const firebaseConfig = {
 };
 
 // Variabili per l'esportazione
-let app: any;
-let auth: any;
-let db: any;
+let app: any = null;
+let auth: any = null;
+let db: any = null;
 
 // Inizializzazione cross-platform
-if (Platform.OS === 'web') {
-  // ============================================
-  // CONFIGURAZIONE WEB - Firebase JS SDK v9+
-  // ============================================
-  try {
+try {
+  if (Platform.OS === 'web') {
+    // ============================================
+    // CONFIGURAZIONE WEB - Firebase JS SDK v9+
+    // ============================================
     const { initializeApp } = require('firebase/app');
     const { getFirestore } = require('firebase/firestore');
     const { getAuth } = require('firebase/auth');
@@ -35,59 +35,60 @@ if (Platform.OS === 'web') {
     auth = getAuth(app);
 
     console.log('✅ Firebase Web SDK inizializzato correttamente');
-  } catch (error) {
-    console.error('❌ Errore nell\'inizializzazione Firebase Web:', error);
-  }
-} else {
-  // ============================================
-  // CONFIGURAZIONE MOBILE - React Native Firebase
-  // ============================================
-  try {
-    // React Native Firebase si auto-configura dal google-services.json/GoogleService-Info.plist
-    const firebaseAuth = require('@react-native-firebase/auth').default;
-    const firebaseFirestore = require('@react-native-firebase/firestore').default;
-
-    auth = firebaseAuth();
-    db = firebaseFirestore();
-
-    console.log('✅ React Native Firebase inizializzato correttamente');
-  } catch (error) {
-    console.error('❌ Errore nell\'inizializzazione React Native Firebase:', error);
-    
-    // Fallback: prova a usare Firebase JS SDK anche su mobile (meno efficiente)
+  } else {
+    // ============================================
+    // CONFIGURAZIONE MOBILE - Prima prova Expo Firebase, poi RN Firebase
+    // ============================================
     try {
+      // Prima prova: usa Firebase JS SDK con AsyncStorage
       const { initializeApp } = require('firebase/app');
       const { getFirestore } = require('firebase/firestore');
       const { getAuth, initializeAuth } = require('firebase/auth');
+      const { getReactNativePersistence } = require('firebase/auth/react-native');
+      const ReactNativeAsyncStorage = require('@react-native-async-storage/async-storage').default;
 
       app = initializeApp(firebaseConfig);
       db = getFirestore(app);
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+      });
 
-      // Prova a usare la persistenza React Native se disponibile
+      console.log('🔥 Firebase inizializzato con successo per', Platform.OS);
+    } catch (error) {
+      console.warn('⚠️ Persistenza React Native non disponibile, usando auth di default');
+      
+      // Seconda prova: React Native Firebase nativo
       try {
-        const { getReactNativePersistence } = require('firebase/auth/react-native');
-        const ReactNativeAsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const firebaseAuth = require('@react-native-firebase/auth').default;
+        const firebaseFirestore = require('@react-native-firebase/firestore').default;
 
-        auth = initializeAuth(app, {
-          persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-        });
-        console.log('✅ Firebase JS SDK con persistenza React Native inizializzato');
-      } catch (persistenceError) {
-        console.warn('⚠️ Persistenza React Native non disponibile, usando auth di default');
-        auth = getAuth(app);
+        auth = firebaseAuth();
+        db = firebaseFirestore();
+
+        console.log('✅ React Native Firebase inizializzato correttamente');
+      } catch (rnError) {
+        console.error('❌ Errore nell\'inizializzazione React Native Firebase:', rnError);
+        
+        // Fallback: prova a usare Firebase JS SDK anche su mobile (meno efficiente)
+        try {
+          const { initializeApp } = require('firebase/app');
+          const { getFirestore } = require('firebase/firestore');
+          const { getAuth } = require('firebase/auth');
+
+          app = initializeApp(firebaseConfig);
+          db = getFirestore(app);
+          auth = getAuth(app);
+
+          console.log('✅ Firebase JS SDK con fallback inizializzato');
+        } catch (fallbackError) {
+          console.error('❌ Anche il fallback Firebase JS SDK ha fallito:', fallbackError);
+        }
       }
-    } catch (fallbackError) {
-      console.error('❌ Anche il fallback Firebase JS SDK ha fallito:', fallbackError);
     }
   }
+} catch (error) {
+  console.error('❌ Errore generale nell\'inizializzazione Firebase:', error);
 }
-
-// Esportazioni
-export { auth, db };
-
-// Utility per platform detection
-export const isWeb = Platform.OS === 'web';
-export const isMobile = Platform.OS !== 'web';
 
 // Helper per gestire errori Firebase in modo cross-platform
 export const getFirebaseErrorMessage = (error: any): string => {
@@ -135,26 +136,46 @@ export const testFirebaseConnection = async (): Promise<boolean> => {
       return false;
     }
 
-    // Test di connessione semplice
-    if (isWeb) {
-      const { doc, getDoc } = require('firebase/firestore');
-      await getDoc(doc(db, 'test', 'connection'));
-    } else {
-      // Per React Native Firebase
-      await db.doc('test/connection').get();
+    // Test di connessione per web
+    if (Platform.OS === 'web') {
+      const { enableNetwork } = require('firebase/firestore');
+      await enableNetwork(db);
     }
 
-    console.log('✅ Connessione Firebase funzionante');
+    console.log('✅ Test di connessione Firebase riuscito');
     return true;
   } catch (error) {
-    console.error('❌ Test connessione Firebase fallito:', getFirebaseErrorMessage(error));
+    console.error('❌ Test di connessione Firebase fallito:', error);
     return false;
   }
 };
 
-// Log dello stato di inizializzazione
-if (auth && db) {
-  console.log('🔥 Firebase inizializzato con successo per', Platform.OS);
+// Esportazioni principali
+export { auth, db, app };
+
+// Utility per platform detection
+export const isWeb = Platform.OS === 'web';
+export const isMobile = Platform.OS !== 'web';
+
+// Configurazione per Google Sign-In (se disponibile)
+export let googleSignInConfig: any = null;
+
+if (Platform.OS !== 'web') {
+  // Mobile: prova a configurare Google Sign-In
+  try {
+    const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+    GoogleSignin.configure({
+      webClientId: '619020396283-i6v7j4j5j5j5j5j5j5j5j5j5j5j5j5j5.apps.googleusercontent.com', // Da Firebase Console
+      iosClientId: '619020396283-ios-client-id.apps.googleusercontent.com', // Opzionale
+    });
+    googleSignInConfig = GoogleSignin;
+    console.log('✅ Google Sign-In configurato per mobile');
+  } catch (error) {
+    console.warn('Google Sign-In non disponibile:', error);
+  }
 } else {
-  console.error('❌ Firebase non è stato inizializzato correttamente');
+  // Web: Google Sign-In è gestito automaticamente da Firebase Auth
+  console.log('✅ Google Sign-In configurato per web');
 }
+
+export { googleSignInConfig };

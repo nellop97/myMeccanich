@@ -1,5 +1,5 @@
 // App.tsx - VERSIONE CORRETTA
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ActivityIndicator, Platform, StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -36,8 +36,8 @@ if (Platform.OS !== 'web') {
 }
 
 export default function App() {
-  const [isLoadingComplete, setLoadingComplete] = useState(false);
-  const [initializing, setInitializing] = useState(true);
+  const [isLoadingComplete, setLoadingComplete] = useState<boolean>(false);
+  const [initializing, setInitializing] = useState<boolean>(true);
   const [user, setUser] = useState<any>(null);
 
   // Store actions
@@ -57,32 +57,36 @@ export default function App() {
       if (initializing) setInitializing(false);
     });
 
-    return unsubscribe; // Cleanup subscription
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, [initializing]);
 
   // Load resources
-  useEffect(() => {
-    async function loadResourcesAndDataAsync() {
-      try {
-        if (Platform.OS !== 'web') {
-          // Load fonts only on mobile
-          await Font.loadAsync({
-            // Aggiungi qui eventuali fonti personalizzate
-            // 'custom-font': require('./assets/fonts/custom-font.ttf'),
-          });
-        }
-      } catch (e) {
-        console.warn('Error loading resources:', e);
-      } finally {
-        setLoadingComplete(true);
-        if (Platform.OS !== 'web') {
-          SplashScreen.hideAsync();
-        }
+  const loadResourcesAndDataAsync = useCallback(async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        // Load fonts only on mobile
+        await Font.loadAsync({
+          // Aggiungi qui eventuali fonti personalizzate
+          // 'custom-font': require('./assets/fonts/custom-font.ttf'),
+        });
+      }
+    } catch (e) {
+      console.warn('Error loading resources:', e);
+    } finally {
+      setLoadingComplete(true);
+      if (Platform.OS !== 'web') {
+        SplashScreen.hideAsync();
       }
     }
-
-    loadResourcesAndDataAsync();
   }, []);
+
+  useEffect(() => {
+    loadResourcesAndDataAsync();
+  }, [loadResourcesAndDataAsync]);
 
   // Mostra loading screen durante l'inizializzazione
   if (initializing || !isLoadingComplete) {
