@@ -188,17 +188,12 @@ const AddExpenseScreen = () => {
             </TouchableOpacity>
 
             {showDatePicker && (
-              <DateTimePicker
-                value={watch('date')}
-                mode="date"
-                display="default"
-                onChange={(event, selectedDate) => {
-                  setShowDatePicker(false);
-                  if (selectedDate) {
-                    setValue('date', selectedDate);
-                  }
-                }}
-              />
+                <UniversalDatePicker
+                    value={date}
+                    onChange={setDate}
+                    label="Seleziona data"
+                    mode="date"
+                />
             )}
           </View>
 

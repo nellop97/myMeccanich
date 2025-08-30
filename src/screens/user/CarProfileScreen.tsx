@@ -45,7 +45,11 @@ import {
   ChevronRight,
   CheckCircle
 } from 'lucide-react-native';
-import { ImagePicker } from '../../components/ImagePicker';
+import {
+    UniversalImagePicker,
+    UniversalDatePicker,
+    UniversalDocumentPicker,
+} from '../../components/pickers';
 import { SecurityService } from '../../security/SecurityService';
 import { VehicleService } from '../../services/VehicleService';
 import { MaintenanceService } from '../../services/MaintenanceService';

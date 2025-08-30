@@ -6,9 +6,7 @@
     "orientation": "portrait",
     "scheme": "mymeccanich",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mymeccanich.com",
@@ -45,10 +43,10 @@
         }
       ],
       [
-        "@react-native-google-signin/google-signin",
+        "expo-image-picker",
         {
-          "iosClientId": "619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com",
-          "iosUrlScheme": "com.googleusercontent.apps.619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r"
+          "photosPermission": "L'app necessita l'accesso alle tue foto per permetterti di aggiungere immagini dei veicoli.",
+          "cameraPermission": "L'app necessita l'accesso alla fotocamera per scattare foto dei veicoli."
         }
       ]
     ],

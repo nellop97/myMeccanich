@@ -29,11 +29,11 @@ import {
   AlertTriangle,
   Info,
 } from 'lucide-react-native';
-import { DatePicker } from '../../components/DatePicker';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
 import { db, auth } from '../../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import UniversalDatePicker from "@/src/components/pickers/UniversalImagePicker";
 
 const AddReminderScreen = () => {
   const navigation = useNavigation();
@@ -508,11 +508,19 @@ const AddReminderScreen = () => {
       </KeyboardAvoidingView>
 
       {showDatePicker && (
-        <DatePicker
-          date={formData.dueDate}
-          onDateChange={(date) => setFormData(prev => ({ ...prev, dueDate: date }))}
-          onClose={() => setShowDatePicker(false)}
-        />
+          <UniversalDatePicker
+          value={reminderDate}
+        onChange={(date) => {
+            setReminderDate(date);
+            // Calcola notifica
+            const notifyDate = new Date(date);
+            notifyDate.setDate(notifyDate.getDate() - 7);
+            setNotificationDate(notifyDate);
+        }}
+        label="Data Promemoria"
+        mode="datetime" // Supporta anche ora
+        minimumDate={new Date()}
+    />
       )}
     </SafeAreaView>
   );

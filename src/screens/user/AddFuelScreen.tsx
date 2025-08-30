@@ -191,17 +191,12 @@ const AddFuelScreen = () => {
             </TouchableOpacity>
 
             {showDatePicker && (
-              <DateTimePicker
-                value={watchedValues.date}
-                mode="datetime"
-                display="default"
-                onChange={(event, selectedDate) => {
-                  setShowDatePicker(false);
-                  if (selectedDate) {
-                    setValue('date', selectedDate);
-                  }
-                }}
-              />
+                <UniversalDatePicker
+                    value={date}
+                    onChange={setDate}
+                    label="Seleziona data"
+                    mode="date"
+                />
             )}
           </View>
 

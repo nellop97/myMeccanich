@@ -45,7 +45,11 @@ import { useUserData } from '../../hooks/useUserData';
 import { db, auth } from '../../services/firebase';
 import { collection, addDoc, deleteDoc, doc, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { DocumentPicker } from '../../components/DocumentPicker';
+import {
+    UniversalImagePicker,
+    UniversalDatePicker,
+    UniversalDocumentPicker,
+} from '../../components/pickers';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 const storage = getStorage();

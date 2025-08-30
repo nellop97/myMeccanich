@@ -1,89 +1,74 @@
+// storage.rules - Firebase Storage Rules per MyMeccanich
 rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    // Helper functions
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Funzione helper per verificare se l'utente è autenticato
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    function isOwner(ownerId) {
-      return isAuthenticated() && request.auth.uid == ownerId;
+
+    // Funzione helper per verificare se l'utente è il proprietario
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
     }
-    
-    function isSharedUser(sharedWith) {
-      return isAuthenticated() && request.auth.uid in sharedWith;
+
+    // Funzione helper per verificare il tipo di file
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
     }
-    
-    function hasWorkshopAccess(workshopId) {
-      return isAuthenticated() && request.auth.uid == workshopId;
+
+    // Funzione helper per verificare la dimensione del file (max 10MB)
+    function isValidSize() {
+      return request.resource.size < 10 * 1024 * 1024;
     }
-    
-    // Users collection
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
-      
-      // Allow reading basic workshop info for public listings
-      allow read: if isAuthenticated() && 
-        resource.data.userType == 'mechanic' && 
-        resource.data.isActive == true;
+
+    // Documenti utente - solo il proprietario può leggere/scrivere
+    match /documents/{userId}/{document=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidSize();
     }
-    
-    // Workshops collection  
-    match /workshops/{workshopId} {
+
+    // Foto veicoli - il proprietario può gestire
+    match /vehicles/{userId}/{vehicleId}/photos/{photo} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isImage() && isValidSize();
+      allow delete: if isOwner(userId);
+    }
+
+    // Foto profilo utente
+    match /users/{userId}/profile/{image} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && 
-        resource.data.ownerId == request.auth.uid;
+      allow write: if isOwner(userId) && isImage() && isValidSize();
+      allow delete: if isOwner(userId);
     }
-    
-    // Vehicles collection
-    match /vehicles/{vehicleId} {
-      allow read, write: if isAuthenticated() && 
-        (isOwner(resource.data.ownerId) ||
-         isSharedUser(resource.data.get('sharedWith', [])));
+
+    // Foto riparazioni/interventi (per meccanici)
+    match /repairs/{repairId}/photos/{photo} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isImage() && isValidSize();
+      allow delete: if isAuthenticated();
     }
-    
-    // Maintenance records
-    match /maintenance_records/{recordId} {
-      allow read, write: if isAuthenticated() && 
-        (isOwner(resource.data.ownerId) ||
-         request.auth.uid == resource.data.get('mechanicId', '') ||
-         hasWorkshopAccess(resource.data.get('workshopId', '')));
+
+    // Allegati fatture
+    match /invoices/{invoiceId}/attachments/{attachment} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidSize();
+      allow delete: if isAuthenticated();
     }
-    
-    // Invoices
-    match /invoices/{invoiceId} {
-      allow read, write: if isAuthenticated() && 
-        (hasWorkshopAccess(resource.data.get('workshopId', '')) ||
-         isOwner(resource.data.customerId));
+
+    // Backup generali (solo admin - da implementare)
+    match /backups/{backup=**} {
+      allow read: if false; // Solo admin
+      allow write: if false; // Solo admin
     }
-    
-    // Fuel records
-    match /fuel_records/{recordId} {
-      allow read, write: if isOwner(resource.data.ownerId);
-    }
-    
-    // Expenses
-    match /expenses/{recordId} {
-      allow read, write: if isOwner(resource.data.ownerId);
-    }
-    
-    // Documents
-    match /documents/{documentId} {
-      allow read, write: if isOwner(resource.data.ownerId);
-    }
-    
-    // Reminders
-    match /reminders/{reminderId} {
-      allow read, write: if isOwner(resource.data.ownerId);
-    }
-    
-    // Reviews
-    match /reviews/{reviewId} {
-      allow read: if isAuthenticated() && resource.data.isVisible == true;
-      allow write: if isAuthenticated() && 
-        (isOwner(resource.data.customerId) ||
-         hasWorkshopAccess(resource.data.workshopId));
+
+    // Cartella temporanea per upload in corso
+    match /temp/{userId}/{tempFile} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidSize();
+      // I file temporanei vengono eliminati automaticamente dopo 24 ore
+      allow delete: if isOwner(userId);
     }
   }
 }

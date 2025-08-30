@@ -768,11 +768,11 @@ const AddMaintenanceScreen = () => {
 
                 {/* Date Pickers */}
                 {showDatePicker && (
-                    <DateTimePicker
-                        value={selectedDate}
+                    <UniversalDatePicker
+                        value={date}
+                        onChange={setDate}
+                        label="Seleziona data"
                         mode="date"
-                        display="default"
-                        onChange={handleDateChange}
                     />
                 )}
 
