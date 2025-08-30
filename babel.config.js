@@ -27,9 +27,7 @@ module.exports = function(api) {
         }
       ],
       // Plugin per gestire import.meta nel web
-      [
-        '@babel/plugin-syntax-import-meta'
-      ],
+      '@babel/plugin-syntax-import-meta',
       // Plugin necessari per React Native
       'react-native-reanimated/plugin', // DEVE essere l'ultimo plugin
     ]

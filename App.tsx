@@ -11,7 +11,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { useStore } from './src/store';
 
 // Firebase - Import diretto dal servizio configurato
-import { auth } from './src/services/firebase';
+import { auth } from './src/services/firebase-simple';
 
 // Gestione fonti e splash screen
 import * as SplashScreen from 'expo-splash-screen';
@@ -26,8 +26,9 @@ if (Platform.OS === 'web') {
   const { onAuthStateChanged: webAuthStateChanged } = require('firebase/auth');
   onAuthStateChanged = webAuthStateChanged;
 } else {
-  // Mobile: usa React Native Firebase (già importato tramite il servizio)
-  onAuthStateChanged = (callback: any) => auth.onAuthStateChanged(callback);
+  // Mobile: usa Firebase JS SDK direttamente
+  const { onAuthStateChanged: mobileAuthStateChanged } = require('firebase/auth');
+  onAuthStateChanged = mobileAuthStateChanged;
 }
 
 // Prevent the splash screen from auto-hiding (solo su mobile)
@@ -35,10 +36,10 @@ if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync();
 }
 
-export default function App() {
-  const [isLoadingComplete, setLoadingComplete] = useState<boolean>(false);
-  const [initializing, setInitializing] = useState<boolean>(true);
-  const [user, setUser] = useState<any>(null);
+export default function App(): React.JSX.Element {
+  const [isLoadingComplete, setLoadingComplete] = React.useState<boolean>(false);
+  const [initializing, setInitializing] = React.useState<boolean>(true);
+  const [user, setUser] = React.useState<any>(null);
 
   // Store actions
   const { preferences } = useStore();

@@ -38,6 +38,8 @@ module.exports = (() => {
         keep_fnames: true,
       },
     },
+    // Gestione import.meta per web
+    unstable_allowRequireContext: true,
   };
 
   // Configurazione per Firebase e altre dipendenze problematiche
