@@ -1,4 +1,4 @@
-// babel.config.js
+// babel.config.js - VERSIONE SEMPLIFICATA SENZA IMPORT.META
 module.exports = function(api) {
   api.cache(true);
   return {
@@ -26,8 +26,6 @@ module.exports = function(api) {
           }
         }
       ],
-      // Plugin per gestire import.meta nel web
-      '@babel/plugin-syntax-import-meta',
       // Plugin necessari per React Native
       'react-native-reanimated/plugin', // DEVE essere l'ultimo plugin
     ]
