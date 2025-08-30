@@ -1,7 +1,7 @@
 // src/hooks/useAuth.ts
 import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
-import { auth } from '../services/firebase';
+import { auth } from '../services/firebase-clean';
 
 // Import condizionale per onAuthStateChanged
 let onAuthStateChanged: any;

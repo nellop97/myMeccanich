@@ -11,7 +11,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { useStore } from './src/store';
 
 // Firebase - Import diretto dal servizio configurato
-import { auth } from './src/services/firebase-simple';
+import { auth } from './src/services/firebase-clean';
 
 // Gestione fonti e splash screen
 import * as SplashScreen from 'expo-splash-screen';

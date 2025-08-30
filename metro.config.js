@@ -1,4 +1,4 @@
-// metro.config.js - VERSIONE CORRETTA PER RISOLVERE IMPORT.META
+// metro.config.js - CONFIGURAZIONE PULITA SENZA IMPORT.META
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
@@ -28,44 +28,27 @@ module.exports = (() => {
     '@hooks': path.resolve(__dirname, './src/hooks'),
   };
 
-  // Configura il transformer per gestire meglio i moduli
+  // Configurazione transformer semplificata
   config.transformer = {
     ...config.transformer,
-    minifierConfig: {
-      // Evita errori di minificazione con alcune librerie
-      keep_fnames: true,
-      mangle: {
-        keep_fnames: true,
-      },
-    },
-    // Gestione import.meta per web - ABILITA PER EXPO ROUTER
+    // RICHIESTO PER EXPO ROUTER
     unstable_allowRequireContext: true,
-    // Fix per import.meta
     getTransformOptions: async () => ({
       transform: {
         experimentalImportSupport: false,
-        inlineRequires: false,
+        inlineRequires: true,
       },
     }),
   };
 
-  // Configurazione per Firebase e altre dipendenze problematiche
+  // Configurazione resolver per Firebase
   config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
   
-  // Blocklist per evitare conflitti di dipendenze - AGGIUNGI MODULI PROBLEMATICI
+  // Blocklist per evitare conflitti 
   config.resolver.blockList = [
-    // Evita conflitti con Firebase
     /.*\/__tests__\/.*/,
     /.*\/node_modules\/.*\/node_modules\/react-native\/.*/,
-    // Blocca moduli che usano import.meta
-    /.*\/node_modules\/@expo\/metro-config\/.*\/collect-dependencies\.js$/,
-    /.*\/node_modules\/babel-preset-current-node-syntax\/.*/,
   ];
-
-  // Configurazione aggiuntiva per web
-  if (process.env.EXPO_PLATFORM === 'web') {
-    config.resolver.platforms = ['web', 'js', 'ts', 'tsx', 'jsx', 'json'];
-  }
 
   return config;
 })();
