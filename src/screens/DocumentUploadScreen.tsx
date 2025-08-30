@@ -16,7 +16,7 @@ import {
     UniversalImagePicker,
     UniversalDatePicker,
     UniversalDocumentPicker,
-} from '../components/pickers';
+} from '../components';
 import UploadService from '../services/UploadService';
 import FileService from '../services/FileService';
 import { useAppThemeManager } from '../hooks/useTheme';

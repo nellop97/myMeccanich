@@ -21,7 +21,7 @@ import {
     AlertCircle
 } from 'lucide-react-native';
 import * as ExpoDocumentPicker from 'expo-document-picker';
-import { useAppThemeManager } from '../../hooks/useTheme';
+import { useAppThemeManager } from '../hooks/useTheme';
 
 interface DocumentAsset {
     uri: string;

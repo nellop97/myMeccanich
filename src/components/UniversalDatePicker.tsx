@@ -11,7 +11,7 @@ import {
     Pressable,
 } from 'react-native';
 import { Calendar, Clock, ChevronDown, X } from 'lucide-react-native';
-import { useAppThemeManager } from '../../hooks/useTheme';
+import { useAppThemeManager } from '../hooks/useTheme';
 
 // Import condizionale per DateTimePicker nativo
 let DateTimePicker: any = null;

@@ -49,7 +49,7 @@ import {
     UniversalImagePicker,
     UniversalDatePicker,
     UniversalDocumentPicker,
-} from '../../components/pickers';
+} from '../../components';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 const storage = getStorage();

@@ -12,7 +12,7 @@ import {
 import { Calendar, Clock, ChevronDown } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Calendar as RNCalendar } from 'react-native-calendars';
-import { useAppThemeManager } from '../../hooks/useTheme';
+import { useAppThemeManager } from '../hooks/useTheme';
 
 interface UniversalDatePickerProps {
     value: Date;
