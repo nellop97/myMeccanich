@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { UniversalDatePicker } from '../../components';
 
 import {
     ArrowLeft,
@@ -46,6 +46,7 @@ import {
 
 import { useStore } from '../../store';
 import { useCarsStore } from '../../store/useCarsStore';
+import { useAppThemeManager } from '../../hooks/useTheme';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -769,19 +770,27 @@ const AddMaintenanceScreen = () => {
                 {/* Date Pickers */}
                 {showDatePicker && (
                     <UniversalDatePicker
-                        value={date}
-                        onChange={setDate}
+                        value={selectedDate}
+                        onChange={(date) => {
+                            setShowDatePicker(false);
+                            setSelectedDate(date);
+                            setValue('date', date.toISOString().split('T')[0]);
+                        }}
                         label="Seleziona data"
                         mode="date"
                     />
                 )}
 
                 {showNextDuePicker && (
-                    <DateTimePicker
+                    <UniversalDatePicker
                         value={selectedNextDueDate}
+                        onChange={(date) => {
+                            setShowNextDuePicker(false);
+                            setSelectedNextDueDate(date);
+                            setValue('nextDueDate', date.toISOString().split('T')[0]);
+                        }}
+                        label="Seleziona prossima scadenza"
                         mode="date"
-                        display="default"
-                        onChange={handleNextDueDateChange}
                     />
                 )}
 

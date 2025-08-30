@@ -1,257 +1,220 @@
-// src/components/pickers/UniversalDatePicker.tsx
-import React, { useState, useRef } from 'react';
+// src/components/UniversalImagePicker.tsx
+import React, { useState } from 'react';
 import {
     View,
     Text,
     TouchableOpacity,
     StyleSheet,
     Platform,
-    Modal,
-    Animated,
+    Alert,
+    Image,
+    ScrollView,
 } from 'react-native';
-import { Calendar, Clock, ChevronDown } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Calendar as RNCalendar } from 'react-native-calendars';
+import {
+    Camera,
+    Image as ImageIcon,
+    Upload,
+    X,
+    Plus,
+} from 'lucide-react-native';
+import * as ExpoImagePicker from 'expo-image-picker';
 import { useAppThemeManager } from '../hooks/useTheme';
 
-interface UniversalDatePickerProps {
-    value: Date;
-    onChange: (date: Date) => void;
-    label?: string;
-    mode?: 'date' | 'time' | 'datetime';
-    minimumDate?: Date;
-    maximumDate?: Date;
-    disabled?: boolean;
-    error?: string;
-    showCalendar?: boolean; // Mostra calendario completo su mobile
+interface ImageAsset {
+    uri: string;
+    width?: number;
+    height?: number;
+    type?: string;
+    fileName?: string;
+    fileSize?: number;
 }
 
-export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
-                                                                            value,
-                                                                            onChange,
-                                                                            label,
-                                                                            mode = 'date',
-                                                                            minimumDate,
-                                                                            maximumDate,
-                                                                            disabled = false,
-                                                                            error,
-                                                                            showCalendar = false,
-                                                                        }) => {
+interface UniversalImagePickerProps {
+    onImagesSelected: (images: ImageAsset[]) => void;
+    multiple?: boolean;
+    maxImages?: number;
+    quality?: number;
+    showCameraOption?: boolean;
+    showGalleryOption?: boolean;
+    label?: string;
+    disabled?: boolean;
+}
+
+export const UniversalImagePicker: React.FC<UniversalImagePickerProps> = ({
+    onImagesSelected,
+    multiple = false,
+    maxImages = 5,
+    quality = 0.8,
+    showCameraOption = true,
+    showGalleryOption = true,
+    label = 'Seleziona immagini',
+    disabled = false,
+}) => {
     const { colors, isDark } = useAppThemeManager();
-    const [showPicker, setShowPicker] = useState(false);
-    const [showModal, setShowModal] = useState(false);
-    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const [selectedImages, setSelectedImages] = useState<ImageAsset[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const formatDate = (date: Date) => {
-        if (mode === 'time') {
-            return date.toLocaleTimeString('it-IT', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        }
-        if (mode === 'datetime') {
-            return date.toLocaleString('it-IT', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-            });
-        }
-        return date.toLocaleDateString('it-IT', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-        });
-    };
+    const requestPermissions = async () => {
+        if (Platform.OS === 'web') return true;
 
-    const handleDateChange = (date: Date) => {
-        onChange(date);
-        setShowPicker(false);
-        setShowModal(false);
-    };
-
-    // WEB Implementation
-    if (Platform.OS === 'web') {
-        const getInputType = () => {
-            switch (mode) {
-                case 'time': return 'time';
-                case 'datetime': return 'datetime-local';
-                default: return 'date';
-            }
-        };
-
-        const getWebValue = () => {
-            if (mode === 'time') {
-                return value.toTimeString().slice(0, 5);
-            }
-            if (mode === 'datetime') {
-                return value.toISOString().slice(0, 16);
-            }
-            return value.toISOString().split('T')[0];
-        };
+        const cameraPermission = await ExpoImagePicker.requestCameraPermissionsAsync();
+        const mediaLibraryPermission = await ExpoImagePicker.requestMediaLibraryPermissionsAsync();
 
         return (
-            <View style={[styles.container, disabled && styles.disabled]}>
-                {label && (
-                    <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                        {label}
-                    </Text>
-                )}
-                <View
-                    style={[
-                        styles.inputContainer,
-                        {
-                            backgroundColor: colors.surfaceVariant,
-                            borderColor: error ? colors.error : colors.outline,
-                        }
-                    ]}
-                >
-                    {mode !== 'time' ? <Calendar size={20} color={colors.primary} /> : <Clock size={20} color={colors.primary} />}
-                    <input
-                        type={getInputType()}
-                        value={getWebValue()}
-                        onChange={(e) => {
-                            const newDate = new Date(e.target.value);
-                            if (!isNaN(newDate.getTime())) {
-                                handleDateChange(newDate);
-                            }
-                        }}
-                        min={minimumDate?.toISOString().slice(0, mode === 'datetime' ? 16 : 10)}
-                        max={maximumDate?.toISOString().slice(0, mode === 'datetime' ? 16 : 10)}
-                        disabled={disabled}
-                        style={{
-                            flex: 1,
-                            padding: '12px',
-                            fontSize: '16px',
-                            border: 'none',
-                            background: 'transparent',
-                            color: colors.onSurface,
-                            outline: 'none',
-                            fontFamily: 'inherit',
-                            cursor: disabled ? 'not-allowed' : 'pointer',
-                        }}
-                    />
-                </View>
-                {error && (
-                    <Text style={[styles.errorText, { color: colors.error }]}>
-                        {error}
-                    </Text>
-                )}
-            </View>
+            cameraPermission.status === 'granted' &&
+            mediaLibraryPermission.status === 'granted'
         );
-    }
+    };
 
-    // MOBILE Implementation with Calendar Option
+    const pickFromGallery = async () => {
+        try {
+            setIsLoading(true);
+            const result = await ExpoImagePicker.launchImageLibraryAsync({
+                mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
+                allowsMultipleSelection: multiple,
+                quality,
+                allowsEditing: !multiple,
+                aspect: [4, 3],
+            });
+
+            if (!result.canceled && result.assets) {
+                const images: ImageAsset[] = result.assets.map(asset => ({
+                    uri: asset.uri,
+                    width: asset.width,
+                    height: asset.height,
+                    type: asset.type,
+                    fileName: asset.fileName || `image_${Date.now()}.jpg`,
+                    fileSize: asset.fileSize,
+                }));
+
+                handleImagesSelected(images);
+            }
+        } catch (error) {
+            Alert.alert('Errore', 'Errore durante la selezione delle immagini');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const takePhoto = async () => {
+        try {
+            setIsLoading(true);
+            const hasPermission = await requestPermissions();
+            
+            if (!hasPermission) {
+                Alert.alert('Permessi necessari', 'Sono necessari i permessi per camera e galleria');
+                return;
+            }
+
+            const result = await ExpoImagePicker.launchCameraAsync({
+                mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
+                quality,
+                allowsEditing: true,
+                aspect: [4, 3],
+            });
+
+            if (!result.canceled && result.assets?.[0]) {
+                const asset = result.assets[0];
+                const image: ImageAsset = {
+                    uri: asset.uri,
+                    width: asset.width,
+                    height: asset.height,
+                    type: asset.type,
+                    fileName: `photo_${Date.now()}.jpg`,
+                    fileSize: asset.fileSize,
+                };
+
+                handleImagesSelected([image]);
+            }
+        } catch (error) {
+            Alert.alert('Errore', 'Errore durante lo scatto della foto');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleImagesSelected = (images: ImageAsset[]) => {
+        const newImages = multiple 
+            ? [...selectedImages, ...images].slice(0, maxImages)
+            : images;
+        
+        setSelectedImages(newImages);
+        onImagesSelected(newImages);
+    };
+
+    const removeImage = (index: number) => {
+        const newImages = selectedImages.filter((_, i) => i !== index);
+        setSelectedImages(newImages);
+        onImagesSelected(newImages);
+    };
+
     return (
-        <View style={[styles.container, disabled && styles.disabled]}>
+        <View style={styles.container}>
             {label && (
-                <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
+                <Text style={[styles.label, { color: colors.onSurface }]}>
                     {label}
                 </Text>
             )}
 
-            <TouchableOpacity
-                style={[
-                    styles.inputContainer,
-                    {
-                        backgroundColor: colors.surfaceVariant,
-                        borderColor: error ? colors.error : colors.outline,
-                    }
-                ]}
-                onPress={() => showCalendar ? setShowModal(true) : setShowPicker(true)}
-                disabled={disabled}
-            >
-                {mode !== 'time' ? <Calendar size={20} color={colors.primary} /> : <Clock size={20} color={colors.primary} />}
-                <Text style={[styles.value, { color: colors.onSurface }]}>
-                    {formatDate(value)}
-                </Text>
-                <ChevronDown size={20} color={colors.onSurfaceVariant} />
-            </TouchableOpacity>
-
-            {error && (
-                <Text style={[styles.errorText, { color: colors.error }]}>
-                    {error}
-                </Text>
-            )}
-
-            {/* Native Date/Time Picker */}
-            {showPicker && (
-                <DateTimePicker
-                    value={value}
-                    mode={mode === 'datetime' ? 'date' : mode}
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    minimumDate={minimumDate}
-                    maximumDate={maximumDate}
-                    onChange={(event, selectedDate) => {
-                        setShowPicker(false);
-                        if (selectedDate) {
-                            if (mode === 'datetime' && Platform.OS === 'android') {
-                                // Per Android, mostra prima date poi time
-                                setShowPicker(true);
-                                setTimeout(() => {
-                                    setShowPicker(false);
-                                    // Qui mostrerebbe il time picker
-                                }, 100);
-                            }
-                            handleDateChange(selectedDate);
-                        }
-                    }}
-                />
-            )}
-
-            {/* Calendar Modal for better UX */}
-            <Modal
-                visible={showModal}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <Animated.View
+            <View style={styles.buttonContainer}>
+                {showGalleryOption && (
+                    <TouchableOpacity
                         style={[
-                            styles.modalContent,
-                            {
-                                backgroundColor: colors.surface,
-                                opacity: fadeAnim,
+                            styles.actionButton,
+                            { 
+                                backgroundColor: colors.primary + '20',
+                                borderColor: colors.primary,
                             }
                         ]}
+                        onPress={pickFromGallery}
+                        disabled={disabled || isLoading}
                     >
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
-                                {label || 'Seleziona Data'}
-                            </Text>
-                            <TouchableOpacity onPress={() => setShowModal(false)}>
-                                <Text style={[styles.modalClose, { color: colors.primary }]}>
-                                    Chiudi
-                                </Text>
+                        <ImageIcon size={20} color={colors.primary} />
+                        <Text style={[styles.buttonText, { color: colors.primary }]}>
+                            Galleria
+                        </Text>
+                    </TouchableOpacity>
+                )}
+
+                {showCameraOption && (
+                    <TouchableOpacity
+                        style={[
+                            styles.actionButton,
+                            { 
+                                backgroundColor: colors.secondary + '20',
+                                borderColor: colors.secondary,
+                            }
+                        ]}
+                        onPress={takePhoto}
+                        disabled={disabled || isLoading}
+                    >
+                        <Camera size={20} color={colors.secondary} />
+                        <Text style={[styles.buttonText, { color: colors.secondary }]}>
+                            Fotocamera
+                        </Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+
+            {selectedImages.length > 0 && (
+                <ScrollView 
+                    horizontal 
+                    style={styles.imagePreview}
+                    showsHorizontalScrollIndicator={false}
+                >
+                    {selectedImages.map((image, index) => (
+                        <View key={index} style={styles.imageContainer}>
+                            <Image source={{ uri: image.uri }} style={styles.image} />
+                            <TouchableOpacity
+                                style={[styles.removeButton, { backgroundColor: colors.error }]}
+                                onPress={() => removeImage(index)}
+                            >
+                                <X size={16} color="white" />
                             </TouchableOpacity>
                         </View>
-
-                        <RNCalendar
-                            current={value.toISOString().split('T')[0]}
-                            minDate={minimumDate?.toISOString().split('T')[0]}
-                            maxDate={maximumDate?.toISOString().split('T')[0]}
-                            onDayPress={(day) => {
-                                handleDateChange(new Date(day.dateString));
-                            }}
-                            theme={{
-                                backgroundColor: colors.surface,
-                                calendarBackground: colors.surface,
-                                textSectionTitleColor: colors.onSurfaceVariant,
-                                selectedDayBackgroundColor: colors.primary,
-                                selectedDayTextColor: colors.onPrimary,
-                                todayTextColor: colors.primary,
-                                dayTextColor: colors.onSurface,
-                                textDisabledColor: colors.onSurfaceDisabled,
-                                monthTextColor: colors.onSurface,
-                                arrowColor: colors.primary,
-                            }}
-                        />
-                    </Animated.View>
-                </View>
-            </Modal>
+                    ))}
+                </ScrollView>
+            )}
         </View>
     );
 };
@@ -260,64 +223,52 @@ const styles = StyleSheet.create({
     container: {
         marginVertical: 8,
     },
-    disabled: {
-        opacity: 0.6,
-    },
     label: {
-        fontSize: 14,
-        marginBottom: 8,
-        fontWeight: '500',
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 12,
     },
-    inputContainer: {
+    buttonContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
         gap: 12,
     },
-    value: {
+    actionButton: {
         flex: 1,
-        fontSize: 16,
-    },
-    errorText: {
-        fontSize: 12,
-        marginTop: 4,
-        marginLeft: 4,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        width: '100%',
-        maxWidth: 400,
-        borderRadius: 16,
-        padding: 20,
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-    },
-    modalHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        gap: 8,
     },
-    modalTitle: {
-        fontSize: 18,
+    buttonText: {
+        fontSize: 14,
         fontWeight: '600',
     },
-    modalClose: {
-        fontSize: 16,
-        fontWeight: '500',
+    imagePreview: {
+        marginTop: 12,
+    },
+    imageContainer: {
+        position: 'relative',
+        marginRight: 8,
+    },
+    image: {
+        width: 80,
+        height: 80,
+        borderRadius: 8,
+    },
+    removeButton: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });
 
-export default UniversalDatePicker;
+export default UniversalImagePicker;

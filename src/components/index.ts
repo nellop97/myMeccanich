@@ -27,9 +27,7 @@ export default {
     Document: UniversalDocumentPicker,
 };
 
-// Type exports
-export type { UniversalDatePickerProps } from './UniversalDatePicker';
-export type { UniversalDocumentPickerProps } from './UniversalDocumentPicker';
+// Type exports are included in the component files themselves
 
 // Utility function per verificare la disponibilità dei componenti
 export const checkPickerAvailability = () => {

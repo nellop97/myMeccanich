@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { UniversalDatePicker } from '../../components';
 import {
   ArrowLeft,
   Calendar,
@@ -26,6 +26,7 @@ import {
 import { db, auth } from '../../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useStore } from '../../store';
+import { useAppThemeManager } from '../../hooks/useTheme';
 
 interface FuelFormData {
   date: Date;
@@ -192,10 +193,13 @@ const AddFuelScreen = () => {
 
             {showDatePicker && (
                 <UniversalDatePicker
-                    value={date}
-                    onChange={setDate}
+                    value={watchedValues.date}
+                    onChange={(date) => {
+                        setShowDatePicker(false);
+                        setValue('date', date);
+                    }}
                     label="Seleziona data"
-                    mode="date"
+                    mode="datetime"
                 />
             )}
           </View>
