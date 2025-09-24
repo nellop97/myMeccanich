@@ -26,6 +26,8 @@ module.exports = function(api) {
           }
         }
       ],
+      // Transform import.meta per compatibilità web
+      ['@babel/plugin-syntax-import-meta'],
       // Plugin necessari per React Native
       'react-native-reanimated/plugin', // DEVE essere l'ultimo plugin
     ]

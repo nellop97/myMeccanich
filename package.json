@@ -102,6 +102,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@babel/plugin-transform-modules-commonjs": "^7.27.1",
     "@types/node": "^22.5.4",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
