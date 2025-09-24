@@ -50,7 +50,9 @@
           "cameraPermission": "L'app necessita l'accesso alla fotocamera per scattare foto dei veicoli."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font",
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": false
