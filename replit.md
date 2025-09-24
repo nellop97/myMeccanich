@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 
-**Framework**: React Native with Expo SDK 53
+**Framework**: React Native with Expo SDK 54
 - Cross-platform mobile application (iOS, Android, Web)
 - Navigation: React Navigation 7 with nested stack and tab navigators
 - UI Framework: React Native Paper with Material Design 3

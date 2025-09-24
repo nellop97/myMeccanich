@@ -6,10 +6,12 @@
     "orientation": "portrait",
     "scheme": "mymeccanich",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mymeccanich.com",
+      "bundleIdentifier": "com.mymecchanich",
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
         "ITSAppUsesNonExemptEncryption": false,
@@ -18,7 +20,7 @@
       }
     },
     "android": {
-      "package": "com.mymeccanich",
+      "package": "com.mymecchanich",
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
@@ -38,9 +40,7 @@
           "ios": {
             "useFrameworks": "static"
           },
-          "android": {
-            "minSdkVersion": 21
-          }
+          "android": {}
         }
       ],
       [
@@ -49,7 +49,8 @@
           "photosPermission": "L'app necessita l'accesso alle tue foto per permetterti di aggiungere immagini dei veicoli.",
           "cameraPermission": "L'app necessita l'accesso alla fotocamera per scattare foto dei veicoli."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": false
