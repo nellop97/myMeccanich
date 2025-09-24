@@ -44,10 +44,14 @@ module.exports = (() => {
   // Configurazione resolver per Firebase
   config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
   
-  // Blocklist per evitare conflitti 
+  // Blocklist per evitare conflitti e moduli ESM con import.meta (ma non Firebase)
   config.resolver.blockList = [
     /.*\/__tests__\/.*/,
     /.*\/node_modules\/.*\/node_modules\/react-native\/.*/,
+    // Escludi solo i moduli ESM specifici che utilizzano import.meta
+    /node_modules\/@eslint\/eslintrc\/.*/,
+    /node_modules\/@humanwhocodes\/module-importer\/.*/,
+    // NON bloccare Firebase
   ];
 
   return config;
