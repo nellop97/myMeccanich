@@ -26,8 +26,6 @@ module.exports = function(api) {
           }
         }
       ],
-      // Transform import.meta per compatibilità web
-      ['@babel/plugin-transform-modules-commonjs', { allowTopLevelThis: true }],
       // Plugin necessari per React Native
       'react-native-reanimated/plugin', // DEVE essere l'ultimo plugin
     ]
