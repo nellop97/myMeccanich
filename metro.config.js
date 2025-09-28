@@ -1,61 +1,33 @@
-// metro.config.js - CONFIGURAZIONE PULITA SENZA IMPORT.META
-const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
+// metro.config.js
 const { getDefaultConfig } = require('expo/metro-config');
 
+const config = getDefaultConfig(__dirname);
 
-module.exports = (() => {
-    const config = getDefaultConfig(__dirname);
-    config.resolver.sourceExts.push('cjs');
-    config.resolver.unstable_enablePackageExports = false;
+// Fix per compatibilità Firebase JS SDK con Metro
+// Necessario per SDK 53+ con Firebase JS SDK
+config.resolver.sourceExts.push('cjs');
 
-    module.exports = config;
-  // Aggiungi estensioni per supportare web e mobile
-  config.resolver.sourceExts = [
-    ...config.resolver.sourceExts,
-    'web.js',
-    'web.jsx', 
-    'web.ts',
-    'web.tsx'
-  ];
+// Disabilita temporaneamente package exports per Firebase
+// Questo risolve l'errore "Component auth has not been registered yet"
+config.resolver.unstable_enablePackageExports = false;
 
-  // Aggiungi alias per risolvere i percorsi
-  config.resolver.alias = {
-    '@': path.resolve(__dirname, './'),
-    '@components': path.resolve(__dirname, './src/components'),
-    '@screens': path.resolve(__dirname, './src/screens'),
-    '@services': path.resolve(__dirname, './src/services'),
-    '@store': path.resolve(__dirname, './src/store'),
-    '@types': path.resolve(__dirname, './src/types'),
-    '@utils': path.resolve(__dirname, './src/utils'),
-    '@assets': path.resolve(__dirname, './assets'),
-    '@navigation': path.resolve(__dirname, './src/navigation'),
-    '@hooks': path.resolve(__dirname, './src/hooks'),
-  };
+// Aggiungi resolver per moduli problematici
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+    // Fix per Firebase Auth
+    if (moduleName.startsWith('firebase/')) {
+        try {
+            return context.resolveRequest(context, moduleName, platform);
+        } catch (e) {
+            console.warn(`Warning resolving ${moduleName}:`, e.message);
+        }
+    }
 
-  // Configurazione transformer semplificata
-  config.transformer = {
-    ...config.transformer,
-    // RICHIESTO PER EXPO ROUTER
-    unstable_allowRequireContext: true,
-    getTransformOptions: async () => ({
-      transform: {
-        experimentalImportSupport: false,
-        inlineRequires: true,
-      },
-    }),
-  };
+    return context.resolveRequest(context, moduleName, platform);
+};
 
-  // Configurazione resolver per Firebase
-  config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
-  
-  // Blocklist per evitare conflitti  
-  config.resolver.blockList = [
-    /.*\/__tests__\/.*/,
-    /.*\/node_modules\/.*\/node_modules\/react-native\/.*/,
-  ];
+// Ottimizzazioni per development
+if (process.env.NODE_ENV !== 'production') {
+    config.resolver.disableHierarchicalLookup = true;
+}
 
-  return config;
-})();
-
-
+module.exports = config;
