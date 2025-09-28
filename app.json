@@ -81,12 +81,10 @@
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "buildToolsVersion": "35.0.0",
-            "minSdkVersion": 26,
-            "edgeToEdgeEnabled": true
+            "minSdkVersion": 26
           },
           "ios": {
-            "deploymentTarget": "15.1",
-            "useFrameworks": "static"
+            "deploymentTarget": "15.1"
           }
         }
       ],
@@ -95,8 +93,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#ffffff",
-          "sounds": []
+          "color": "#ffffff"
         }
       ],
       "expo-apple-authentication",
@@ -107,30 +104,12 @@
           "cameraPermission": "L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli."
         }
       ],
-      [
-        "expo-document-picker",
-        {
-          "iCloudContainerEnvironment": "Production"
-        }
-      ],
       "expo-secure-store",
       "expo-dev-client"
     ],
     "experiments": {
       "tsconfigPaths": true
     },
-    "extra": {
-      "eas": {
-        "projectId": "your-eas-project-id"
-      }
-    },
-    "newArchEnabled": false,
-    "scheme": "mymeccanich",
-    "updates": {
-      "url": "https://u.expo.dev/your-eas-project-id"
-    },
-    "runtimeVersion": {
-      "policy": "sdkVersion"
-    }
+    "scheme": "mymeccanich"
   }
 }

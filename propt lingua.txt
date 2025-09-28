@@ -1,0 +1,19 @@
+sAgisci come un esperto sviluppatore React Native con esperienza nella gestione della localizzazione multilingua (i18n).
+Ho già sviluppato un’applicazione in React Native e voglio renderla multilingua con supporto a:
+Italiano 🇮🇹
+Inglese 🇬🇧
+Spagnolo 🇪🇸
+Tedesco 🇩🇪
+Cosa devi fare:
+Integrare una libreria di i18n (es. react-i18next oppure react-native-localize) nella mia applicazione.
+Creare i file di traduzione JSON per tutte le lingue supportate (it.json, en.json, es.json, de.json).
+Tradurre automaticamente tutti i testi presenti nella mia app (UI, messaggi, placeholder, bottoni, ecc.) senza lasciare nulla insospeso. Se trovi stringhe hardcoded in JSX o nei componenti, sostituiscile con le chiamate a t("chiave").
+Organizzare le chiavi di traduzione in maniera chiara e strutturata (es. common, buttons, labels, errors).
+Impostare la lingua di default in italiano, ma rilevare automaticamente la lingua del dispositivo con fallback all’inglese se non supportata.
+Mostrare un esempio di come usare le traduzioni all’interno di un componente React Native già esistente.
+Assicurarti che tutte le lingue siano realmente tradotte (non lasciare nulla in italiano se la lingua selezionata è diversa).
+Gestire l’aggiornamento della lingua a runtime senza riavvio dell’app.
+Output atteso:
+Tutti i file modificati e aggiornati (App.js, setup i18n, file di traduzione, ecc.).
+Traduzioni complete in Italiano, Inglese, Spagnolo e Tedesco.
+Esempi pratici su come richiamare le traduzioni nei componenti.
