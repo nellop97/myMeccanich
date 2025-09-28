@@ -26,7 +26,7 @@ if (Platform.OS !== 'web') {
 
 export default function App(): React.JSX.Element {
     const [initializing, setInitializing] = useState(true);
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState(null);
 
     // Gestione stato di autenticazione
     useEffect(() => {
