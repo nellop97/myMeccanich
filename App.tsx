@@ -1,8 +1,8 @@
-// App.tsx - VERSIONE CORRETTA
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ActivityIndicator, Platform, StatusBar } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { onAuthStateChanged } from 'firebase/auth';
 
 // Navigation
 import AppNavigator from './src/navigation/AppNavigator';
@@ -10,116 +10,59 @@ import AppNavigator from './src/navigation/AppNavigator';
 // Store
 import { useStore } from './src/store';
 
-// Firebase - Import diretto dal servizio configurato
-import { auth } from './src/services/firebase-clean';
+// Firebase
+import { auth } from './src/services/firebase';
 
-// Gestione fonti e splash screen
-import * as SplashScreen from 'expo-splash-screen';
-import * as Font from 'expo-font';
+// Theme
 import { ThemeProvider } from './src/contexts/ThemeContext';
 
-// Import condizionale per onAuthStateChanged
-let onAuthStateChanged: any;
+// Splash Screen
+import * as SplashScreen from 'expo-splash-screen';
 
-if (Platform.OS === 'web') {
-  // Web: usa Firebase JS SDK
-  const { onAuthStateChanged: webAuthStateChanged } = require('firebase/auth');
-  onAuthStateChanged = webAuthStateChanged;
-} else {
-  // Mobile: usa Firebase JS SDK direttamente
-  const { onAuthStateChanged: mobileAuthStateChanged } = require('firebase/auth');
-  onAuthStateChanged = mobileAuthStateChanged;
-}
-
-// Prevent the splash screen from auto-hiding (solo su mobile)
+// Prevent auto-hide (solo mobile)
 if (Platform.OS !== 'web') {
-  SplashScreen.preventAutoHideAsync();
+    SplashScreen.preventAutoHideAsync();
 }
 
 export default function App(): React.JSX.Element {
-  const [isLoadingComplete, setLoadingComplete] = React.useState<boolean>(false);
-  const [initializing, setInitializing] = React.useState<boolean>(true);
-  const [user, setUser] = React.useState<any>(null);
+    const [initializing, setInitializing] = useState(true);
+    const [user, setUser] = useState<any>(null);
 
-  // Store actions
-  const { preferences } = useStore();
+    // Gestione stato di autenticazione
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            console.log('Auth state changed:', firebaseUser?.uid ? 'User logged in' : 'User logged out');
+            setUser(firebaseUser);
 
-  // Gestione stato di autenticazione
-  useEffect(() => {
-    if (!auth) {
-      console.warn('Auth non disponibile');
-      setInitializing(false);
-      return;
-    }
+            if (initializing) {
+                setInitializing(false);
 
-    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
-      console.log('Auth state changed:', user?.uid ? 'User logged in' : 'User logged out');
-      setUser(user);
-      if (initializing) setInitializing(false);
-    });
-
-    return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [initializing]);
-
-  // Load resources
-  const loadResourcesAndDataAsync = useCallback(async () => {
-    try {
-      if (Platform.OS !== 'web') {
-        // Load fonts only on mobile
-        await Font.loadAsync({
-          // Aggiungi qui eventuali fonti personalizzate
-          // 'custom-font': require('./assets/fonts/custom-font.ttf'),
+                // Nascondi splash screen su mobile
+                if (Platform.OS !== 'web') {
+                    SplashScreen.hideAsync();
+                }
+            }
         });
-      }
-    } catch (e) {
-      console.warn('Error loading resources:', e);
-    } finally {
-      setLoadingComplete(true);
-      if (Platform.OS !== 'web') {
-        SplashScreen.hideAsync();
-      }
+
+        return unsubscribe;
+    }, [initializing]);
+
+    // Loading screen
+    if (initializing) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
     }
-  }, []);
 
-  useEffect(() => {
-    loadResourcesAndDataAsync();
-  }, [loadResourcesAndDataAsync]);
-
-  // Mostra loading screen durante l'inizializzazione
-  if (initializing || !isLoadingComplete) {
     return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        backgroundColor: preferences.theme === 'dark' ? '#121212' : '#ffffff'
-      }}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{
-          marginTop: 20,
-          color: preferences.theme === 'dark' ? '#ffffff' : '#000000'
-        }}>
-          Caricamento...
-        </Text>
-      </View>
+        <SafeAreaProvider>
+            <ThemeProvider>
+                <NavigationContainer>
+                    <AppNavigator />
+                </NavigationContainer>
+            </ThemeProvider>
+        </SafeAreaProvider>
     );
-  }
-
-  return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <NavigationContainer>
-          <StatusBar 
-            barStyle={preferences.theme === 'dark' ? 'light-content' : 'dark-content'}
-            backgroundColor={preferences.theme === 'dark' ? '#121212' : '#ffffff'}
-          />
-          <AppNavigator />
-        </NavigationContainer>
-      </ThemeProvider>
-    </SafeAreaProvider>
-  );
 }

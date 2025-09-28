@@ -1,10 +1,15 @@
 // metro.config.js - CONFIGURAZIONE PULITA SENZA IMPORT.META
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
+const { getDefaultConfig } = require('expo/metro-config');
+
 
 module.exports = (() => {
-  const config = getDefaultConfig(__dirname);
+    const config = getDefaultConfig(__dirname);
+    config.resolver.sourceExts.push('cjs');
+    config.resolver.unstable_enablePackageExports = false;
 
+    module.exports = config;
   // Aggiungi estensioni per supportare web e mobile
   config.resolver.sourceExts = [
     ...config.resolver.sourceExts,
@@ -52,3 +57,5 @@ module.exports = (() => {
 
   return config;
 })();
+
+
