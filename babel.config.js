@@ -1,54 +1,47 @@
+// babel.config.js
 module.exports = function (api) {
     api.cache(true);
-
     return {
         presets: ['babel-preset-expo'],
         plugins: [
-            // ECMAScript proposals (in ordine raccomandato)
-            '@babel/plugin-transform-flow-strip-types',
-            '@babel/plugin-proposal-export-namespace-from',
-
-            // Path alias (Module Resolver)
+            // React Native Reanimated plugin deve essere l'ultimo
+            'react-native-reanimated/plugin',
+            // Aggiungi supporto per alias di percorso
             [
                 'module-resolver',
                 {
                     root: ['./'],
-                    extensions: [
-                        '.ios.ts',
-                        '.android.ts',
-                        '.ts',
-                        '.ios.tsx',
-                        '.android.tsx',
-                        '.tsx',
-                        '.jsx',
-                        '.js',
-                        '.json'
-                    ],
                     alias: {
-                        '@': './src',
+                        '@': './',
+                        '@src': './src',
                         '@components': './src/components',
                         '@screens': './src/screens',
                         '@services': './src/services',
-                        '@navigation': './src/navigation',
                         '@hooks': './src/hooks',
                         '@utils': './src/utils',
                         '@assets': './assets',
+                        '@constants': './src/constants',
+                        '@navigation': './src/navigation',
                         '@store': './src/store',
-                        '@types': './src/types'
-                    }
-                }
+                    },
+                    extensions: [
+                        '.ios.js',
+                        '.android.js',
+                        '.js',
+                        '.jsx',
+                        '.json',
+                        '.tsx',
+                        '.ts',
+                        '.native.js',
+                        '.web.js',
+                    ],
+                },
             ],
-
-            // React Native Reanimated deve SEMPRE essere l'ultimo plugin
-            'react-native-reanimated/plugin'
         ],
         env: {
             production: {
-                plugins: [
-                    'transform-remove-console',
-                    'react-native-paper/babel'
-                ]
-            }
-        }
+                plugins: ['react-native-paper/babel'],
+            },
+        },
     };
 };

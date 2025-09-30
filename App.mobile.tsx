@@ -1,57 +1,44 @@
+// App.tsx (parte iniziale con inizializzazione Firebase)
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { onAuthStateChanged } from 'firebase/auth';
+import { initializeFirebase } from './src/services/firebaseInit';
 
-// Navigation
-import AppNavigator from './src/navigation/AppNavigator';
+export default function App() {
+    const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+    const [firebaseError, setFirebaseError] = useState<string | null>(null);
 
-// Store
-import { useStore } from './src/store';
-
-// Firebase
-import { auth } from './src/services/firebase';
-
-// Theme
-import { ThemeProvider } from './src/contexts/ThemeContext';
-
-// Splash Screen
-import * as SplashScreen from 'expo-splash-screen';
-
-// Prevent auto-hide (solo mobile)
-if (Platform.OS !== 'web') {
-    SplashScreen.preventAutoHideAsync();
-}
-
-export default function App(): React.JSX.Element {
-    const [initializing, setInitializing] = useState(true);
-    const [user, setUser] = useState(null);
-
-    // Gestione stato di autenticazione
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-            console.log('Auth state changed:', firebaseUser?.uid ? 'User logged in' : 'User logged out');
-            setUser(firebaseUser);
+        // Inizializza Firebase all'avvio
+        initializeFirebase()
+            .then((firebase) => {
+                console.log('✅ Firebase inizializzato con successo');
+                setIsFirebaseReady(true);
 
-            if (initializing) {
-                setInitializing(false);
+                // Salva le istanze globalmente se necessario
+                global.firebaseApp = firebase.app;
+                global.firebaseAuth = firebase.auth;
+                global.firebaseDb = firebase.db;
+            })
+            .catch((error) => {
+                console.error('❌ Errore inizializzazione Firebase:', error);
+                setFirebaseError(error.message);
+            });
+    }, []);
 
-                // Nascondi splash screen su mobile
-                if (Platform.OS !== 'web') {
-                    SplashScreen.hideAsync();
-                }
-            }
-        });
+    if (firebaseError) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Text>Errore Firebase: {firebaseError}</Text>
+            </View>
+        );
+    }
 
-        return unsubscribe;
-    }, [initializing]);
-
-    // Loading screen
-    if (initializing) {
+    if (!isFirebaseReady) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <ActivityIndicator size="large" />
+                <Text>Inizializzazione Firebase...</Text>
             </View>
         );
     }
