@@ -1,8 +1,4 @@
-// ========================================
-// 2. LOGIN SCREEN COMPLETO CON REDIRECT
-// ========================================
-// Path: src/screens/LoginScreen.tsx
-
+// src/screens/LoginScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -13,8 +9,6 @@ import {
     Platform,
     KeyboardAvoidingView,
     Dimensions,
-    StatusBar,
-    Animated,
 } from 'react-native';
 import {
     Card,
@@ -25,36 +19,32 @@ import {
     Divider,
     HelperText,
     Surface,
+    ActivityIndicator,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// Firebase imports
+// Firebase imports dal nuovo sistema
+import { auth, db, handleAuthError, isWeb } from '../services/firebase';
 import {
     signInWithEmailAndPassword,
-    onAuthStateChanged
+    onAuthStateChanged,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
+    User
 } from 'firebase/auth';
-import {
-    doc,
-    getDoc,
-    setDoc
-} from 'firebase/firestore';
-import { auth, db, getFirebaseErrorMessage, isWeb } from '../services/firebase';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 // Import tema
 import { useAppThemeManager, useThemedStyles } from '../hooks/useTheme';
 
-// Tipo per la navigazione
-type LoginScreenNavigationProp = StackNavigationProp<any>;
-
 const LoginScreen: React.FC = () => {
-    const navigation = useNavigation<LoginScreenNavigationProp>();
+    const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();
-
-    // Sistema di temi
     const { colors, isDark } = useAppThemeManager();
     const { dynamicStyles } = useThemedStyles();
 
@@ -66,108 +56,72 @@ const LoginScreen: React.FC = () => {
     const [rememberMe, setRememberMe] = useState(false);
     const [emailError, setEmailError] = useState('');
     const [passwordError, setPasswordError] = useState('');
+    const [initializing, setInitializing] = useState(true);
 
     // Responsive
     const screenWidth = Dimensions.get('window').width;
-    const isTablet = screenWidth >= 768;
-    const isDesktop = screenWidth >= 1024;
+    const isDesktop = screenWidth > 768;
 
-    // Animazioni
-    const fadeAnim = new Animated.Value(0);
-    const slideAnim = new Animated.Value(50);
-
-    // Animazione di entrata
+    // Gestione autenticazione
     useEffect(() => {
-        Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 800,
-                useNativeDriver: true,
-            }),
-            Animated.timing(slideAnim, {
-                toValue: 0,
-                duration: 600,
-                useNativeDriver: true,
-            }),
-        ]).start();
-    }, []);
-
-    // ====================================
-    // LISTENER PER AUTENTICAZIONE E REDIRECT
-    // ====================================
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
             if (user) {
-                console.log('🔍 Utente autenticato, verifico il tipo...');
-                await handleUserRedirect(user);
-            }
-        });
+                console.log('✅ Utente autenticato:', user.email);
 
-        return () => unsubscribe();
-    }, [navigation]);
+                // Aggiorna ultimo accesso
+                try {
+                    await updateDoc(doc(db, 'users', user.uid), {
+                        lastLoginAt: serverTimestamp(),
+                    });
+                } catch (error) {
+                    console.error('Errore aggiornamento ultimo accesso:', error);
+                }
 
-    // ====================================
-    // FUNZIONE DI REDIRECT BASATA SUL TIPO UTENTE
-    // ====================================
-    const handleUserRedirect = async (user: any) => {
-        try {
-            // Ottieni i dati dell'utente da Firestore
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-
-            if (userDoc.exists()) {
+                // Naviga alla dashboard appropriata
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
                 const userData = userDoc.data();
-                console.log('👤 Tipo utente:', userData.userType);
 
-                // Redirect basato sul tipo di utente
-                if (userData.userType === 'mechanic') {
-                    console.log('🔧 Redirect a Dashboard Meccanico');
-                    // Reset dello stack per evitare che l'utente possa tornare al login
+                if (userData?.role === 'mechanic') {
                     navigation.reset({
                         index: 0,
-                        routes: [{ name: 'HomeMechanic' as never }],
+                        routes: [{ name: 'HomeMechanic' }],
                     });
                 } else {
-                    console.log('🚗 Redirect a Dashboard Utente');
                     navigation.reset({
                         index: 0,
-                        routes: [{ name: 'Home' as never }],
+                        routes: [{ name: 'Main' }],
                     });
                 }
-            } else {
-                // Se non esiste il documento, crealo con dati base
-                console.log('📝 Creando profilo utente...');
-                await setDoc(doc(db, 'users', user.uid), {
-                    email: user.email,
-                    displayName: user.displayName || '',
-                    userType: 'user', // Default a user
-                    createdAt: new Date().toISOString(),
-                    photoURL: user.photoURL || '',
-                });
-
-                // Redirect a user dashboard di default
-                navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Home' as never }],
-                });
             }
-        } catch (error) {
-            console.error('❌ Errore durante il redirect:', error);
-            Alert.alert('Errore', 'Impossibile determinare il tipo di utente');
-        }
-    };
+            setInitializing(false);
+        });
 
-    // ====================================
-    // VALIDAZIONE FORM
-    // ====================================
+        return unsubscribe;
+    }, [navigation]);
+
+    // Check redirect result per Google Sign-In su web
+    useEffect(() => {
+        if (isWeb) {
+            getRedirectResult(auth)
+                .then(async (result) => {
+                    if (result) {
+                        console.log('✅ Google Sign-In completato');
+                        await handleGoogleUser(result.user);
+                    }
+                })
+                .catch((error) => {
+                    console.error('Errore redirect Google:', error);
+                });
+        }
+    }, []);
+
+    // Validazione form
     const validateForm = (): boolean => {
         let valid = true;
-
-        // Reset errori
         setEmailError('');
         setPasswordError('');
 
-        // Valida email
-        if (!email.trim()) {
+        if (!email) {
             setEmailError('Email richiesta');
             valid = false;
         } else if (!/\S+@\S+\.\S+/.test(email)) {
@@ -175,315 +129,220 @@ const LoginScreen: React.FC = () => {
             valid = false;
         }
 
-        // Valida password
-        if (!password.trim()) {
+        if (!password) {
             setPasswordError('Password richiesta');
             valid = false;
         } else if (password.length < 6) {
-            setPasswordError('Password troppo corta');
+            setPasswordError('Password troppo corta (min. 6 caratteri)');
             valid = false;
         }
 
         return valid;
     };
 
-    // ====================================
-    // GESTIONE LOGIN
-    // ====================================
+    // Login con email e password
     const handleLogin = async () => {
-        if (!validateForm()) {
-            return;
-        }
+        if (!validateForm()) return;
 
         setLoading(true);
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             console.log('✅ Login successful:', userCredential.user.email);
-
-            // Il redirect verrà gestito automaticamente dal listener onAuthStateChanged
-
+            // Il redirect è gestito da onAuthStateChanged
         } catch (error: any) {
             console.error('❌ Login error:', error);
-            const errorMessage = getFirebaseErrorMessage(error);
-            Alert.alert('Errore di accesso', errorMessage);
+            Alert.alert('Errore di accesso', handleAuthError(error));
         } finally {
             setLoading(false);
         }
     };
 
-    // ====================================
-    // GESTIONE GOOGLE LOGIN (PLACEHOLDER)
-    // ====================================
-    const handleGoogleLogin = async () => {
-        Alert.alert('Info', 'Google Sign-In sarà disponibile nella prossima versione');
+    // Gestione utente Google
+    const handleGoogleUser = async (user: User) => {
+        try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+
+            if (!userDoc.exists()) {
+                // Nuovo utente - crea profilo
+                await setDoc(doc(db, 'users', user.uid), {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: user.displayName || '',
+                    photoURL: user.photoURL || '',
+                    role: 'owner', // Default per nuovi utenti Google
+                    createdAt: serverTimestamp(),
+                    lastLoginAt: serverTimestamp(),
+                    provider: 'google',
+                });
+            } else {
+                // Utente esistente - aggiorna ultimo accesso
+                await updateDoc(doc(db, 'users', user.uid), {
+                    lastLoginAt: serverTimestamp(),
+                });
+            }
+        } catch (error) {
+            console.error('Errore gestione utente Google:', error);
+        }
     };
 
-    // ====================================
-    // GESTIONE APPLE LOGIN (PLACEHOLDER)
-    // ====================================
+    // Login con Google
+    const handleGoogleLogin = async () => {
+        setLoading(true);
+        try {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('profile');
+            provider.addScope('email');
+
+            if (isWeb) {
+                // Web: usa signInWithPopup o redirect
+                try {
+                    const result = await signInWithPopup(auth, provider);
+                    await handleGoogleUser(result.user);
+                } catch (popupError: any) {
+                    if (popupError.code === 'auth/popup-blocked') {
+                        // Fallback a redirect se popup bloccato
+                        await signInWithRedirect(auth, provider);
+                    } else {
+                        throw popupError;
+                    }
+                }
+            } else {
+                // Mobile: implementazione futura con expo-auth-session
+                Alert.alert('Info', 'Google Sign-In disponibile prossimamente su mobile');
+            }
+        } catch (error: any) {
+            console.error('Errore Google Sign-In:', error);
+            Alert.alert('Errore', handleAuthError(error));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Login con Apple (solo iOS)
     const handleAppleLogin = () => {
         Alert.alert('Info', 'Apple Sign-In sarà disponibile nella prossima versione');
     };
 
-    // ====================================
-    // STYLES
-    // ====================================
-    const styles = StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: colors.background,
-        },
-        backgroundGradient: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-        },
-        scrollContainer: {
-            flexGrow: 1,
-            justifyContent: isDesktop ? 'center' : 'flex-start',
-            paddingHorizontal: 20,
-            paddingTop: isDesktop ? 0 : insets.top + 40,
-            paddingBottom: insets.bottom + 20,
-        },
-        animatedContainer: {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-        },
-        header: {
-            alignItems: 'center',
-            marginBottom: 40,
-        },
-        headerIcon: {
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: colors.surface,
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: 16,
-            elevation: 2,
-        },
-        title: {
-            fontSize: 32,
-            fontWeight: 'bold',
-            color: colors.primary,
-            marginBottom: 8,
-        },
-        subtitle: {
-            fontSize: 16,
-            color: colors.onSurfaceVariant,
-            textAlign: 'center',
-        },
-        loginCard: {
-            borderRadius: 16,
-            backgroundColor: colors.surface,
-            elevation: 2,
-            maxWidth: isDesktop ? 480 : '100%',
-            alignSelf: 'center',
-            width: '100%',
-        },
-        input: {
-            marginBottom: 8,
-            backgroundColor: colors.surface,
-        },
-        optionsRow: {
-            flexDirection: isTablet ? 'row' : 'column',
-            justifyContent: 'space-between',
-            alignItems: isTablet ? 'center' : 'flex-start',
-            marginVertical: 16,
-            gap: isTablet ? 0 : 8,
-        },
-        checkboxRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-        },
-        checkboxLabel: {
-            marginLeft: 4,
-            fontSize: 14,
-            color: colors.onSurface,
-        },
-        forgotPasswordLink: {
-            alignSelf: isTablet ? 'auto' : 'flex-end',
-        },
-        forgotPasswordText: {
-            color: colors.primary,
-            fontSize: 14,
-            fontWeight: '500',
-        },
-        loginButton: {
-            marginTop: 8,
-            marginBottom: 24,
-            borderRadius: 12,
-        },
-        buttonContent: {
-            height: 48,
-        },
-        dividerContainer: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginBottom: 24,
-        },
-        divider: {
-            flex: 1,
-            backgroundColor: colors.outline,
-        },
-        dividerText: {
-            marginHorizontal: 16,
-            fontSize: 12,
-            color: colors.onSurfaceVariant,
-        },
-        socialButtonsContainer: {
-            gap: 12,
-            marginBottom: 24,
-        },
-        socialButton: {
-            borderRadius: 12,
-            borderColor: colors.outline,
-        },
-        registerContainer: {
-            alignItems: 'center',
-            paddingTop: 24,
-            paddingBottom: insets.bottom + 20,
-        },
-        registerTextContainer: {
-            flexDirection: 'row',
-            alignItems: 'center',
-        },
-        registerText: {
-            fontSize: 14,
-            color: colors.onSurfaceVariant,
-        },
-        registerLink: {
-            color: colors.primary,
-            fontWeight: '600',
-            fontSize: 14,
-        },
-    });
+    // Se sta ancora inizializzando, mostra loading
+    if (initializing) {
+        return (
+            <View style={[styles.container, styles.centerContent]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={{ marginTop: 16 }}>Caricamento...</Text>
+            </View>
+        );
+    }
 
-    // ====================================
-    // RENDER
-    // ====================================
     return (
-        <View style={styles.container}>
-            {/* Background Gradient */}
+        <KeyboardAvoidingView
+            style={styles.container}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
             <LinearGradient
-                colors={isDark ?
-                    ['#000000', '#1C1C1E', '#2C2C2E'] :
-                    ['#FAFAFA', '#F5F5F5', '#FFFFFF']
-                }
+                colors={isDark ? ['#1a1a1a', '#2d2d2d'] : ['#2196F3', '#1976D2']}
                 style={styles.backgroundGradient}
             />
 
-            {/* Status Bar */}
-            <StatusBar
-                barStyle={isDark ? 'light-content' : 'dark-content'}
-                backgroundColor={colors.background}
-            />
-
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            <ScrollView
+                contentContainerStyle={[
+                    styles.scrollContainer,
+                    { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }
+                ]}
+                showsVerticalScrollIndicator={false}
             >
-                <ScrollView
-                    contentContainerStyle={styles.scrollContainer}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    {/* Header */}
-                    <Animated.View style={[styles.header, styles.animatedContainer]}>
-                        <Surface style={styles.headerIcon} elevation={0}>
-                            <MaterialCommunityIcons
-                                name="car-wrench"
-                                size={40}
-                                color={colors.primary}
-                            />
-                        </Surface>
-                        <Text style={styles.title}>MyMeccanic</Text>
-                        <Text style={styles.subtitle}>
-                            Gestisci la tua auto o la tua officina
-                        </Text>
-                    </Animated.View>
+                <View style={[styles.formContainer, isDesktop && styles.formContainerDesktop]}>
+                    <Card style={styles.card}>
+                        <Card.Content style={styles.cardContent}>
+                            {/* Logo e titolo */}
+                            <View style={styles.header}>
+                                <MaterialCommunityIcons
+                                    name="car-wrench"
+                                    size={60}
+                                    color={colors.primary}
+                                />
+                                <Text variant="headlineMedium" style={styles.title}>
+                                    MyMechanic
+                                </Text>
+                                <Text variant="bodyLarge" style={styles.subtitle}>
+                                    Accedi al tuo account
+                                </Text>
+                            </View>
 
-                    {/* Login Form */}
-                    <Animated.View style={styles.animatedContainer}>
-                        <Card style={styles.loginCard}>
-                            <Card.Content>
-                                {/* Email Input */}
+                            {/* Form */}
+                            <View style={styles.form}>
                                 <TextInput
+                                    mode="outlined"
                                     label="Email"
                                     value={email}
-                                    onChangeText={setEmail}
+                                    onChangeText={(text) => {
+                                        setEmail(text);
+                                        setEmailError('');
+                                    }}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     autoComplete="email"
+                                    left={<TextInput.Icon icon="email" />}
                                     error={!!emailError}
-                                    mode="outlined"
-                                    style={styles.input}
-                                    outlineStyle={{ borderColor: colors.outline }}
-                                    activeOutlineColor={colors.primary}
-                                    left={<TextInput.Icon icon="email" iconColor={colors.primary} />}
+                                    disabled={loading}
                                 />
                                 <HelperText type="error" visible={!!emailError}>
                                     {emailError}
                                 </HelperText>
 
-                                {/* Password Input */}
                                 <TextInput
+                                    mode="outlined"
                                     label="Password"
                                     value={password}
-                                    onChangeText={setPassword}
+                                    onChangeText={(text) => {
+                                        setPassword(text);
+                                        setPasswordError('');
+                                    }}
                                     secureTextEntry={!showPassword}
-                                    error={!!passwordError}
-                                    mode="outlined"
-                                    style={styles.input}
-                                    outlineStyle={{ borderColor: colors.outline }}
-                                    activeOutlineColor={colors.primary}
-                                    left={<TextInput.Icon icon="lock" iconColor={colors.primary} />}
+                                    autoComplete="password"
+                                    left={<TextInput.Icon icon="lock" />}
                                     right={
                                         <TextInput.Icon
-                                            icon={showPassword ? "eye-off" : "eye"}
-                                            iconColor={colors.primary}
+                                            icon={showPassword ? 'eye-off' : 'eye'}
                                             onPress={() => setShowPassword(!showPassword)}
                                         />
                                     }
+                                    error={!!passwordError}
+                                    disabled={loading}
                                 />
                                 <HelperText type="error" visible={!!passwordError}>
                                     {passwordError}
                                 </HelperText>
 
-                                {/* Options Row */}
-                                <View style={styles.optionsRow}>
-                                    <View style={styles.checkboxRow}>
-                                        <Checkbox
-                                            status={rememberMe ? 'checked' : 'unchecked'}
-                                            onPress={() => setRememberMe(!rememberMe)}
-                                            color={colors.primary}
-                                        />
-                                        <Text style={styles.checkboxLabel}>
-                                            Ricordami
-                                        </Text>
-                                    </View>
-                                    <TouchableOpacity style={styles.forgotPasswordLink}>
-                                        <Text style={styles.forgotPasswordText}>
-                                            Password dimenticata?
-                                        </Text>
+                                {/* Opzioni */}
+                                <View style={styles.options}>
+                                    <TouchableOpacity
+                                        style={styles.checkboxContainer}
+                                        onPress={() => setRememberMe(!rememberMe)}
+                                        disabled={loading}
+                                    >
+                                        <Checkbox status={rememberMe ? 'checked' : 'unchecked'} />
+                                        <Text>Ricordami</Text>
                                     </TouchableOpacity>
+
+                                    <Button
+                                        mode="text"
+                                        onPress={() => Alert.alert('Info', 'Recupero password disponibile prossimamente')}
+                                        disabled={loading}
+                                    >
+                                        Password dimenticata?
+                                    </Button>
                                 </View>
 
-                                {/* Login Button */}
+                                {/* Pulsante login */}
                                 <Button
                                     mode="contained"
                                     onPress={handleLogin}
                                     loading={loading}
                                     disabled={loading}
                                     style={styles.loginButton}
-                                    contentStyle={styles.buttonContent}
-                                    buttonColor={colors.primary}
+                                    contentStyle={styles.loginButtonContent}
                                 >
-                                    {loading ? 'Accesso in corso...' : 'Accedi'}
+                                    Accedi
                                 </Button>
 
                                 {/* Divider */}
@@ -493,18 +352,16 @@ const LoginScreen: React.FC = () => {
                                     <Divider style={styles.divider} />
                                 </View>
 
-                                {/* Social Login Buttons */}
-                                <View style={styles.socialButtonsContainer}>
+                                {/* Social login */}
+                                <View style={styles.socialButtons}>
                                     <Button
                                         mode="outlined"
                                         onPress={handleGoogleLogin}
                                         disabled={loading}
-                                        style={styles.socialButton}
-                                        contentStyle={styles.buttonContent}
                                         icon="google"
-                                        textColor={colors.onSurfaceVariant}
+                                        style={styles.socialButton}
                                     >
-                                        Continua con Google
+                                        Google
                                     </Button>
 
                                     {Platform.OS === 'ios' && (
@@ -512,39 +369,124 @@ const LoginScreen: React.FC = () => {
                                             mode="outlined"
                                             onPress={handleAppleLogin}
                                             disabled={loading}
-                                            style={styles.socialButton}
-                                            contentStyle={styles.buttonContent}
                                             icon="apple"
-                                            textColor={colors.onSurfaceVariant}
+                                            style={styles.socialButton}
                                         >
-                                            Continua con Apple
+                                            Apple
                                         </Button>
                                     )}
                                 </View>
-                            </Card.Content>
-                        </Card>
-                    </Animated.View>
 
-                    {/* Register Link */}
-                    <View style={styles.registerContainer}>
-                        <View style={styles.registerTextContainer}>
-                            <Text style={styles.registerText}>
-                                Non hai un account?{' '}
-                            </Text>
-                            <TouchableOpacity
-                                onPress={() => navigation.navigate('Register' as never)}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={styles.registerLink}>
-                                    Registrati
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
-        </View>
+                                {/* Link registrazione */}
+                                <View style={styles.footer}>
+                                    <Text>Non hai un account?</Text>
+                                    <Button
+                                        mode="text"
+                                        onPress={() => navigation.navigate('Register')}
+                                        disabled={loading}
+                                    >
+                                        Registrati
+                                    </Button>
+                                </View>
+                            </View>
+                        </Card.Content>
+                    </Card>
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 };
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    centerContent: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    backgroundGradient: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+    },
+    scrollContainer: {
+        flexGrow: 1,
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+    },
+    formContainer: {
+        width: '100%',
+        maxWidth: 400,
+        alignSelf: 'center',
+    },
+    formContainerDesktop: {
+        maxWidth: 450,
+    },
+    card: {
+        elevation: 8,
+    },
+    cardContent: {
+        padding: 24,
+    },
+    header: {
+        alignItems: 'center',
+        marginBottom: 32,
+    },
+    title: {
+        marginTop: 16,
+        fontWeight: 'bold',
+    },
+    subtitle: {
+        marginTop: 8,
+        opacity: 0.7,
+    },
+    form: {
+        gap: 8,
+    },
+    options: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginVertical: 8,
+    },
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    loginButton: {
+        marginTop: 16,
+    },
+    loginButtonContent: {
+        paddingVertical: 8,
+    },
+    dividerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 24,
+    },
+    divider: {
+        flex: 1,
+    },
+    dividerText: {
+        marginHorizontal: 16,
+        opacity: 0.6,
+    },
+    socialButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    socialButton: {
+        flex: 1,
+    },
+    footer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 24,
+    },
+});
 
 export default LoginScreen;

@@ -1,19 +1,31 @@
-// App.web.tsx - Versione Web con polyfill per import.meta
-// IMPORTANTE: Importa il polyfill PRIMA di qualsiasi altra cosa
-import './src/utils/firebasePolyfill';
+// App.web.tsx - Versione Web con polyfill inline
+// POLYFILL INLINE - DEVE essere prima di QUALSIASI import
+(function() {
+    if (typeof globalThis !== 'undefined' && !globalThis.import) {
+        globalThis.import = {
+            meta: {
+                url: 'https://localhost:8081',
+                env: { MODE: 'development', DEV: true, PROD: false, SSR: false }
+            }
+        };
+    }
+    if (typeof window !== 'undefined' && !window.import) {
+        window.import = {
+            meta: {
+                url: window.location ? window.location.href : 'https://localhost:8081',
+                env: { MODE: 'development', DEV: true, PROD: false, SSR: false }
+            }
+        };
+    }
+})();
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { PaperProvider, MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
+import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
-
-// Lazy load degli screen per evitare problemi di import
-const LoginScreen = React.lazy(() => import('./src/screens/LoginScreen'));
-const RegisterScreen = React.lazy(() => import('./src/screens/RegisterScreen'));
-const DashboardScreen = React.lazy(() => import('./src/screens/DashboardScreen'));
 
 // Configurazione tema
 const theme = {
@@ -27,7 +39,7 @@ const theme = {
 
 const Stack = createNativeStackNavigator();
 
-// Componente di loading per Suspense
+// Componente di loading
 function LoadingScreen() {
     return (
         <View style={styles.centerContainer}>
@@ -37,43 +49,84 @@ function LoadingScreen() {
     );
 }
 
-// Auth Stack con Suspense
+// Componente wrapper per lazy loading degli screen
+function LazyScreen({ screenName }: { screenName: string }) {
+    const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Import dinamico degli screen
+        const loadScreen = async () => {
+            try {
+                let module;
+                switch (screenName) {
+                    case 'Login':
+                        module = await import('./src/screens/LoginScreen');
+                        break;
+                    case 'Register':
+                        module = await import('./src/screens/RegisterScreen');
+                        break;
+                    default:
+                        throw new Error(`Screen ${screenName} not found`);
+                }
+                setComponent(() => module.default);
+            } catch (err: any) {
+                console.error(`Error loading ${screenName}:`, err);
+                setError(err.message);
+            }
+        };
+
+        loadScreen();
+    }, [screenName]);
+
+    if (error) {
+        return (
+            <View style={styles.centerContainer}>
+                <Text style={styles.errorText}>Errore caricamento</Text>
+                <Text style={styles.errorDetails}>{error}</Text>
+            </View>
+        );
+    }
+
+    if (!Component) {
+        return <LoadingScreen />;
+    }
+
+    return <Component />;
+}
+
+// Auth Stack
 function AuthStack() {
     return (
-        <React.Suspense fallback={<LoadingScreen />}>
-            <Stack.Navigator
-                screenOptions={{
-                    headerShown: false,
-                    animation: 'fade',
-                }}
-            >
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Register" component={RegisterScreen} />
-            </Stack.Navigator>
-        </React.Suspense>
+        <Stack.Navigator
+            screenOptions={{
+                headerShown: false,
+                animation: 'fade',
+            }}
+        >
+            <Stack.Screen name="Login">
+                {() => <LazyScreen screenName="Login" />}
+            </Stack.Screen>
+            <Stack.Screen name="Register">
+                {() => <LazyScreen screenName="Register" />}
+            </Stack.Screen>
+        </Stack.Navigator>
     );
 }
 
-// Main Stack con Suspense
+// Main Stack
 function MainStack() {
     return (
-        <React.Suspense fallback={<LoadingScreen />}>
-            <Stack.Navigator
-                screenOptions={{
-                    headerShown: true,
-                    headerStyle: {
-                        backgroundColor: theme.colors.primary,
-                    },
-                    headerTintColor: '#fff',
-                }}
-            >
-                <Stack.Screen
-                    name="Dashboard"
-                    component={DashboardScreen}
-                    options={{ title: 'MyMechanic' }}
-                />
-            </Stack.Navigator>
-        </React.Suspense>
+        <Stack.Navigator
+            screenOptions={{
+                headerShown: true,
+                headerStyle: {
+                    backgroundColor: theme.colors.primary,
+                },
+                headerTintColor: '#fff',
+            }}
+        >
+        </Stack.Navigator>
     );
 }
 
@@ -88,49 +141,28 @@ export default function App() {
 
         const initializeApp = async () => {
             try {
-                // Usa require invece di import dinamico per evitare problemi
-                const { initializeApp: initFB, getApps } = require('firebase/app');
-                const { getAuth, onAuthStateChanged: onAuthChange, browserLocalPersistence, setPersistence } = require('firebase/auth');
-                const { getFirestore } = require('firebase/firestore');
+                // Delay per assicurarsi che il polyfill sia attivo
+                await new Promise(resolve => setTimeout(resolve, 100));
 
-                const firebaseConfig = {
-                    apiKey: "AIzaSyBH6F0JOVh8X-X41h2xN7cXxNEZnmY2nMk",
-                    authDomain: "mymecanich.firebaseapp.com",
-                    projectId: "mymecanich",
-                    storageBucket: "mymecanich.firebasestorage.app",
-                    messagingSenderId: "619020396283",
-                    appId: "1:619020396283:web:2f97f5f3e5e5dc5105b25e",
-                    measurementId: "G-7K1E9X8RLN"
-                };
+                // Import Firebase dopo il delay
+                const { auth, db, isFirebaseReady } = await import('./src/services/firebase');
 
-                // Inizializza Firebase
-                const app = !getApps().length ? initFB(firebaseConfig) : getApps()[0];
-                const auth = getAuth(app);
-                const db = getFirestore(app);
-
-                // Imposta persistenza
-                try {
-                    await setPersistence(auth, browserLocalPersistence);
-                } catch (persistErr) {
-                    console.warn('Persistenza non impostata:', persistErr);
+                if (!isFirebaseReady()) {
+                    throw new Error('Firebase non pronto');
                 }
 
-                // Salva globalmente per altri componenti
-                if (typeof window !== 'undefined') {
-                    (window as any).firebaseApp = app;
-                    (window as any).firebaseAuth = auth;
-                    (window as any).firebaseDb = db;
-                }
+                // Import onAuthStateChanged
+                const { onAuthStateChanged } = await import('firebase/auth');
 
-                // Ascolta i cambiamenti di autenticazione
-                unsubscribe = onAuthChange(auth, (user: any) => {
-                    console.log('Auth state changed:', !!user);
+                // Setup auth listener
+                unsubscribe = onAuthStateChanged(auth, (user: any) => {
+                    console.log('Auth state:', !!user);
                     setIsAuthenticated(!!user);
                     setFirebaseReady(true);
                     setIsLoading(false);
                 });
 
-                console.log('✅ Firebase inizializzato con successo');
+                console.log('✅ App inizializzata');
             } catch (err: any) {
                 console.error('❌ Errore inizializzazione:', err);
                 setError(err.message || 'Errore sconosciuto');
@@ -138,8 +170,7 @@ export default function App() {
             }
         };
 
-        // Piccolo delay per assicurarsi che il DOM sia pronto
-        setTimeout(initializeApp, 100);
+        initializeApp();
 
         return () => {
             if (unsubscribe) {
@@ -148,18 +179,16 @@ export default function App() {
         };
     }, []);
 
-    // Mostra errori
     if (error) {
         return (
             <View style={styles.centerContainer}>
                 <Text style={styles.errorText}>Errore di inizializzazione</Text>
                 <Text style={styles.errorDetails}>{error}</Text>
-                <Text style={styles.errorHint}>Prova a ricaricare la pagina</Text>
+                <Text style={styles.errorHint}>Prova a ricaricare la pagina (F5)</Text>
             </View>
         );
     }
 
-    // Mostra loading
     if (isLoading || !firebaseReady) {
         return <LoadingScreen />;
     }
