@@ -1,24 +1,3 @@
-// App.web.tsx - Versione Web con polyfill inline
-// POLYFILL INLINE - DEVE essere prima di QUALSIASI import
-(function() {
-    if (typeof globalThis !== 'undefined' && !globalThis.import) {
-        globalThis.import = {
-            meta: {
-                url: 'https://localhost:8081',
-                env: { MODE: 'development', DEV: true, PROD: false, SSR: false }
-            }
-        };
-    }
-    if (typeof window !== 'undefined' && !window.import) {
-        window.import = {
-            meta: {
-                url: window.location ? window.location.href : 'https://localhost:8081',
-                env: { MODE: 'development', DEV: true, PROD: false, SSR: false }
-            }
-        };
-    }
-})();
-
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -26,8 +5,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, isFirebaseReady } from './src/services/firebase.web';
+import LoginScreen from './src/screens/LoginScreen';
+import RegisterScreen from './src/screens/RegisterScreen';
 
-// Configurazione tema
 const theme = {
     ...MD3LightTheme,
     colors: {
@@ -39,7 +21,6 @@ const theme = {
 
 const Stack = createNativeStackNavigator();
 
-// Componente di loading
 function LoadingScreen() {
     return (
         <View style={styles.centerContainer}>
@@ -49,53 +30,6 @@ function LoadingScreen() {
     );
 }
 
-// Componente wrapper per lazy loading degli screen
-function LazyScreen({ screenName }: { screenName: string }) {
-    const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        // Import dinamico degli screen
-        const loadScreen = async () => {
-            try {
-                let module;
-                switch (screenName) {
-                    case 'Login':
-                        module = await import('./src/screens/LoginScreen');
-                        break;
-                    case 'Register':
-                        module = await import('./src/screens/RegisterScreen');
-                        break;
-                    default:
-                        throw new Error(`Screen ${screenName} not found`);
-                }
-                setComponent(() => module.default);
-            } catch (err: any) {
-                console.error(`Error loading ${screenName}:`, err);
-                setError(err.message);
-            }
-        };
-
-        loadScreen();
-    }, [screenName]);
-
-    if (error) {
-        return (
-            <View style={styles.centerContainer}>
-                <Text style={styles.errorText}>Errore caricamento</Text>
-                <Text style={styles.errorDetails}>{error}</Text>
-            </View>
-        );
-    }
-
-    if (!Component) {
-        return <LoadingScreen />;
-    }
-
-    return <Component />;
-}
-
-// Auth Stack
 function AuthStack() {
     return (
         <Stack.Navigator
@@ -104,36 +38,23 @@ function AuthStack() {
                 animation: 'fade',
             }}
         >
-            <Stack.Screen name="Login">
-                {() => <LazyScreen screenName="Login" />}
-            </Stack.Screen>
-            <Stack.Screen name="Register">
-                {() => <LazyScreen screenName="Register" />}
-            </Stack.Screen>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
         </Stack.Navigator>
     );
 }
 
-// Main Stack
 function MainStack() {
     return (
-        <Stack.Navigator
-            screenOptions={{
-                headerShown: true,
-                headerStyle: {
-                    backgroundColor: theme.colors.primary,
-                },
-                headerTintColor: '#fff',
-            }}
-        >
-        </Stack.Navigator>
+        <View style={styles.centerContainer}>
+            <Text style={styles.loadingText}>Dashboard - In sviluppo</Text>
+        </View>
     );
 }
 
 export default function App() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [firebaseReady, setFirebaseReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -141,24 +62,13 @@ export default function App() {
 
         const initializeApp = async () => {
             try {
-                // Delay per assicurarsi che il polyfill sia attivo
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                // Import Firebase dopo il delay
-                const { auth, db, isFirebaseReady } = await import('./src/services/firebase');
-
                 if (!isFirebaseReady()) {
-                    throw new Error('Firebase non pronto');
+                    throw new Error('Firebase non inizializzato correttamente');
                 }
 
-                // Import onAuthStateChanged
-                const { onAuthStateChanged } = await import('firebase/auth');
-
-                // Setup auth listener
                 unsubscribe = onAuthStateChanged(auth, (user: any) => {
                     console.log('Auth state:', !!user);
                     setIsAuthenticated(!!user);
-                    setFirebaseReady(true);
                     setIsLoading(false);
                 });
 
@@ -189,7 +99,7 @@ export default function App() {
         );
     }
 
-    if (isLoading || !firebaseReady) {
+    if (isLoading) {
         return <LoadingScreen />;
     }
 
