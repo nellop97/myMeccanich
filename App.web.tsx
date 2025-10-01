@@ -1,20 +1,19 @@
-// App.web.tsx - Versione specifica per Web
+// App.web.tsx - Versione Web con polyfill per import.meta
+// IMPORTANTE: Importa il polyfill PRIMA di qualsiasi altra cosa
+import './src/utils/firebasePolyfill';
+
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PaperProvider, MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 
-// Import screens
-import LoginScreen from './src/screens/LoginScreen';
-import RegisterScreen from './src/screens/RegisterScreen';
-
-// Firebase - usa import dinamico per evitare problemi con import.meta
-let auth: any = null;
-let db: any = null;
-let onAuthStateChanged: any = null;
+// Lazy load degli screen per evitare problemi di import
+const LoginScreen = React.lazy(() => import('./src/screens/LoginScreen'));
+const RegisterScreen = React.lazy(() => import('./src/screens/RegisterScreen'));
+const DashboardScreen = React.lazy(() => import('./src/screens/DashboardScreen'));
 
 // Configurazione tema
 const theme = {
@@ -28,48 +27,71 @@ const theme = {
 
 const Stack = createNativeStackNavigator();
 
-function AuthStack() {
+// Componente di loading per Suspense
+function LoadingScreen() {
     return (
-        <Stack.Navigator
-            screenOptions={{
-                headerShown: false,
-                animation: 'fade',
-            }}
-        >
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-        </Stack.Navigator>
+        <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Caricamento...</Text>
+        </View>
     );
 }
 
+// Auth Stack con Suspense
+function AuthStack() {
+    return (
+        <React.Suspense fallback={<LoadingScreen />}>
+            <Stack.Navigator
+                screenOptions={{
+                    headerShown: false,
+                    animation: 'fade',
+                }}
+            >
+                <Stack.Screen name="Login" component={LoginScreen} />
+                <Stack.Screen name="Register" component={RegisterScreen} />
+            </Stack.Navigator>
+        </React.Suspense>
+    );
+}
+
+// Main Stack con Suspense
 function MainStack() {
     return (
-        <Stack.Navigator
-            screenOptions={{
-                headerShown: true,
-                headerStyle: {
-                    backgroundColor: theme.colors.primary,
-                },
-                headerTintColor: '#fff',
-            }}
-        >
-        </Stack.Navigator>
+        <React.Suspense fallback={<LoadingScreen />}>
+            <Stack.Navigator
+                screenOptions={{
+                    headerShown: true,
+                    headerStyle: {
+                        backgroundColor: theme.colors.primary,
+                    },
+                    headerTintColor: '#fff',
+                }}
+            >
+                <Stack.Screen
+                    name="Dashboard"
+                    component={DashboardScreen}
+                    options={{ title: 'MyMechanic' }}
+                />
+            </Stack.Navigator>
+        </React.Suspense>
     );
 }
 
 export default function App() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [firebaseError, setFirebaseError] = useState<string | null>(null);
+    const [firebaseReady, setFirebaseReady] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Inizializza Firebase in modo asincrono per evitare problemi con import.meta
-        const initFirebase = async () => {
+        let unsubscribe: any = null;
+
+        const initializeApp = async () => {
             try {
-                // Import dinamici per evitare errori di bundling
-                const firebaseApp = await import('firebase/app');
-                const firebaseAuth = await import('firebase/auth');
-                const firebaseFirestore = await import('firebase/firestore');
+                // Usa require invece di import dinamico per evitare problemi
+                const { initializeApp: initFB, getApps } = require('firebase/app');
+                const { getAuth, onAuthStateChanged: onAuthChange, browserLocalPersistence, setPersistence } = require('firebase/auth');
+                const { getFirestore } = require('firebase/firestore');
 
                 const firebaseConfig = {
                     apiKey: "AIzaSyBH6F0JOVh8X-X41h2xN7cXxNEZnmY2nMk",
@@ -82,62 +104,64 @@ export default function App() {
                 };
 
                 // Inizializza Firebase
-                const app = !firebaseApp.getApps().length
-                    ? firebaseApp.initializeApp(firebaseConfig)
-                    : firebaseApp.getApps()[0];
+                const app = !getApps().length ? initFB(firebaseConfig) : getApps()[0];
+                const auth = getAuth(app);
+                const db = getFirestore(app);
 
-                auth = firebaseAuth.getAuth(app);
-                db = firebaseFirestore.getFirestore(app);
-                onAuthStateChanged = firebaseAuth.onAuthStateChanged;
+                // Imposta persistenza
+                try {
+                    await setPersistence(auth, browserLocalPersistence);
+                } catch (persistErr) {
+                    console.warn('Persistenza non impostata:', persistErr);
+                }
 
-                // Imposta persistenza per web
-                await firebaseAuth.setPersistence(auth, firebaseAuth.browserLocalPersistence);
+                // Salva globalmente per altri componenti
+                if (typeof window !== 'undefined') {
+                    (window as any).firebaseApp = app;
+                    (window as any).firebaseAuth = auth;
+                    (window as any).firebaseDb = db;
+                }
 
-                console.log('✅ Firebase Web inizializzato con successo');
-
-                // Setup auth listener
-                const unsubscribe = onAuthStateChanged(auth, (user: any) => {
+                // Ascolta i cambiamenti di autenticazione
+                unsubscribe = onAuthChange(auth, (user: any) => {
+                    console.log('Auth state changed:', !!user);
                     setIsAuthenticated(!!user);
+                    setFirebaseReady(true);
                     setIsLoading(false);
                 });
 
-                return () => unsubscribe();
-            } catch (error: any) {
-                console.error('❌ Errore inizializzazione Firebase:', error);
-                setFirebaseError(error.message);
+                console.log('✅ Firebase inizializzato con successo');
+            } catch (err: any) {
+                console.error('❌ Errore inizializzazione:', err);
+                setError(err.message || 'Errore sconosciuto');
                 setIsLoading(false);
             }
         };
 
-        initFirebase();
+        // Piccolo delay per assicurarsi che il DOM sia pronto
+        setTimeout(initializeApp, 100);
+
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
     }, []);
 
-    // Rendi Firebase disponibile globalmente per gli altri componenti
-    useEffect(() => {
-        if (auth && db) {
-            // @ts-ignore
-            window.firebaseAuth = auth;
-            // @ts-ignore
-            window.firebaseDb = db;
-        }
-    }, [auth, db]);
-
-    if (firebaseError) {
+    // Mostra errori
+    if (error) {
         return (
             <View style={styles.centerContainer}>
                 <Text style={styles.errorText}>Errore di inizializzazione</Text>
-                <Text style={styles.errorDetails}>{firebaseError}</Text>
+                <Text style={styles.errorDetails}>{error}</Text>
+                <Text style={styles.errorHint}>Prova a ricaricare la pagina</Text>
             </View>
         );
     }
 
-    if (isLoading) {
-        return (
-            <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color={theme.colors.primary} />
-                <Text style={styles.loadingText}>Caricamento...</Text>
-            </View>
-        );
+    // Mostra loading
+    if (isLoading || !firebaseReady) {
+        return <LoadingScreen />;
     }
 
     return (
@@ -158,6 +182,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#f5f5f5',
+        padding: 20,
     },
     errorText: {
         fontSize: 18,
@@ -169,7 +194,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#666',
         textAlign: 'center',
-        paddingHorizontal: 20,
+        marginBottom: 10,
+    },
+    errorHint: {
+        fontSize: 12,
+        color: '#999',
+        fontStyle: 'italic',
     },
     loadingText: {
         marginTop: 10,

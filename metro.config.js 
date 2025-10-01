@@ -1,10 +1,28 @@
 // metro.config.js
 const { getDefaultConfig } = require('expo/metro-config');
-const defaultConfig = getDefaultConfig(__dirname);
 
-module.exports = {
-  ...defaultConfig,
-  resolver: {
-    sourceExts: [...defaultConfig.resolver.sourceExts, 'web.tsx', 'mobile.tsx'],
-  },
+const config = getDefaultConfig(__dirname);
+
+// Aggiungi supporto per i moduli web
+config.resolver.sourceExts = [...config.resolver.sourceExts, 'web.js', 'web.ts', 'web.tsx'];
+
+// Risolvi i problemi con Firebase e import.meta
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Gestisci import.meta per Firebase
+  if (moduleName.includes('firebase') && platform === 'web') {
+    // Forza l'uso dei moduli CommonJS per evitare import.meta
+    if (moduleName.includes('@firebase')) {
+      const commonjsPath = moduleName.replace('@firebase', '@firebase/').replace('/dist/esm', '/dist/cjs');
+      try {
+        return context.resolveRequest(context, commonjsPath, platform);
+      } catch (e) {
+        // Fallback al modulo originale
+      }
+    }
+  }
+
+  // Default resolution
+  return context.resolveRequest(context, moduleName, platform);
 };
+
+module.exports = config;
