@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore';
 import {
     getStorage,
-    Storage,
+    FirebaseStorage,
     connectStorageEmulator
 } from 'firebase/storage';
 
@@ -37,7 +37,8 @@ const firebaseConfig = {
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
-let storage: Storage;
+let storage: FirebaseStorage;
+let initialized = false;
 
 // Flag per emulatori (development)
 const USE_EMULATORS = false; // Imposta su true per usare emulatori locali
@@ -56,6 +57,7 @@ try {
     auth = getAuth(app);
     db = getFirestore(app);
     storage = getStorage(app);
+    initialized = true;
 
     // Imposta persistenza per web
     setPersistence(auth, browserLocalPersistence)
@@ -103,6 +105,11 @@ try {
     throw error;
 }
 
+// Verifica se Firebase è pronto
+export const isFirebaseReady = (): boolean => {
+    return initialized && !!auth && !!db;
+};
+
 // Helper per gestire errori di autenticazione
 export const handleAuthError = (error: any): string => {
     const errorMessages: { [key: string]: string } = {
@@ -132,4 +139,4 @@ export const isWeb = true;
 export const isMobile = false;
 
 // Export types
-export type { FirebaseApp, Auth, Firestore, Storage };
+export type { FirebaseApp, Auth, Firestore, FirebaseStorage };

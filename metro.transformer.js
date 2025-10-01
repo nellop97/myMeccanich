@@ -1,5 +1,5 @@
-// metro.transformer.js
-const upstreamTransformer = require('metro-react-native-babel-transformer');
+// metro.transformer.js - Expo 54 compatible
+const upstreamTransformer = require('@expo/metro-runtime/build/transformer');
 
 module.exports.transform = async ({ src, filename, options }) => {
     // Rimuovi o sostituisci import.meta nei file Firebase
