@@ -53,9 +53,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 // Import Navigation
 import AppNavigator from './src/navigation/AppNavigator';
 
-// Import Theme
-import { theme } from './src/theme/theme';
-
 // Loading Screen Component
 function LoadingScreen() {
     return (

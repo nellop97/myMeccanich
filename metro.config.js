@@ -9,9 +9,9 @@ const config = getDefaultConfig(__dirname);
 config.resolver.sourceExts.push('web.js', 'web.jsx', 'web.ts', 'web.tsx');
 
 // TRANSFORMER PERSONALIZZATO
+// Metro cercherà automaticamente metro.transformer.js nella root
 config.transformer = {
     ...config.transformer,
-    babelTransformerPath: path.resolve(__dirname, 'metro.transformer.js'),
     // Abilita supporto per sintassi moderna
     unstable_allowRequireContext: true,
     getTransformOptions: async () => ({
