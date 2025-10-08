@@ -1,36 +1,30 @@
-// babel.config.js - SENZA Reanimated
-module.exports = function (api) {
+// babel.config.js
+module.exports = function(api) {
     api.cache(true);
 
     return {
-        presets: ['babel-preset-expo'],
+        presets: [
+            'babel-preset-expo'
+        ],
         plugins: [
+            // Plugin per module resolver (se lo usi)
             [
                 'module-resolver',
                 {
                     root: ['./'],
                     alias: {
                         '@': './',
-                        '@src': './src',
-                        '@components': './src/components',
-                        '@screens': './src/screens',
-                        '@services': './src/services',
-                        '@hooks': './src/hooks',
-                        '@utils': './src/utils',
-                        '@assets': './assets',
                     },
-                    extensions: [
-                        '.ios.js',
-                        '.android.js',
-                        '.js',
-                        '.jsx',
-                        '.json',
-                        '.tsx',
-                        '.ts',
-                        '.web.js',
-                    ],
                 },
             ],
         ],
+        env: {
+            production: {
+                plugins: [
+                    // Rimuovi console.log in production
+                    'transform-remove-console',
+                ].filter(Boolean),
+            },
+        },
     };
 };

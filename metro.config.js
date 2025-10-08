@@ -1,11 +1,21 @@
-// metro.config.js - Versione semplificata senza transformer custom
+// metro.config.js - Blocca moduli ESM problematici
 const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// Estensioni file per web
+// BLOCCA COMPLETAMENTE I FILE .mjs E LA CARTELLA esm/
+config.resolver.sourceExts = config.resolver.sourceExts.filter(ext => ext !== 'mjs');
+
+// Aggiungi estensioni per web
 config.resolver.sourceExts.push('web.js', 'web.jsx', 'web.ts', 'web.tsx');
+
+// BLOCCA LA CARTELLA esm/ di zustand
+config.resolver.blockList = [
+    /node_modules\/zustand\/esm\/.*/,
+    /\.mjs$/,
+];
 
 // Resolver personalizzato
 const originalResolveRequest = config.resolver.resolveRequest;
@@ -15,9 +25,16 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
         return context.resolveRequest(context, 'react-native-web', platform);
     }
 
-    // Log Firebase modules (opzionale, puoi rimuovere)
-    if (platform === 'web' && moduleName.startsWith('firebase/')) {
-        console.log(`🔥 Caricando Firebase module: ${moduleName}`);
+    // FORZA ZUSTAND A USARE FILE COMMONJS, NON ESM
+    if (moduleName === 'zustand' || moduleName.startsWith('zustand/')) {
+        // Rimuovi /esm se presente
+        const cleanModuleName = moduleName.replace(/\/esm\//, '/');
+
+        try {
+            return context.resolveRequest(context, cleanModuleName, platform);
+        } catch (e) {
+            // Fallback al default
+        }
     }
 
     // Default resolver
