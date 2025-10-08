@@ -1,43 +1,9 @@
-// App.web.tsx - Entry Point Web con Polyfill Firebase
+// App.web.tsx - Entry Point Web
+
+// NOTA: Il polyfill import.meta è già caricato in index.web.js
 
 // ============================================
-// 🔥 POLYFILL IMPORT.META - DEVE ESSERE IL PRIMO IMPORT
-// ============================================
-// Polyfill per import.meta (necessario per Firebase su web)
-if (typeof global !== 'undefined' && !global.import) {
-    (global as any).import = {
-        meta: {
-            url: typeof window !== 'undefined' ? window.location.href : 'https://localhost:8081',
-            env: {
-                MODE: process.env.NODE_ENV || 'production',
-                DEV: process.env.NODE_ENV === 'development',
-                PROD: process.env.NODE_ENV === 'production',
-                SSR: false,
-                BASE_URL: '/',
-            }
-        }
-    };
-    console.log('✅ Polyfill import.meta applicato (global)');
-}
-
-if (typeof window !== 'undefined' && !window.import) {
-    (window as any).import = {
-        meta: {
-            url: window.location.href,
-            env: {
-                MODE: process.env.NODE_ENV || 'production',
-                DEV: process.env.NODE_ENV === 'development',
-                PROD: process.env.NODE_ENV === 'production',
-                SSR: false,
-                BASE_URL: '/',
-            }
-        }
-    };
-    console.log('✅ Polyfill import.meta applicato (window)');
-}
-
-// ============================================
-// IMPORT NORMALI (DOPO IL POLYFILL)
+// IMPORT
 // ============================================
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
@@ -52,6 +18,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 // Import Navigation
 import AppNavigator from './src/navigation/AppNavigator';
+
 
 // Loading Screen Component
 function LoadingScreen() {
@@ -129,7 +96,7 @@ export default function App() {
     // App principale
     return (
         <SafeAreaProvider>
-            <PaperProvider theme={theme}>
+            <PaperProvider>
                 <StatusBar style="auto" />
                 <NavigationContainer>
                     <AppNavigator />

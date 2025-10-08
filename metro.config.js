@@ -1,40 +1,21 @@
-// metro.config.js
+// metro.config.js - Versione semplificata senza transformer custom
 const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// ESTENSIONI FILE
+// Estensioni file per web
 config.resolver.sourceExts.push('web.js', 'web.jsx', 'web.ts', 'web.tsx');
 
-// TRANSFORMER PERSONALIZZATO
-// Metro cercherà automaticamente metro.transformer.js nella root
-config.transformer = {
-    ...config.transformer,
-    // Abilita supporto per sintassi moderna
-    unstable_allowRequireContext: true,
-    getTransformOptions: async () => ({
-        transform: {
-            experimentalImportSupport: false,
-            inlineRequires: true,
-        },
-    }),
-};
-
-// RESOLVER PERSONALIZZATO
+// Resolver personalizzato
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
     // Forza react-native-web per web
     if (platform === 'web' && moduleName === 'react-native') {
-        return context.resolveRequest(
-            context,
-            'react-native-web',
-            platform
-        );
+        return context.resolveRequest(context, 'react-native-web', platform);
     }
 
-    // Gestisci Firebase per web
+    // Log Firebase modules (opzionale, puoi rimuovere)
     if (platform === 'web' && moduleName.startsWith('firebase/')) {
         console.log(`🔥 Caricando Firebase module: ${moduleName}`);
     }
@@ -45,11 +26,5 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
     return context.resolveRequest(context, moduleName, platform);
 };
-
-// ASSET EXTS
-config.resolver.assetExts.push(
-    // File extensions
-    'db', 'mp3', 'ttf', 'obj', 'png', 'jpg'
-);
 
 module.exports = config;

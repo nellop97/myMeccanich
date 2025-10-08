@@ -1,4 +1,4 @@
-// app.config.js
+// app.config.js - CORRETTO (senza expo-router)
 module.exports = {
     expo: {
         name: "MyMechanic",
@@ -26,11 +26,13 @@ module.exports = {
         },
         web: {
             favicon: "./assets/favicon.png",
-            bundler: "metro" // ✅ Conferma Metro per web
+            bundler: "metro"
         },
-        plugins: ["expo-router"],
+        // ❌ RIMOSSO: plugins: ["expo-router"]
+        // ❌ RIMOSSO: experiments con typedRoutes
+
+        // ✅ Usa solo le experiments necessarie
         experiments: {
-            typedRoutes: true,
             tsconfigPaths: true
         }
     }
