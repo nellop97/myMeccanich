@@ -1,8 +1,4 @@
-// index.web.js - Entry point con polyfill aggressivo
-
-// IMPORTA IL POLYFILL COME PRIMISSIMA COSA
-import './polyfill-import-meta.js';
-
+// index.web.js - Entry point per Web (Semplificato)
 import { registerRootComponent } from 'expo';
 import App from './App.web';
 
@@ -11,11 +7,13 @@ registerRootComponent(App);
 
 // Setup web
 if (typeof document !== 'undefined') {
+    // Previeni zoom su mobile web
     const metaViewport = document.createElement('meta');
     metaViewport.name = 'viewport';
     metaViewport.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
     document.head.appendChild(metaViewport);
 
+    // Stili base
     const style = document.createElement('style');
     style.innerHTML = `
     * {
@@ -68,12 +66,6 @@ if (typeof document !== 'undefined') {
       -webkit-appearance: none;
       appearance: none;
     }
-
-    * {
-      transition: background-color 0.3s ease;
-    }
     `;
     document.head.appendChild(style);
-
-    console.log('✅ Setup web completato');
 }

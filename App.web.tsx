@@ -1,24 +1,17 @@
-// App.web.tsx - Entry Point Web
-
-// NOTA: Il polyfill import.meta è già caricato in index.web.js
-
-// ============================================
-// IMPORT
-// ============================================
+// App.web.tsx - Entry Point Web (Semplificato)
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Provider as PaperProvider } from 'react-native-paper';
+import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 
-// Import Firebase (DOPO il polyfill)
-import { auth, isFirebaseReady } from './src/services/firebase';
+// Import Firebase
+import { auth } from './src/services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 // Import Navigation
 import AppNavigator from './src/navigation/AppNavigator';
-
 
 // Loading Screen Component
 function LoadingScreen() {
@@ -33,7 +26,6 @@ function LoadingScreen() {
 // Main App Component
 export default function App() {
     const [isLoading, setIsLoading] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -44,8 +36,8 @@ export default function App() {
                 console.log('🚀 Inizializzazione App Web...');
 
                 // Verifica che Firebase sia pronto
-                if (!isFirebaseReady()) {
-                    throw new Error('Firebase non inizializzato correttamente');
+                if (!auth) {
+                    throw new Error('Firebase Auth non inizializzato');
                 }
 
                 console.log('✅ Firebase pronto');
@@ -53,7 +45,6 @@ export default function App() {
                 // Listener per lo stato di autenticazione
                 unsubscribe = onAuthStateChanged(auth, (user) => {
                     console.log('👤 Auth state changed:', user ? user.uid : 'No user');
-                    setIsAuthenticated(!!user);
                     setIsLoading(false);
                 });
 
@@ -82,7 +73,7 @@ export default function App() {
                 <Text style={styles.errorText}>⚠️ Errore di Inizializzazione</Text>
                 <Text style={styles.errorDetails}>{error}</Text>
                 <Text style={styles.errorHint}>
-                    Prova a ricaricare la pagina (F5) o controlla la console per più dettagli
+                    Prova a ricaricare la pagina (F5)
                 </Text>
             </View>
         );
@@ -96,7 +87,7 @@ export default function App() {
     // App principale
     return (
         <SafeAreaProvider>
-            <PaperProvider>
+            <PaperProvider theme={DefaultTheme}>
                 <StatusBar style="auto" />
                 <NavigationContainer>
                     <AppNavigator />
@@ -106,9 +97,7 @@ export default function App() {
     );
 }
 
-// ============================================
-// STYLES
-// ============================================
+// Styles
 const styles = StyleSheet.create({
     centerContainer: {
         flex: 1,

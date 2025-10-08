@@ -1,55 +1,137 @@
-// App.tsx (parte iniziale con inizializzazione Firebase)
+// App.mobile.tsx - Entry Point Mobile
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { initializeFirebase } from './src/services/firebaseInit';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
+import { StatusBar } from 'expo-status-bar';
 
+// Import Firebase
+import { auth, isFirebaseReady } from './src/services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+
+// Import Navigation
+import AppNavigator from './src/navigation/AppNavigator';
+
+// Loading Screen Component
+function LoadingScreen() {
+    return (
+        <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text style={styles.loadingText}>Caricamento...</Text>
+        </View>
+    );
+}
+
+// Main App Component
 export default function App() {
-    const [isFirebaseReady, setIsFirebaseReady] = useState(false);
-    const [firebaseError, setFirebaseError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Inizializza Firebase all'avvio
-        initializeFirebase()
-            .then((firebase) => {
-                console.log('✅ Firebase inizializzato con successo');
-                setIsFirebaseReady(true);
+        let unsubscribe: (() => void) | null = null;
 
-                // Salva le istanze globalmente se necessario
-                global.firebaseApp = firebase.app;
-                global.firebaseAuth = firebase.auth;
-                global.firebaseDb = firebase.db;
-            })
-            .catch((error) => {
-                console.error('❌ Errore inizializzazione Firebase:', error);
-                setFirebaseError(error.message);
-            });
+        const initializeApp = async () => {
+            try {
+                console.log('🚀 Inizializzazione App Mobile...');
+
+                // Verifica che Firebase sia pronto
+                if (!isFirebaseReady()) {
+                    throw new Error('Firebase non inizializzato correttamente');
+                }
+
+                console.log('✅ Firebase pronto');
+
+                // Listener per lo stato di autenticazione
+                unsubscribe = onAuthStateChanged(auth, (user) => {
+                    console.log('👤 Auth state changed:', user ? user.uid : 'No user');
+                    setIsLoading(false);
+                });
+
+                console.log('✅ App Mobile inizializzata');
+            } catch (err: any) {
+                console.error('❌ Errore inizializzazione:', err);
+                setError(err.message || 'Errore sconosciuto durante l\'inizializzazione');
+                setIsLoading(false);
+            }
+        };
+
+        initializeApp();
+
+        // Cleanup
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
     }, []);
 
-    if (firebaseError) {
+    // Errore di inizializzazione
+    if (error) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Text>Errore Firebase: {firebaseError}</Text>
+            <View style={styles.centerContainer}>
+                <Text style={styles.errorText}>⚠️ Errore di Inizializzazione</Text>
+                <Text style={styles.errorDetails}>{error}</Text>
+                <Text style={styles.errorHint}>
+                    Riavvia l'app per riprovare
+                </Text>
             </View>
         );
     }
 
-    if (!isFirebaseReady) {
-        return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" />
-                <Text>Inizializzazione Firebase...</Text>
-            </View>
-        );
+    // Loading state
+    if (isLoading) {
+        return <LoadingScreen />;
     }
 
+    // App principale
     return (
         <SafeAreaProvider>
-            <ThemeProvider>
+            <PaperProvider theme={DefaultTheme}>
+                <StatusBar style="auto" />
                 <NavigationContainer>
                     <AppNavigator />
                 </NavigationContainer>
-            </ThemeProvider>
+            </PaperProvider>
         </SafeAreaProvider>
     );
 }
+
+// Styles
+const styles = StyleSheet.create({
+    centerContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f8fafc',
+        padding: 20,
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#64748b',
+        fontWeight: '500',
+    },
+    errorText: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#ef4444',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    errorDetails: {
+        fontSize: 14,
+        color: '#64748b',
+        textAlign: 'center',
+        marginBottom: 12,
+        paddingHorizontal: 20,
+        lineHeight: 20,
+    },
+    errorHint: {
+        fontSize: 12,
+        color: '#94a3b8',
+        fontStyle: 'italic',
+        textAlign: 'center',
+        paddingHorizontal: 20,
+    },
+});
