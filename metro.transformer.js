@@ -1,21 +1,40 @@
-// metro.transformer.js - Expo 54 compatible
+// metro.transformer.js - Versione migliorata per Expo 54
 const upstreamTransformer = require('@expo/metro-runtime/build/transformer');
 
 module.exports.transform = async ({ src, filename, options }) => {
-    // Rimuovi o sostituisci import.meta nei file Firebase
-    if (filename.includes('node_modules/firebase') ||
-        filename.includes('node_modules/@firebase')) {
+    // Gestione completa di import.meta per Firebase e altre librerie
+    if (
+        filename.includes('node_modules/firebase') ||
+        filename.includes('node_modules/@firebase') ||
+        filename.includes('node_modules/idb')
+    ) {
+        console.log(`🔧 Trasformando: ${filename.split('node_modules/').pop()}`);
 
-        // Sostituisci import.meta.url con una stringa vuota
-        src = src.replace(/import\.meta\.url/g, '"firebase-polyfill-url"');
+        // FASE 1: Sostituisci import.meta.url
+        src = src.replace(
+            /import\.meta\.url/g,
+            '"__METRO_POLYFILL_URL__"'
+        );
 
-        // Sostituisci import.meta.env con un oggetto vuoto
-        src = src.replace(/import\.meta\.env/g, '({})');
+        // FASE 2: Sostituisci import.meta.env
+        src = src.replace(
+            /import\.meta\.env/g,
+            '({MODE: "production", DEV: false, PROD: true})'
+        );
 
-        // Sostituisci import.meta generico
-        src = src.replace(/import\.meta/g, '({url: "firebase-polyfill-url", env: {}})');
+        // FASE 3: Sostituisci import.meta generico
+        src = src.replace(
+            /import\.meta(?!\.)/g,
+            '({url: "__METRO_POLYFILL_URL__", env: {MODE: "production", DEV: false, PROD: true}})'
+        );
+
+        // FASE 4: Gestione sintassi import.meta[prop]
+        src = src.replace(
+            /import\.meta\[(['"`])(\w+)\1\]/g,
+            '({url: "__METRO_POLYFILL_URL__", env: {MODE: "production"}})["$2"]'
+        );
     }
 
-    // Passa al transformer upstream
+    // Passa al transformer upstream con il codice modificato
     return upstreamTransformer.transform({ src, filename, options });
 };

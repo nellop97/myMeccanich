@@ -1,13 +1,51 @@
-// index.web.js - Entry point per Web
-import { registerRootComponent } from 'expo';
+// index.web.js - Entry point per Web con Polyfill
 
-// IMPORTANTE: Usa App.web.tsx per la versione web
+// ============================================
+// 🔥 POLYFILL IMPORT.META (PRIMA PRIORITÀ)
+// ============================================
+if (typeof global !== 'undefined' && !global.import) {
+    global.import = {
+        meta: {
+            url: typeof window !== 'undefined' ? window.location.href : 'https://localhost:8081',
+            env: {
+                MODE: 'production',
+                DEV: false,
+                PROD: true,
+                SSR: false,
+                BASE_URL: '/',
+            }
+        }
+    };
+}
+
+if (typeof window !== 'undefined' && !window.import) {
+    window.import = {
+        meta: {
+            url: window.location.href,
+            env: {
+                MODE: process.env.NODE_ENV || 'production',
+                DEV: process.env.NODE_ENV === 'development',
+                PROD: process.env.NODE_ENV === 'production',
+                SSR: false,
+                BASE_URL: '/',
+            }
+        }
+    };
+    console.log('✅ Polyfill import.meta applicato');
+}
+
+// ============================================
+// IMPORT NORMALI
+// ============================================
+import { registerRootComponent } from 'expo';
 import App from './App.web';
 
 // Registra l'app
 registerRootComponent(App);
 
-// Setup specifico per Web
+// ============================================
+// SETUP WEB SPECIFICO
+// ============================================
 if (typeof document !== 'undefined') {
     // Previeni zoom su mobile web
     const metaViewport = document.createElement('meta');
@@ -96,46 +134,32 @@ if (typeof document !== 'undefined') {
       align-items: center;
       justify-content: center;
       z-index: 9999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
 
-    .app-loader.loaded {
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
+    .app-loader::after {
+      content: "Caricamento...";
+      font-size: 18px;
+      color: #3b82f6;
+      margin-top: 60px;
+      position: absolute;
     }
-  `;
+
+    .app-loader::before {
+      content: "";
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e5e7eb;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    `;
     document.head.appendChild(style);
 
-    // Aggiungi loader iniziale
-    const loader = document.createElement('div');
-    loader.className = 'app-loader';
-    loader.innerHTML = `
-    <div style="text-align: center;">
-      <div style="
-        width: 50px;
-        height: 50px;
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #2196F3;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 20px;
-      "></div>
-      <style>
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      </style>
-      <div style="color: #666; font-size: 16px;">Caricamento...</div>
-    </div>
-  `;
-    document.body.appendChild(loader);
-
-    // Rimuovi loader quando l'app è pronta
-    window.addEventListener('load', () => {
-        setTimeout(() => {
-            loader.classList.add('loaded');
-            setTimeout(() => loader.remove(), 300);
-        }, 500);
-    });
+    console.log('✅ Stili web applicati');
 }

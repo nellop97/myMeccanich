@@ -1,142 +1,92 @@
-// src/services/firebase.web.ts - Versione specifica per Web
-import {
-    initializeApp,
-    getApps,
-    getApp,
-    FirebaseApp
-} from 'firebase/app';
-import {
-    getAuth,
-    browserLocalPersistence,
-    setPersistence,
-    Auth
-} from 'firebase/auth';
-import {
-    getFirestore,
-    Firestore,
-    connectFirestoreEmulator
-} from 'firebase/firestore';
-import {
-    getStorage,
-    FirebaseStorage,
-    connectStorageEmulator
-} from 'firebase/storage';
+// src/services/firebase.web.ts - Versione ottimizzata per Web
+// Usa require invece di import per evitare problemi con import.meta
+
+let app: any;
+let auth: any;
+let db: any;
+let storage: any;
+let initialized = false;
 
 // Configurazione Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyBH6F0JOVh8X-X41h2xN7cXxNEZnmY2nMk",
+    apiKey: "AIzaSyC-AmP6d3a_VVXJnCWVHB1WmU_wPHF0ISI",
     authDomain: "mymecanich.firebaseapp.com",
     projectId: "mymecanich",
     storageBucket: "mymecanich.firebasestorage.app",
     messagingSenderId: "619020396283",
-    appId: "1:619020396283:web:2f97f5f3e5e5dc5105b25e",
-    measurementId: "G-7K1E9X8RLN"
+    appId: "1:619020396283:web:883f0ca48dce8c4d05b25e"
 };
 
-// Inizializzazione singleton
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
-let initialized = false;
-
-// Flag per emulatori (development)
-const USE_EMULATORS = false; // Imposta su true per usare emulatori locali
-
-try {
-    // Inizializza o recupera app esistente
-    if (!getApps().length) {
-        app = initializeApp(firebaseConfig);
-        console.log('🔥 Firebase App inizializzata');
-    } else {
-        app = getApp();
-        console.log('🔥 Firebase App esistente recuperata');
+/**
+ * Inizializza Firebase per Web
+ * Usa require per evitare problemi con import.meta
+ */
+function initializeFirebaseWeb() {
+    if (initialized) {
+        return { app, auth, db, storage };
     }
 
-    // Inizializza servizi
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-    initialized = true;
+    try {
+        // Usa require per caricare Firebase
+        const firebaseApp = require('firebase/app');
+        const firebaseAuth = require('firebase/auth');
+        const firebaseFirestore = require('firebase/firestore');
+        const firebaseStorage = require('firebase/storage');
 
-    // Imposta persistenza per web
-    setPersistence(auth, browserLocalPersistence)
-        .then(() => {
-            console.log('✅ Persistenza browser impostata');
-        })
-        .catch((error) => {
-            console.warn('⚠️ Errore impostazione persistenza:', error);
-        });
-
-    // Connetti agli emulatori se in development
-    if (USE_EMULATORS && typeof window !== 'undefined') {
-        // @ts-ignore - Controlla se già connesso
-        if (!window._firebaseEmulatorsConnected) {
-            try {
-                // Connetti auth emulator
-                // connectAuthEmulator(auth, 'http://localhost:9099');
-
-                // Connetti Firestore emulator
-                connectFirestoreEmulator(db, 'localhost', 8080);
-
-                // Connetti Storage emulator
-                connectStorageEmulator(storage, 'localhost', 9199);
-
-                // @ts-ignore
-                window._firebaseEmulatorsConnected = true;
-                console.log('🔧 Connesso agli emulatori Firebase');
-            } catch (error) {
-                console.warn('⚠️ Emulatori già connessi o non disponibili');
-            }
+        // Inizializza app
+        if (!firebaseApp.getApps().length) {
+            app = firebaseApp.initializeApp(firebaseConfig);
+            console.log('🔥 Firebase Web App inizializzata');
+        } else {
+            app = firebaseApp.getApps()[0];
+            console.log('🔥 Firebase Web App esistente recuperata');
         }
-    }
 
-    // Log configurazione in development
-    if (process.env.NODE_ENV === 'development') {
-        console.log('🔥 Firebase Web Configuration:', {
-            projectId: firebaseConfig.projectId,
-            authDomain: firebaseConfig.authDomain,
-            emulators: USE_EMULATORS,
-        });
-    }
+        // Inizializza servizi
+        auth = firebaseAuth.getAuth(app);
+        db = firebaseFirestore.getFirestore(app);
+        storage = firebaseStorage.getStorage(app);
 
-} catch (error) {
-    console.error('❌ Errore inizializzazione Firebase:', error);
-    throw error;
+        // Imposta persistenza per web
+        firebaseAuth.setPersistence(auth, firebaseAuth.browserLocalPersistence)
+            .then(() => {
+                console.log('✅ Persistenza browser impostata');
+            })
+            .catch((error: any) => {
+                console.warn('⚠️ Errore impostazione persistenza:', error);
+            });
+
+        initialized = true;
+        console.log('✅ Firebase Web completamente inizializzato');
+
+        return { app, auth, db, storage };
+    } catch (error) {
+        console.error('❌ Errore inizializzazione Firebase Web:', error);
+        throw error;
+    }
 }
 
-// Verifica se Firebase è pronto
-export const isFirebaseReady = (): boolean => {
-    return initialized && !!auth && !!db;
-};
+// Inizializza immediatamente
+initializeFirebaseWeb();
 
-// Helper per gestire errori di autenticazione
+// Helper per gestire errori auth
 export const handleAuthError = (error: any): string => {
     const errorMessages: { [key: string]: string } = {
         'auth/network-request-failed': 'Errore di connessione. Verifica la tua connessione internet.',
-        'auth/email-already-in-use': 'Email già registrata. Prova ad accedere.',
+        'auth/email-already-in-use': 'Email già registrata.',
         'auth/invalid-email': 'Email non valida.',
-        'auth/operation-not-allowed': 'Operazione non permessa.',
-        'auth/weak-password': 'Password troppo debole. Usa almeno 6 caratteri.',
-        'auth/user-disabled': 'Account disabilitato. Contatta il supporto.',
+        'auth/weak-password': 'Password troppo debole (min. 6 caratteri).',
         'auth/user-not-found': 'Utente non trovato.',
         'auth/wrong-password': 'Password errata.',
-        'auth/invalid-credential': 'Credenziali non valide.',
-        'auth/popup-blocked': 'Popup bloccato dal browser. Abilita i popup per questo sito.',
-        'auth/popup-closed-by-user': 'Accesso annullato.',
-        'auth/account-exists-with-different-credential': 'Un account esiste già con la stessa email ma credenziali diverse.',
         'auth/too-many-requests': 'Troppi tentativi. Riprova più tardi.',
+        'auth/popup-blocked': 'Popup bloccato. Abilita i popup per questo sito.',
+        'auth/invalid-credential': 'Credenziali non valide.',
     };
 
-    return errorMessages[error.code] || `Errore: ${error.message}`;
+    return errorMessages[error?.code] || error?.message || 'Errore sconosciuto';
 };
 
-// Export servizi Firebase
-export { app, auth, db, storage };
-
-// Export utilities
+// Export per compatibilità
+export { auth, db, storage, app };
 export const isWeb = true;
-export const isMobile = false;
-
-// Export types
-export type { FirebaseApp, Auth, Firestore, FirebaseStorage };
+export default { auth, db, storage, app, handleAuthError };
