@@ -1,12 +1,25 @@
 // metro.config.js
 const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
 
+/** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// Aggiungi estensioni web
-config.resolver.sourceExts = [...config.resolver.sourceExts, 'web.js', 'web.ts', 'web.tsx'];
+// Aggiungi estensioni per web
+config.resolver.sourceExts.push('web.js', 'web.jsx', 'web.ts', 'web.tsx');
 
-// Nota: Transformer personalizzato rimosso - non più necessario con import statici
+// Gestisci i moduli problematici
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+    // Forza react-native-web per web platform
+    if (platform === 'web' && moduleName === 'react-native') {
+        return context.resolveRequest(
+            context,
+            'react-native-web',
+            platform
+        );
+    }
+
+    // Default resolver
+    return context.resolveRequest(context, moduleName, platform);
+};
 
 module.exports = config;

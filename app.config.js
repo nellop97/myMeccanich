@@ -12,9 +12,7 @@ module.exports = {
             resizeMode: "contain",
             backgroundColor: "#ffffff"
         },
-        assetBundlePatterns: [
-            "**/*"
-        ],
+        assetBundlePatterns: ["**/*"],
         ios: {
             supportsTablet: true,
             bundleIdentifier: "com.mymechanic.app"
@@ -28,26 +26,11 @@ module.exports = {
         },
         web: {
             favicon: "./assets/favicon.png",
-            bundler: "metro",
-            // Aggiungi configurazione per evitare problemi con import.meta
-            build: {
-                babel: {
-                    include: [
-                        "@firebase/auth",
-                        "@firebase/firestore",
-                        "@firebase/storage",
-                        "@firebase/app",
-                        "firebase"
-                    ]
-                }
-            }
+            bundler: "metro" // ✅ Conferma Metro per web
         },
-        plugins: [
-            "expo-router"
-        ],
+        plugins: ["expo-router"],
         experiments: {
             typedRoutes: true,
-            // Abilita il supporto web ottimizzato
             tsconfigPaths: true
         }
     }
