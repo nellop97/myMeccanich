@@ -10,9 +10,9 @@ import {
   Pressable,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useStore } from "../../store";
 import { useAuth } from "../../hooks/useAuth";
 import { Portal, Dialog, Button } from "react-native-paper";
+import { useAppThemeManager } from "../../hooks/useTheme";
 
 interface MechanicSidebarDesktopProps {
   activeTab: string;
@@ -74,8 +74,8 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
   activeTab,
   onTabChange,
 }) => {
-  const { darkMode, toggleDarkMode } = useStore();
-  const { user, logout } = useAuth();
+  const { colors, isDark, toggleTheme } = useAppThemeManager();
+  const { user, signOut } = useAuth();
   const [expandedSections, setExpandedSections] = useState<string[]>([
     "main",
     "workshop",
@@ -85,16 +85,16 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
 
   // Tema dinamico
   const theme = {
-    background: darkMode ? "#1e293b" : "#ffffff",
-    surface: darkMode ? "#334155" : "#f8fafc",
-    text: darkMode ? "#f1f5f9" : "#0f172a",
-    textSecondary: darkMode ? "#94a3b8" : "#64748b",
-    border: darkMode ? "#334155" : "#e2e8f0",
-    primary: "#3b82f6",
-    danger: "#ef4444",
-    hover: darkMode ? "#334155" : "#f1f5f9",
-    activeBackground: darkMode ? "#3b82f6" : "#eff6ff",
-    activeText: darkMode ? "#ffffff" : "#3b82f6",
+    background: colors.background,
+    surface: colors.surface,
+    text: colors.onSurface,
+    textSecondary: colors.onSurfaceVariant,
+    border: colors.outline,
+    primary: colors.primary,
+    danger: colors.error,
+    hover: colors.surfaceVariant,
+    activeBackground: colors.primaryContainer,
+    activeText: colors.primary,
   };
 
   const toggleSection = (sectionId: string) => {
@@ -134,11 +134,11 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
     try {
       console.log("🚪 Desktop Sidebar: Iniziando logout...");
 
-      if (!logout || typeof logout !== "function") {
+      if (!signOut || typeof signOut !== "function") {
         throw new Error("Logout function not available");
       }
 
-      await logout();
+      await signOut();
       console.log("✅ Desktop Sidebar: Logout completato con successo");
       setShowLogoutDialog(false);
     } catch (error) {
@@ -282,17 +282,17 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
         <View style={[styles.footer, { borderTopColor: theme.border }]}>
           <TouchableOpacity
             style={styles.footerButton}
-            onPress={toggleDarkMode}
+            onPress={toggleTheme}
           >
             <MaterialCommunityIcons
-              name={darkMode ? "weather-sunny" : "weather-night"}
+              name={isDark ? "weather-sunny" : "weather-night"}
               size={20}
               color={theme.textSecondary}
             />
             <Text
               style={[styles.footerButtonText, { color: theme.textSecondary }]}
             >
-              {darkMode ? "Tema Chiaro" : "Tema Scuro"}
+              {isDark ? "Tema Chiaro" : "Tema Scuro"}
             </Text>
           </TouchableOpacity>
 

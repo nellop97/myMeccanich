@@ -3,8 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
-import { StatusBar } from 'expo-status-bar';
 
 // Import Firebase
 import { auth, isFirebaseReady } from './src/services/firebase';
@@ -12,6 +10,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 // Import Navigation
 import AppNavigator from './src/navigation/AppNavigator';
+
+// Import Theme Provider
+import { ThemeProvider } from './src/contexts/ThemeContext';
 
 // Loading Screen Component
 function LoadingScreen() {
@@ -87,12 +88,11 @@ export default function App() {
     // App principale
     return (
         <SafeAreaProvider>
-            <PaperProvider theme={DefaultTheme}>
-                <StatusBar style="auto" />
+            <ThemeProvider>
                 <NavigationContainer>
                     <AppNavigator />
                 </NavigationContainer>
-            </PaperProvider>
+            </ThemeProvider>
         </SafeAreaProvider>
     );
 }
