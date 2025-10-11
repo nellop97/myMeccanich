@@ -3,7 +3,7 @@
 // ========================================
 // Path: src/screens/LoginScreen.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     ScrollView,
@@ -72,9 +72,9 @@ const LoginScreen: React.FC = () => {
     const isTablet = screenWidth >= 768;
     const isDesktop = screenWidth >= 1024;
 
-    // Animazioni
-    const fadeAnim = new Animated.Value(0);
-    const slideAnim = new Animated.Value(50);
+    // Animazioni - usando useRef per evitare ricreazione ad ogni render
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const slideAnim = useRef(new Animated.Value(50)).current;
 
     // Animazione di entrata
     useEffect(() => {
@@ -90,7 +90,7 @@ const LoginScreen: React.FC = () => {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, []);
+    }, [fadeAnim, slideAnim]);
 
     // ====================================
     // LISTENER PER AUTENTICAZIONE E REDIRECT
