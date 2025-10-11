@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "MyMechanic",
-    "slug": "mymeccanich",
+    "slug": "MyMechanic",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mymeccanich.com",
+      "bundleIdentifier": "MyMechanic.com",
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli e documenti.",
@@ -26,7 +26,9 @@
         "NSLocationWhenInUseUsageDescription": "L'app ha bisogno della tua posizione per trovare officine vicine.",
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["mymeccanich"]
+            "CFBundleURLSchemes": [
+              "MyMechanic"
+            ]
           }
         ]
       },
@@ -35,7 +37,7 @@
       },
       "googleServicesFile": "./ios/GoogleService-Info.plist",
       "associatedDomains": [
-        "applinks:mymeccanich.com"
+        "applinks:MyMechanic.com"
       ]
     },
     "android": {
@@ -43,7 +45,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.mymeccanich.com",
+      "package": "MyMechanic.com",
       "versionCode": 1,
       "permissions": [
         "CAMERA",
@@ -61,11 +63,14 @@
           "autoVerify": true,
           "data": [
             {
-              "scheme": "mymeccanich",
+              "scheme": "MyMechanic",
               "host": "*"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -110,6 +115,11 @@
     "experiments": {
       "tsconfigPaths": true
     },
-    "scheme": "mymeccanich"
+    "scheme": "MyMechanic",
+    "extra": {
+      "eas": {
+        "projectId": "c9c73115-5bec-49d5-b7ab-ab89a90252db"
+      }
+    }
   }
 }
