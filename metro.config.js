@@ -1,4 +1,4 @@
-// metro.config.js - Blocca moduli ESM problematici
+// metro.config.js - Configurazione con supporto react-hook-form
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
@@ -23,6 +23,14 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     // Forza react-native-web per web
     if (platform === 'web' && moduleName === 'react-native') {
         return context.resolveRequest(context, 'react-native-web', platform);
+    }
+
+    // ✅ ECCEZIONE PER REACT-HOOK-FORM - Usa il resolver di default
+    if (moduleName === 'react-hook-form' || moduleName.startsWith('react-hook-form/')) {
+        if (originalResolveRequest) {
+            return originalResolveRequest(context, moduleName, platform);
+        }
+        return context.resolveRequest(context, moduleName, platform);
     }
 
     // FORZA ZUSTAND A USARE FILE COMMONJS, NON ESM

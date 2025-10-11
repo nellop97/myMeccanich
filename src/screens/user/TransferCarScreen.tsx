@@ -12,7 +12,6 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { Controller, useForm } from 'react-hook-form';
 import {
   ArrowLeft,
   User,

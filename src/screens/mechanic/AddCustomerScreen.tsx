@@ -1,547 +1,491 @@
 // src/screens/mechanic/AddCustomerScreen.tsx
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
-  ArrowLeft,
-  Building,
-  Mail,
-  MapPin,
-  Phone,
-  Save,
-  User,
+    ArrowLeft,
+    Building,
+    Mail,
+    MapPin,
+    Phone,
+    Save,
+    User,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
 import {
-  Alert,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useStore } from '../../store';
-import { useInvoicingStore, Customer } from '../../store/invoicingStore';
+import { useInvoicingStore } from '../../store/invoicingStore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 interface RouteParams {
-  customerId?: string;
-}
-
-interface CustomerFormData {
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  postalCode: string;
-  vatNumber: string;
-  fiscalCode: string;
-  isCompany: boolean;
+    customerId?: string;
 }
 
 const AddCustomerScreen = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const params = route.params as RouteParams | undefined;
+    const navigation = useNavigation();
+    const route = useRoute();
+    const params = route.params as RouteParams | undefined;
 
-  const { darkMode } = useStore();
-  const { addCustomer, updateCustomer, getCustomerById } = useInvoicingStore();
+    const { darkMode } = useStore();
+    const { addCustomer, updateCustomer, getCustomerById } = useInvoicingStore();
 
-  const isEditing = !!params?.customerId;
-  const customer = isEditing ? getCustomerById(params!.customerId) : null;
+    const isEditing = !!params?.customerId;
+    const customer = isEditing ? getCustomerById(params!.customerId) : null;
 
-  const { control, handleSubmit, formState: { errors }, watch, setValue } = useForm<CustomerFormData>({
-    defaultValues: {
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-      city: '',
-      postalCode: '',
-      vatNumber: '',
-      fiscalCode: '',
-      isCompany: false,
-    }
-  });
+    // Form state
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        postalCode: '',
+        vatNumber: '',
+        fiscalCode: '',
+        isCompany: false,
+    });
 
-  const watchIsCompany = watch('isCompany');
+    const [errors, setErrors] = useState<{[key: string]: string}>({});
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
+    const theme = {
+        background: darkMode ? '#111827' : '#f3f4f6',
+        cardBackground: darkMode ? '#1f2937' : '#ffffff',
+        text: darkMode ? '#ffffff' : '#000000',
+        textSecondary: darkMode ? '#9ca3af' : '#6b7280',
+        border: darkMode ? '#374151' : '#e5e7eb',
+        inputBackground: darkMode ? '#374151' : '#ffffff',
+        placeholderColor: darkMode ? '#9ca3af' : '#6b7280',
+        accent: '#2563eb',
+        primary: darkMode ? '#60a5fa' : '#2563eb',
+    };
 
-  // Carica i dati del cliente se in modalità modifica
-  useEffect(() => {
-    if (customer) {
-      setValue('name', customer.name);
-      setValue('email', customer.email || '');
-      setValue('phone', customer.phone || '');
-      setValue('address', customer.address || '');
-      setValue('city', customer.city || '');
-      setValue('postalCode', customer.postalCode || '');
-      setValue('vatNumber', customer.vatNumber || '');
-      setValue('fiscalCode', customer.fiscalCode || '');
-      setValue('isCompany', customer.isCompany);
-    }
-  }, [customer, setValue]);
+    // Load customer data if editing
+    useEffect(() => {
+        if (customer) {
+            setFormData({
+                name: customer.name || '',
+                email: customer.email || '',
+                phone: customer.phone || '',
+                address: customer.address || '',
+                city: customer.city || '',
+                postalCode: customer.postalCode || '',
+                vatNumber: customer.vatNumber || '',
+                fiscalCode: customer.fiscalCode || '',
+                isCompany: customer.isCompany || false,
+            });
+        }
+    }, [customer]);
 
-  const onSubmit = (data: CustomerFormData) => {
-    try {
-      if (isEditing && customer) {
-        updateCustomer(customer.id, data);
-        Alert.alert('Successo', 'Cliente aggiornato con successo', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
-      } else {
-        addCustomer(data);
-        Alert.alert('Successo', 'Cliente aggiunto con successo', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
-      }
-    } catch (error) {
-      Alert.alert('Errore', 'Errore durante il salvataggio del cliente');
-    }
-  };
+    const updateField = (field: string, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        // Clear error when user starts typing
+        if (errors[field]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[field];
+                return newErrors;
+            });
+        }
+    };
 
-  const FormCard = ({ title, icon: Icon, children }: any) => (
-    <View style={[styles.formCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-      <View style={styles.formCardHeader}>
-        <View style={styles.formCardTitleContainer}>
-          <View style={[styles.formCardIcon, { backgroundColor: darkMode ? '#1e3a8a' : '#dbeafe' }]}>
-            <Icon size={20} color={darkMode ? '#60a5fa' : '#2563eb'} />
-          </View>
-          <Text style={[styles.formCardTitle, { color: theme.text }]}>{title}</Text>
-        </View>
-      </View>
-      <View style={styles.formCardContent}>
-        {children}
-      </View>
-    </View>
-  );
+    const validateForm = () => {
+        const newErrors: {[key: string]: string} = {};
 
-  const FormInput = ({
-    label,
-    placeholder,
-    value,
-    onChangeText,
-    error,
-    keyboardType = 'default',
-    autoCapitalize = 'words',
-    required = false
-  }: any) => (
-    <View style={styles.inputContainer}>
-      <Text style={[styles.inputLabel, { color: theme.text }]}>
-        {label} {required && <Text style={{ color: theme.error }}>*</Text>}
-      </Text>
-      <TextInput
-        style={[
-          styles.textInput,
-          {
-            backgroundColor: theme.cardBackground,
-            borderColor: error ? theme.error : theme.border,
-            color: theme.text
-          }
-        ]}
-        placeholder={placeholder}
-        placeholderTextColor={theme.textSecondary}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        autoCapitalize={autoCapitalize}
-      />
-      {error && <Text style={[styles.errorText, { color: theme.error }]}>Questo campo è obbligatorio</Text>}
-    </View>
-  );
+        if (!formData.name.trim()) {
+            newErrors.name = 'Nome richiesto';
+        }
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+        if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+            newErrors.email = 'Email non valida';
+        }
 
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <ArrowLeft size={24} color={theme.text} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>
-            {isEditing ? 'Modifica Cliente' : 'Nuovo Cliente'}
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-            {isEditing ? 'Aggiorna i dati del cliente' : 'Aggiungi un nuovo cliente'}
-          </Text>
-        </View>
-      </View>
+        if (formData.isCompany && !formData.vatNumber.trim()) {
+            newErrors.vatNumber = 'P.IVA richiesta per aziende';
+        }
 
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Tipo Cliente */}
-          <FormCard title="Tipo Cliente" icon={watchIsCompany ? Building : User}>
-            <View style={styles.switchContainer}>
-              <View style={styles.switchLabelContainer}>
-                <Text style={[styles.switchLabel, { color: theme.text }]}>Persona Fisica</Text>
-                <Text style={[styles.switchLabel, { color: theme.text }]}>Azienda</Text>
-              </View>
-              <Controller
-                control={control}
-                name="isCompany"
-                render={({ field: { onChange, value } }) => (
-                  <Switch
-                    value={value}
-                    onValueChange={onChange}
-                    trackColor={{ false: theme.textSecondary, true: theme.accent }}
-                    thumbColor={value ? '#ffffff' : '#ffffff'}
-                  />
-                )}
-              />
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleSave = () => {
+        if (!validateForm()) {
+            Alert.alert('Errore', 'Compila correttamente tutti i campi obbligatori');
+            return;
+        }
+
+        try {
+            if (isEditing && params?.customerId) {
+                updateCustomer(params.customerId, formData);
+                Alert.alert('Successo', 'Cliente aggiornato con successo');
+            } else {
+                addCustomer(formData);
+                Alert.alert('Successo', 'Cliente aggiunto con successo');
+            }
+            navigation.goBack();
+        } catch (error) {
+            console.error('Errore durante il salvataggio:', error);
+            Alert.alert('Errore', 'Impossibile salvare il cliente');
+        }
+    };
+
+    const FormCard = ({ title, icon: Icon, children }: any) => (
+        <View style={[styles.formCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={styles.formCardHeader}>
+                <View style={styles.formCardTitleContainer}>
+                    <View style={[styles.formCardIcon, { backgroundColor: darkMode ? '#1e3a8a' : '#dbeafe' }]}>
+                        <Icon size={20} color={darkMode ? '#60a5fa' : '#2563eb'} />
+                    </View>
+                    <Text style={[styles.formCardTitle, { color: theme.text }]}>{title}</Text>
+                </View>
             </View>
-            <Text style={[styles.switchDescription, { color: theme.textSecondary }]}>
-              {watchIsCompany
-                ? 'Selezionato per aziende, professionisti e attività commerciali'
-                : 'Selezionato per clienti privati e persone fisiche'
-              }
+            <View style={styles.formCardContent}>{children}</View>
+        </View>
+    );
+
+    const FormInput = ({ label, value, onChangeText, placeholder, keyboardType, autoCapitalize, error, required }: any) => (
+        <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+                {label} {required && <Text style={{ color: '#ef4444' }}>*</Text>}
             </Text>
-          </FormCard>
-
-          {/* Informazioni Generali */}
-          <FormCard title="Informazioni Generali" icon={User}>
-            <Controller
-              control={control}
-              rules={{ required: true }}
-              render={({ field: { onChange, value } }) => (
-                <FormInput
-                  label={watchIsCompany ? "Ragione Sociale" : "Nome e Cognome"}
-                  placeholder={watchIsCompany ? "es. AutoService SpA" : "es. Mario Rossi"}
-                  value={value}
-                  onChangeText={onChange}
-                  error={errors.name}
-                  required={true}
-                />
-              )}
-              name="name"
+            <TextInput
+                style={[
+                    styles.input,
+                    {
+                        backgroundColor: theme.inputBackground,
+                        color: theme.text,
+                        borderColor: error ? '#ef4444' : theme.border
+                    }
+                ]}
+                value={value}
+                onChangeText={onChangeText}
+                placeholder={placeholder}
+                placeholderTextColor={theme.placeholderColor}
+                keyboardType={keyboardType}
+                autoCapitalize={autoCapitalize}
             />
+            {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+    );
 
-            <Controller
-              control={control}
-              render={({ field: { onChange, value } }) => (
-                <FormInput
-                  label="Email"
-                  placeholder="es. cliente@email.com"
-                  value={value}
-                  onChangeText={onChange}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              )}
-              name="email"
-            />
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
 
-            <Controller
-              control={control}
-              render={({ field: { onChange, value } }) => (
-                <FormInput
-                  label="Telefono"
-                  placeholder="es. +39 123 456 7890"
-                  value={value}
-                  onChangeText={onChange}
-                  keyboardType="phone-pad"
-                />
-              )}
-              name="phone"
-            />
-          </FormCard>
-
-          {/* Indirizzo */}
-          <FormCard title="Indirizzo" icon={MapPin}>
-            <Controller
-              control={control}
-              render={({ field: { onChange, value } }) => (
-                <FormInput
-                  label="Indirizzo"
-                  placeholder="es. Via Roma 123"
-                  value={value}
-                  onChangeText={onChange}
-                />
-              )}
-              name="address"
-            />
-
-            <View style={styles.addressRow}>
-              <View style={styles.cityContainer}>
-                <Controller
-                  control={control}
-                  render={({ field: { onChange, value } }) => (
-                    <FormInput
-                      label="Città"
-                      placeholder="es. Milano"
-                      value={value}
-                      onChangeText={onChange}
-                    />
-                  )}
-                  name="city"
-                />
-              </View>
-
-              <View style={styles.postalCodeContainer}>
-                <Controller
-                  control={control}
-                  render={({ field: { onChange, value } }) => (
-                    <FormInput
-                      label="CAP"
-                      placeholder="es. 20100"
-                      value={value}
-                      onChangeText={onChange}
-                      keyboardType="numeric"
-                    />
-                  )}
-                  name="postalCode"
-                />
-              </View>
+            {/* Header */}
+            <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                    <ArrowLeft size={24} color={theme.text} />
+                </TouchableOpacity>
+                <View style={styles.headerTitleContainer}>
+                    <Text style={[styles.headerTitle, { color: theme.text }]}>
+                        {isEditing ? 'Modifica Cliente' : 'Nuovo Cliente'}
+                    </Text>
+                    <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                        {isEditing ? 'Aggiorna le informazioni del cliente' : 'Aggiungi un nuovo cliente'}
+                    </Text>
+                </View>
             </View>
-          </FormCard>
 
-          {/* Dati Fiscali */}
-          <FormCard title="Dati Fiscali" icon={Building}>
-            {watchIsCompany ? (
-              <Controller
-                control={control}
-                render={({ field: { onChange, value } }) => (
-                  <FormInput
-                    label="Partita IVA"
-                    placeholder="es. IT12345678901"
-                    value={value}
-                    onChangeText={onChange}
-                    autoCapitalize="characters"
-                  />
-                )}
-                name="vatNumber"
-              />
-            ) : (
-              <Controller
-                control={control}
-                render={({ field: { onChange, value } }) => (
-                  <FormInput
-                    label="Codice Fiscale"
-                    placeholder="es. RSSMRA80A01F205X"
-                    value={value}
-                    onChangeText={onChange}
-                    autoCapitalize="characters"
-                  />
-                )}
-                name="fiscalCode"
-              />
-            )}
-
-            <Text style={[styles.fiscalNote, { color: theme.textSecondary }]}>
-              {watchIsCompany
-                ? 'La Partita IVA è necessaria per le fatture B2B'
-                : 'Il Codice Fiscale è necessario per le fatture ai privati'
-              }
-            </Text>
-          </FormCard>
-
-          {/* Pulsanti Azione */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.cancelButton, { borderColor: theme.border }]}
-              onPress={() => navigation.goBack()}
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
-              <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Annulla</Text>
-            </TouchableOpacity>
+                <ScrollView
+                    style={styles.scrollContainer}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Tipo Cliente */}
+                    <View style={[styles.switchCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                        <View style={styles.switchContainer}>
+                            <View style={styles.switchLabelContainer}>
+                                <Building size={20} color={theme.primary} />
+                                <Text style={[styles.switchLabel, { color: theme.text }]}>Cliente Aziendale</Text>
+                            </View>
+                            <Switch
+                                value={formData.isCompany}
+                                onValueChange={(value) => updateField('isCompany', value)}
+                                trackColor={{ false: theme.border, true: theme.primary }}
+                                thumbColor={formData.isCompany ? '#ffffff' : '#ffffff'}
+                            />
+                        </View>
+                        <Text style={[styles.switchDescription, { color: theme.textSecondary }]}>
+                            {formData.isCompany
+                                ? 'Selezionato per aziende, professionisti e attività commerciali'
+                                : 'Selezionato per clienti privati e persone fisiche'
+                            }
+                        </Text>
+                    </View>
 
-            <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: theme.accent }]}
-              onPress={handleSubmit(onSubmit)}
-            >
-              <Save size={18} color="#ffffff" />
-              <Text style={styles.saveButtonText}>
-                {isEditing ? 'Aggiorna Cliente' : 'Salva Cliente'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+                    {/* Informazioni Generali */}
+                    <FormCard title="Informazioni Generali" icon={User}>
+                        <FormInput
+                            label={formData.isCompany ? "Ragione Sociale" : "Nome e Cognome"}
+                            placeholder={formData.isCompany ? "es. AutoService SpA" : "es. Mario Rossi"}
+                            value={formData.name}
+                            onChangeText={(text: string) => updateField('name', text)}
+                            error={errors.name}
+                            required={true}
+                        />
+
+                        <FormInput
+                            label="Email"
+                            placeholder="es. cliente@email.com"
+                            value={formData.email}
+                            onChangeText={(text: string) => updateField('email', text)}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            error={errors.email}
+                        />
+
+                        <FormInput
+                            label="Telefono"
+                            placeholder="es. +39 123 456 7890"
+                            value={formData.phone}
+                            onChangeText={(text: string) => updateField('phone', text)}
+                            keyboardType="phone-pad"
+                        />
+                    </FormCard>
+
+                    {/* Indirizzo */}
+                    <FormCard title="Indirizzo" icon={MapPin}>
+                        <FormInput
+                            label="Indirizzo"
+                            placeholder="es. Via Roma 123"
+                            value={formData.address}
+                            onChangeText={(text: string) => updateField('address', text)}
+                        />
+
+                        <View style={styles.addressRow}>
+                            <View style={styles.cityContainer}>
+                                <FormInput
+                                    label="Città"
+                                    placeholder="es. Milano"
+                                    value={formData.city}
+                                    onChangeText={(text: string) => updateField('city', text)}
+                                />
+                            </View>
+
+                            <View style={styles.postalCodeContainer}>
+                                <FormInput
+                                    label="CAP"
+                                    placeholder="20100"
+                                    value={formData.postalCode}
+                                    onChangeText={(text: string) => updateField('postalCode', text)}
+                                    keyboardType="number-pad"
+                                />
+                            </View>
+                        </View>
+                    </FormCard>
+
+                    {/* Dati Fiscali */}
+                    <FormCard title="Dati Fiscali" icon={Building}>
+                        {formData.isCompany ? (
+                            <FormInput
+                                label="Partita IVA"
+                                placeholder="es. IT12345678901"
+                                value={formData.vatNumber}
+                                onChangeText={(text: string) => updateField('vatNumber', text.toUpperCase())}
+                                error={errors.vatNumber}
+                                required={true}
+                            />
+                        ) : (
+                            <FormInput
+                                label="Codice Fiscale"
+                                placeholder="es. RSSMRA80A01H501U"
+                                value={formData.fiscalCode}
+                                onChangeText={(text: string) => updateField('fiscalCode', text.toUpperCase())}
+                                autoCapitalize="characters"
+                            />
+                        )}
+                    </FormCard>
+
+                    {/* Pulsanti Azione */}
+                    <View style={styles.actionButtons}>
+                        <TouchableOpacity
+                            style={[styles.cancelButton, { borderColor: theme.border }]}
+                            onPress={() => navigation.goBack()}
+                        >
+                            <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Annulla</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.saveButton, { backgroundColor: theme.accent }]}
+                            onPress={handleSave}
+                        >
+                            <Save size={18} color="#ffffff" />
+                            <Text style={styles.saveButtonText}>
+                                {isEditing ? 'Aggiorna' : 'Salva'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 12,
-  },
-  headerTitleContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  formCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  formCardHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  formCardTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  formCardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  formCardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  formCardContent: {
-    padding: 16,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  switchLabelContainer: {
-    flexDirection: 'row',
-    flex: 1,
-    justifyContent: 'space-between',
-    marginRight: 16,
-  },
-  switchLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  switchDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontStyle: 'italic',
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  errorText: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  cityContainer: {
-    flex: 2,
-  },
-  postalCodeContainer: {
-    flex: 1,
-  },
-  fiscalNote: {
-    fontSize: 12,
-    lineHeight: 18,
-    fontStyle: 'italic',
-    marginTop: 8,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  saveButton: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
+    container: {
+        flex: 1,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+    },
+    backButton: {
+        padding: 8,
+        marginRight: 12,
+    },
+    headerTitleContainer: {
+        flex: 1,
+    },
+    headerTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        marginTop: 2,
+    },
+    scrollContainer: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 16,
+        paddingBottom: 32,
+    },
+    switchCard: {
+        borderRadius: 12,
+        borderWidth: 1,
+        padding: 16,
+        marginBottom: 16,
+    },
+    switchContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    switchLabelContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    switchLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    switchDescription: {
+        fontSize: 13,
+        lineHeight: 18,
+    },
+    formCard: {
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 16,
+    },
+    formCardHeader: {
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+    },
+    formCardTitleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    formCardIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    formCardTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    formCardContent: {
+        padding: 16,
+    },
+    inputContainer: {
+        marginBottom: 16,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        marginBottom: 8,
+    },
+    input: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 16,
+    },
+    errorText: {
+        color: '#ef4444',
+        fontSize: 12,
+        marginTop: 4,
+    },
+    addressRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    cityContainer: {
+        flex: 2,
+    },
+    postalCodeContainer: {
+        flex: 1,
+    },
+    actionButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 8,
+    },
+    cancelButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 8,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    saveButton: {
+        flex: 1,
+        flexDirection: 'row',
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    saveButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
 });
 
 export default AddCustomerScreen;

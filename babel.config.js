@@ -1,4 +1,4 @@
-// babel.config.js
+// babel.config.js - Configurazione Babel Semplificata
 module.exports = function(api) {
     api.cache(true);
 
@@ -7,7 +7,7 @@ module.exports = function(api) {
             'babel-preset-expo'
         ],
         plugins: [
-            // Plugin per module resolver (se lo usi)
+            // Plugin per module resolver (alias @/)
             [
                 'module-resolver',
                 {
@@ -18,13 +18,5 @@ module.exports = function(api) {
                 },
             ],
         ],
-        env: {
-            production: {
-                plugins: [
-                    // Rimuovi console.log in production
-                    'transform-remove-console',
-                ].filter(Boolean),
-            },
-        },
     };
 };
