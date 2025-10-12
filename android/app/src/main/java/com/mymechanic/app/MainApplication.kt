@@ -1,4 +1,4 @@
-package MyMechanic.com
+package com.mymechanic.app
 
 import android.app.Application
 import android.content.res.Configuration

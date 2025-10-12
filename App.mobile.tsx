@@ -45,6 +45,7 @@ export default function App() {
 
                 // Listener per lo stato di autenticazione
                 unsubscribe = onAuthStateChanged(auth, (user) => {
+                    // ✅ CORRETTO: Sintassi ternario completa
                     console.log('👤 Auth state changed:', user ? user.uid : 'No user');
                     setIsLoading(false);
                 });
