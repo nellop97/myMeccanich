@@ -1,1354 +1,722 @@
-
-// src/screens/RegisterScreen.tsx - VERSIONE COMPLETA
+// src/screens/RegisterScreen.tsx - VERSIONE AGGIORNATA CON NUOVO DESIGN SYSTEM
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  Platform,
-  KeyboardAvoidingView,
-  Dimensions,
-  Animated,
+    View,
+    ScrollView,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Dimensions,
+    StatusBar,
+    Alert,
+    Animated,
+    TouchableOpacity,
 } from 'react-native';
-import {
-  Text,
-  TextInput,
-  Button,
-  HelperText,
-  Divider,
-  Card,
-  IconButton,
-  Chip,
-  ProgressBar,
-  Checkbox,
-  Surface,
-  Menu,
-} from 'react-native-paper';
+import { Text, ProgressBar } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-
-// Firebase imports
-import { auth, db, isWeb } from '../services/firebase';
-
-// Car data imports
-import CarSearchModal from '../components/CarSearchModal';
-import { carDataService } from '../services/CarDataService';
 import {
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  signInWithCredential,
-  GoogleAuthProvider,
-  User as FirebaseUser
-} from 'firebase/auth';
+    Mail,
+    Lock,
+    User,
+    Phone,
+    ArrowRight,
+    ArrowLeft,
+    CheckCircle,
+    Car,
+    Wrench,
+    UserPlus,
+} from 'lucide-react-native';
+
+// Firebase
+import { auth, db } from '../services/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-// Importa il nuovo sistema di temi
-import { useAppThemeManager, useThemedStyles } from '../hooks/useTheme';
+// Custom Components & Hooks
+import {
+    ThemedInput,
+    GradientButton,
+    GlassCard,
+    DividerWithText,
+    SocialButton,
+} from '../components/CommonComponents';
+import { useAppThemeManager } from '../hooks/useTheme';
 
-// Gestione Google Sign-In cross-platform
-let AuthSession: any = null;
-let AppleAuthentication: any = null;
-
-if (!isWeb) {
-  try {
-    AuthSession = require('expo-auth-session');
-  } catch (e) {
-    console.warn('Expo Auth Session non disponibile:', e);
-  }
-  
-  if (Platform.OS === 'ios') {
-    try {
-      AppleAuthentication = require('expo-apple-authentication');
-    } catch (e) {
-      console.warn('Apple Authentication non disponibile:', e);
-    }
-  }
-}
-
-// Configurazione Google OAuth
-const GOOGLE_CONFIG = {
-  clientId: Platform.select({
-    ios: '619020396283-i5qvfa2fnri304g3nndjrob5flhfrp5r.apps.googleusercontent.com',
-    android: '619020396283-hsb93gobbbuokvc80idf466ptlh7fmdi.apps.googleusercontent.com',
-    web: '619020396283-4gd2pd371hop6d1vkc0tvo6j3jaod2t6.apps.googleusercontent.com',
-    default: '619020396283-hsb93gobbbuokvc80idf466ptlh7fmdi.apps.googleusercontent.com'
-  }),
-  scopes: ['openid', 'profile', 'email'],
-};
-
-// Interfacce
-interface FormData {
-  email: string;
-  password: string;
-  confirmPassword: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  workshopName?: string;
-  address?: string;
-  vatNumber?: string;
-  mechanicLicense?: string;
-  specializations?: string[];
-  workingHours?: {
-    [key: string]: {
-      open: string;
-      close: string;
-      isClosed: boolean;
-    };
-  };
-}
-
-interface CarData {
-  brand: string;
-  model: string;
-  year: string;
-  licensePlate: string;
-  vin: string;
-  fuelType: string;
-  kilometers: string;
-  color: string;
-  engineSize: string;
-  transmission: string;
-}
+const { width, height } = Dimensions.get('window');
+const isWeb = Platform.OS === 'web';
+const isSmallScreen = width < 375;
 
 type UserType = 'user' | 'mechanic';
-type SocialProvider = 'google' | 'apple' | null;
 
-const RegisterScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
+interface FormData {
+    email: string;
+    password: string;
+    confirmPassword: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    workshopName?: string;
+}
 
-  // Nuovo sistema di temi
-  const { colors, isDark, toggleTheme } = useAppThemeManager();
-  const { dynamicStyles } = useThemedStyles();
+const RegisterScreen = () => {
+    const navigation = useNavigation();
+    const { colors, isDark } = useAppThemeManager();
 
-  // Responsive hooks
-  const [screenData, setScreenData] = useState(Dimensions.get('window'));
-  
-  // Animazioni
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const slideAnim = useState(new Animated.Value(30))[0];
-  const progressAnim = useState(new Animated.Value(0))[0];
+    // Form State
+    const [currentStep, setCurrentStep] = useState(0);
+    const [userType, setUserType] = useState<UserType | null>(null);
+    const [loading, setLoading] = useState(false);
 
-  // Stati principali
-  const [currentStep, setCurrentStep] = useState(0);
-  const [userType, setUserType] = useState<UserType>('user');
-  const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<SocialProvider>(null);
-  const [socialUser, setSocialUser] = useState<FirebaseUser | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-
-  // Dati del form
-  const [formData, setFormData] = useState<FormData>({
-    email: '',
-    password: '',
-    confirmPassword: '',
-    firstName: '',
-    lastName: '',
-    phone: '',
-    workshopName: '',
-    address: '',
-    vatNumber: '',
-    mechanicLicense: '',
-    specializations: [],
-    workingHours: {
-      monday: { open: '08:00', close: '18:00', isClosed: false },
-      tuesday: { open: '08:00', close: '18:00', isClosed: false },
-      wednesday: { open: '08:00', close: '18:00', isClosed: false },
-      thursday: { open: '08:00', close: '18:00', isClosed: false },
-      friday: { open: '08:00', close: '18:00', isClosed: false },
-      saturday: { open: '08:00', close: '13:00', isClosed: false },
-      sunday: { open: '00:00', close: '00:00', isClosed: true },
-    }
-  });
-
-  // Dati auto (per utenti normali)
-  const [carDataList, setCarDataList] = useState<CarData[]>([]);
-  const [currentCarData, setCurrentCarData] = useState<CarData>({
-    brand: '',
-    model: '',
-    year: '',
-    licensePlate: '',
-    vin: '',
-    fuelType: 'gasoline',
-    kilometers: '',
-    color: '',
-    engineSize: '',
-    transmission: 'manual'
-  });
-
-  // Errori di validazione
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Menù per specializzazioni
-  const [showSpecializationsMenu, setShowSpecializationsMenu] = useState(false);
-  
-  // Car search modal
-  const [showCarSearchModal, setShowCarSearchModal] = useState(false);
-  const [currentCarIndex, setCurrentCarIndex] = useState(-1);
-
-  // Opzioni disponibili
-  const specializationOptions = [
-    'Auto', 'Moto', 'Elettrico', 'Ibrido', 'Diesel', 'Benzina', 
-    'Climatizzazione', 'Elettronica', 'Carrozzeria', 'Pneumatici'
-  ];
-
-  const fuelTypeOptions = [
-    { value: 'gasoline', label: 'Benzina' },
-    { value: 'diesel', label: 'Diesel' },
-    { value: 'electric', label: 'Elettrico' },
-    { value: 'hybrid', label: 'Ibrido' },
-    { value: 'lpg', label: 'GPL' },
-    { value: 'methane', label: 'Metano' }
-  ];
-
-  const transmissionOptions = [
-    { value: 'manual', label: 'Manuale' },
-    { value: 'automatic', label: 'Automatico' },
-    { value: 'semiautomatic', label: 'Semiautomatico' }
-  ];
-
-  // Calcolo responsive
-  const isTablet = screenData.width >= 768;
-  const isDesktop = screenData.width >= 1024;
-
-  const getContainerWidth = () => {
-    if (isDesktop) return 1200;
-    if (isTablet) return 800;
-    return screenData.width;
-  };
-
-  const getCardWidth = () => {
-    if (isDesktop) return 600;
-    if (isTablet) return 700;
-    return '100%';
-  };
-
-  useEffect(() => {
-    const onChange = (result: any) => {
-      setScreenData(result.window);
-    };
-    
-    const subscription = Dimensions.addEventListener('change', onChange);
-    
-    // Animazione di entrata
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    
-    return () => subscription?.remove();
-  }, []);
-
-  // Effect per animare la progress bar
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: (currentStep + 1) / 5,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [currentStep]);
-
-  // Funzioni di validazione
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePhone = (phone: string): boolean => {
-    const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/;
-    return phoneRegex.test(phone);
-  };
-
-  const validateVatNumber = (vatNumber: string): boolean => {
-    const vatRegex = /^IT[0-9]{11}$/;
-    return vatRegex.test(vatNumber);
-  };
-
-  const validateLicensePlate = (plate: string): boolean => {
-    const plateRegex = /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/;
-    return plateRegex.test(plate.toUpperCase());
-  };
-
-  const validateStep = (step: number): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    switch (step) {
-      case 1: // Credenziali
-        if (!formData.email || !validateEmail(formData.email)) {
-          newErrors.email = 'Email non valida';
-        }
-        if (!formData.password || formData.password.length < 6) {
-          newErrors.password = 'La password deve avere almeno 6 caratteri';
-        }
-        if (formData.password !== formData.confirmPassword) {
-          newErrors.confirmPassword = 'Le password non coincidono';
-        }
-        break;
-
-      case 2: // Dati personali
-        if (!formData.firstName) {
-          newErrors.firstName = 'Nome obbligatorio';
-        }
-        if (!formData.lastName) {
-          newErrors.lastName = 'Cognome obbligatorio';
-        }
-        if (!formData.phone || !validatePhone(formData.phone)) {
-          newErrors.phone = 'Numero di telefono non valido';
-        }
-        break;
-
-      case 3: // Dati specifici
-        if (userType === 'mechanic') {
-          if (!formData.workshopName) {
-            newErrors.workshopName = 'Nome officina obbligatorio';
-          }
-          if (!formData.address) {
-            newErrors.address = 'Indirizzo obbligatorio';
-          }
-          if (!formData.vatNumber || !validateVatNumber(formData.vatNumber)) {
-            newErrors.vatNumber = 'Partita IVA non valida (formato: IT + 11 cifre)';
-          }
-        } else {
-          // Validazione auto per utenti
-          if (carDataList.length === 0) {
-            newErrors.cars = 'Aggiungi almeno una auto';
-          }
-          
-          // Validazione dati auto
-          carDataList.forEach((car, index) => {
-            if (!car.brand || !car.model || !car.year) {
-              newErrors[`car_${index}`] = 'Dati auto incompleti';
-            }
-          });
-        }
-        break;
-
-      case 4: // Termini e condizioni
-        if (!agreedToTerms) {
-          newErrors.terms = 'Devi accettare i termini e condizioni';
-        }
-        break;
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // Salvataggio utente su Firestore
-  const saveUserToFirestore = async (user: FirebaseUser, authProvider: string) => {
-    try {
-      console.log('💾 Salvataggio dati utente su Firestore...');
-      
-      const baseUserData = {
-        uid: user.uid,
-        email: user.email,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        name: `${formData.firstName} ${formData.lastName}`,
-        phone: formData.phone,
-        userType,
-        authProvider,
-        profilePicture: user.photoURL || null,
-        isEmailVerified: user.emailVerified,
-        profileComplete: true,
-        isActive: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp(),
-        settings: {
-          language: 'it',
-          currency: 'EUR',
-          notifications: userType === 'mechanic' ? {
-            appointments: true,
-            invoices: true,
-            reviews: true,
-            marketing: false,
-          } : {
-            maintenance: true,
-            documents: true,
-            reminders: true,
-            marketing: false,
-          },
-          privacy: {
-            shareDataWithWorkshops: userType === 'user',
-            allowMarketingEmails: false,
-          },
-        },
-      };
-
-      let userData = { ...baseUserData };
-
-      // Dati specifici per meccanici
-      if (userType === 'mechanic') {
-        userData = {
-          ...userData,
-          workshopName: formData.workshopName,
-          address: formData.address,
-          vatNumber: formData.vatNumber,
-          mechanicLicense: formData.mechanicLicense || '',
-          specializations: formData.specializations || [],
-          workingHours: formData.workingHours,
-          rating: 0,
-          reviewsCount: 0,
-          verified: false,
-          certifications: [],
-        };
-      }
-
-      // Salva l'utente
-      await setDoc(doc(db, 'users', user.uid), userData);
-
-      // Se è un utente normale, salva anche le auto
-      if (userType === 'user' && carDataList.length > 0) {
-        for (let i = 0; i < carDataList.length; i++) {
-          const car = carDataList[i];
-          const carId = `${user.uid}_vehicle_${i + 1}`;
-          
-          await setDoc(doc(db, 'vehicles', carId), {
-            id: carId,
-            userId: user.uid,
-            brand: car.brand,
-            model: car.model,
-            year: parseInt(car.year),
-            licensePlate: car.licensePlate.toUpperCase(),
-            vin: car.vin.toUpperCase(),
-            fuelType: car.fuelType,
-            kilometers: parseInt(car.kilometers),
-            color: car.color,
-            engineSize: car.engineSize,
-            transmission: car.transmission,
-            isActive: true,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            notes: '',
-          });
-        }
-      }
-
-      console.log('✅ Utente salvato su Firestore');
-    } catch (error) {
-      console.error('❌ Errore salvataggio Firestore:', error);
-      throw error;
-    }
-  };
-
-  // Gestione registrazione con email
-  const handleEmailRegister = async () => {
-    if (!validateStep(1) || !validateStep(2) || !validateStep(3) || !validateStep(4)) {
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
-
-      await saveUserToFirestore(userCredential.user, 'email');
-
-      Alert.alert(
-        'Registrazione completata!',
-        'Account creato con successo. Benvenuto in MyMeccanic!',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-
-    } catch (error: any) {
-      console.error('❌ Errore registrazione:', error);
-      Alert.alert('Errore', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Gestione auto
-  const addCar = async () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!currentCarData.brand) newErrors.brand = 'Marca obbligatoria';
-    if (!currentCarData.model) newErrors.model = 'Modello obbligatorio';
-    if (!currentCarData.year) newErrors.year = 'Anno obbligatorio';
-    if (!currentCarData.licensePlate) {
-      newErrors.licensePlate = 'Targa obbligatoria';
-    } else if (!validateLicensePlate(currentCarData.licensePlate)) {
-      newErrors.licensePlate = 'Formato targa non valido (es: AB123CD)';
-    }
-    if (!currentCarData.kilometers) newErrors.kilometers = 'Chilometraggio obbligatorio';
-
-    // Validazione anno
-    if (currentCarData.year) {
-      const year = parseInt(currentCarData.year);
-      const currentYear = new Date().getFullYear();
-      if (isNaN(year) || year < 1900 || year > currentYear + 1) {
-        newErrors.year = 'Anno non valido (1900 - ' + (currentYear + 1) + ')';
-      }
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    setCarDataList([...carDataList, { ...currentCarData }]);
-    setCurrentCarData({
-      brand: '',
-      model: '',
-      year: '',
-      licensePlate: '',
-      vin: '',
-      fuelType: 'gasoline',
-      kilometers: '',
-      color: '',
-      engineSize: '',
-      transmission: 'manual'
+    const [formData, setFormData] = useState<FormData>({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        firstName: '',
+        lastName: '',
+        phone: '',
+        workshopName: '',
     });
-    setErrors({});
-  };
 
-  const removeCar = (index: number) => {
-    setCarDataList(carDataList.filter((_, i) => i !== index));
-  };
+    const [errors, setErrors] = useState<Partial<FormData>>({});
 
-  // Gestisce apertura modal ricerca auto
-  const openCarSearch = (index: number = -1) => {
-    setCurrentCarIndex(index);
-    setShowCarSearchModal(true);
-  };
+    // Animation Values
+    const fadeAnim = useState(new Animated.Value(0))[0];
+    const slideAnim = useState(new Animated.Value(30))[0];
 
-  // Gestisce selezione auto dal modal
-  const handleCarSelection = (selectedCar: { brand: string; model: string; year: string }) => {
-    if (currentCarIndex === -1) {
-      // Nuovo auto
-      setCurrentCarData({
-        ...currentCarData,
-        brand: selectedCar.brand,
-        model: selectedCar.model,
-        year: selectedCar.year,
-      });
-    } else {
-      // Modifica auto esistente
-      const updatedCars = [...carDataList];
-      updatedCars[currentCarIndex] = {
-        ...updatedCars[currentCarIndex],
-        brand: selectedCar.brand,
-        model: selectedCar.model,
-        year: selectedCar.year,
-      };
-      setCarDataList(updatedCars);
-    }
-    setShowCarSearchModal(false);
-  };
+    // Calculate progress
+    const totalSteps = userType === 'mechanic' ? 3 : 2;
+    const progress = (currentStep + 1) / totalSteps;
 
-  // Navigazione tra step
-  const nextStep = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
+    useEffect(() => {
+        // Entrance animation
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 600,
+                useNativeDriver: true,
+            }),
+            Animated.spring(slideAnim, {
+                toValue: 0,
+                tension: 20,
+                friction: 7,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, [currentStep]);
 
-  const prevStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
+    // ============================================
+    // VALIDATION
+    // ============================================
+    const validateStep = (): boolean => {
+        const newErrors: Partial<FormData> = {};
 
-  // Render selezione tipo utente
-  const renderUserTypeSelection = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>
-        Come vuoi utilizzare l'app?
-      </Text>
-      <Text style={styles.stepSubtitle}>
-        Scegli il tipo di account più adatto alle tue esigenze
-      </Text>
+        if (currentStep === 0 && !userType) {
+            Alert.alert('Errore', 'Seleziona il tipo di utente');
+            return false;
+        }
 
-      <View style={styles.userTypeContainer}>
-        <TouchableOpacity
-          style={[
-            styles.userTypeCard,
-            userType === 'user' && styles.userTypeCardSelected
-          ]}
-          onPress={() => {
-            setUserType('user');
-            nextStep();
-          }}
-          activeOpacity={0.8}
+        if (currentStep === 1) {
+            // Validate email
+            if (!formData.email.trim()) {
+                newErrors.email = 'Email richiesta';
+            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                newErrors.email = 'Email non valida';
+            }
+
+            // Validate password
+            if (!formData.password) {
+                newErrors.password = 'Password richiesta';
+            } else if (formData.password.length < 6) {
+                newErrors.password = 'Password troppo corta (min. 6 caratteri)';
+            }
+
+            // Validate confirm password
+            if (formData.password !== formData.confirmPassword) {
+                newErrors.confirmPassword = 'Le password non coincidono';
+            }
+        }
+
+        if (currentStep === 2) {
+            // Validate personal info
+            if (!formData.firstName.trim()) {
+                newErrors.firstName = 'Nome richiesto';
+            }
+            if (!formData.lastName.trim()) {
+                newErrors.lastName = 'Cognome richiesto';
+            }
+
+            // Mechanic specific
+            if (userType === 'mechanic' && !formData.workshopName?.trim()) {
+                newErrors.workshopName = 'Nome officina richiesto';
+            }
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    // ============================================
+    // NAVIGATION
+    // ============================================
+    const handleNext = () => {
+        if (validateStep()) {
+            if (currentStep < totalSteps - 1) {
+                setCurrentStep(currentStep + 1);
+                fadeAnim.setValue(0);
+                slideAnim.setValue(30);
+                Animated.parallel([
+                    Animated.timing(fadeAnim, {
+                        toValue: 1,
+                        duration: 400,
+                        useNativeDriver: true,
+                    }),
+                    Animated.spring(slideAnim, {
+                        toValue: 0,
+                        tension: 20,
+                        friction: 7,
+                        useNativeDriver: true,
+                    }),
+                ]).start();
+            } else {
+                handleRegister();
+            }
+        }
+    };
+
+    const handleBack = () => {
+        if (currentStep > 0) {
+            setCurrentStep(currentStep - 1);
+        } else {
+            navigation.goBack();
+        }
+    };
+
+    // ============================================
+    // REGISTRATION HANDLER
+    // ============================================
+    const handleRegister = async () => {
+        if (!validateStep()) return;
+
+        setLoading(true);
+
+        try {
+            // Create Firebase user
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
+                formData.email.trim(),
+                formData.password
+            );
+
+            const userId = userCredential.user.uid;
+
+            // Save user data to Firestore
+            await setDoc(doc(db, 'users', userId), {
+                email: formData.email.trim(),
+                firstName: formData.firstName.trim(),
+                lastName: formData.lastName.trim(),
+                phone: formData.phone.trim(),
+                isMechanic: userType === 'mechanic',
+                workshopName: userType === 'mechanic' ? formData.workshopName : null,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            });
+
+            Alert.alert('Successo', 'Registrazione completata!', [
+                {
+                    text: 'OK',
+                    onPress: () => navigation.navigate('Login' as never),
+                },
+            ]);
+        } catch (error: any) {
+            console.error('Registration error:', error);
+
+            let errorMessage = 'Errore durante la registrazione';
+
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = 'Email già registrata';
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = 'Password troppo debole';
+            } else if (error.code === 'auth/network-request-failed') {
+                errorMessage = 'Errore di connessione';
+            }
+
+            Alert.alert('Errore', errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ============================================
+    // RENDER STEPS
+    // ============================================
+    const renderUserTypeSelection = () => (
+        <Animated.View
+            style={{
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+            }}
         >
-          <MaterialCommunityIcons
-            name="car"
-            size={64}
-            color={userType === 'user' ? colors.primary : colors.onSurface}
-          />
-          <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
-            Proprietario Auto
-          </Text>
-          <Text style={[styles.userTypeSubtitle, { color: colors.onSurfaceVariant }]}>
-            Gestisci la manutenzione delle tue auto
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.userTypeCard,
-            userType === 'mechanic' && styles.userTypeCardSelected
-          ]}
-          onPress={() => {
-            setUserType('mechanic');
-            nextStep();
-          }}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons
-            name="wrench"
-            size={64}
-            color={userType === 'mechanic' ? colors.primary : colors.onSurface}
-          />
-          <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
-            Meccanico/Officina
-          </Text>
-          <Text style={[styles.userTypeSubtitle, { color: colors.onSurfaceVariant }]}>
-            Gestisci clienti e servizi
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  // Render step credenziali
-  const renderCredentialsStep = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Crea il tuo account</Text>
-      <Text style={styles.stepSubtitle}>
-        Inserisci i tuoi dati per accedere
-      </Text>
-
-      <View style={styles.inputsContainer}>
-        <TextInput
-          label="Email"
-          value={formData.email}
-          onChangeText={(text) => setFormData({ ...formData, email: text })}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          error={!!errors.email}
-          style={styles.input}
-          mode="outlined"
-          left={<TextInput.Icon icon="email" />}
-        />
-        <HelperText type="error" visible={!!errors.email}>
-          {errors.email}
-        </HelperText>
-
-        <TextInput
-          label="Password"
-          value={formData.password}
-          onChangeText={(text) => setFormData({ ...formData, password: text })}
-          secureTextEntry={!showPassword}
-          error={!!errors.password}
-          style={styles.input}
-          mode="outlined"
-          left={<TextInput.Icon icon="lock" />}
-          right={
-            <TextInput.Icon
-              icon={showPassword ? "eye-off" : "eye"}
-              onPress={() => setShowPassword(!showPassword)}
-            />
-          }
-        />
-        <HelperText type="error" visible={!!errors.password}>
-          {errors.password}
-        </HelperText>
-
-        <TextInput
-          label="Conferma Password"
-          value={formData.confirmPassword}
-          onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
-          secureTextEntry={!showConfirmPassword}
-          error={!!errors.confirmPassword}
-          style={styles.input}
-          mode="outlined"
-          left={<TextInput.Icon icon="lock-check" />}
-          right={
-            <TextInput.Icon
-              icon={showConfirmPassword ? "eye-off" : "eye"}
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            />
-          }
-        />
-        <HelperText type="error" visible={!!errors.confirmPassword}>
-          {errors.confirmPassword}
-        </HelperText>
-      </View>
-    </View>
-  );
-
-  // Render dati personali
-  const renderPersonalDataStep = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Dati Personali</Text>
-      <Text style={styles.stepSubtitle}>
-        Inserisci i tuoi dati personali
-      </Text>
-
-      <View style={styles.inputsContainer}>
-        <TextInput
-          label="Nome"
-          value={formData.firstName}
-          onChangeText={(text) => setFormData({ ...formData, firstName: text })}
-          error={!!errors.firstName}
-          style={styles.input}
-          mode="outlined"
-          left={<TextInput.Icon icon="account" />}
-        />
-        <HelperText type="error" visible={!!errors.firstName}>
-          {errors.firstName}
-        </HelperText>
-
-        <TextInput
-          label="Cognome"
-          value={formData.lastName}
-          onChangeText={(text) => setFormData({ ...formData, lastName: text })}
-          error={!!errors.lastName}
-          style={styles.input}
-          mode="outlined"
-          left={<TextInput.Icon icon="account" />}
-        />
-        <HelperText type="error" visible={!!errors.lastName}>
-          {errors.lastName}
-        </HelperText>
-
-        <TextInput
-          label="Telefono"
-          value={formData.phone}
-          onChangeText={(text) => setFormData({ ...formData, phone: text })}
-          keyboardType="phone-pad"
-          error={!!errors.phone}
-          style={styles.input}
-          mode="outlined"
-          left={<TextInput.Icon icon="phone" />}
-        />
-        <HelperText type="error" visible={!!errors.phone}>
-          {errors.phone}
-        </HelperText>
-      </View>
-    </View>
-  );
-
-  // Render dati specifici
-  const renderSpecificDataStep = () => {
-    if (userType === 'mechanic') {
-      return (
-        <View style={styles.stepContainer}>
-          <Text style={styles.stepTitle}>Dati Officina</Text>
-          <Text style={styles.stepSubtitle}>
-            Inserisci i dati della tua officina
-          </Text>
-
-          <View style={styles.inputsContainer}>
-            <TextInput
-              label="Nome Officina"
-              value={formData.workshopName}
-              onChangeText={(text) => setFormData({ ...formData, workshopName: text })}
-              error={!!errors.workshopName}
-              style={styles.input}
-              mode="outlined"
-              left={<TextInput.Icon icon="store" />}
-            />
-            <HelperText type="error" visible={!!errors.workshopName}>
-              {errors.workshopName}
-            </HelperText>
-
-            <TextInput
-              label="Indirizzo"
-              value={formData.address}
-              onChangeText={(text) => setFormData({ ...formData, address: text })}
-              error={!!errors.address}
-              style={styles.input}
-              mode="outlined"
-              multiline
-              numberOfLines={2}
-              left={<TextInput.Icon icon="map-marker" />}
-            />
-            <HelperText type="error" visible={!!errors.address}>
-              {errors.address}
-            </HelperText>
-
-            <TextInput
-              label="Partita IVA (IT + 11 cifre)"
-              value={formData.vatNumber}
-              onChangeText={(text) => setFormData({ ...formData, vatNumber: text.toUpperCase() })}
-              error={!!errors.vatNumber}
-              style={styles.input}
-              mode="outlined"
-              left={<TextInput.Icon icon="file-document" />}
-            />
-            <HelperText type="error" visible={!!errors.vatNumber}>
-              {errors.vatNumber}
-            </HelperText>
-
-            <TextInput
-              label="Licenza Meccanico (opzionale)"
-              value={formData.mechanicLicense}
-              onChangeText={(text) => setFormData({ ...formData, mechanicLicense: text })}
-              style={styles.input}
-              mode="outlined"
-              left={<TextInput.Icon icon="certificate" />}
-            />
-
-            <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-              Specializzazioni
-            </Text>
-            <View style={styles.chipContainer}>
-              {specializationOptions.map((spec) => (
-                <Chip
-                  key={spec}
-                  selected={formData.specializations?.includes(spec)}
-                  onPress={() => {
-                    const current = formData.specializations || [];
-                    const updated = current.includes(spec)
-                      ? current.filter(s => s !== spec)
-                      : [...current, spec];
-                    setFormData({ ...formData, specializations: updated });
-                  }}
-                  style={styles.chip}
-                >
-                  {spec}
-                </Chip>
-              ))}
-            </View>
-          </View>
-        </View>
-      );
-    } else {
-      return (
-        <View style={styles.stepContainer}>
-          <Text style={styles.stepTitle}>Le Tue Auto</Text>
-          <Text style={styles.stepSubtitle}>
-            Aggiungi almeno una auto per iniziare
-          </Text>
-
-          <View style={styles.inputsContainer}>
-            <View style={styles.addCarForm}>
-              {/* Campi Auto Manuali con Suggerimenti */}
-              <View style={styles.carFormRow}>
-                <View style={[styles.inputWithSuggestion, styles.halfWidth]}>
-                  <TextInput
-                    label="Marca"
-                    value={currentCarData.brand}
-                    onChangeText={(text) => setCurrentCarData({ ...currentCarData, brand: text })}
-                    error={!!errors.brand}
-                    style={styles.input}
-                    mode="outlined"
-                    placeholder="es. Fiat, Volkswagen, BMW"
-                    left={<TextInput.Icon icon="car" />}
-                    right={
-                      <TextInput.Icon
-                        icon="magnify"
-                        onPress={() => openCarSearch()}
-                      />
-                    }
-                  />
-                  <HelperText type="info" visible={true}>
-                    Scrivi manualmente o clicca 🔍 per suggerimenti
-                  </HelperText>
-                </View>
-                
-                <View style={[styles.inputWithSuggestion, styles.halfWidth]}>
-                  <TextInput
-                    label="Modello"
-                    value={currentCarData.model}
-                    onChangeText={(text) => setCurrentCarData({ ...currentCarData, model: text })}
-                    error={!!errors.model}
-                    style={styles.input}
-                    mode="outlined"
-                    placeholder="es. Golf, 500, Serie 3"
-                    left={<TextInput.Icon icon="car-side" />}
-                    right={
-                      currentCarData.brand ? (
-                        <TextInput.Icon
-                          icon="magnify"
-                          onPress={() => openCarSearch()}
-                        />
-                      ) : null
-                    }
-                  />
-                  <HelperText type="info" visible={true}>
-                    {currentCarData.brand ? 'Scrivi o cerca modelli per ' + currentCarData.brand : 'Prima inserisci la marca'}
-                  </HelperText>
-                </View>
-              </View>
-
-              <View style={styles.carFormRow}>
-                <TextInput
-                  label="Anno"
-                  value={currentCarData.year}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, year: text })}
-                  keyboardType="numeric"
-                  error={!!errors.year}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
-                  placeholder="es. 2020"
-                  left={<TextInput.Icon icon="calendar" />}
-                />
-                <TextInput
-                  label="Cilindrata (opzionale)"
-                  value={currentCarData.engineSize}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, engineSize: text })}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
-                  placeholder="es. 1.6, 2.0 TDI"
-                  left={<TextInput.Icon icon="engine" />}
-                />
-              </View>
-
-              {/* Campi aggiuntivi */}
-              <View style={styles.carFormRow}>
-                <TextInput
-                  label="Targa"
-                  value={currentCarData.licensePlate}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, licensePlate: text.toUpperCase() })}
-                  error={!!errors.licensePlate}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
-                  placeholder="AB123CD"
-                />
-                <TextInput
-                  label="Chilometri"
-                  value={currentCarData.kilometers}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, kilometers: text })}
-                  keyboardType="numeric"
-                  error={!!errors.kilometers}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
-                  placeholder="50000"
-                />
-              </View>
-
-              <View style={styles.carFormRow}>
-                <TextInput
-                  label="VIN (opzionale)"
-                  value={currentCarData.vin}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, vin: text.toUpperCase() })}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
-                  placeholder="17 caratteri"
-                  left={<TextInput.Icon icon="barcode" />}
-                />
-                <TextInput
-                  label="Colore (opzionale)"
-                  value={currentCarData.color}
-                  onChangeText={(text) => setCurrentCarData({ ...currentCarData, color: text })}
-                  style={[styles.input, styles.halfWidth]}
-                  mode="outlined"
-                  placeholder="Rosso"
-                  left={<TextInput.Icon icon="palette" />}
-                />
-              </View>
-
-              {/* Selezione Carburante e Cambio */}
-              <View style={styles.carFormRow}>
-                <View style={styles.halfWidth}>
-                  <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-                    Tipo Carburante
-                  </Text>
-                  <View style={styles.chipContainer}>
-                    {fuelTypeOptions.map((fuel) => (
-                      <Chip
-                        key={fuel.value}
-                        selected={currentCarData.fuelType === fuel.value}
-                        onPress={() => setCurrentCarData({ ...currentCarData, fuelType: fuel.value })}
-                        style={styles.chip}
-                      >
-                        {fuel.label}
-                      </Chip>
-                    ))}
-                  </View>
-                </View>
-                
-                <View style={styles.halfWidth}>
-                  <Text style={[styles.inputLabel, { color: colors.onSurface }]}>
-                    Trasmissione
-                  </Text>
-                  <View style={styles.chipContainer}>
-                    {transmissionOptions.map((trans) => (
-                      <Chip
-                        key={trans.value}
-                        selected={currentCarData.transmission === trans.value}
-                        onPress={() => setCurrentCarData({ ...currentCarData, transmission: trans.value })}
-                        style={styles.chip}
-                      >
-                        {trans.label}
-                      </Chip>
-                    ))}
-                  </View>
-                </View>
-              </View>
-
-              <Button
-                mode="outlined"
-                onPress={addCar}
-                style={styles.addButton}
-                icon="plus"
-              >
-                Aggiungi Auto
-              </Button>
-
-              {Object.keys(errors).map(key => errors[key] && (
-                <HelperText key={key} type="error" visible={true}>
-                  {errors[key]}
-                </HelperText>
-              ))}
-            </View>
-
-            {carDataList.length > 0 && (
-              <View style={styles.carsList}>
-                <Text style={[styles.carsListTitle, { color: colors.onSurface }]}>
-                  Auto aggiunte ({carDataList.length})
+            <View style={styles.stepHeader}>
+                <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+                    Chi sei?
                 </Text>
-                {carDataList.map((car, index) => (
-                  <View key={index} style={[styles.carItem, { borderColor: colors.outline }]}>
-                    <TouchableOpacity
-                      style={styles.carInfo}
-                      onPress={() => openCarSearch(index)}
-                      activeOpacity={0.7}
+                <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
+                    Seleziona il tipo di account da creare
+                </Text>
+            </View>
+
+            <View style={styles.userTypeContainer}>
+                {/* User Card */}
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setUserType('user')}
+                >
+                    <GlassCard
+                        style={[
+                            styles.userTypeCard,
+                            userType === 'user' && {
+                                borderColor: colors.primary,
+                                borderWidth: 2,
+                            },
+                        ]}
                     >
-                      <Text style={[styles.carTitle, { color: colors.onSurface }]}>
-                        {car.brand} {car.model} ({car.year})
-                      </Text>
-                      <Text style={[styles.carSubtitle, { color: colors.onSurfaceVariant }]}>
-                        {car.licensePlate} - {car.kilometers} km
-                      </Text>
-                      {car.color && (
-                        <Text style={[styles.carDetails, { color: colors.onSurfaceVariant }]}>
-                          Colore: {car.color}
+                        <View
+                            style={[
+                                styles.userTypeIcon,
+                                { backgroundColor: `${colors.primary}20` },
+                            ]}
+                        >
+                            <Car size={32} color={colors.primary} />
+                        </View>
+                        <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
+                            Proprietario
                         </Text>
-                      )}
-                    </TouchableOpacity>
-                    <View style={styles.carActions}>
-                      <IconButton
-                        icon="pencil"
-                        onPress={() => openCarSearch(index)}
-                        iconColor={colors.primary}
-                        size={20}
-                      />
-                      <IconButton
-                        icon="delete"
-                        onPress={() => removeCar(index)}
-                        iconColor={colors.error}
-                        size={20}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
-      );
-    }
-  };
+                        <Text style={[styles.userTypeDesc, { color: colors.onSurfaceVariant }]}>
+                            Gestisci le tue auto, manutenzioni e spese
+                        </Text>
+                        {userType === 'user' && (
+                            <View style={styles.selectedBadge}>
+                                <CheckCircle size={20} color={colors.primary} />
+                            </View>
+                        )}
+                    </GlassCard>
+                </TouchableOpacity>
 
-  // Step finale
-  const renderFinalStep = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Quasi finito!</Text>
-      <Text style={styles.stepSubtitle}>
-        Accetta i termini per completare la registrazione
-      </Text>
-
-      <View style={styles.finalStepContent}>
-        <MaterialCommunityIcons
-          name="check-circle-outline"
-          size={80}
-          color={colors.primary}
-          style={styles.finalIcon}
-        />
-
-        <View style={styles.checkboxContainer}>
-          <Checkbox
-            status={agreedToTerms ? 'checked' : 'unchecked'}
-            onPress={() => setAgreedToTerms(!agreedToTerms)}
-            color={colors.primary}
-          />
-          <Text style={[styles.checkboxLabel, { color: colors.onSurface }]}>
-            Accetto i termini e condizioni
-          </Text>
-        </View>
-
-        <Button
-          mode="contained"
-          onPress={handleEmailRegister}
-          loading={loading}
-          disabled={loading || !agreedToTerms}
-          buttonColor={colors.primary}
-          style={styles.finalButton}
-          contentStyle={styles.finalButtonContent}
-        >
-          {loading ? 'Creazione account...' : 'Crea Account'}
-        </Button>
-      </View>
-    </View>
-  );
-
-  // Render navigation buttons
-  const renderNavigationButtons = () => {
-    if (currentStep === 0 || currentStep === 4) return null;
-
-    return (
-      <View style={styles.navigationContainer}>
-        <Button
-          mode="text"
-          onPress={prevStep}
-          disabled={loading}
-          style={styles.navigationButton}
-          textColor={colors.primary}
-        >
-          Indietro
-        </Button>
-
-        <Button
-          mode="contained"
-          onPress={nextStep}
-          disabled={loading}
-          style={styles.navigationButton}
-          buttonColor={colors.primary}
-        >
-          Avanti
-        </Button>
-      </View>
+                {/* Mechanic Card */}
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setUserType('mechanic')}
+                >
+                    <GlassCard
+                        style={[
+                            styles.userTypeCard,
+                            userType === 'mechanic' && {
+                                borderColor: colors.secondary,
+                                borderWidth: 2,
+                            },
+                        ]}
+                    >
+                        <View
+                            style={[
+                                styles.userTypeIcon,
+                                { backgroundColor: `${colors.secondary}20` },
+                            ]}
+                        >
+                            <Wrench size={32} color={colors.secondary} />
+                        </View>
+                        <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
+                            Meccanico
+                        </Text>
+                        <Text style={[styles.userTypeDesc, { color: colors.onSurfaceVariant }]}>
+                            Gestisci la tua officina e i clienti
+                        </Text>
+                        {userType === 'mechanic' && (
+                            <View style={styles.selectedBadge}>
+                                <CheckCircle size={20} color={colors.secondary} />
+                            </View>
+                        )}
+                    </GlassCard>
+                </TouchableOpacity>
+            </View>
+        </Animated.View>
     );
-  };
 
-  // Render del contenuto dello step corrente
-  const renderCurrentStep = () => {
-    switch (currentStep) {
-      case 0: return renderUserTypeSelection();
-      case 1: return renderCredentialsStep();
-      case 2: return renderPersonalDataStep();
-      case 3: return renderSpecificDataStep();
-      case 4: return renderFinalStep();
-      default: return renderUserTypeSelection();
-    }
-  };
+    const renderCredentialsStep = () => (
+        <Animated.View
+            style={{
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+            }}
+        >
+            <View style={styles.stepHeader}>
+                <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+                    Crea il tuo account
+                </Text>
+                <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
+                    Inserisci email e password
+                </Text>
+            </View>
 
-  const styles = StyleSheet.create({
+            <GlassCard>
+                <ThemedInput
+                    label="Email"
+                    placeholder="tua@email.com"
+                    value={formData.email}
+                    onChangeText={(text) => {
+                        setFormData({ ...formData, email: text });
+                        setErrors({ ...errors, email: '' });
+                    }}
+                    error={errors.email}
+                    icon={Mail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    editable={!loading}
+                />
+
+                <ThemedInput
+                    label="Password"
+                    placeholder="Minimo 6 caratteri"
+                    value={formData.password}
+                    onChangeText={(text) => {
+                        setFormData({ ...formData, password: text });
+                        setErrors({ ...errors, password: '' });
+                    }}
+                    error={errors.password}
+                    icon={Lock}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                />
+
+                <ThemedInput
+                    label="Conferma Password"
+                    placeholder="Ripeti la password"
+                    value={formData.confirmPassword}
+                    onChangeText={(text) => {
+                        setFormData({ ...formData, confirmPassword: text });
+                        setErrors({ ...errors, confirmPassword: '' });
+                    }}
+                    error={errors.confirmPassword}
+                    icon={Lock}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                />
+            </GlassCard>
+        </Animated.View>
+    );
+
+    const renderPersonalInfoStep = () => (
+        <Animated.View
+            style={{
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+            }}
+        >
+            <View style={styles.stepHeader}>
+                <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+                    Informazioni personali
+                </Text>
+                <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
+                    Dicci qualcosa su di te
+                </Text>
+            </View>
+
+            <GlassCard>
+                <ThemedInput
+                    label="Nome"
+                    placeholder="Mario"
+                    value={formData.firstName}
+                    onChangeText={(text) => {
+                        setFormData({ ...formData, firstName: text });
+                        setErrors({ ...errors, firstName: '' });
+                    }}
+                    error={errors.firstName}
+                    icon={User}
+                    autoCapitalize="words"
+                    editable={!loading}
+                />
+
+                <ThemedInput
+                    label="Cognome"
+                    placeholder="Rossi"
+                    value={formData.lastName}
+                    onChangeText={(text) => {
+                        setFormData({ ...formData, lastName: text });
+                        setErrors({ ...errors, lastName: '' });
+                    }}
+                    error={errors.lastName}
+                    icon={User}
+                    autoCapitalize="words"
+                    editable={!loading}
+                />
+
+                <ThemedInput
+                    label="Telefono (opzionale)"
+                    placeholder="+39 123 456 7890"
+                    value={formData.phone}
+                    onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                    icon={Phone}
+                    keyboardType="phone-pad"
+                    editable={!loading}
+                />
+
+                {userType === 'mechanic' && (
+                    <ThemedInput
+                        label="Nome Officina"
+                        placeholder="Auto Service Rossi"
+                        value={formData.workshopName}
+                        onChangeText={(text) => {
+                            setFormData({ ...formData, workshopName: text });
+                            setErrors({ ...errors, workshopName: '' });
+                        }}
+                        error={errors.workshopName}
+                        icon={Wrench}
+                        autoCapitalize="words"
+                        editable={!loading}
+                    />
+                )}
+            </GlassCard>
+        </Animated.View>
+    );
+
+    const renderCurrentStep = () => {
+        switch (currentStep) {
+            case 0:
+                return renderUserTypeSelection();
+            case 1:
+                return renderCredentialsStep();
+            case 2:
+                return renderPersonalInfoStep();
+            default:
+                return null;
+        }
+    };
+
+    // ============================================
+    // RENDER
+    // ============================================
+    return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar
+                barStyle={isDark ? 'light-content' : 'dark-content'}
+                backgroundColor="transparent"
+                translucent
+            />
+
+            {/* Background Gradient */}
+            <LinearGradient
+                colors={
+                    isDark
+                        ? ['#000000', '#1A1A1A', '#2C2C2E']
+                        : ['#F8F9FA', '#E8EAED', '#FFFFFF']
+                }
+                style={StyleSheet.absoluteFillObject}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            />
+
+            {/* Progress Bar */}
+            <View style={styles.progressContainer}>
+                <ProgressBar
+                    progress={progress}
+                    color={colors.primary}
+                    style={styles.progressBar}
+                />
+            </View>
+
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.keyboardView}
+            >
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.content}>
+                        {/* Header */}
+                        <View style={styles.header}>
+                            <View
+                                style={[
+                                    styles.logoCircle,
+                                    { backgroundColor: `${colors.primary}15` },
+                                ]}
+                            >
+                                <UserPlus size={40} color={colors.primary} />
+                            </View>
+                            <Text style={[styles.mainTitle, { color: colors.onSurface }]}>
+                                Registrazione
+                            </Text>
+                        </View>
+
+                        {/* Steps Content */}
+                        {renderCurrentStep()}
+
+                        {/* Navigation Buttons */}
+                        <View style={styles.buttonContainer}>
+                            {currentStep > 0 && (
+                                <GradientButton
+                                    variant="outlined"
+                                    title="Indietro"
+                                    onPress={handleBack}
+                                    icon={ArrowLeft}
+                                    disabled={loading}
+                                    style={styles.backButton}
+                                />
+                            )}
+
+                            <GradientButton
+                                title={currentStep === totalSteps - 1 ? 'Completa' : 'Avanti'}
+                                onPress={handleNext}
+                                loading={loading}
+                                disabled={loading}
+                                icon={ArrowRight}
+                                style={styles.nextButton}
+                            />
+                        </View>
+
+                        {/* Login Link */}
+                        {currentStep === 0 && (
+                            <View style={styles.loginContainer}>
+                                <Text style={[styles.loginText, { color: colors.onSurfaceVariant }]}>
+                                    Hai già un account?{' '}
+                                </Text>
+                                <GradientButton
+                                    variant="text"
+                                    title="Accedi"
+                                    onPress={() => navigation.navigate('Login' as never)}
+                                />
+                            </View>
+                        )}
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </View>
+    );
+};
+
+// ============================================
+// STYLES
+// ============================================
+const styles = StyleSheet.create({
     container: {
-      flex: 1,
-      backgroundColor: colors.background,
+        flex: 1,
     },
-    scrollContainer: {
-      flexGrow: 1,
-      paddingHorizontal: 16,
-      paddingVertical: Math.max(insets.top + 20, 40),
+    progressContainer: {
+        paddingTop: Platform.OS === 'ios' ? 50 : 30,
+        paddingHorizontal: 20,
     },
-    stepContainer: {
-      alignItems: 'center',
-      minHeight: 400,
+    progressBar: {
+        height: 4,
+        borderRadius: 2,
+    },
+    keyboardView: {
+        flex: 1,
+    },
+    scrollContent: {
+        flexGrow: 1,
+        paddingHorizontal: isWeb ? 40 : 24,
+        paddingVertical: 24,
+    },
+    content: {
+        width: '100%',
+        maxWidth: 480,
+        alignSelf: 'center',
+    },
+
+    // Header
+    header: {
+        alignItems: 'center',
+        marginBottom: 32,
+    },
+    logoCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    mainTitle: {
+        fontSize: 28,
+        fontWeight: '700',
+        letterSpacing: -0.5,
+    },
+
+    // Steps
+    stepHeader: {
+        marginBottom: 24,
     },
     stepTitle: {
-      fontSize: isDesktop ? 28 : 20,
-      fontWeight: '600',
-      textAlign: 'center',
-      marginBottom: 12,
-      color: colors.onSurface,
+        fontSize: 24,
+        fontWeight: '700',
+        marginBottom: 8,
+        letterSpacing: -0.3,
     },
     stepSubtitle: {
-      fontSize: 14,
-      textAlign: 'center',
-      color: colors.onSurfaceVariant,
-      marginBottom: 32,
-      maxWidth: 400,
+        fontSize: 15,
+        lineHeight: 22,
+        letterSpacing: 0.15,
     },
+
+    // User Type Selection
     userTypeContainer: {
-      flexDirection: isTablet ? 'row' : 'column',
-      gap: 16,
-      width: '100%',
-      maxWidth: 600,
+        gap: 16,
     },
     userTypeCard: {
-      flex: isTablet ? 1 : undefined,
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 20,
-      padding: 24,
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: 'transparent',
-      minHeight: 160,
+        position: 'relative',
+        alignItems: 'center',
+        paddingVertical: 32,
     },
-    userTypeCardSelected: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primaryContainer,
+    userTypeIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
     },
     userTypeTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      marginTop: 12,
-      textAlign: 'center',
+        fontSize: 20,
+        fontWeight: '700',
+        marginBottom: 8,
     },
-    userTypeSubtitle: {
-      fontSize: 14,
-      textAlign: 'center',
-      marginTop: 4,
+    userTypeDesc: {
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
     },
-    inputsContainer: {
-      width: '100%',
-      maxWidth: 400,
-      gap: 16,
+    selectedBadge: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
     },
-    input: {
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 12,
-    },
-    navigationContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 32,
-      width: '100%',
-      maxWidth: 400,
-    },
-    navigationButton: {
-      minWidth: 100,
-      borderRadius: 12,
-    },
-    inputLabel: {
-      fontSize: 16,
-      fontWeight: '500',
-      marginBottom: 8,
-    },
-    chipContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 16,
-    },
-    chip: {
-      margin: 2,
-    },
-    addCarForm: {
-      marginBottom: 24,
-    },
-    carFormRow: {
-      flexDirection: 'row',
-      gap: 12,
-      marginBottom: 16,
-    },
-    halfWidth: {
-      flex: 1,
-    },
-    addButton: {
-      marginTop: 16,
-      borderRadius: 12,
-    },
-    carsList: {
-      width: '100%',
-    },
-    carsListTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      marginBottom: 12,
-    },
-    carItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 12,
-      borderWidth: 1,
-      borderRadius: 8,
-      marginBottom: 8,
-    },
-    carInfo: {
-      flex: 1,
-    },
-    carTitle: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    carSubtitle: {
-      fontSize: 12,
-      marginTop: 2,
-    },
-    carDetails: {
-      fontSize: 11,
-      marginTop: 1,
-    },
-    carActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    inputWithSuggestion: {
-      position: 'relative',
-    },
-    finalStepContent: {
-      alignItems: 'center',
-      marginTop: 40,
-      width: '100%',
-      maxWidth: 400,
-    },
-    finalIcon: {
-      marginBottom: 24,
-    },
-    checkboxContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 24,
-    },
-    checkboxLabel: {
-      marginLeft: 8,
-      flex: 1,
-    },
-    finalButton: {
-      width: '100%',
-      borderRadius: 12,
-    },
-    finalButtonContent: {
-      height: 48,
-    },
-  });
 
-  return (
-    <View style={styles.container}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {renderCurrentStep()}
-          {renderNavigationButtons()}
-        </ScrollView>
-      </KeyboardAvoidingView>
+    // Buttons
+    buttonContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 24,
+    },
+    backButton: {
+        flex: 1,
+    },
+    nextButton: {
+        flex: 2,
+    },
 
-      {/* Car Search Modal */}
-      <CarSearchModal
-        visible={showCarSearchModal}
-        onClose={() => setShowCarSearchModal(false)}
-        onSelect={handleCarSelection}
-        initialData={
-          currentCarIndex >= 0 ? carDataList[currentCarIndex] : currentCarData
-        }
-        isDark={isDark}
-      />
-    </View>
-  );
-};
+    // Login Link
+    loginContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 24,
+    },
+    loginText: {
+        fontSize: 15,
+    },
+});
 
 export default RegisterScreen;

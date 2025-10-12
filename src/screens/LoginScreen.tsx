@@ -1,197 +1,147 @@
-// src/screens/LoginScreen.tsx
-import React, { useState } from 'react';
+// src/screens/LoginScreen.tsx - VERSIONE MODERNA
+import React, { useState, useEffect } from 'react';
 import {
     View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
-    Alert,
+    ScrollView,
     KeyboardAvoidingView,
     Platform,
-    ScrollView,
-    ActivityIndicator,
+    StyleSheet,
+    Dimensions,
+    StatusBar,
+    Alert,
+    Animated,
 } from 'react-native';
+import { Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../services/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { useStore } from '../store';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
-import { CommonActions } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Mail, Lock, ArrowRight, Smartphone } from 'lucide-react-native';
 
-const LoginScreen: React.FC = () => {
+// Firebase
+import { auth } from '../services/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+
+// Custom Components & Hooks
+import {
+    ThemedInput,
+    GradientButton,
+    GlassCard,
+    DividerWithText,
+    SocialButton,
+} from '../components/CommonComponents';
+import { useAppThemeManager } from '../hooks/useTheme';
+import { useStore } from '../store';
+
+const { width, height } = Dimensions.get('window');
+const isWeb = Platform.OS === 'web';
+const isSmallScreen = width < 375;
+
+const LoginScreen = () => {
     const navigation = useNavigation();
+    const { colors, isDark } = useAppThemeManager();
     const { setUser } = useStore();
 
-    // Stati locali
+    // Form State
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [emailError, setEmailError] = useState('');
     const [passwordError, setPasswordError] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // ====================================
-    // 🔑 REDIRECT DOPO LOGIN - PARTE MODIFICATA
-    // ====================================
-    const handlePostLoginRedirect = async (user: any) => {
-        try {
-            console.log('👤 Controllo tipo utente per:', user.uid);
+    // Animation Values
+    const fadeAnim = useState(new Animated.Value(0))[0];
+    const slideAnim = useState(new Animated.Value(30))[0];
 
-            // Leggi il documento utente da Firestore
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDoc = await getDoc(userDocRef);
+    useEffect(() => {
+        // Entrance animation
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 800,
+                useNativeDriver: true,
+            }),
+            Animated.spring(slideAnim, {
+                toValue: 0,
+                tension: 20,
+                friction: 7,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, []);
 
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                console.log('📄 Dati utente trovati:', userData);
-
-                // Determina se è meccanico o utente normale
-                const isMechanic = userData.userType === 'mechanic';
-
-                // ✅ CORREZIONE PRINCIPALE: Usa "Main" per utenti, "HomeMechanic" per meccanici
-                if (isMechanic) {
-                    console.log('🔧 Redirect a Dashboard Meccanico');
-
-                    // Reset completo dello stack di navigazione
-                    navigation.dispatch(
-                        CommonActions.reset({
-                            index: 0,
-                            routes: [{ name: 'HomeMechanic' }],
-                        })
-                    );
-                } else {
-                    console.log('🚗 Redirect a Dashboard Utente');
-
-                    // ✅ USA "Main" invece di "Home"
-                    // "Main" è il Tab Navigator che contiene "Home" e "Settings"
-                    navigation.dispatch(
-                        CommonActions.reset({
-                            index: 0,
-                            routes: [{ name: 'Main' }],
-                        })
-                    );
-                }
-            } else {
-                // Se il documento non esiste, crealo con dati base
-                console.log('📝 Creando profilo utente...');
-                await setDoc(doc(db, 'users', user.uid), {
-                    email: user.email,
-                    displayName: user.displayName || '',
-                    userType: 'user', // Default a user normale
-                    createdAt: new Date().toISOString(),
-                    photoURL: user.photoURL || '',
-                });
-
-                // Redirect a dashboard utente di default
-                navigation.dispatch(
-                    CommonActions.reset({
-                        index: 0,
-                        routes: [{ name: 'Main' }],
-                    })
-                );
-            }
-        } catch (error) {
-            console.error('❌ Errore durante il redirect:', error);
-            Alert.alert('Errore', 'Impossibile determinare il tipo di utente');
-        }
-    };
-
-    // ====================================
-    // VALIDAZIONE FORM
-    // ====================================
-    const validateForm = (): boolean => {
-        let valid = true;
-
-        // Reset errori
-        setEmailError('');
-        setPasswordError('');
-
-        // Valida email
+    // ============================================
+    // VALIDATION
+    // ============================================
+    const validateEmail = (email: string): boolean => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!email.trim()) {
             setEmailError('Email richiesta');
-            valid = false;
-        } else if (!/\S+@\S+\.\S+/.test(email)) {
+            return false;
+        }
+        if (!emailRegex.test(email)) {
             setEmailError('Email non valida');
-            valid = false;
+            return false;
         }
-
-        // Valida password
-        if (!password.trim()) {
-            setPasswordError('Password richiesta');
-            valid = false;
-        } else if (password.length < 6) {
-            setPasswordError('Password troppo corta (minimo 6 caratteri)');
-            valid = false;
-        }
-
-        return valid;
+        setEmailError('');
+        return true;
     };
 
-    // ====================================
-    // GESTIONE LOGIN
-    // ====================================
-    const handleLogin = async () => {
-        // Valida il form
-        if (!validateForm()) {
-            return;
+    const validatePassword = (password: string): boolean => {
+        if (!password) {
+            setPasswordError('Password richiesta');
+            return false;
         }
+        if (password.length < 6) {
+            setPasswordError('Password troppo corta (min. 6 caratteri)');
+            return false;
+        }
+        setPasswordError('');
+        return true;
+    };
+
+    // ============================================
+    // LOGIN HANDLER
+    // ============================================
+    const handleLogin = async () => {
+        // Validate
+        const isEmailValid = validateEmail(email);
+        const isPasswordValid = validatePassword(password);
+
+        if (!isEmailValid || !isPasswordValid) return;
 
         setLoading(true);
 
         try {
-            console.log('🔐 Tentativo di login per:', email);
-
-            // Effettua il login con Firebase
             const userCredential = await signInWithEmailAndPassword(
                 auth,
                 email.trim(),
                 password
             );
 
-            const user = userCredential.user;
-            console.log('✅ Login riuscito per:', user.email);
-
-            // Salva i dati dell'utente nello store
+            // Update store
             setUser({
-                uid: user.uid,
-                email: user.email || '',
-                displayName: user.displayName || '',
-                photoURL: user.photoURL || '',
+                id: userCredential.user.uid,
+                email: userCredential.user.email || '',
+                displayName: userCredential.user.displayName || '',
                 isLoggedIn: true,
             });
 
-            // Redirect basato sul tipo di utente
-            await handlePostLoginRedirect(user);
-
+            Alert.alert('Successo', 'Accesso effettuato!');
         } catch (error: any) {
-            console.error('❌ Errore login:', error);
+            console.error('Login error:', error);
 
-            let errorMessage = 'Credenziali non valide';
+            // Friendly error messages
+            let errorMessage = 'Errore durante l\'accesso';
 
-            // Gestione errori specifici
-            switch (error.code) {
-                case 'auth/user-not-found':
-                    errorMessage = 'Utente non trovato';
-                    break;
-                case 'auth/wrong-password':
-                    errorMessage = 'Password errata';
-                    break;
-                case 'auth/invalid-email':
-                    errorMessage = 'Email non valida';
-                    break;
-                case 'auth/user-disabled':
-                    errorMessage = 'Account disabilitato';
-                    break;
-                case 'auth/too-many-requests':
-                    errorMessage = 'Troppi tentativi. Riprova più tardi';
-                    break;
-                case 'auth/network-request-failed':
-                    errorMessage = 'Errore di connessione';
-                    break;
-                default:
-                    errorMessage = 'Errore durante il login';
+            if (error.code === 'auth/invalid-credential') {
+                errorMessage = 'Email o password non corretti';
+            } else if (error.code === 'auth/user-not-found') {
+                errorMessage = 'Utente non trovato';
+            } else if (error.code === 'auth/wrong-password') {
+                errorMessage = 'Password non corretta';
+            } else if (error.code === 'auth/too-many-requests') {
+                errorMessage = 'Troppi tentativi. Riprova più tardi';
+            } else if (error.code === 'auth/network-request-failed') {
+                errorMessage = 'Errore di connessione. Verifica la tua rete';
             }
 
             Alert.alert('Errore', errorMessage);
@@ -200,11 +150,44 @@ const LoginScreen: React.FC = () => {
         }
     };
 
-    // ====================================
-    // UI
-    // ====================================
+    // ============================================
+    // SOCIAL LOGIN HANDLERS
+    // ============================================
+    const handleGoogleLogin = () => {
+        Alert.alert('In arrivo', 'Login Google in sviluppo');
+    };
+
+    const handleAppleLogin = () => {
+        Alert.alert('In arrivo', 'Login Apple in sviluppo');
+    };
+
+    // ============================================
+    // RENDER
+    // ============================================
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar
+                barStyle={isDark ? 'light-content' : 'dark-content'}
+                backgroundColor="transparent"
+                translucent
+            />
+
+            {/* Background Gradient */}
+            <LinearGradient
+                colors={
+                    isDark
+                        ? ['#000000', '#1A1A1A', '#2C2C2E']
+                        : ['#F8F9FA', '#E8EAED', '#FFFFFF']
+                }
+                style={StyleSheet.absoluteFillObject}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            />
+
+            {/* Decorative Elements */}
+            <View style={styles.decorativeCircle1} />
+            <View style={styles.decorativeCircle2} />
+
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.keyboardView}
@@ -212,130 +195,170 @@ const LoginScreen: React.FC = () => {
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
                 >
-                    <View style={styles.content}>
+                    <Animated.View
+                        style={[
+                            styles.content,
+                            {
+                                opacity: fadeAnim,
+                                transform: [{ translateY: slideAnim }],
+                            },
+                        ]}
+                    >
+                        {/* Logo/Icon Section */}
+                        <View style={styles.logoContainer}>
+                            <View
+                                style={[
+                                    styles.logoCircle,
+                                    {
+                                        backgroundColor: isDark
+                                            ? 'rgba(10, 132, 255, 0.15)'
+                                            : 'rgba(0, 122, 255, 0.1)',
+                                    },
+                                ]}
+                            >
+                                <Smartphone size={48} color={colors.primary} />
+                            </View>
+                        </View>
+
                         {/* Header */}
                         <View style={styles.header}>
-                            <Text style={styles.title}>Bentornato! 👋</Text>
-                            <Text style={styles.subtitle}>
-                                Accedi al tuo account per continuare
+                            <Text
+                                style={[
+                                    styles.title,
+                                    { color: colors.onSurface },
+                                ]}
+                            >
+                                Bentornato! 👋
+                            </Text>
+                            <Text
+                                style={[
+                                    styles.subtitle,
+                                    { color: colors.onSurfaceVariant },
+                                ]}
+                            >
+                                Accedi per gestire la tua auto
                             </Text>
                         </View>
 
-                        {/* Form */}
-                        <View style={styles.form}>
-                            {/* Campo Email */}
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Email</Text>
-                                <View style={[
-                                    styles.inputWrapper,
-                                    emailError ? styles.inputError : null
-                                ]}>
-                                    <Mail size={20} color="#666" style={styles.inputIcon} />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="tua@email.com"
-                                        value={email}
-                                        onChangeText={(text) => {
-                                            setEmail(text);
-                                            setEmailError('');
-                                        }}
-                                        keyboardType="email-address"
-                                        autoCapitalize="none"
-                                        autoCorrect={false}
-                                        editable={!loading}
-                                    />
-                                </View>
-                                {emailError ? (
-                                    <Text style={styles.errorText}>{emailError}</Text>
-                                ) : null}
-                            </View>
+                        {/* Login Card */}
+                        <GlassCard style={styles.formCard}>
+                            {/* Email Input */}
+                            <ThemedInput
+                                label="Email"
+                                placeholder="tua@email.com"
+                                value={email}
+                                onChangeText={(text) => {
+                                    setEmail(text);
+                                    setEmailError('');
+                                }}
+                                error={emailError}
+                                icon={Mail}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                editable={!loading}
+                            />
 
-                            {/* Campo Password */}
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Password</Text>
-                                <View style={[
-                                    styles.inputWrapper,
-                                    passwordError ? styles.inputError : null
-                                ]}>
-                                    <Lock size={20} color="#666" style={styles.inputIcon} />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Password"
-                                        value={password}
-                                        onChangeText={(text) => {
-                                            setPassword(text);
-                                            setPasswordError('');
-                                        }}
-                                        secureTextEntry={!showPassword}
-                                        autoCapitalize="none"
-                                        autoCorrect={false}
-                                        editable={!loading}
-                                    />
-                                    <TouchableOpacity
-                                        onPress={() => setShowPassword(!showPassword)}
-                                        style={styles.eyeIcon}
-                                        disabled={loading}
-                                    >
-                                        {showPassword ? (
-                                            <EyeOff size={20} color="#666" />
-                                        ) : (
-                                            <Eye size={20} color="#666" />
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-                                {passwordError ? (
-                                    <Text style={styles.errorText}>{passwordError}</Text>
-                                ) : null}
-                            </View>
+                            {/* Password Input */}
+                            <ThemedInput
+                                label="Password"
+                                placeholder="Inserisci la password"
+                                value={password}
+                                onChangeText={(text) => {
+                                    setPassword(text);
+                                    setPasswordError('');
+                                }}
+                                error={passwordError}
+                                icon={Lock}
+                                secureTextEntry
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                editable={!loading}
+                            />
 
-                            {/* Pulsante Login */}
-                            <TouchableOpacity
-                                style={[
-                                    styles.loginButton,
-                                    loading && styles.loginButtonDisabled
-                                ]}
+                            {/* Forgot Password Link */}
+                            <GradientButton
+                                variant="text"
+                                title="Password dimenticata?"
+                                onPress={() => Alert.alert('In arrivo', 'Recupero password in sviluppo')}
+                            />
+
+                            {/* Login Button */}
+                            <GradientButton
+                                title="Accedi"
                                 onPress={handleLogin}
+                                loading={loading}
                                 disabled={loading}
-                                activeOpacity={0.8}
-                            >
-                                {loading ? (
-                                    <ActivityIndicator color="#FFFFFF" />
-                                ) : (
-                                    <Text style={styles.loginButtonText}>Accedi</Text>
-                                )}
-                            </TouchableOpacity>
+                                icon={ArrowRight}
+                                style={styles.loginButton}
+                            />
+                        </GlassCard>
 
-                            {/* Link Registrazione */}
-                            <View style={styles.registerContainer}>
-                                <Text style={styles.registerText}>
-                                    Non hai un account?{' '}
-                                </Text>
-                                <TouchableOpacity
-                                    onPress={() => navigation.navigate('Register' as never)}
-                                    activeOpacity={0.7}
-                                    disabled={loading}
-                                >
-                                    <Text style={styles.registerLink}>
-                                        Registrati
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                        {/* Divider */}
+                        <DividerWithText text="Oppure continua con" />
+
+                        {/* Social Login Buttons */}
+                        <View style={styles.socialContainer}>
+                            <SocialButton
+                                onPress={handleGoogleLogin}
+                                icon={Mail}
+                                provider="Google"
+                                loading={loading}
+                            />
+                            {Platform.OS === 'ios' && (
+                                <SocialButton
+                                    onPress={handleAppleLogin}
+                                    icon={Smartphone}
+                                    provider="Apple"
+                                    loading={loading}
+                                />
+                            )}
                         </View>
-                    </View>
+
+                        {/* Register Link */}
+                        <View style={styles.registerContainer}>
+                            <Text style={[styles.registerText, { color: colors.onSurfaceVariant }]}>
+                                Non hai un account?{' '}
+                            </Text>
+                            <GradientButton
+                                variant="text"
+                                title="Registrati"
+                                onPress={() => navigation.navigate('Register' as never)}
+                            />
+                        </View>
+                    </Animated.View>
                 </ScrollView>
             </KeyboardAvoidingView>
         </View>
     );
 };
 
-// ====================================
-// STILI
-// ====================================
+// ============================================
+// STYLES
+// ============================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F5F5',
+    },
+    decorativeCircle1: {
+        position: 'absolute',
+        top: -100,
+        right: -100,
+        width: 300,
+        height: 300,
+        borderRadius: 150,
+        backgroundColor: 'rgba(0, 122, 255, 0.05)',
+    },
+    decorativeCircle2: {
+        position: 'absolute',
+        bottom: -150,
+        left: -150,
+        width: 400,
+        height: 400,
+        borderRadius: 200,
+        backgroundColor: 'rgba(94, 92, 230, 0.05)',
     },
     keyboardView: {
         flex: 1,
@@ -343,86 +366,61 @@ const styles = StyleSheet.create({
     scrollContent: {
         flexGrow: 1,
         justifyContent: 'center',
-        padding: 20,
+        paddingHorizontal: isWeb ? 40 : 24,
+        paddingVertical: isWeb ? 60 : 40,
     },
     content: {
         width: '100%',
-        maxWidth: 400,
+        maxWidth: 440,
         alignSelf: 'center',
     },
-    header: {
+
+    // Logo Section
+    logoContainer: {
+        alignItems: 'center',
         marginBottom: 32,
     },
+    logoCircle: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // Header
+    header: {
+        marginBottom: 32,
+        alignItems: isWeb ? 'center' : 'flex-start',
+    },
     title: {
-        fontSize: 28,
+        fontSize: isSmallScreen ? 28 : 32,
         fontWeight: '700',
-        color: '#1A1A1A',
         marginBottom: 8,
+        letterSpacing: -0.5,
+        textAlign: isWeb ? 'center' : 'left',
     },
     subtitle: {
-        fontSize: 16,
-        color: '#666',
-        lineHeight: 22,
+        fontSize: isSmallScreen ? 15 : 16,
+        lineHeight: 24,
+        letterSpacing: 0.15,
+        textAlign: isWeb ? 'center' : 'left',
     },
-    form: {
-        gap: 20,
-    },
-    inputContainer: {
+
+    // Form Card
+    formCard: {
         marginBottom: 8,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1A1A1A',
-        marginBottom: 8,
-    },
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        paddingHorizontal: 16,
-        height: 52,
-    },
-    inputError: {
-        borderColor: '#FF3B30',
-    },
-    inputIcon: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1A1A1A',
-        height: '100%',
-    },
-    eyeIcon: {
-        padding: 4,
-    },
-    errorText: {
-        fontSize: 12,
-        color: '#FF3B30',
-        marginTop: 4,
-        marginLeft: 4,
     },
     loginButton: {
-        backgroundColor: '#007AFF',
-        borderRadius: 12,
-        height: 52,
-        justifyContent: 'center',
-        alignItems: 'center',
         marginTop: 8,
     },
-    loginButtonDisabled: {
-        backgroundColor: '#99C7FF',
+
+    // Social Login
+    socialContainer: {
+        marginBottom: 16,
     },
-    loginButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-    },
+
+    // Register Section
     registerContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
@@ -430,13 +428,8 @@ const styles = StyleSheet.create({
         marginTop: 16,
     },
     registerText: {
-        fontSize: 14,
-        color: '#666',
-    },
-    registerLink: {
-        fontSize: 14,
-        color: '#007AFF',
-        fontWeight: '600',
+        fontSize: 15,
+        letterSpacing: 0.15,
     },
 });
 

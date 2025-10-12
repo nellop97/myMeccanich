@@ -259,12 +259,14 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.name.MyMechanic;
-				PRODUCT_NAME = MyMechanic;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.mymechanic.app";
+				PRODUCT_NAME = "MyMechanic";
 				SWIFT_OBJC_BRIDGING_HEADER = "MyMechanic/MyMechanic-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				CODE_SIGN_ENTITLEMENTS = MyMechanic/MyMechanic.entitlements;
 			};
 			name = Debug;
 		};
@@ -286,11 +288,13 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.name.MyMechanic;
-				PRODUCT_NAME = MyMechanic;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.mymechanic.app";
+				PRODUCT_NAME = "MyMechanic";
 				SWIFT_OBJC_BRIDGING_HEADER = "MyMechanic/MyMechanic-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				CODE_SIGN_ENTITLEMENTS = MyMechanic/MyMechanic.entitlements;
 			};
 			name = Release;
 		};
