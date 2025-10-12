@@ -1,55 +1,56 @@
-// app.config.js (Versione unificata e completa)
+// app.config.js
+// IMPORTANTE: Usa SOLO percorsi relativi per assets in Expo Config
 
 module.exports = ({ config }) => {
     return {
-        ...config,
-        "name": "MyMechanic",
-        "slug": "MyMechanic",
-        "version": "1.0.0",
-        "orientation": "portrait",
-        "icon": "./assets/icon.png",
-        "userInterfaceStyle": "automatic",
-        "splash": {
-            "image": "./assets/splash.png",
-            "resizeMode": "contain",
-            "backgroundColor": "#ffffff"
+        name: "MyMechanic",
+        slug: "MyMechanic",
+        version: "1.0.0",
+        orientation: "portrait",
+        // PERCORSI RELATIVI - NON usare path.resolve()
+        icon: "./assets/icon.png",
+        userInterfaceStyle: "automatic",
+        splash: {
+            image: "./assets/splash.png",
+            resizeMode: "contain",
+            backgroundColor: "#ffffff"
         },
-        "assetBundlePatterns": [
+        assetBundlePatterns: [
             "**/*"
         ],
-        "ios": {
-            "supportsTablet": true,
-            "bundleIdentifier": "MyMechanic.com",
-            "buildNumber": "1",
-            "infoPlist": {
-                "NSCameraUsageDescription": "L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli e documenti.",
-                "NSPhotoLibraryUsageDescription": "L'app ha bisogno di accedere alla libreria foto per selezionare immagini dei veicoli.",
-                "NSPhotoLibraryAddUsageDescription": "L'app ha bisogno di salvare le foto nella libreria.",
-                "NSCalendarsUsageDescription": "L'app ha bisogno di accedere al calendario per ricordarti le scadenze.",
-                "NSLocationWhenInUseUsageDescription": "L'app ha bisogno della tua posizione per trovare officine vicine.",
-                "CFBundleURLTypes": [
+        ios: {
+            supportsTablet: true,
+            // IMPORTANTE: Usa formato reverse-domain corretto
+            bundleIdentifier: "com.mymechanic.app",
+            buildNumber: "1",
+            infoPlist: {
+                NSCameraUsageDescription: "L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli e documenti.",
+                NSPhotoLibraryUsageDescription: "L'app ha bisogno di accedere alla libreria foto per selezionare immagini dei veicoli.",
+                NSPhotoLibraryAddUsageDescription: "L'app ha bisogno di salvare le foto nella libreria.",
+                NSCalendarsUsageDescription: "L'app ha bisogno di accedere al calendario per ricordarti le scadenze.",
+                NSLocationWhenInUseUsageDescription: "L'app ha bisogno della tua posizione per trovare officine vicine.",
+                CFBundleURLTypes: [
                     {
-                        "CFBundleURLSchemes": ["MyMechanic"]
+                        CFBundleURLSchemes: ["mymechanic"]
                     }
                 ]
             },
-            "config": {
-                "usesNonExemptEncryption": false
+            config: {
+                usesNonExemptEncryption: false
             },
-            "googleServicesFile": "./ios/GoogleService-Info.plist",
-            "associatedDomains": [
-                "applinks:MyMechanic.com"
+            associatedDomains: [
+                "applinks:mymechanic.com"
             ],
-            "deploymentTarget": "15.1"
+            deploymentTarget: "15.1"
         },
-        "android": {
-            "adaptiveIcon": {
-                "foregroundImage": "./assets/adaptive-icon.png",
-                "backgroundColor": "#FFFFFF"
+        android: {
+            adaptiveIcon: {
+                foregroundImage: "./assets/adaptive-icon.png",
+                backgroundColor: "#FFFFFF"
             },
-            "package": "MyMechanic.com",
-            "versionCode": 1,
-            "permissions": [
+            package: "com.mymechanic.app",
+            versionCode: 1,
+            permissions: [
                 "CAMERA",
                 "READ_EXTERNAL_STORAGE",
                 "WRITE_EXTERNAL_STORAGE",
@@ -58,51 +59,55 @@ module.exports = ({ config }) => {
                 "VIBRATE",
                 "RECEIVE_BOOT_COMPLETED"
             ],
-            "googleServicesFile": "./android/app/google-services.json",
-            "intentFilters": [
+            intentFilters: [
                 {
-                    "action": "VIEW",
-                    "autoVerify": true,
-                    "data": [
+                    action: "VIEW",
+                    autoVerify: true,
+                    data: [
                         {
-                            "scheme": "MyMechanic",
-                            "host": "*"
+                            scheme: "mymechanic",
+                            host: "*"
                         }
                     ],
-                    "category": ["BROWSABLE", "DEFAULT"]
+                    category: ["BROWSABLE", "DEFAULT"]
                 }
             ],
-            "compileSdkVersion": 35, // Spostato qui da expo-build-properties
-            "targetSdkVersion": 35, // Spostato qui da expo-build-properties
-            "buildToolsVersion": "35.0.0", // Spostato qui da expo-build-properties
-            "minSdkVersion": 26 // Spostato qui da expo-build-properties
+            compileSdkVersion: 35,
+            targetSdkVersion: 35,
+            buildToolsVersion: "35.0.0",
+            minSdkVersion: 26
         },
-        "web": {
-            "favicon": "./assets/favicon.png",
-            "bundler": "metro"
+        web: {
+            favicon: "./assets/favicon.png",
+            bundler: "metro"
         },
-        "plugins": [
-            "expo-font", // expo-build-properties è stato eliminato e le sue impostazioni spostate sopra
+        plugins: [
+            "expo-font",
             [
                 "expo-notifications",
                 {
-                    "icon": "./assets/notification-icon.png",
-                    "color": "#ffffff"
+                    icon: "./assets/notification-icon.png",
+                    color: "#ffffff"
                 }
             ],
             "expo-apple-authentication",
             [
                 "expo-image-picker",
                 {
-                    "photosPermission": "L'app ha bisogno di accedere alle tue foto per permetterti di caricare immagini dei veicoli.",
-                    "cameraPermission": "L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli."
+                    photosPermission: "L'app ha bisogno di accedere alle tue foto per permetterti di caricare immagini dei veicoli."
                 }
             ],
-            "expo-secure-store",
-            "expo-dev-client"
+            [
+                "expo-location",
+                {
+                    locationWhenInUsePermission: "L'app usa la tua posizione per trovare officine vicine."
+                }
+            ]
         ],
-        "experiments": {
-            "tsconfigPaths": true
+        "extra": {
+            "eas": {
+                "projectId": "3fbefffe-67b0-43d9-90e9-df0b8c853b14"
+            }
         },
         "scheme": "MyMechanic"
     };
