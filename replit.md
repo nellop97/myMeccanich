@@ -4,6 +4,33 @@
 
 MyMechanic is a comprehensive cross-platform React Native application built with Expo that serves both vehicle owners and mechanics. The app provides vehicle management, maintenance tracking, expense monitoring, and workshop management capabilities. It features a dual-user interface with specialized dashboards for car owners and mechanics, enabling complete automotive lifecycle management from purchase to maintenance and repairs.
 
+## Recent Changes (October 2025)
+
+### Complete UI Redesign
+The app underwent a complete redesign following minimal, clean design mockups:
+
+**Navigation Architecture:**
+- Removed tab navigator and drawer navigation
+- Implemented pure stack navigation architecture
+- Streamlined navigation flow: Login → Vehicle List → Vehicle Detail → Add Maintenance/Reminders → Profile
+
+**Redesigned Screens:**
+1. **VehicleListScreen** - Minimal vehicle cards with images, "Prossime scadenze" section, "Attività Recenti" section
+2. **CarDetailScreen** - Clean header, vehicle info card, maintenance history, reminders with expiry highlighting
+3. **AddMaintenanceScreen** - Simplified form with inline date picker, type selector, description, cost, and attachment placeholder
+
+**Design System:**
+- Color scheme: White/light gray base (#F8F9FA) with blue accents (#3B82F6)
+- Cards: rounded-2xl (20px) with soft shadows
+- Typography: Clean, readable fonts with proper hierarchy
+- Icons: Lucide React Native with strokeWidth 2
+- Theme: Full light/dark mode support via useAppThemeManager
+
+**Data Management:**
+- Uses useUserData hook to avoid Firestore composite index issues
+- Pre-fetched data filtering instead of complex queries
+- Real Firebase data throughout (zero mock data)
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

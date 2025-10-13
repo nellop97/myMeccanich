@@ -239,8 +239,8 @@ export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
                 >
                     <View style={styles.iconContainer}>
                         {mode !== 'time' ?
-                            <Calendar size={20} color={disabled ? colors.onSurfaceDisabled : colors.primary} /> :
-                            <Clock size={20} color={disabled ? colors.onSurfaceDisabled : colors.primary} />
+                            <Calendar size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} /> :
+                            <Clock size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} />
                         }
                     </View>
 
@@ -263,7 +263,7 @@ export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
                             fontSize: '16px',
                             border: 'none',
                             background: 'transparent',
-                            color: disabled ? colors.onSurfaceDisabled : colors.onSurface,
+                            color: disabled ? colors.onSurfaceVariant : colors.onSurface,
                             outline: 'none',
                             fontFamily: 'inherit',
                             cursor: disabled ? 'not-allowed' : 'pointer',
@@ -336,7 +336,7 @@ export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
                                 selectedDayTextColor: colors.onPrimary,
                                 todayTextColor: colors.primary,
                                 dayTextColor: colors.onSurface,
-                                textDisabledColor: colors.onSurfaceDisabled,
+                                textDisabledColor: colors.onSurfaceVariant,
                                 monthTextColor: colors.onSurface,
                                 arrowColor: colors.primary,
                                 dotColor: colors.primary,
@@ -407,15 +407,15 @@ export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
             >
                 <View style={styles.iconContainer}>
                     {mode !== 'time' ?
-                        <Calendar size={20} color={disabled ? colors.onSurfaceDisabled : colors.primary} /> :
-                        <Clock size={20} color={disabled ? colors.onSurfaceDisabled : colors.primary} />
+                        <Calendar size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} /> :
+                        <Clock size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} />
                     }
                 </View>
 
                 <Text
                     style={[
                         styles.value,
-                        { color: disabled ? colors.onSurfaceDisabled : colors.onSurface }
+                        { color: disabled ? colors.onSurfaceVariant : colors.onSurface }
                     ]}
                     numberOfLines={1}
                 >
@@ -424,7 +424,7 @@ export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
 
                 <ChevronDown
                     size={20}
-                    color={disabled ? colors.onSurfaceDisabled : colors.onSurfaceVariant}
+                    color={disabled ? colors.onSurfaceVariant : colors.onSurfaceVariant}
                 />
             </TouchableOpacity>
 
