@@ -1,0 +1,132 @@
+# Objective
+Aggiorna completamente la mia applicazione basandoti sul design e lo stile delle schermate fornite (`screen.png`, `screen2.png`, `screen3.png`).
+L’obiettivo è ottenere un’app **completamente navigabile**, moderna e coerente tra tutte le pagine, funzionante su **mobile (Expo React Native)** e **web**, senza necessità di ulteriori rework.
+
+---
+
+# Environment
+- L’app è sviluppata in **React Native con Expo 54**.
+- Il progetto è già completamente funzionante su **Replit**.
+- Firebase è già **collegato e configurato** (Auth, Firestore, Storage).
+- Tutte le funzioni Firebase devono restare operative e i campi correttamente mappati.
+
+---
+
+# Tasks
+
+## 🔹 1. Navigazione
+- Implementa una **navigazione completa** senza utilizzare drawer laterale o tab bar inferiore.
+- Usa **stack navigation** con transizioni fluide tra le schermate:
+  - Login / Registrazione → I miei veicoli → Dettagli veicolo → Nuovo intervento / Nuova scadenza → Profilo utente.
+- Aggiungi la gestione dei ruoli (proprietario / meccanico) per visualizzare schermate differenti.
+
+## 🔹 2. Ruoli utente
+- **Proprietario:**
+  - Può aggiungere/modificare interventi, scadenze, allegati.
+  - Può visualizzare i propri veicoli e storico manutenzioni.
+- **Meccanico:**
+  - Può visualizzare i veicoli dei clienti e aggiungere interventi effettuati.
+  - Può caricare fatture o foto di manutenzioni.
+- Gestisci il ruolo tramite un campo `role` su Firebase (valori: `"proprietario"`, `"meccanico"`).
+
+## 🔹 3. Schermate principali
+
+### 🏠 Login / Registrazione
+- Schermata con autenticazione Firebase.
+- Campo aggiuntivo per selezionare ruolo utente (dropdown “Proprietario” o “Meccanico”).
+- Dopo login, reindirizza alla schermata corretta in base al ruolo.
+
+### 🚗 I miei veicoli
+- Mostra cards dei veicoli con foto, nome, targa, pulsante “Seleziona”.
+- Sezioni:
+  - **Prossime scadenze** (con data e costo stimato/fisso)
+  - **Attività recenti** (interventi completati)
+- Ogni voce deve essere cliccabile e aprire il dettaglio.
+
+### 📋 Dettagli veicolo
+- Mostra:
+  - Storico manutenzioni (con icone e date)
+  - Scadenze e promemoria (con colori di stato)
+- Pulsanti “+ Aggiungi” per interventi e promemoria.
+- Le azioni devono navigare a “Nuovo Intervento” o “Nuova Scadenza”.
+
+### 🧰 Nuovo Intervento
+- Campi:
+  - Data e ora
+  - Tipo intervento (dropdown)
+  - Descrizione dettagliata
+  - Costo (€)
+  - Upload allegati (foto, fatture, documenti)
+- Gli allegati vanno su Firebase Storage, con riferimento salvato su Firestore.
+
+### 📅 Nuova Scadenza / Promemoria
+- Campi:
+  - Tipo scadenza
+  - Data di scadenza
+  - Descrizione
+  - Costo previsto
+  - Notifica promemoria (toggle o switch)
+- Associa automaticamente al veicolo selezionato.
+
+### 👤 Profilo utente
+- Dati personali e ruolo.
+- Pulsante “Logout”.
+- Possibilità di aggiornare i dati personali.
+
+### 🧾 Dashboard Meccanico
+- Mostra elenco interventi associati all’officina o meccanico loggato.
+- Possibilità di filtrare per stato (in corso, completato).
+- Pulsante per registrare nuovo intervento.
+
+---
+
+# Constraints
+
+1. **Niente menu laterale o inferiore.**
+2. L’app deve essere **completamente navigabile** tramite stack navigation.
+3. Tutte le schermate devono essere collegate e funzionanti.
+4. Tutti i campi devono essere **sincronizzati con Firebase** (Auth, Firestore, Storage).
+5. Il codice deve essere **modulare, pulito e pronto alla produzione**.
+6. **Zero placeholder o funzioni mock.** Tutto deve essere operativo.
+7. Mantenere compatibilità **mobile e web**.
+8. L’esperienza utente può differire graficamente tra web e mobile, ma deve restare coerente a livello di contenuti e flusso.
+
+---
+
+# Style Guide
+
+- Segui la **linea grafica delle schermate fornite**:
+  - Font chiaro e leggibile (es. Inter, Nunito o System).
+  - Colori neutri (bianco, grigio chiaro) con accenti blu.
+  - Cards con **angoli arrotondati (rounded-2xl)** e ombre morbide.
+  - Padding coerente, spaziatura ariosa.
+  - Usa icone da `lucide-react` o `@expo/vector-icons`.
+- Inserisci componenti moderni:
+  - DatePicker personalizzato.
+  - Area upload drag & drop.
+  - Cards cliccabili con animazioni leggere (`framer-motion` o `react-native-reanimated`).
+- Layout responsive su web (usa grid o flexbox adattivo).
+
+---
+
+# Expected Output
+
+1. Tutte le schermate aggiornate e collegate.
+2. Navigazione fluida tra tutte le sezioni.
+3. UI coerente con le schermate (`screen.png`, `screen2.png`, `screen3.png`).
+4. Mappatura completa con Firebase (Auth, Firestore, Storage).
+5. Funzionamento sia su **mobile (Expo)** che **web**.
+6. Nessun rework necessario: il codice deve essere **funzionante, pulito e testato**.
+
+---
+
+# Additional Notes
+- Mantieni la struttura del progetto organizzata:
+  - `/screens` → pagine principali
+  - `/components` → componenti riutilizzabili
+  - `/services` → interfacce con Firebase
+  - `/hooks` → logica condivisa
+  - `/assets` → immagini/icones
+- Assicurati che la logica di routing distingua chiaramente tra utente **proprietario** e **meccanico**.
+- Testa il flusso completo da registrazione → aggiunta veicolo → nuovo intervento → visualizzazione scadenze.
+

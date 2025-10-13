@@ -1,0 +1,111 @@
+⚙️ Specifiche tecniche
+
+Ambiente di sviluppo:
+
+L’app è sviluppata in React Native con Expo 54, già configurata e funzionante su Replit.
+
+Firebase è già collegato e operativo (autenticazione, Firestore e Storage).
+
+Tutti i dati e i campi devono essere mappati correttamente al database Firebase (utenti, veicoli, interventi, allegati, scadenze, officine, ecc.).
+
+Navigazione:
+
+L’app deve essere completamente navigabile senza usare menu laterale (drawer) né tab bar inferiore.
+
+La navigazione deve basarsi su stack navigation e transizioni contestuali (es. da “I miei veicoli” a “Dettagli Veicolo”, da lì a “Nuovo Intervento”, ecc.).
+
+Mantieni un’esperienza coerente tra mobile e web (puoi differenziare lo stile tra le due piattaforme se necessario).
+
+Ruoli utente:
+
+Gestisci due tipi di utenti:
+
+Proprietario del veicolo: può aggiungere/modificare interventi, scadenze e documenti.
+
+Meccanico: può registrare interventi, caricare fatture e aggiornare lo stato delle manutenzioni.
+
+Le viste e le funzionalità devono adattarsi in base al tipo di utente loggato (campo role su Firebase).
+
+UI/UX e stile:
+
+Adotta la stessa linea grafica mostrata nelle schermate:
+
+font pulito e leggibile, colori neutri con accenti blu;
+
+cards con angoli arrotondati (rounded-2xl);
+
+ombre morbide, padding coerente e spaziatura tra sezioni;
+
+icone in linea con il contesto (usa lucide-react o @expo/vector-icons).
+
+Includi componenti moderni come datepicker, upload area drag-and-drop e cards cliccabili.
+
+Struttura delle schermate principali:
+
+Login / Registrazione
+
+Collegata a Firebase Auth.
+
+Campo per selezionare ruolo (proprietario o meccanico).
+
+I miei veicoli
+
+Lista dei veicoli collegati all’utente.
+
+Cards con immagine, targa e pulsante “Seleziona”.
+
+Sezione “Prossime scadenze” e “Attività recenti”.
+
+Dettagli veicolo
+
+Mostra storico manutenzioni e scadenze.
+
+Pulsante “Aggiungi” per nuove manutenzioni o promemoria.
+
+Nuovo Intervento
+
+Campi: data e ora, tipo, descrizione, costo, allegati (fatture/foto).
+
+Upload su Firebase Storage e riferimento nel Firestore.
+
+Profilo utente
+
+Dati personali e opzione logout.
+
+Dashboard (solo per meccanico)
+
+Lista degli interventi in corso o completati.
+
+Accesso ai veicoli gestiti.
+
+Compatibilità multipiattaforma:
+
+L’app deve funzionare sia su mobile che su web.
+
+Su web adatta layout e spaziature (usa grid o flex responsive).
+
+Requisiti finali:
+
+Tutte le schermate devono essere collegate e funzionanti.
+
+Nessun placeholder vuoto o funzione mock.
+
+Nessun rework necessario: il codice deve essere completo e funzionante.
+
+Mantenere la struttura modulare e riutilizzabile dei componenti (cartelle /components, /screens, /services, /hooks).
+
+Testa il flusso completo da login a gestione veicoli.
+
+📦 Obiettivo finale
+
+Genera il codice aggiornato dell’intera app con le modifiche sopra descritte, assicurando che:
+
+sia navigabile end-to-end,
+
+rispetti il design fornito,
+
+sia sincronizzata con Firebase,
+
+funzioni su mobile e web,
+
+non richieda ulteriori interventi di correzione.
