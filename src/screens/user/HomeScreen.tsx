@@ -1,4 +1,4 @@
-// src/screens/user/HomeScreen.tsx - VERSIONE AGGIORNATA CON TUTTI I COLLEGAMENTI
+// src/screens/user/HomeScreen.tsx - VERSIONE MODERNA E RAFFINATA
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
@@ -11,20 +11,16 @@ import {
   Alert,
   ActivityIndicator,
   Dimensions,
+  Platform,
 } from 'react-native';
 import {
   Card,
   Text,
   Button,
-  Surface,
   FAB,
-  Chip,
-  IconButton,
-  Divider,
 } from 'react-native-paper';
 import {
   Car,
-  Settings,
   Plus,
   AlertCircle,
   Wrench,
@@ -32,27 +28,21 @@ import {
   DollarSign,
   FileText,
   Bell,
-  Calendar,
   TrendingUp,
-  Shield,
-  Clock,
-  MapPin,
   ChevronRight,
-  Activity,
-  Zap,
   User,
   LogOut,
   Moon,
   Sun,
+  Sparkles,
+  BarChart3,
+  Calendar,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// Importa il nuovo sistema di temi
 import { useAppThemeManager, useThemedStyles } from '../../hooks/useTheme';
-
-// USA SOLO FIREBASE AUTH E USERDATA
 import { useAuth } from '../../hooks/useAuth';
 import { useUserData } from '../../hooks/useUserData';
 
@@ -60,12 +50,10 @@ const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
-  // Sistema di temi
   const { colors, isDark, toggleTheme } = useAppThemeManager();
   const { dynamicStyles } = useThemedStyles();
 
-  // Hooks per dati reali
-  const { user, logout, loading: authLoading } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
   const { 
     vehicles,
     recentMaintenance, 
@@ -92,11 +80,10 @@ const HomeScreen: React.FC = () => {
     return () => subscription?.remove();
   }, []);
 
-  // Calcolo responsive
   const isTablet = screenData.width >= 768;
   const isDesktop = screenData.width >= 1024;
+  const isWeb = Platform.OS === 'web';
 
-  // Funzione per formattare la valuta
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('it-IT', {
       style: 'currency',
@@ -104,7 +91,6 @@ const HomeScreen: React.FC = () => {
     }).format(amount);
   };
 
-  // Refresh dei dati
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -116,7 +102,6 @@ const HomeScreen: React.FC = () => {
     }
   }, [refreshData]);
 
-  // Gestione logout
   const handleLogout = useCallback(async () => {
     Alert.alert(
       'Conferma Logout',
@@ -128,7 +113,7 @@ const HomeScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await logout();
+              await signOut();
             } catch (error) {
               Alert.alert('Errore', 'Errore durante il logout');
             }
@@ -136,39 +121,40 @@ const HomeScreen: React.FC = () => {
         }
       ]
     );
-  }, [logout]);
+  }, [signOut]);
 
-  // NAVIGAZIONE AGGIORNATA CON TUTTI I COLLEGAMENTI
   const handleNavigation = useCallback((screenName: string, params?: any) => {
     try {
-      navigation.navigate(screenName as never, params as never);
+      (navigation as any).navigate(screenName, params);
     } catch (error) {
       console.error('Navigation error:', error);
       Alert.alert('Errore', 'Errore di navigazione');
     }
   }, [navigation]);
 
-  // Quick Actions con navigazione corretta
   const quickActions = [
     {
       id: 'vehicles',
       icon: Car,
-      label: 'I Miei Veicoli',
-      color: colors.primary,
+      label: 'Veicoli',
+      color: '#6366f1',
+      gradient: ['#6366f1', '#8b5cf6'],
       onPress: () => handleNavigation('VehicleList'),
     },
     {
       id: 'add_vehicle',
       icon: Plus,
-      label: 'Aggiungi Auto',
-      color: colors.success,
+      label: 'Aggiungi',
+      color: '#10b981',
+      gradient: ['#10b981', '#059669'],
       onPress: () => handleNavigation('AddVehicle'),
     },
     {
       id: 'maintenance',
       icon: Wrench,
-      label: 'Manutenzioni',
-      color: colors.info,
+      label: 'Manutenzione',
+      color: '#3b82f6',
+      gradient: ['#3b82f6', '#2563eb'],
       onPress: () => {
         if (vehicles.length === 1) {
           handleNavigation('CarMaintenance', { carId: vehicles[0].id });
@@ -183,7 +169,8 @@ const HomeScreen: React.FC = () => {
       id: 'fuel',
       icon: Fuel,
       label: 'Carburante',
-      color: colors.warning,
+      color: '#f59e0b',
+      gradient: ['#f59e0b', '#d97706'],
       onPress: () => {
         if (vehicles.length > 0) {
           handleNavigation('FuelTracking', { carId: vehicles[0]?.id });
@@ -196,21 +183,24 @@ const HomeScreen: React.FC = () => {
       id: 'expenses',
       icon: DollarSign,
       label: 'Spese',
-      color: colors.error,
+      color: '#ef4444',
+      gradient: ['#ef4444', '#dc2626'],
       onPress: () => handleNavigation('ExpenseTracker'),
     },
     {
       id: 'reminders',
       icon: Bell,
       label: 'Promemoria',
-      color: colors.secondary,
+      color: '#8b5cf6',
+      gradient: ['#8b5cf6', '#7c3aed'],
       onPress: () => handleNavigation('RemindersList'),
     },
     {
       id: 'documents',
       icon: FileText,
       label: 'Documenti',
-      color: colors.tertiary,
+      color: '#06b6d4',
+      gradient: ['#06b6d4', '#0891b2'],
       onPress: () => {
         if (vehicles.length > 0) {
           handleNavigation('DocumentsList', { carId: vehicles[0]?.id });
@@ -223,12 +213,12 @@ const HomeScreen: React.FC = () => {
       id: 'profile',
       icon: User,
       label: 'Profilo',
-      color: colors.onSurfaceVariant,
+      color: '#64748b',
+      gradient: ['#64748b', '#475569'],
       onPress: () => handleNavigation('Profile', { userId: user?.uid }),
     },
   ];
 
-  // Loading state
   if (!user || dataLoading || authLoading) {
     return (
       <View style={{ 
@@ -249,13 +239,10 @@ const HomeScreen: React.FC = () => {
     );
   }
 
-  // Costruisci il nome utente
   const userName = user?.displayName || 
-                  `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
                   user?.email?.split('@')[0] ||
                   'Utente';
 
-  // Dati statistiche
   const userStats = {
     totalCars: stats.vehiclesCount,
     totalMaintenance: stats.maintenanceCount,
@@ -263,28 +250,44 @@ const HomeScreen: React.FC = () => {
     upcomingMaintenance: stats.remindersCount,
   };
 
-  // Componente StatCard
-  const StatCard = ({ icon: Icon, number, label, color }: any) => (
-    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
-      <View style={[styles.statIcon, { backgroundColor: colors.primaryContainer }]}>
-        <Icon size={24} color={color} />
+  const ModernStatCard = ({ icon: Icon, number, label, gradient }: any) => (
+    <LinearGradient
+      colors={gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.modernStatCard}
+    >
+      <View style={styles.statCardContent}>
+        <View style={styles.statIconWrapper}>
+          <Icon size={24} color="#fff" strokeWidth={2.5} />
+        </View>
+        <View style={styles.statTextWrapper}>
+          <Text style={styles.statNumber}>{number}</Text>
+          <Text style={styles.statLabel}>{label}</Text>
+        </View>
       </View>
-      <Text style={[styles.statNumber, { color: colors.onSurface }]}>{number}</Text>
-      <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>{label}</Text>
-    </View>
+    </LinearGradient>
   );
 
-  // Componente QuickActionCard
-  const QuickActionCard = ({ icon: Icon, label, onPress, color = colors.primary }: any) => (
+  const QuickActionButton = ({ icon: Icon, label, onPress, gradient }: any) => (
     <TouchableOpacity 
-      style={[styles.quickActionCard, { backgroundColor: colors.surface }]} 
+      style={styles.quickActionWrapper} 
       onPress={onPress} 
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
-      <View style={styles.quickActionIcon}>
-        <Icon size={24} color={color} />
-      </View>
-      <Text style={[styles.quickActionLabel, { color: colors.onSurface }]}>{label}</Text>
+      <LinearGradient
+        colors={gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.quickActionGradient}
+      >
+        <View style={styles.quickActionIconContainer}>
+          <Icon size={22} color="#fff" strokeWidth={2.5} />
+        </View>
+      </LinearGradient>
+      <Text style={[styles.quickActionText, { color: colors.onBackground }]} numberOfLines={1}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 
@@ -292,31 +295,37 @@ const HomeScreen: React.FC = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar 
         barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
+        backgroundColor="transparent"
+        translucent
       />
 
-      {/* Header Gradient */}
       <LinearGradient
-        colors={isDark ? ['#1e3a8a', '#1e293b'] : ['#3b82f6', '#60a5fa']}
+        colors={isDark 
+          ? ['#1e1b4b', '#312e81', colors.background] 
+          : ['#6366f1', '#8b5cf6', colors.background]
+        }
+        locations={[0, 0.5, 1]}
         style={styles.headerGradient}
       >
-        <SafeAreaView edges={['top']}>
-          <View style={[styles.header, { paddingTop: insets.top }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
             <View style={styles.headerContent}>
               <View style={styles.headerLeft}>
-                <Text style={styles.headerGreeting}>Ciao, {userName}! 👋</Text>
+                <View style={styles.greetingRow}>
+                  <Text style={styles.headerGreeting}>Ciao, {userName}</Text>
+                  <Sparkles size={20} color="#fff" style={{ marginLeft: 6 }} />
+                </View>
                 <Text style={styles.headerSubtitle}>
                   {hasOverdueReminders 
                     ? '⚠️ Hai scadenze da controllare'
-                    : 'Tutto sotto controllo'}
+                    : '✨ Tutto sotto controllo'}
                 </Text>
               </View>
               <View style={styles.headerActions}>
                 <TouchableOpacity 
-                  style={styles.notificationButton} 
+                  style={styles.actionIconButton} 
                   onPress={() => handleNavigation('RemindersList')}
                 >
-                  <Bell size={24} color="#fff" />
+                  <Bell size={22} color="#fff" strokeWidth={2.5} />
                   {stats.overdueReminders > 0 && (
                     <View style={styles.notificationBadge}>
                       <Text style={styles.notificationCount}>
@@ -326,97 +335,113 @@ const HomeScreen: React.FC = () => {
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  style={styles.themeToggle} 
+                  style={styles.actionIconButton} 
                   onPress={toggleTheme}
                 >
                   {isDark ? 
-                    <Sun size={24} color="#fff" /> : 
-                    <Moon size={24} color="#fff" />
+                    <Sun size={22} color="#fff" strokeWidth={2.5} /> : 
+                    <Moon size={22} color="#fff" strokeWidth={2.5} />
                   }
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  style={styles.themeToggle} 
+                  style={styles.actionIconButton} 
                   onPress={handleLogout}
                 >
-                  <LogOut size={24} color="#fff" />
+                  <LogOut size={22} color="#fff" strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
             </View>
           </View>
-        </SafeAreaView>
       </LinearGradient>
 
-      {/* Content */}
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          (isTablet || isDesktop) && styles.scrollContentWide
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Stats Section */}
         <View style={styles.statsSection}>
-          <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
-            Panoramica
-          </Text>
-          <View style={styles.statsGrid}>
-            <StatCard 
+          <View style={styles.sectionHeader}>
+            <BarChart3 size={20} color={colors.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
+              Panoramica
+            </Text>
+          </View>
+          <View style={[
+            styles.statsGrid,
+            (isTablet || isDesktop) && styles.statsGridWide
+          ]}>
+            <ModernStatCard 
               icon={Car} 
               number={userStats.totalCars} 
               label="Veicoli" 
-              color={colors.primary}
+              gradient={['#6366f1', '#8b5cf6']}
             />
-            <StatCard 
+            <ModernStatCard 
               icon={Wrench} 
               number={userStats.totalMaintenance} 
               label="Manutenzioni" 
-              color={colors.info}
+              gradient={['#3b82f6', '#2563eb']}
             />
-            <StatCard 
+            <ModernStatCard 
               icon={DollarSign} 
               number={formatCurrency(userStats.totalExpenses)} 
               label="Spese Totali" 
-              color={colors.error}
+              gradient={['#ef4444', '#dc2626']}
             />
-            <StatCard 
+            <ModernStatCard 
               icon={Bell} 
               number={userStats.upcomingMaintenance} 
               label="Promemoria" 
-              color={colors.warning}
+              gradient={['#f59e0b', '#d97706']}
             />
           </View>
         </View>
 
-        {/* Quick Actions */}
         <View style={styles.quickActionsSection}>
-          <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
-            Azioni Rapide
-          </Text>
-          <View style={styles.quickActionsGrid}>
+          <View style={styles.sectionHeader}>
+            <Sparkles size={20} color={colors.primary} strokeWidth={2.5} />
+            <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
+              Azioni Rapide
+            </Text>
+          </View>
+          <View style={[
+            styles.quickActionsGrid,
+            (isTablet || isDesktop) && styles.quickActionsGridWide
+          ]}>
             {quickActions.map((action) => (
-              <QuickActionCard
+              <QuickActionButton
                 key={action.id}
                 icon={action.icon}
                 label={action.label}
                 onPress={action.onPress}
-                color={action.color}
+                gradient={action.gradient}
               />
             ))}
           </View>
         </View>
 
-        {/* Recent Activities */}
         {(recentMaintenance.length > 0 || recentFuelRecords.length > 0) && (
           <View style={styles.recentSection}>
-            <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
-              Attività Recenti
-            </Text>
+            <View style={styles.sectionHeader}>
+              <Calendar size={20} color={colors.primary} strokeWidth={2.5} />
+              <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>
+                Attività Recenti
+              </Text>
+            </View>
 
             {recentMaintenance.slice(0, 3).map((maintenance: any) => (
               <TouchableOpacity
                 key={maintenance.id}
-                style={[styles.activityCard, { backgroundColor: colors.surface }]}
+                style={[styles.activityCard, { 
+                  backgroundColor: colors.surface,
+                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'
+                }]}
                 onPress={() => {
                   const vehicle = vehicles.find(v => v.id === maintenance.vehicleId);
                   if (vehicle) {
@@ -424,9 +449,12 @@ const HomeScreen: React.FC = () => {
                   }
                 }}
               >
-                <View style={[styles.activityIcon, { backgroundColor: colors.primaryContainer }]}>
-                  <Wrench size={20} color={colors.primary} />
-                </View>
+                <LinearGradient
+                  colors={['#3b82f6', '#2563eb']}
+                  style={styles.activityIconGradient}
+                >
+                  <Wrench size={20} color="#fff" strokeWidth={2.5} />
+                </LinearGradient>
                 <View style={styles.activityContent}>
                   <Text style={[styles.activityTitle, { color: colors.onSurface }]}>
                     {maintenance.description || maintenance.type}
@@ -444,32 +472,40 @@ const HomeScreen: React.FC = () => {
           </View>
         )}
 
-        {/* No Vehicles Alert */}
         {!hasVehicles && (
-          <Card style={[styles.alertCard, { backgroundColor: colors.primaryContainer }]}>
-            <Card.Content>
-              <View style={styles.alertContent}>
-                <AlertCircle size={24} color={colors.primary} />
-                <Text style={[styles.alertTitle, { color: colors.onPrimaryContainer }]}>
-                  Inizia ora!
-                </Text>
-                <Text style={[styles.alertText, { color: colors.onPrimaryContainer }]}>
-                  Aggiungi il tuo primo veicolo per iniziare a tracciare manutenzioni e spese
-                </Text>
-                <Button
-                  mode="contained"
-                  onPress={() => handleNavigation('AddVehicle')}
-                  style={styles.alertButton}
-                >
-                  Aggiungi Veicolo
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
+          <LinearGradient
+            colors={isDark ? ['#1e293b', '#334155'] : ['#f1f5f9', '#e2e8f0']}
+            style={styles.emptyStateCard}
+          >
+            <View style={styles.emptyStateIconWrapper}>
+              <Car size={48} color={colors.primary} strokeWidth={2} />
+            </View>
+            <Text style={[styles.emptyStateTitle, { color: colors.onSurface }]}>
+              Inizia il tuo viaggio!
+            </Text>
+            <Text style={[styles.emptyStateText, { color: colors.onSurfaceVariant }]}>
+              Aggiungi il tuo primo veicolo per iniziare a tracciare manutenzioni, spese e molto altro
+            </Text>
+            <TouchableOpacity
+              style={styles.emptyStateButton}
+              onPress={() => handleNavigation('AddVehicle')}
+            >
+              <LinearGradient
+                colors={['#6366f1', '#8b5cf6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.emptyStateButtonGradient}
+              >
+                <Plus size={20} color="#fff" strokeWidth={2.5} />
+                <Text style={styles.emptyStateButtonText}>Aggiungi Veicolo</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </LinearGradient>
         )}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* FAB per aggiungere velocemente */}
       <FAB.Group
         open={false}
         visible
@@ -526,163 +562,215 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerGradient: {
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   header: {
     paddingHorizontal: 20,
+    paddingBottom: 12,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
+    alignItems: 'flex-start',
   },
   headerLeft: {
     flex: 1,
   },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   headerGreeting: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#fff',
-    marginBottom: 4,
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '500',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    marginTop: 4,
   },
-  notificationButton: {
+  actionIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
     position: 'relative',
-    padding: 8,
   },
   notificationBadge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: -2,
+    right: -2,
     backgroundColor: '#ef4444',
     borderRadius: 10,
     minWidth: 20,
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   notificationCount: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  themeToggle: {
-    padding: 8,
+    fontSize: 11,
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 40,
+  },
+  scrollContentWide: {
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+    paddingHorizontal: 40,
   },
   statsSection: {
     padding: 20,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
-  statCard: {
-    flex: 1,
-    minWidth: '45%',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    elevation: 2,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  statsGridWide: {
+    gap: 16,
   },
-  statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  modernStatCard: {
+    flex: 1,
+    minWidth: '47%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  statCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    gap: 14,
+  },
+  statIconWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+  },
+  statTextWrapper: {
+    flex: 1,
   },
   statNumber: {
     fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 2,
+    letterSpacing: -0.5,
   },
   statLabel: {
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
   },
   quickActionsSection: {
-    padding: 20,
-    paddingTop: 0,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 16,
   },
-  quickActionCard: {
-    width: '30%',
-    aspectRatio: 1,
-    padding: 12,
-    borderRadius: 12,
+  quickActionsGridWide: {
+    gap: 20,
+  },
+  quickActionWrapper: {
+    width: '22%',
     alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
+    gap: 10,
+  },
+  quickActionGradient: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
-  quickActionIcon: {
-    marginBottom: 8,
+  quickActionIconContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  quickActionLabel: {
-    fontSize: 11,
+  quickActionText: {
+    fontSize: 12,
     textAlign: 'center',
+    fontWeight: '600',
   },
   recentSection: {
-    padding: 20,
+    paddingHorizontal: 20,
     paddingTop: 0,
+    paddingBottom: 20,
   },
   activityCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 12,
-    elevation: 1,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderWidth: 1,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
-  activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  activityIconGradient: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   activityContent: {
     flex: 1,
   },
   activityTitle: {
     fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   activitySubtitle: {
     fontSize: 14,
@@ -691,27 +779,54 @@ const styles = StyleSheet.create({
   activityDate: {
     fontSize: 12,
   },
-  alertCard: {
+  emptyStateCard: {
     margin: 20,
-    borderRadius: 12,
-  },
-  alertContent: {
+    borderRadius: 24,
+    padding: 32,
     alignItems: 'center',
-    padding: 16,
   },
-  alertTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 8,
+  emptyStateIconWrapper: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  alertText: {
-    fontSize: 14,
+  emptyStateTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 12,
     textAlign: 'center',
-    marginBottom: 16,
   },
-  alertButton: {
-    borderRadius: 20,
+  emptyStateText: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+    paddingHorizontal: 20,
+  },
+  emptyStateButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  emptyStateButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    gap: 10,
+  },
+  emptyStateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
 

@@ -1,4 +1,4 @@
-// src/screens/user/AddCarScreen.tsx
+// src/screens/user/AddCarScreen.tsx - VERSIONE MODERNA E RAFFINATA
 import React, { useState } from 'react';
 import {
     SafeAreaView,
@@ -25,7 +25,6 @@ import {
     DollarSign,
     FileText,
     Save,
-    Info,
     Key,
     Hash,
     Palette,
@@ -33,10 +32,11 @@ import {
     ChevronRight,
     ChevronLeft,
     Gauge,
-    X
+    X,
+    Sparkles,
 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// Import Firebase
 import { db, auth } from '../../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -45,7 +45,6 @@ import { useCarsStore } from '../../store/useCarsStore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// Car colors
 const CAR_COLORS = [
     { name: 'Bianco', value: '#FFFFFF', border: '#E5E5EA' },
     { name: 'Nero', value: '#000000' },
@@ -64,7 +63,6 @@ const AddCarScreen = () => {
     const { colors, isDark } = useAppThemeManager();
     const { addVehicle: addCarToStore } = useCarsStore();
 
-    // Form state
     const [formData, setFormData] = useState({
         make: '',
         model: '',
@@ -86,12 +84,11 @@ const AddCarScreen = () => {
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    // Validation functions
     const validateStep = (step: number): boolean => {
         const newErrors: Record<string, string> = {};
 
         switch (step) {
-            case 0: // Basic Info
+            case 0:
                 if (!formData.make.trim()) newErrors.make = 'Marca obbligatoria';
                 if (!formData.model.trim()) newErrors.model = 'Modello obbligatorio';
                 if (!formData.year.trim()) {
@@ -100,10 +97,10 @@ const AddCarScreen = () => {
                     newErrors.year = 'Anno non valido';
                 }
                 break;
-            case 1: // Identification
+            case 1:
                 if (!formData.licensePlate.trim()) newErrors.licensePlate = 'Targa obbligatoria';
                 break;
-            case 2: // Purchase Info
+            case 2:
                 if (formData.purchasePrice && isNaN(parseFloat(formData.purchasePrice))) {
                     newErrors.purchasePrice = 'Prezzo non valido';
                 }
@@ -139,7 +136,6 @@ const AddCarScreen = () => {
 
     const updateFormData = (field: string, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
-        // Clear error for this field
         if (errors[field]) {
             setErrors(prev => {
                 const newErrors = { ...prev };
@@ -158,36 +154,58 @@ const AddCarScreen = () => {
             const user = auth.currentUser;
             if (!user) throw new Error('Utente non autenticato');
 
-            const carData = {
+            const now = new Date();
+
+            const firestoreData = {
                 userId: user.uid,
+                ownerId: user.uid,
                 make: formData.make.trim(),
                 model: formData.model.trim(),
                 year: parseInt(formData.year),
                 color: formData.color,
                 licensePlate: formData.licensePlate.trim().toUpperCase(),
                 vin: formData.vin.trim().toUpperCase() || null,
-                purchaseDate: formData.purchaseDate.toISOString(),
+                purchaseDate: formData.purchaseDate,
                 purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
                 purchaseMileage: formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
                 currentMileage: formData.currentMileage ? parseInt(formData.currentMileage) :
                     formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
                 insuranceCompany: formData.insuranceCompany.trim() || null,
-                insuranceExpiry: formData.insuranceExpiry ? formData.insuranceExpiry.toISOString() : null,
+                insuranceExpiry: formData.insuranceExpiry || null,
                 notes: formData.notes.trim() || null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 status: 'active',
+                isActive: true,
             };
 
-            const docRef = await addDoc(collection(db, 'vehicles'), carData);
+            const docRef = await addDoc(collection(db, 'vehicles'), firestoreData);
 
-            // Add to local store
-            addCarToStore({
+            const localStoreData = {
                 id: docRef.id,
-                ...carData,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
+                userId: user.uid,
+                ownerId: user.uid,
+                make: formData.make.trim(),
+                model: formData.model.trim(),
+                year: parseInt(formData.year),
+                color: formData.color,
+                licensePlate: formData.licensePlate.trim().toUpperCase(),
+                vin: formData.vin.trim().toUpperCase() || null,
+                purchaseDate: formData.purchaseDate,
+                purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
+                purchaseMileage: formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
+                currentMileage: formData.currentMileage ? parseInt(formData.currentMileage) :
+                    formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
+                insuranceCompany: formData.insuranceCompany.trim() || null,
+                insuranceExpiry: formData.insuranceExpiry || null,
+                notes: formData.notes.trim() || null,
+                createdAt: now,
+                updatedAt: now,
+                status: 'active',
+                isActive: true,
+            };
+
+            addCarToStore(localStoreData as any);
 
             Alert.alert(
                 'Successo',
@@ -224,7 +242,10 @@ const AddCarScreen = () => {
                         <Text style={[styles.colorPickerTitle, { color: colors.onSurface }]}>
                             Seleziona Colore
                         </Text>
-                        <TouchableOpacity onPress={() => setShowColorPicker(false)}>
+                        <TouchableOpacity 
+                            onPress={() => setShowColorPicker(false)}
+                            style={styles.closeButton}
+                        >
                             <X size={24} color={colors.onSurface} />
                         </TouchableOpacity>
                     </View>
@@ -247,7 +268,9 @@ const AddCarScreen = () => {
                                 }}
                             >
                                 {formData.color === color.value && (
-                                    <Check size={20} color={color.value === '#FFFFFF' ? '#000' : '#FFF'} />
+                                    <View style={styles.checkmarkWrapper}>
+                                        <Check size={20} color={color.value === '#FFFFFF' ? '#000' : '#FFF'} strokeWidth={3} />
+                                    </View>
                                 )}
                             </TouchableOpacity>
                         ))}
@@ -259,23 +282,25 @@ const AddCarScreen = () => {
 
     const renderStep = () => {
         switch (currentStep) {
-            case 0: // Basic Info
+            case 0:
                 return (
                     <View style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                            Informazioni Base
-                        </Text>
+                        <View style={styles.stepHeader}>
+                            <Car size={28} color={colors.primary} strokeWidth={2.5} />
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+                                Informazioni Base
+                            </Text>
+                        </View>
 
-                        {/* Make */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Marca *
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.make ? colors.error : colors.outline,
+                                borderColor: errors.make ? colors.error : 'transparent',
                             }]}>
-                                <Car size={20} color={colors.primary} />
+                                <Car size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. Toyota, BMW, Fiat"
@@ -291,16 +316,15 @@ const AddCarScreen = () => {
                             )}
                         </View>
 
-                        {/* Model */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Modello *
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.model ? colors.error : colors.outline,
+                                borderColor: errors.model ? colors.error : 'transparent',
                             }]}>
-                                <Car size={20} color={colors.primary} />
+                                <Car size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. Corolla, Serie 3, Panda"
@@ -316,16 +340,15 @@ const AddCarScreen = () => {
                             )}
                         </View>
 
-                        {/* Year */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Anno *
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.year ? colors.error : colors.outline,
+                                borderColor: errors.year ? colors.error : 'transparent',
                             }]}>
-                                <Calendar size={20} color={colors.primary} />
+                                <Calendar size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. 2023"
@@ -343,19 +366,17 @@ const AddCarScreen = () => {
                             )}
                         </View>
 
-                        {/* Color */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Colore
                             </Text>
                             <TouchableOpacity
-                                style={[styles.inputContainer, {
+                                style={[styles.modernInput, {
                                     backgroundColor: colors.surfaceVariant,
-                                    borderColor: colors.outline,
                                 }]}
                                 onPress={() => setShowColorPicker(true)}
                             >
-                                <Palette size={20} color={colors.primary} />
+                                <Palette size={20} color={colors.primary} strokeWidth={2.5} />
                                 <View style={styles.colorPreview}>
                                     <View
                                         style={[
@@ -376,23 +397,25 @@ const AddCarScreen = () => {
                     </View>
                 );
 
-            case 1: // Identification
+            case 1:
                 return (
                     <View style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                            Identificazione
-                        </Text>
+                        <View style={styles.stepHeader}>
+                            <Key size={28} color={colors.primary} strokeWidth={2.5} />
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+                                Identificazione
+                            </Text>
+                        </View>
 
-                        {/* License Plate */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Targa *
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.licensePlate ? colors.error : colors.outline,
+                                borderColor: errors.licensePlate ? colors.error : 'transparent',
                             }]}>
-                                <Key size={20} color={colors.primary} />
+                                <Key size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. AB123CD"
@@ -409,16 +432,14 @@ const AddCarScreen = () => {
                             )}
                         </View>
 
-                        {/* VIN */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Numero Telaio (VIN)
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: colors.outline,
                             }]}>
-                                <Hash size={20} color={colors.primary} />
+                                <Hash size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. WBADT43452G123456 (opzionale)"
@@ -436,14 +457,16 @@ const AddCarScreen = () => {
                     </View>
                 );
 
-            case 2: // Purchase Info
+            case 2:
                 return (
                     <View style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                            Informazioni Acquisto
-                        </Text>
+                        <View style={styles.stepHeader}>
+                            <DollarSign size={28} color={colors.primary} strokeWidth={2.5} />
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+                                Informazioni Acquisto
+                            </Text>
+                        </View>
 
-                        {/* Purchase Date */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Data Acquisto
@@ -455,16 +478,15 @@ const AddCarScreen = () => {
                             />
                         </View>
 
-                        {/* Purchase Price */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Prezzo di Acquisto
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.purchasePrice ? colors.error : colors.outline,
+                                borderColor: errors.purchasePrice ? colors.error : 'transparent',
                             }]}>
-                                <DollarSign size={20} color={colors.primary} />
+                                <DollarSign size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. 15000"
@@ -484,16 +506,15 @@ const AddCarScreen = () => {
                             )}
                         </View>
 
-                        {/* Purchase Mileage */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Chilometraggio all'Acquisto
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.purchaseMileage ? colors.error : colors.outline,
+                                borderColor: errors.purchaseMileage ? colors.error : 'transparent',
                             }]}>
-                                <Gauge size={20} color={colors.primary} />
+                                <Gauge size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. 50000"
@@ -513,16 +534,15 @@ const AddCarScreen = () => {
                             )}
                         </View>
 
-                        {/* Current Mileage */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Chilometraggio Attuale
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.currentMileage ? colors.error : colors.outline,
+                                borderColor: errors.currentMileage ? colors.error : 'transparent',
                             }]}>
-                                <Gauge size={20} color={colors.primary} />
+                                <Gauge size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. 55000"
@@ -544,23 +564,24 @@ const AddCarScreen = () => {
                     </View>
                 );
 
-            case 3: // Insurance & Notes
+            case 3:
                 return (
                     <View style={styles.stepContent}>
-                        <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                            Assicurazione e Note
-                        </Text>
+                        <View style={styles.stepHeader}>
+                            <FileText size={28} color={colors.primary} strokeWidth={2.5} />
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
+                                Assicurazione e Note
+                            </Text>
+                        </View>
 
-                        {/* Insurance Company */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Compagnia Assicurativa
                             </Text>
-                            <View style={[styles.inputContainer, {
+                            <View style={[styles.modernInput, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: colors.outline,
                             }]}>
-                                <FileText size={20} color={colors.primary} />
+                                <FileText size={20} color={colors.primary} strokeWidth={2.5} />
                                 <TextInput
                                     style={[styles.input, { color: colors.onSurface }]}
                                     placeholder="es. Generali, Allianz"
@@ -571,7 +592,6 @@ const AddCarScreen = () => {
                             </View>
                         </View>
 
-                        {/* Insurance Expiry */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Scadenza Assicurazione
@@ -583,14 +603,12 @@ const AddCarScreen = () => {
                             />
                         </View>
 
-                        {/* Notes */}
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
                                 Note
                             </Text>
                             <View style={[styles.textAreaContainer, {
                                 backgroundColor: colors.surfaceVariant,
-                                borderColor: colors.outline,
                             }]}>
                                 <TextInput
                                     style={[styles.textArea, { color: colors.onSurface }]}
@@ -623,26 +641,34 @@ const AddCarScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             <StatusBar
                 barStyle={isDark ? 'light-content' : 'dark-content'}
-                backgroundColor={colors.surface}
+                backgroundColor="transparent"
+                translucent
             />
 
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <ArrowLeft size={24} color={colors.onSurface} />
-                </TouchableOpacity>
+            <LinearGradient
+                colors={isDark 
+                    ? ['#1e1b4b', '#312e81'] 
+                    : ['#6366f1', '#8b5cf6']
+                }
+                style={styles.headerGradient}
+            >
+                <View style={styles.header}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => navigation.goBack()}
+                    >
+                        <ArrowLeft size={24} color="#fff" strokeWidth={2.5} />
+                    </TouchableOpacity>
 
-                <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
-                    Aggiungi Veicolo
-                </Text>
+                    <View style={styles.headerTitleWrapper}>
+                        <Sparkles size={20} color="#fff" style={{ marginRight: 8 }} />
+                        <Text style={styles.headerTitle}>Aggiungi Veicolo</Text>
+                    </View>
 
-                <View style={styles.headerRight} />
-            </View>
+                    <View style={styles.headerRight} />
+                </View>
+            </LinearGradient>
 
-            {/* Progress Indicator */}
             <View style={[styles.progressContainer, { backgroundColor: colors.surface }]}>
                 {steps.map((step, index) => {
                     const Icon = step.icon;
@@ -656,15 +682,20 @@ const AddCarScreen = () => {
                                     style={[
                                         styles.stepCircle,
                                         {
-                                            backgroundColor: isActive || isCompleted ? colors.primary : colors.surfaceVariant,
-                                            borderColor: isActive ? colors.primary : colors.outline,
+                                            backgroundColor: isActive || isCompleted 
+                                                ? colors.primary 
+                                                : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                                         },
                                     ]}
                                 >
                                     {isCompleted ? (
-                                        <Check size={16} color="#FFF" />
+                                        <Check size={18} color="#FFF" strokeWidth={3} />
                                     ) : (
-                                        <Icon size={16} color={isActive ? '#FFF' : colors.onSurfaceVariant} />
+                                        <Icon 
+                                            size={18} 
+                                            color={isActive ? '#FFF' : colors.onSurfaceVariant} 
+                                            strokeWidth={2.5}
+                                        />
                                     )}
                                 </View>
                                 <Text
@@ -672,6 +703,7 @@ const AddCarScreen = () => {
                                         styles.stepLabel,
                                         {
                                             color: isActive ? colors.primary : colors.onSurfaceVariant,
+                                            fontWeight: isActive ? '700' : '500',
                                         },
                                     ]}
                                 >
@@ -680,14 +712,18 @@ const AddCarScreen = () => {
                             </View>
 
                             {index < steps.length - 1 && (
-                                <View
-                                    style={[
-                                        styles.stepConnector,
-                                        {
-                                            backgroundColor: isCompleted ? colors.primary : colors.outline,
-                                        },
-                                    ]}
-                                />
+                                <View style={styles.stepConnectorWrapper}>
+                                    <View
+                                        style={[
+                                            styles.stepConnector,
+                                            {
+                                                backgroundColor: isCompleted 
+                                                    ? colors.primary 
+                                                    : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                                            },
+                                        ]}
+                                    />
+                                </View>
                             )}
                         </React.Fragment>
                     );
@@ -708,17 +744,19 @@ const AddCarScreen = () => {
                 </ScrollView>
             </KeyboardAvoidingView>
 
-            {/* Navigation Buttons */}
-            <View style={[styles.footer, { backgroundColor: colors.surface }]}>
+            <View style={[styles.footer, { 
+                backgroundColor: colors.surface,
+                borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+            }]}>
                 {currentStep > 0 && (
                     <TouchableOpacity
                         style={[styles.footerButton, styles.backFooterButton, {
-                            borderColor: colors.outline,
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                         }]}
                         onPress={handleBack}
                         disabled={isLoading}
                     >
-                        <ChevronLeft size={20} color={colors.onSurface} />
+                        <ChevronLeft size={20} color={colors.onSurface} strokeWidth={2.5} />
                         <Text style={[styles.backButtonText, { color: colors.onSurface }]}>
                             Indietro
                         </Text>
@@ -728,27 +766,32 @@ const AddCarScreen = () => {
                 <TouchableOpacity
                     style={[
                         styles.footerButton,
-                        styles.nextButton,
-                        { backgroundColor: colors.primary },
                         currentStep === 0 && styles.fullWidthButton,
                     ]}
                     onPress={handleNext}
                     disabled={isLoading}
                 >
-                    {isLoading ? (
-                        <ActivityIndicator color="#FFF" />
-                    ) : (
-                        <>
-                            <Text style={styles.nextButtonText}>
-                                {currentStep === 3 ? 'Salva Veicolo' : 'Avanti'}
-                            </Text>
-                            {currentStep === 3 ? (
-                                <Save size={20} color="#FFF" />
-                            ) : (
-                                <ChevronRight size={20} color="#FFF" />
-                            )}
-                        </>
-                    )}
+                    <LinearGradient
+                        colors={['#6366f1', '#8b5cf6']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.nextButtonGradient}
+                    >
+                        {isLoading ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <>
+                                <Text style={styles.nextButtonText}>
+                                    {currentStep === 3 ? 'Salva Veicolo' : 'Avanti'}
+                                </Text>
+                                {currentStep === 3 ? (
+                                    <Save size={20} color="#FFF" strokeWidth={2.5} />
+                                ) : (
+                                    <ChevronRight size={20} color="#FFF" strokeWidth={2.5} />
+                                )}
+                            </>
+                        )}
+                    </LinearGradient>
                 </TouchableOpacity>
             </View>
 
@@ -761,104 +804,125 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
+    headerGradient: {
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
+        paddingVertical: 16,
     },
     backButton: {
-        padding: 8,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerTitleWrapper: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     headerTitle: {
-        flex: 1,
-        fontSize: 18,
-        fontWeight: '600',
-        marginLeft: 12,
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#fff',
+        letterSpacing: -0.5,
     },
     headerRight: {
-        width: 40,
+        width: 44,
     },
     progressContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
+        paddingVertical: 20,
     },
     stepIndicator: {
         alignItems: 'center',
     },
     stepCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        borderWidth: 2,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 4,
+        marginBottom: 6,
     },
     stepLabel: {
-        fontSize: 10,
-        fontWeight: '500',
+        fontSize: 11,
+    },
+    stepConnectorWrapper: {
+        flex: 1,
+        alignItems: 'center',
+        marginBottom: 26,
     },
     stepConnector: {
-        flex: 1,
-        height: 2,
-        marginHorizontal: 4,
-        marginBottom: 20,
+        width: '100%',
+        height: 3,
+        borderRadius: 1.5,
     },
     content: {
         flex: 1,
     },
     scrollContent: {
-        padding: 20,
+        padding: 24,
     },
     stepContent: {
         paddingBottom: 20,
     },
-    stepTitle: {
-        fontSize: 24,
-        fontWeight: '700',
-        marginBottom: 24,
-    },
-    inputGroup: {
-        marginBottom: 20,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 8,
-    },
-    inputContainer: {
+    stepHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
+        marginBottom: 28,
+        gap: 12,
+    },
+    stepTitle: {
+        fontSize: 26,
+        fontWeight: '700',
+        letterSpacing: -0.5,
+    },
+    inputGroup: {
+        marginBottom: 24,
+    },
+    label: {
+        fontSize: 15,
+        fontWeight: '600',
+        marginBottom: 10,
+        letterSpacing: -0.2,
+    },
+    modernInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 18,
+        paddingVertical: 16,
+        borderRadius: 16,
+        borderWidth: 2,
     },
     input: {
         flex: 1,
         fontSize: 16,
         marginLeft: 12,
+        fontWeight: '500',
     },
     currency: {
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     helperText: {
-        fontSize: 12,
-        marginTop: 4,
+        fontSize: 13,
+        marginTop: 6,
         marginLeft: 4,
     },
     errorText: {
-        fontSize: 12,
-        marginTop: 4,
+        fontSize: 13,
+        marginTop: 6,
         marginLeft: 4,
+        fontWeight: '500',
     },
     colorPreview: {
         flex: 1,
@@ -867,96 +931,113 @@ const styles = StyleSheet.create({
         marginLeft: 12,
     },
     colorSwatch: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
         borderWidth: 2,
-        marginRight: 8,
+        marginRight: 10,
     },
     colorName: {
         fontSize: 16,
+        fontWeight: '500',
     },
     textAreaContainer: {
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
+        paddingHorizontal: 18,
+        paddingVertical: 16,
+        borderRadius: 16,
     },
     textArea: {
         fontSize: 16,
-        minHeight: 100,
+        minHeight: 120,
+        fontWeight: '500',
     },
     footer: {
         flexDirection: 'row',
         padding: 16,
         gap: 12,
         borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.1)',
     },
     footerButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 20,
-        borderRadius: 12,
-        gap: 8,
+        flex: 1,
+        borderRadius: 16,
+        overflow: 'hidden',
     },
     backFooterButton: {
-        flex: 1,
-        borderWidth: 1,
-    },
-    backButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    nextButton: {
         flex: 1,
     },
     fullWidthButton: {
         flex: 1,
     },
-    nextButtonText: {
+    backButtonText: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+    },
+    nextButtonGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 18,
+        paddingHorizontal: 24,
+        gap: 10,
+    },
+    nextButtonText: {
+        fontSize: 17,
+        fontWeight: '700',
         color: '#FFF',
+        letterSpacing: -0.3,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     colorPickerModal: {
-        width: screenWidth - 40,
-        borderRadius: 20,
-        padding: 20,
+        width: screenWidth - 48,
+        maxWidth: 400,
+        borderRadius: 24,
+        padding: 24,
     },
     colorPickerHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 24,
     },
     colorPickerTitle: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: '700',
+        letterSpacing: -0.5,
+    },
+    closeButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     colorGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 16,
+        justifyContent: 'center',
     },
     colorOption: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
         borderWidth: 3,
         justifyContent: 'center',
         alignItems: 'center',
     },
     colorOptionSelected: {
         borderWidth: 4,
+        transform: [{ scale: 1.1 }],
+    },
+    checkmarkWrapper: {
+        backgroundColor: 'rgba(0,0,0,0.1)',
+        borderRadius: 20,
+        padding: 4,
     },
 });
 
