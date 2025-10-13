@@ -1,4 +1,4 @@
-// app.config.js
+// app.config.js - CONFIGURAZIONE CORRETTA
 module.exports = {
     expo: {
         name: "MyMechanic",
@@ -7,7 +7,7 @@ module.exports = {
         orientation: "portrait",
         icon: "./assets/icon.png",
         userInterfaceStyle: "automatic",
-        scheme: "mymechanic", // Corretto 'scheme' e spostato qui
+        scheme: "mymechanic",
         splash: {
             image: "./assets/splash.png",
             resizeMode: "contain",
@@ -16,13 +16,13 @@ module.exports = {
         assetBundlePatterns: ["**/*"],
         ios: {
             supportsTablet: true,
-            // IMPORTANTE: Formato reverse-domain corretto
-            bundleIdentifier: "com.mymechanic.app",
+            // IMPORTANTE: Deve coincidere con GoogleService-Info.plist
+            bundleIdentifier: "com.mymeccanich.com", // CAMBIATO per matching Firebase
             buildNumber: "1",
-            googleServicesFile: "./GoogleService-Info.plist", // Aggiunto da app.json
+            googleServicesFile: "./GoogleService-Info.plist",
             associatedDomains: ["applinks:mymechanic.com"],
             infoPlist: {
-                NSCameraUsageDescription: "L'app ha bisogno di accedere alla fotcamera per scattare foto dei veicoli e documenti.",
+                NSCameraUsageDescription: "L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli e documenti.",
                 NSPhotoLibraryUsageDescription: "L'app ha bisogno di accedere alla libreria foto per selezionare immagini dei veicoli.",
                 NSPhotoLibraryAddUsageDescription: "L'app ha bisogno di salvare le foto nella libreria.",
                 NSCalendarsUsageDescription: "L'app ha bisogno di accedere al calendario per ricordarti le scadenze.",
@@ -37,10 +37,10 @@ module.exports = {
                 foregroundImage: "./assets/adaptive-icon.png",
                 backgroundColor: "#FFFFFF",
             },
-            // IMPORTANTE: Formato reverse-domain corretto e consistente con iOS
+            // Mantieni consistency tra le piattaforme
             package: "com.mymechanic.app",
             versionCode: 1,
-            googleServicesFile: "./google-services.json", // Aggiunto da app.json
+            googleServicesFile: "./google-services.json",
             permissions: [
                 "CAMERA",
                 "READ_EXTERNAL_STORAGE",
@@ -54,7 +54,7 @@ module.exports = {
                 {
                     action: "VIEW",
                     autoVerify: true,
-                    data: [{ scheme: "httpss", host: "mymechanic.com" }], // Schema standard per Universal Links
+                    data: [{ scheme: "https", host: "mymechanic.com" }],
                     category: ["BROWSABLE", "DEFAULT"],
                 },
             ],
@@ -64,18 +64,21 @@ module.exports = {
             bundler: "metro",
         },
         plugins: [
-            // Plugin per gestire le versioni di build native
             [
                 "expo-build-properties",
                 {
                     android: {
-                        compileSdkVersion: 34, // SDK 34 è lo standard per Expo 51
+                        compileSdkVersion: 34,
                         targetSdkVersion: 34,
                         buildToolsVersion: "34.0.0",
                         minSdkVersion: 26,
+                        // Disabilita New Architecture su Android
+                        newArchEnabled: false,
                     },
                     ios: {
-                        deploymentTarget: "15.1", // Target più comune e stabile
+                        deploymentTarget: "15.1",
+                        // Disabilita New Architecture su iOS
+                        newArchEnabled: false,
                     },
                 },
             ],
@@ -92,12 +95,18 @@ module.exports = {
                 "expo-image-picker",
                 {
                     photosPermission: "L'app ha bisogno di accedere alle tue foto per permetterti di caricare immagini dei veicoli.",
-                    // Aggiunta la permission per la fotocamera che mancava
                     cameraPermission: "L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli.",
                 },
             ],
-            "expo-secure-store", // Aggiunto da app.json
-            "expo-dev-client",  // Aggiunto da app.json
+            "expo-location",
+            "expo-document-picker",
+            [
+                "expo-dev-client",
+                {
+                    // Aggiungi configurazione per dev client
+                    addGeneratedScheme: false,
+                },
+            ],
         ],
         extra: {
             eas: {
