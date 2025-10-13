@@ -275,10 +275,10 @@ const RegisterScreen = () => {
                     <GlassCard
                         style={[
                             styles.userTypeCard,
-                            userType === 'user' && {
+                            userType === 'user' ? {
                                 borderColor: colors.primary,
                                 borderWidth: 2,
-                            },
+                            } : {},
                         ]}
                     >
                         <View
@@ -311,10 +311,10 @@ const RegisterScreen = () => {
                     <GlassCard
                         style={[
                             styles.userTypeCard,
-                            userType === 'mechanic' && {
+                            userType === 'mechanic' ? {
                                 borderColor: colors.secondary,
                                 borderWidth: 2,
-                            },
+                            } : {},
                         ]}
                     >
                         <View

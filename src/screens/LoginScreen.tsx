@@ -121,7 +121,7 @@ const LoginScreen = () => {
             setUser({
                 id: userCredential.user.uid,
                 email: userCredential.user.email || '',
-                displayName: userCredential.user.displayName || '',
+                name: userCredential.user.displayName || '',
                 isLoggedIn: true,
             });
 
