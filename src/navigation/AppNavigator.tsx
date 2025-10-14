@@ -79,6 +79,8 @@ export type RootStackParamList = {
     AddCustomer: undefined;
     EditCustomer: { customerId: string };
     CustomerDetail: { customerId: string };
+
+
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

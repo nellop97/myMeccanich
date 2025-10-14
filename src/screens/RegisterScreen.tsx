@@ -1,31 +1,28 @@
-// src/screens/RegisterScreen.tsx - VERSIONE AGGIORNATA CON NUOVO DESIGN SYSTEM
+// src/screens/RegisterScreen.tsx - VERSIONE AGGIORNATA CON NUOVO STILE
 import React, { useState, useEffect } from 'react';
 import {
     View,
     ScrollView,
-    KeyboardAvoidingView,
-    Platform,
+    TouchableOpacity,
     StyleSheet,
-    Dimensions,
-    StatusBar,
+    Platform,
+    KeyboardAvoidingView,
     Alert,
     Animated,
-    TouchableOpacity,
 } from 'react-native';
-import { Text, ProgressBar } from 'react-native-paper';
+import { Text, ProgressBar, TextInput, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
     Mail,
     Lock,
     User,
     Phone,
+    Building,
     ArrowRight,
     ArrowLeft,
-    CheckCircle,
     Car,
     Wrench,
-    UserPlus,
+    CheckCircle,
 } from 'lucide-react-native';
 
 // Firebase
@@ -33,21 +30,7 @@ import { auth, db } from '../services/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-// Custom Components & Hooks
-import {
-    ThemedInput,
-    GradientButton,
-    GlassCard,
-    DividerWithText,
-    SocialButton,
-} from '../components/CommonComponents';
-import { useAppThemeManager } from '../hooks/useTheme';
-
-const { width, height } = Dimensions.get('window');
-const isWeb = Platform.OS === 'web';
-const isSmallScreen = width < 375;
-
-type UserType = 'user' | 'mechanic';
+type UserType = 'owner' | 'mechanic';
 
 interface FormData {
     email: string;
@@ -57,17 +40,17 @@ interface FormData {
     lastName: string;
     phone: string;
     workshopName?: string;
+    vatNumber?: string;
+    address?: string;
 }
 
 const RegisterScreen = () => {
     const navigation = useNavigation();
-    const { colors, isDark } = useAppThemeManager();
 
-    // Form State
+    // Stati
     const [currentStep, setCurrentStep] = useState(0);
     const [userType, setUserType] = useState<UserType | null>(null);
     const [loading, setLoading] = useState(false);
-
     const [formData, setFormData] = useState<FormData>({
         email: '',
         password: '',
@@ -76,77 +59,66 @@ const RegisterScreen = () => {
         lastName: '',
         phone: '',
         workshopName: '',
+        vatNumber: '',
+        address: '',
     });
-
     const [errors, setErrors] = useState<Partial<FormData>>({});
 
-    // Animation Values
-    const fadeAnim = useState(new Animated.Value(0))[0];
-    const slideAnim = useState(new Animated.Value(30))[0];
+    // Animazioni
+    const fadeAnim = useState(new Animated.Value(1))[0];
+    const slideAnim = useState(new Animated.Value(0))[0];
 
-    // Calculate progress
-    const totalSteps = userType === 'mechanic' ? 3 : 2;
+    const totalSteps = userType === 'mechanic' ? 3 : 3;
     const progress = (currentStep + 1) / totalSteps;
 
+    // Animazione cambio step
     useEffect(() => {
-        // Entrance animation
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
-                duration: 600,
+                duration: 300,
                 useNativeDriver: true,
             }),
             Animated.spring(slideAnim, {
                 toValue: 0,
-                tension: 20,
+                tension: 50,
                 friction: 7,
                 useNativeDriver: true,
             }),
         ]).start();
     }, [currentStep]);
 
-    // ============================================
-    // VALIDATION
-    // ============================================
-    const validateStep = (): boolean => {
+    // Validazione
+    const validateStep = () => {
         const newErrors: Partial<FormData> = {};
 
-        if (currentStep === 0 && !userType) {
-            Alert.alert('Errore', 'Seleziona il tipo di utente');
-            return false;
-        }
-
         if (currentStep === 1) {
-            // Validate email
+            // Validazione credenziali
             if (!formData.email.trim()) {
                 newErrors.email = 'Email richiesta';
             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
                 newErrors.email = 'Email non valida';
             }
 
-            // Validate password
             if (!formData.password) {
                 newErrors.password = 'Password richiesta';
             } else if (formData.password.length < 6) {
                 newErrors.password = 'Password troppo corta (min. 6 caratteri)';
             }
 
-            // Validate confirm password
             if (formData.password !== formData.confirmPassword) {
                 newErrors.confirmPassword = 'Le password non coincidono';
             }
         }
 
         if (currentStep === 2) {
-            // Validate personal info
+            // Validazione dati personali
             if (!formData.firstName.trim()) {
                 newErrors.firstName = 'Nome richiesto';
             }
             if (!formData.lastName.trim()) {
                 newErrors.lastName = 'Cognome richiesto';
             }
-
-            // Mechanic specific
             if (userType === 'mechanic' && !formData.workshopName?.trim()) {
                 newErrors.workshopName = 'Nome officina richiesto';
             }
@@ -156,28 +128,13 @@ const RegisterScreen = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-    // ============================================
-    // NAVIGATION
-    // ============================================
+    // Navigazione
     const handleNext = () => {
         if (validateStep()) {
             if (currentStep < totalSteps - 1) {
-                setCurrentStep(currentStep + 1);
                 fadeAnim.setValue(0);
-                slideAnim.setValue(30);
-                Animated.parallel([
-                    Animated.timing(fadeAnim, {
-                        toValue: 1,
-                        duration: 400,
-                        useNativeDriver: true,
-                    }),
-                    Animated.spring(slideAnim, {
-                        toValue: 0,
-                        tension: 20,
-                        friction: 7,
-                        useNativeDriver: true,
-                    }),
-                ]).start();
+                slideAnim.setValue(20);
+                setCurrentStep(currentStep + 1);
             } else {
                 handleRegister();
             }
@@ -192,16 +149,14 @@ const RegisterScreen = () => {
         }
     };
 
-    // ============================================
-    // REGISTRATION HANDLER
-    // ============================================
+    // Registrazione
     const handleRegister = async () => {
         if (!validateStep()) return;
 
         setLoading(true);
 
         try {
-            // Create Firebase user
+            // Crea utente Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
                 formData.email.trim(),
@@ -210,26 +165,38 @@ const RegisterScreen = () => {
 
             const userId = userCredential.user.uid;
 
-            // Save user data to Firestore
+            // Salva dati utente in Firestore
             await setDoc(doc(db, 'users', userId), {
+                uid: userId,
                 email: formData.email.trim(),
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
+                name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
                 phone: formData.phone.trim(),
-                isMechanic: userType === 'mechanic',
-                workshopName: userType === 'mechanic' ? formData.workshopName : null,
+                role: userType,
+                userType: userType === 'owner' ? 'user' : 'mechanic',
+                workshopName: userType === 'mechanic' ? formData.workshopName?.trim() : null,
+                vatNumber: userType === 'mechanic' ? formData.vatNumber?.trim() : null,
+                address: formData.address?.trim() || null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
+                isActive: true,
+                profileComplete: true,
+                emailVerified: false,
             });
 
-            Alert.alert('Successo', 'Registrazione completata!', [
-                {
-                    text: 'OK',
-                    onPress: () => navigation.navigate('Login' as never),
-                },
-            ]);
+            Alert.alert(
+                'Successo! 🎉',
+                'Registrazione completata. Benvenuto!',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => navigation.navigate('Login' as never),
+                    },
+                ]
+            );
         } catch (error: any) {
-            console.error('Registration error:', error);
+            console.error('Errore registrazione:', error);
 
             let errorMessage = 'Errore durante la registrazione';
 
@@ -247,283 +214,317 @@ const RegisterScreen = () => {
         }
     };
 
-    // ============================================
-    // RENDER STEPS
-    // ============================================
+    // Render Steps
+    const renderStep = () => {
+        return (
+            <Animated.View
+                style={{
+                    opacity: fadeAnim,
+                    transform: [{ translateY: slideAnim }],
+                }}
+            >
+                {currentStep === 0 && renderUserTypeSelection()}
+                {currentStep === 1 && renderCredentialsStep()}
+                {currentStep === 2 && renderPersonalInfoStep()}
+            </Animated.View>
+        );
+    };
+
     const renderUserTypeSelection = () => (
-        <Animated.View
-            style={{
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-            }}
-        >
-            <View style={styles.stepHeader}>
-                <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                    Chi sei?
-                </Text>
-                <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
-                    Seleziona il tipo di account da creare
-                </Text>
-            </View>
+        <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Chi sei?</Text>
+            <Text style={styles.stepSubtitle}>
+                Scegli il tipo di account che desideri creare
+            </Text>
 
             <View style={styles.userTypeContainer}>
-                {/* User Card */}
+                {/* Proprietario */}
                 <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setUserType('user')}
+                    style={[
+                        styles.userTypeCard,
+                        userType === 'owner' && styles.userTypeCardSelected,
+                    ]}
+                    onPress={() => setUserType('owner')}
                 >
-                    <GlassCard
-                        style={[
-                            styles.userTypeCard,
-                            userType === 'user' ? {
-                                borderColor: colors.primary,
-                                borderWidth: 2,
-                            } : {},
-                        ]}
-                    >
-                        <View
-                            style={[
-                                styles.userTypeIcon,
-                                { backgroundColor: `${colors.primary}20` },
-                            ]}
-                        >
-                            <Car size={32} color={colors.primary} />
+                    <View style={[styles.iconCircle, { backgroundColor: '#3b82f620' }]}>
+                        <Car size={32} color="#3b82f6" />
+                    </View>
+                    <Text style={styles.userTypeTitle}>Proprietario Auto</Text>
+                    <Text style={styles.userTypeDesc}>
+                        Gestisci le tue auto, manutenzioni e scadenze
+                    </Text>
+                    {userType === 'owner' && (
+                        <View style={styles.selectedBadge}>
+                            <CheckCircle size={20} color="#10b981" />
                         </View>
-                        <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
-                            Proprietario
-                        </Text>
-                        <Text style={[styles.userTypeDesc, { color: colors.onSurfaceVariant }]}>
-                            Gestisci le tue auto, manutenzioni e spese
-                        </Text>
-                        {userType === 'user' && (
-                            <View style={styles.selectedBadge}>
-                                <CheckCircle size={20} color={colors.primary} />
-                            </View>
-                        )}
-                    </GlassCard>
+                    )}
                 </TouchableOpacity>
 
-                {/* Mechanic Card */}
+                {/* Meccanico */}
                 <TouchableOpacity
-                    activeOpacity={0.8}
+                    style={[
+                        styles.userTypeCard,
+                        userType === 'mechanic' && styles.userTypeCardSelected,
+                    ]}
                     onPress={() => setUserType('mechanic')}
                 >
-                    <GlassCard
-                        style={[
-                            styles.userTypeCard,
-                            userType === 'mechanic' ? {
-                                borderColor: colors.secondary,
-                                borderWidth: 2,
-                            } : {},
-                        ]}
-                    >
-                        <View
-                            style={[
-                                styles.userTypeIcon,
-                                { backgroundColor: `${colors.secondary}20` },
-                            ]}
-                        >
-                            <Wrench size={32} color={colors.secondary} />
+                    <View style={[styles.iconCircle, { backgroundColor: '#f59e0b20' }]}>
+                        <Wrench size={32} color="#f59e0b" />
+                    </View>
+                    <Text style={styles.userTypeTitle}>Meccanico/Officina</Text>
+                    <Text style={styles.userTypeDesc}>
+                        Gestisci clienti, interventi e fatturazione
+                    </Text>
+                    {userType === 'mechanic' && (
+                        <View style={styles.selectedBadge}>
+                            <CheckCircle size={20} color="#10b981" />
                         </View>
-                        <Text style={[styles.userTypeTitle, { color: colors.onSurface }]}>
-                            Meccanico
-                        </Text>
-                        <Text style={[styles.userTypeDesc, { color: colors.onSurfaceVariant }]}>
-                            Gestisci la tua officina e i clienti
-                        </Text>
-                        {userType === 'mechanic' && (
-                            <View style={styles.selectedBadge}>
-                                <CheckCircle size={20} color={colors.secondary} />
-                            </View>
-                        )}
-                    </GlassCard>
+                    )}
                 </TouchableOpacity>
             </View>
-        </Animated.View>
+        </View>
     );
 
     const renderCredentialsStep = () => (
-        <Animated.View
-            style={{
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-            }}
-        >
-            <View style={styles.stepHeader}>
-                <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                    Crea il tuo account
-                </Text>
-                <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
-                    Inserisci email e password
-                </Text>
+        <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Credenziali</Text>
+            <Text style={styles.stepSubtitle}>
+                Inserisci email e password per il tuo account
+            </Text>
+
+            <View style={styles.inputContainer}>
+                <View style={styles.inputWrapper}>
+                    <Mail size={20} color="#64748b" style={styles.inputIcon} />
+                    <TextInput
+                        mode="outlined"
+                        label="Email"
+                        value={formData.email}
+                        onChangeText={(text) => {
+                            setFormData({ ...formData, email: text });
+                            setErrors({ ...errors, email: '' });
+                        }}
+                        error={!!errors.email}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        style={styles.input}
+                        disabled={loading}
+                        theme={{
+                            colors: {
+                                primary: '#3b82f6',
+                                outline: errors.email ? '#ef4444' : '#e2e8f0',
+                            },
+                        }}
+                    />
+                </View>
+                {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+
+                <View style={styles.inputWrapper}>
+                    <Lock size={20} color="#64748b" style={styles.inputIcon} />
+                    <TextInput
+                        mode="outlined"
+                        label="Password"
+                        value={formData.password}
+                        onChangeText={(text) => {
+                            setFormData({ ...formData, password: text });
+                            setErrors({ ...errors, password: '' });
+                        }}
+                        error={!!errors.password}
+                        secureTextEntry
+                        autoCapitalize="none"
+                        style={styles.input}
+                        disabled={loading}
+                        theme={{
+                            colors: {
+                                primary: '#3b82f6',
+                                outline: errors.password ? '#ef4444' : '#e2e8f0',
+                            },
+                        }}
+                    />
+                </View>
+                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+
+                <View style={styles.inputWrapper}>
+                    <Lock size={20} color="#64748b" style={styles.inputIcon} />
+                    <TextInput
+                        mode="outlined"
+                        label="Conferma Password"
+                        value={formData.confirmPassword}
+                        onChangeText={(text) => {
+                            setFormData({ ...formData, confirmPassword: text });
+                            setErrors({ ...errors, confirmPassword: '' });
+                        }}
+                        error={!!errors.confirmPassword}
+                        secureTextEntry
+                        autoCapitalize="none"
+                        style={styles.input}
+                        disabled={loading}
+                        theme={{
+                            colors: {
+                                primary: '#3b82f6',
+                                outline: errors.confirmPassword ? '#ef4444' : '#e2e8f0',
+                            },
+                        }}
+                    />
+                </View>
+                {errors.confirmPassword && (
+                    <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                )}
             </View>
-
-            <GlassCard>
-                <ThemedInput
-                    label="Email"
-                    placeholder="tua@email.com"
-                    value={formData.email}
-                    onChangeText={(text) => {
-                        setFormData({ ...formData, email: text });
-                        setErrors({ ...errors, email: '' });
-                    }}
-                    error={errors.email}
-                    icon={Mail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    editable={!loading}
-                />
-
-                <ThemedInput
-                    label="Password"
-                    placeholder="Minimo 6 caratteri"
-                    value={formData.password}
-                    onChangeText={(text) => {
-                        setFormData({ ...formData, password: text });
-                        setErrors({ ...errors, password: '' });
-                    }}
-                    error={errors.password}
-                    icon={Lock}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    editable={!loading}
-                />
-
-                <ThemedInput
-                    label="Conferma Password"
-                    placeholder="Ripeti la password"
-                    value={formData.confirmPassword}
-                    onChangeText={(text) => {
-                        setFormData({ ...formData, confirmPassword: text });
-                        setErrors({ ...errors, confirmPassword: '' });
-                    }}
-                    error={errors.confirmPassword}
-                    icon={Lock}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    editable={!loading}
-                />
-            </GlassCard>
-        </Animated.View>
+        </View>
     );
 
     const renderPersonalInfoStep = () => (
-        <Animated.View
-            style={{
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-            }}
-        >
-            <View style={styles.stepHeader}>
-                <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                    Informazioni personali
-                </Text>
-                <Text style={[styles.stepSubtitle, { color: colors.onSurfaceVariant }]}>
-                    Dicci qualcosa su di te
-                </Text>
-            </View>
+        <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Dati Personali</Text>
+            <Text style={styles.stepSubtitle}>
+                {userType === 'mechanic'
+                    ? 'Completa il profilo della tua officina'
+                    : 'Completa il tuo profilo'}
+            </Text>
 
-            <GlassCard>
-                <ThemedInput
-                    label="Nome"
-                    placeholder="Mario"
-                    value={formData.firstName}
-                    onChangeText={(text) => {
-                        setFormData({ ...formData, firstName: text });
-                        setErrors({ ...errors, firstName: '' });
-                    }}
-                    error={errors.firstName}
-                    icon={User}
-                    autoCapitalize="words"
-                    editable={!loading}
-                />
+            <View style={styles.inputContainer}>
+                <View style={styles.inputWrapper}>
+                    <User size={20} color="#64748b" style={styles.inputIcon} />
+                    <TextInput
+                        mode="outlined"
+                        label="Nome"
+                        value={formData.firstName}
+                        onChangeText={(text) => {
+                            setFormData({ ...formData, firstName: text });
+                            setErrors({ ...errors, firstName: '' });
+                        }}
+                        error={!!errors.firstName}
+                        autoCapitalize="words"
+                        style={styles.input}
+                        disabled={loading}
+                        theme={{
+                            colors: {
+                                primary: '#3b82f6',
+                                outline: errors.firstName ? '#ef4444' : '#e2e8f0',
+                            },
+                        }}
+                    />
+                </View>
+                {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
 
-                <ThemedInput
-                    label="Cognome"
-                    placeholder="Rossi"
-                    value={formData.lastName}
-                    onChangeText={(text) => {
-                        setFormData({ ...formData, lastName: text });
-                        setErrors({ ...errors, lastName: '' });
-                    }}
-                    error={errors.lastName}
-                    icon={User}
-                    autoCapitalize="words"
-                    editable={!loading}
-                />
+                <View style={styles.inputWrapper}>
+                    <User size={20} color="#64748b" style={styles.inputIcon} />
+                    <TextInput
+                        mode="outlined"
+                        label="Cognome"
+                        value={formData.lastName}
+                        onChangeText={(text) => {
+                            setFormData({ ...formData, lastName: text });
+                            setErrors({ ...errors, lastName: '' });
+                        }}
+                        error={!!errors.lastName}
+                        autoCapitalize="words"
+                        style={styles.input}
+                        disabled={loading}
+                        theme={{
+                            colors: {
+                                primary: '#3b82f6',
+                                outline: errors.lastName ? '#ef4444' : '#e2e8f0',
+                            },
+                        }}
+                    />
+                </View>
+                {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
 
-                <ThemedInput
-                    label="Telefono (opzionale)"
-                    placeholder="+39 123 456 7890"
-                    value={formData.phone}
-                    onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                    icon={Phone}
-                    keyboardType="phone-pad"
-                    editable={!loading}
-                />
+                <View style={styles.inputWrapper}>
+                    <Phone size={20} color="#64748b" style={styles.inputIcon} />
+                    <TextInput
+                        mode="outlined"
+                        label="Telefono (opzionale)"
+                        value={formData.phone}
+                        onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                        keyboardType="phone-pad"
+                        style={styles.input}
+                        disabled={loading}
+                        theme={{
+                            colors: {
+                                primary: '#3b82f6',
+                                outline: '#e2e8f0',
+                            },
+                        }}
+                    />
+                </View>
 
                 {userType === 'mechanic' && (
-                    <ThemedInput
-                        label="Nome Officina"
-                        placeholder="Auto Service Rossi"
-                        value={formData.workshopName}
-                        onChangeText={(text) => {
-                            setFormData({ ...formData, workshopName: text });
-                            setErrors({ ...errors, workshopName: '' });
-                        }}
-                        error={errors.workshopName}
-                        icon={Wrench}
-                        autoCapitalize="words"
-                        editable={!loading}
-                    />
+                    <>
+                        <View style={styles.inputWrapper}>
+                            <Building size={20} color="#64748b" style={styles.inputIcon} />
+                            <TextInput
+                                mode="outlined"
+                                label="Nome Officina"
+                                value={formData.workshopName}
+                                onChangeText={(text) => {
+                                    setFormData({ ...formData, workshopName: text });
+                                    setErrors({ ...errors, workshopName: '' });
+                                }}
+                                error={!!errors.workshopName}
+                                autoCapitalize="words"
+                                style={styles.input}
+                                disabled={loading}
+                                theme={{
+                                    colors: {
+                                        primary: '#3b82f6',
+                                        outline: errors.workshopName ? '#ef4444' : '#e2e8f0',
+                                    },
+                                }}
+                            />
+                        </View>
+                        {errors.workshopName && (
+                            <Text style={styles.errorText}>{errors.workshopName}</Text>
+                        )}
+
+                        <View style={styles.inputWrapper}>
+                            <TextInput
+                                mode="outlined"
+                                label="Partita IVA (opzionale)"
+                                value={formData.vatNumber}
+                                onChangeText={(text) => setFormData({ ...formData, vatNumber: text })}
+                                style={styles.input}
+                                disabled={loading}
+                                theme={{
+                                    colors: {
+                                        primary: '#3b82f6',
+                                        outline: '#e2e8f0',
+                                    },
+                                }}
+                            />
+                        </View>
+
+                        <View style={styles.inputWrapper}>
+                            <TextInput
+                                mode="outlined"
+                                label="Indirizzo (opzionale)"
+                                value={formData.address}
+                                onChangeText={(text) => setFormData({ ...formData, address: text })}
+                                style={styles.input}
+                                disabled={loading}
+                                multiline
+                                numberOfLines={2}
+                                theme={{
+                                    colors: {
+                                        primary: '#3b82f6',
+                                        outline: '#e2e8f0',
+                                    },
+                                }}
+                            />
+                        </View>
+                    </>
                 )}
-            </GlassCard>
-        </Animated.View>
+            </View>
+        </View>
     );
 
-    const renderCurrentStep = () => {
-        switch (currentStep) {
-            case 0:
-                return renderUserTypeSelection();
-            case 1:
-                return renderCredentialsStep();
-            case 2:
-                return renderPersonalInfoStep();
-            default:
-                return null;
-        }
-    };
-
-    // ============================================
-    // RENDER
-    // ============================================
     return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <StatusBar
-                barStyle={isDark ? 'light-content' : 'dark-content'}
-                backgroundColor="transparent"
-                translucent
-            />
-
-            {/* Background Gradient */}
-            <LinearGradient
-                colors={
-                    isDark
-                        ? ['#000000', '#1A1A1A', '#2C2C2E']
-                        : ['#F8F9FA', '#E8EAED', '#FFFFFF']
-                }
-                style={StyleSheet.absoluteFillObject}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            />
-
+        <View style={styles.container}>
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
-                <ProgressBar
-                    progress={progress}
-                    color={colors.primary}
-                    style={styles.progressBar}
-                />
+                <ProgressBar progress={progress} color="#3b82f6" style={styles.progressBar} />
             </View>
 
             <KeyboardAvoidingView
@@ -532,62 +533,63 @@ const RegisterScreen = () => {
             >
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                 >
                     <View style={styles.content}>
                         {/* Header */}
                         <View style={styles.header}>
-                            <View
-                                style={[
-                                    styles.logoCircle,
-                                    { backgroundColor: `${colors.primary}15` },
-                                ]}
-                            >
-                                <UserPlus size={40} color={colors.primary} />
-                            </View>
-                            <Text style={[styles.mainTitle, { color: colors.onSurface }]}>
-                                Registrazione
+                            <Text style={styles.mainTitle}>Registrazione</Text>
+                            <Text style={styles.mainSubtitle}>
+                                Passo {currentStep + 1} di {totalSteps}
                             </Text>
                         </View>
 
-                        {/* Steps Content */}
-                        {renderCurrentStep()}
+                        {/* Step Content */}
+                        {renderStep()}
 
                         {/* Navigation Buttons */}
                         <View style={styles.buttonContainer}>
                             {currentStep > 0 && (
-                                <GradientButton
-                                    variant="outlined"
-                                    title="Indietro"
+                                <TouchableOpacity
+                                    style={[styles.button, styles.backButton]}
                                     onPress={handleBack}
-                                    icon={ArrowLeft}
                                     disabled={loading}
-                                    style={styles.backButton}
-                                />
+                                >
+                                    <ArrowLeft size={20} color="#64748b" />
+                                    <Text style={styles.backButtonText}>Indietro</Text>
+                                </TouchableOpacity>
                             )}
 
-                            <GradientButton
-                                title={currentStep === totalSteps - 1 ? 'Completa' : 'Avanti'}
+                            <TouchableOpacity
+                                style={[
+                                    styles.button,
+                                    styles.nextButton,
+                                    (currentStep === 0 && !userType) || loading
+                                        ? styles.buttonDisabled
+                                        : {},
+                                ]}
                                 onPress={handleNext}
-                                loading={loading}
-                                disabled={loading}
-                                icon={ArrowRight}
-                                style={styles.nextButton}
-                            />
+                                disabled={(currentStep === 0 && !userType) || loading}
+                            >
+                                <Text style={styles.nextButtonText}>
+                                    {loading
+                                        ? 'Attendi...'
+                                        : currentStep === totalSteps - 1
+                                            ? 'Completa'
+                                            : 'Avanti'}
+                                </Text>
+                                {!loading && <ArrowRight size={20} color="#fff" />}
+                            </TouchableOpacity>
                         </View>
 
                         {/* Login Link */}
                         {currentStep === 0 && (
                             <View style={styles.loginContainer}>
-                                <Text style={[styles.loginText, { color: colors.onSurfaceVariant }]}>
-                                    Hai già un account?{' '}
-                                </Text>
-                                <GradientButton
-                                    variant="text"
-                                    title="Accedi"
-                                    onPress={() => navigation.navigate('Login' as never)}
-                                />
+                                <Text style={styles.loginText}>Hai già un account? </Text>
+                                <TouchableOpacity onPress={() => navigation.navigate('Login' as never)}>
+                                    <Text style={styles.loginLink}>Accedi</Text>
+                                </TouchableOpacity>
                             </View>
                         )}
                     </View>
@@ -597,28 +599,28 @@ const RegisterScreen = () => {
     );
 };
 
-// ============================================
-// STYLES
-// ============================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#f8fafc',
     },
     progressContainer: {
-        paddingTop: Platform.OS === 'ios' ? 50 : 30,
         paddingHorizontal: 20,
+        paddingTop: Platform.OS === 'ios' ? 60 : 40,
+        paddingBottom: 16,
     },
     progressBar: {
         height: 4,
         borderRadius: 2,
+        backgroundColor: '#e2e8f0',
     },
     keyboardView: {
         flex: 1,
     },
     scrollContent: {
         flexGrow: 1,
-        paddingHorizontal: isWeb ? 40 : 24,
-        paddingVertical: 24,
+        paddingHorizontal: 24,
+        paddingBottom: 40,
     },
     content: {
         width: '100%',
@@ -631,46 +633,51 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 32,
     },
-    logoCircle: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 16,
-    },
     mainTitle: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: '700',
-        letterSpacing: -0.5,
+        color: '#0f172a',
+        marginBottom: 8,
+    },
+    mainSubtitle: {
+        fontSize: 16,
+        color: '#64748b',
     },
 
     // Steps
-    stepHeader: {
+    stepContainer: {
         marginBottom: 24,
     },
     stepTitle: {
         fontSize: 24,
         fontWeight: '700',
+        color: '#0f172a',
         marginBottom: 8,
-        letterSpacing: -0.3,
     },
     stepSubtitle: {
-        fontSize: 15,
-        lineHeight: 22,
-        letterSpacing: 0.15,
+        fontSize: 16,
+        color: '#64748b',
+        marginBottom: 24,
     },
 
-    // User Type Selection
+    // User Type Cards
     userTypeContainer: {
         gap: 16,
     },
     userTypeCard: {
-        position: 'relative',
+        backgroundColor: '#fff',
+        padding: 24,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
         alignItems: 'center',
-        paddingVertical: 32,
+        position: 'relative',
     },
-    userTypeIcon: {
+    userTypeCardSelected: {
+        borderColor: '#3b82f6',
+        backgroundColor: '#eff6ff',
+    },
+    iconCircle: {
         width: 64,
         height: 64,
         borderRadius: 32,
@@ -681,12 +688,13 @@ const styles = StyleSheet.create({
     userTypeTitle: {
         fontSize: 20,
         fontWeight: '700',
+        color: '#0f172a',
         marginBottom: 8,
     },
     userTypeDesc: {
         fontSize: 14,
+        color: '#64748b',
         textAlign: 'center',
-        lineHeight: 20,
     },
     selectedBadge: {
         position: 'absolute',
@@ -694,17 +702,66 @@ const styles = StyleSheet.create({
         right: 16,
     },
 
+    // Input Container
+    inputContainer: {
+        gap: 16,
+    },
+    inputWrapper: {
+        position: 'relative',
+    },
+    input: {
+        backgroundColor: '#fff',
+    },
+    inputIcon: {
+        position: 'absolute',
+        left: 12,
+        top: 20,
+        zIndex: 1,
+    },
+    errorText: {
+        color: '#ef4444',
+        fontSize: 14,
+        marginTop: -12,
+        marginLeft: 4,
+    },
+
     // Buttons
     buttonContainer: {
         flexDirection: 'row',
         gap: 12,
-        marginTop: 24,
+        marginTop: 32,
+    },
+    button: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        gap: 8,
     },
     backButton: {
         flex: 1,
+        backgroundColor: '#fff',
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
+    },
+    backButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#64748b',
     },
     nextButton: {
         flex: 2,
+        backgroundColor: '#3b82f6',
+    },
+    nextButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#fff',
+    },
+    buttonDisabled: {
+        opacity: 0.5,
     },
 
     // Login Link
@@ -716,6 +773,12 @@ const styles = StyleSheet.create({
     },
     loginText: {
         fontSize: 15,
+        color: '#64748b',
+    },
+    loginLink: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#3b82f6',
     },
 });
 
