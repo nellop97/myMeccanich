@@ -345,7 +345,7 @@ const OwnerHomeScreen = () => {
             <View style={styles.headerMobile}>
                 <TouchableOpacity
                     style={styles.headerButton}
-                    onPress={() => navigation.navigate('AddVehicle' as never)}
+                    onPress={() => navigation.navigate('AddCarScreen' as never)}
                 >
                     <Plus size={24} color="#1e293b" />
                 </TouchableOpacity>

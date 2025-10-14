@@ -181,6 +181,15 @@ export default function AppNavigator() {
 
                         {/* Schermate Auto */}
                         <Stack.Screen
+                            name="AddCarScreen"
+                            component={AddCarScreen}
+                            options={{
+                                title: 'Dettaglio Auto',
+                                headerShown: true,
+                                headerBackTitle: 'Indietro',
+                            }}
+                        />
+                        <Stack.Screen
                             name="CarDetail"
                             component={CarDetailScreen}
                             options={{
