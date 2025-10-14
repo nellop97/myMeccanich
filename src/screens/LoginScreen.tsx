@@ -1,4 +1,4 @@
-// src/screens/LoginScreen.tsx - VERSIONE CON REDIRECT CORRETTO
+// src/screens/LoginScreen.tsx - VERSIONE COMPLETA CON TOAST POPUP
 import React, { useState } from 'react';
 import {
     View,
@@ -7,7 +7,6 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
-    Alert,
     ActivityIndicator,
 } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
@@ -22,6 +21,9 @@ import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 // Store
 import { useStore } from '../store';
 
+// Toast Component
+import Toast from '../components/Toast';
+
 const LoginScreen = () => {
     const navigation = useNavigation();
     const { setUser } = useStore();
@@ -32,6 +34,11 @@ const LoginScreen = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+    // 🆕 STATI PER TOAST POPUP
+    const [toastVisible, setToastVisible] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'error' | 'success'>('error');
 
     // ============================================================
     // VALIDAZIONE
@@ -55,8 +62,15 @@ const LoginScreen = () => {
         return Object.keys(newErrors).length === 0;
     };
 
+    // 🆕 FUNZIONE PER MOSTRARE TOAST
+    const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+        setToastMessage(message);
+        setToastType(type);
+        setToastVisible(true);
+    };
+
     // ============================================================
-    // LOGIN CON REDIRECT CORRETTO
+    // LOGIN CON GESTIONE ERRORI VIA TOAST
     // ============================================================
     const handleLogin = async () => {
         if (!validateForm()) return;
@@ -107,8 +121,7 @@ const LoginScreen = () => {
                 role: userData.role,
             });
 
-            // 5. ⚡ AGGIORNA STORE IMMEDIATAMENTE CON TUTTI I DATI
-            // Questo previene il flash della homepage sbagliata
+            // 5. AGGIORNA STORE IMMEDIATAMENTE
             const storeData = {
                 id: userId,
                 uid: userId,
@@ -136,48 +149,42 @@ const LoginScreen = () => {
                     verified: userData.verified ?? false,
                 }),
 
-                // Altri campi
                 address: userData.address || undefined,
                 photoURL: userData.photoURL || undefined,
             };
 
             setUser(storeData);
-
-            console.log('✅ Store aggiornato con successo:', {
-                isMechanic: storeData.isMechanic,
-                userType: storeData.userType,
-                hasAllFields: true,
-            });
-
-            // 6. ✨ Feedback successo (opzionale - puoi rimuoverlo per un redirect più veloce)
-            // Alert.alert('Successo!', `Bentornato ${userData.firstName}!`);
-
-            // 7. Il redirect sarà gestito automaticamente da AppNavigator
-            // grazie all'aggiornamento dello store con isLoggedIn: true
             console.log('✅ Login completato, redirect automatico...');
+
+            // 🆕 MOSTRA TOAST DI SUCCESSO (opzionale)
+            // showToast(`Bentornato ${userData.firstName}!`, 'success');
 
         } catch (error: any) {
             console.error('❌ Errore login:', error);
 
-            let errorMessage = 'Errore durante il login';
+            // 🆕 GESTIONE ERRORI CON TOAST INVECE DI ALERT
+            let errorMessage = 'Errore durante il login. Riprova.';
 
             if (error.code === 'auth/user-not-found') {
-                errorMessage = 'Utente non trovato';
+                errorMessage = 'Utente non trovato. Verifica l\'email o registrati.';
             } else if (error.code === 'auth/wrong-password') {
-                errorMessage = 'Password errata';
+                errorMessage = 'Password errata. Riprova o reimposta la password.';
             } else if (error.code === 'auth/invalid-email') {
-                errorMessage = 'Email non valida';
+                errorMessage = 'Email non valida.';
             } else if (error.code === 'auth/user-disabled') {
-                errorMessage = 'Account disabilitato';
+                errorMessage = 'Account disabilitato. Contatta il supporto.';
             } else if (error.code === 'auth/network-request-failed') {
-                errorMessage = 'Errore di connessione';
+                errorMessage = 'Errore di connessione. Verifica la tua rete.';
             } else if (error.code === 'auth/too-many-requests') {
-                errorMessage = 'Troppi tentativi. Riprova più tardi';
+                errorMessage = 'Troppi tentativi. Riprova tra qualche minuto.';
+            } else if (error.code === 'auth/invalid-credential') {
+                errorMessage = 'Credenziali non valide. Verifica email e password.';
             } else if (error.message) {
                 errorMessage = error.message;
             }
 
-            Alert.alert('Errore', errorMessage);
+            // 🆕 MOSTRA TOAST ERRORE
+            showToast(errorMessage, 'error');
         } finally {
             setLoading(false);
         }
@@ -192,6 +199,16 @@ const LoginScreen = () => {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.container}
         >
+            {/* 🆕 TOAST POPUP (si mostra sopra tutto) */}
+            <Toast
+                visible={toastVisible}
+                message={toastMessage}
+                type={toastType}
+                onHide={() => setToastVisible(false)}
+                position="top"
+                duration={4000}
+            />
+
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
@@ -281,7 +298,7 @@ const LoginScreen = () => {
                     <TouchableOpacity
                         style={styles.forgotPassword}
                         onPress={() => {
-                            Alert.alert('Info', 'Funzionalità in arrivo');
+                            navigation.navigate('ForgotPassword' as never);
                         }}
                         disabled={loading}
                     >
@@ -317,7 +334,8 @@ const LoginScreen = () => {
                         disabled={loading}
                     >
                         <Text style={styles.registerButtonText}>
-                            Non hai un account? <Text style={styles.registerButtonTextBold}>Registrati</Text>
+                            Non hai un account?{' '}
+                            <Text style={styles.registerButtonTextBold}>Registrati</Text>
                         </Text>
                     </TouchableOpacity>
                 </View>

@@ -1,4 +1,4 @@
-// src/screens/RegisterScreen.tsx - VERSIONE CORRETTA
+// src/screens/RegisterScreen.tsx - VERSIONE RESPONSIVE WEB/MOBILE
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -9,8 +9,10 @@ import {
     KeyboardAvoidingView,
     Alert,
     Animated,
+    Dimensions,
+    useWindowDimensions,
 } from 'react-native';
-import { Text, ProgressBar, TextInput } from 'react-native-paper';
+import {Text, ProgressBar, TextInput, ActivityIndicator} from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import {
     Mail,
@@ -55,6 +57,12 @@ interface FormData {
 const RegisterScreen = () => {
     const navigation = useNavigation();
     const { setUser } = useStore();
+    const { width } = useWindowDimensions();
+
+    // Determina se è desktop/tablet (breakpoint)
+    const isDesktop = width >= 768;
+    const isTablet = width >= 600 && width < 768;
+    const isMobile = width < 600;
 
     // Stati
     const [currentStep, setCurrentStep] = useState(0);
@@ -131,10 +139,10 @@ const RegisterScreen = () => {
                     newErrors.workshopName = 'Nome officina richiesto';
                 }
                 if (!formData.phone?.trim()) {
-                    newErrors.phone = 'Numero di telefono richiesto per meccanici';
+                    newErrors.phone = 'Numero di telefono richiesto';
                 }
                 if (!formData.address?.trim()) {
-                    newErrors.address = 'Indirizzo richiesto per meccanici';
+                    newErrors.address = 'Indirizzo richiesto';
                 }
             }
         }
@@ -164,9 +172,7 @@ const RegisterScreen = () => {
         }
     };
 
-    // ============================================================
-    // REGISTRAZIONE CORRETTA CON TUTTI I CAMPI NECESSARI
-    // ============================================================
+    // Registrazione
     const handleRegister = async () => {
         if (!validateStep()) return;
 
@@ -185,70 +191,44 @@ const RegisterScreen = () => {
             const userId = userCredential.user.uid;
             console.log('✅ Utente creato su Firebase Auth:', userId);
 
-            // 2. Determina il tipo di utente per Firestore
+            // 2. Determina tipo per Firestore
             const firestoreUserType = userType === 'owner' ? 'user' : 'mechanic';
 
-            // 3. Prepara i dati utente base (comuni a tutti)
-            const baseUserData = {
+            // 3. Prepara dati utente
+            const userData: any = {
                 uid: userId,
                 email: formData.email.trim(),
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
                 name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-                phone: formData.phone.trim() || '',
-                role: userType,
                 userType: firestoreUserType,
-                loginProvider: 'email',
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                isActive: true,
-                profileComplete: true,
+                role: userType,
+                phone: formData.phone?.trim() || null,
                 emailVerified: false,
+                loginProvider: 'email',
+                profileComplete: true,
+                createdAt: serverTimestamp(),
+                lastLoginAt: serverTimestamp(),
             };
 
-            // 4. Aggiungi campi specifici per il meccanico
-            let userData;
-
+            // 4. Aggiungi campi specifici per meccanici
             if (userType === 'mechanic') {
-                // ✅ TUTTI I CAMPI NECESSARI PER IL MECCANICO
-                userData = {
-                    ...baseUserData,
-                    workshopName: formData.workshopName?.trim() || '',
-                    vatNumber: formData.vatNumber?.trim() || '',
-                    address: formData.address?.trim() || '',
-                    mechanicLicense: '', // Campo vuoto ma presente
-                    rating: 0, // Rating iniziale
-                    reviewsCount: 0, // Numero recensioni iniziale
-                    verified: false, // Account non verificato inizialmente
-                };
-
-                console.log('✅ Dati meccanico preparati:', {
-                    workshopName: userData.workshopName,
-                    vatNumber: userData.vatNumber,
-                    address: userData.address,
-                    rating: userData.rating,
-                    reviewsCount: userData.reviewsCount,
-                    verified: userData.verified,
-                });
-            } else {
-                // Dati per proprietario auto
-                userData = {
-                    ...baseUserData,
-                    workshopName: null,
-                    vatNumber: null,
-                    address: formData.address?.trim() || null,
-                };
+                userData.workshopName = formData.workshopName?.trim() || null;
+                userData.address = formData.address?.trim() || null;
+                userData.vatNumber = formData.vatNumber?.trim() || null;
+                userData.rating = 0;
+                userData.reviewsCount = 0;
+                userData.verified = false;
             }
 
             // 5. Salva su Firestore
             await setDoc(doc(db, 'users', userId), userData);
-            console.log('✅ Dati utente salvati su Firestore');
+            console.log('✅ Dati salvati su Firestore');
 
-            // 6. Log analytics
-            await logRegistration(firestoreUserType);
-            console.log('✅ Analytics registrato');
+            // 6. Analytics
+            logRegistration(userType || 'owner');
 
-            // 7. Aggiorna lo store Zustand con TUTTI i dati necessari
+            // 7. Aggiorna Store
             setUser({
                 id: userId,
                 uid: userId,
@@ -259,41 +239,25 @@ const RegisterScreen = () => {
                 isLoggedIn: true,
                 isMechanic: userType === 'mechanic',
                 userType: firestoreUserType,
+                role: userType,
                 phoneNumber: userData.phone || undefined,
                 emailVerified: false,
-                loginProvider: 'email',
-                // Dati specifici meccanico
+                profileComplete: true,
                 ...(userType === 'mechanic' && {
-                    workshopName: userData.workshopName || undefined,
-                    workshopAddress: userData.address || undefined,
-                    vatNumber: userData.vatNumber || undefined,
-                    mechanicLicense: userData.mechanicLicense || undefined,
-                    rating: userData.rating,
-                    reviewsCount: userData.reviewsCount,
-                    verified: userData.verified,
+                    workshopName: userData.workshopName,
+                    workshopAddress: userData.address,
+                    vatNumber: userData.vatNumber,
+                    rating: 0,
+                    reviewsCount: 0,
+                    verified: false,
                 }),
             });
 
-            console.log('✅ Store aggiornato con:', {
-                isMechanic: userType === 'mechanic',
-                userType: firestoreUserType,
-                hasAllFields: userType === 'mechanic' ?
-                    'rating' in userData && 'verified' in userData : true,
-            });
-
-            // 8. Mostra successo
+            // 8. Successo
             Alert.alert(
                 'Successo! 🎉',
                 `Benvenuto ${formData.firstName}! Il tuo account è stato creato.`,
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            // La navigazione sarà gestita automaticamente da AppNavigator
-                            console.log('✅ Registrazione completata, redirect automatico...');
-                        },
-                    },
-                ]
+                [{ text: 'OK' }]
             );
         } catch (error: any) {
             console.error('❌ Errore registrazione:', error);
@@ -321,53 +285,73 @@ const RegisterScreen = () => {
     // ============================================================
 
     const renderUserTypeSelection = () => (
-        <View style={styles.stepContainer}>
+        <View style={[styles.stepContainer, isDesktop && styles.stepContainerDesktop]}>
             <Text style={styles.stepTitle}>Scegli il tuo profilo</Text>
             <Text style={styles.stepSubtitle}>
-                Seleziona come vuoi utilizzare l'app
+                Seleziona il tipo di account che vuoi creare
             </Text>
 
-            <View style={styles.userTypeContainer}>
-                {/* Proprietario auto */}
+            <View style={[styles.userTypeContainer, isDesktop && styles.userTypeContainerDesktop]}>
+                {/* Owner Card */}
                 <TouchableOpacity
                     style={[
                         styles.userTypeCard,
-                        userType === 'owner' && styles.userTypeCardSelected,
+                        userType === 'owner' && styles.userTypeCardActive,
+                        isDesktop && styles.userTypeCardDesktop,
                     ]}
                     onPress={() => setUserType('owner')}
+                    disabled={loading}
                 >
-                    <View style={[styles.iconCircle, { backgroundColor: '#3b82f620' }]}>
-                        <Car size={32} color="#3b82f6" />
+                    <View style={[
+                        styles.userTypeIconContainer,
+                        userType === 'owner' && styles.userTypeIconContainerActive
+                    ]}>
+                        <Car size={isDesktop ? 36 : 32} color={userType === 'owner' ? '#3b82f6' : '#64748b'} />
                     </View>
-                    <Text style={styles.userTypeTitle}>Proprietario Auto</Text>
-                    <Text style={styles.userTypeDesc}>
-                        Gestisci le tue auto e le manutenzioni
+                    <Text style={[
+                        styles.userTypeTitle,
+                        userType === 'owner' && styles.userTypeTitleActive
+                    ]}>
+                        Proprietario Auto
+                    </Text>
+                    <Text style={styles.userTypeDescription}>
+                        Gestisci le tue automobili, manutenzioni e documenti
                     </Text>
                     {userType === 'owner' && (
-                        <View style={styles.selectedBadge}>
-                            <CheckCircle size={20} color="#10b981" />
+                        <View style={styles.userTypeCheckmark}>
+                            <CheckCircle size={24} color="#3b82f6" />
                         </View>
                     )}
                 </TouchableOpacity>
 
-                {/* Meccanico */}
+                {/* Mechanic Card */}
                 <TouchableOpacity
                     style={[
                         styles.userTypeCard,
-                        userType === 'mechanic' && styles.userTypeCardSelected,
+                        userType === 'mechanic' && styles.userTypeCardActive,
+                        isDesktop && styles.userTypeCardDesktop,
                     ]}
                     onPress={() => setUserType('mechanic')}
+                    disabled={loading}
                 >
-                    <View style={[styles.iconCircle, { backgroundColor: '#f59e0b20' }]}>
-                        <Wrench size={32} color="#f59e0b" />
+                    <View style={[
+                        styles.userTypeIconContainer,
+                        userType === 'mechanic' && styles.userTypeIconContainerActive
+                    ]}>
+                        <Wrench size={isDesktop ? 36 : 32} color={userType === 'mechanic' ? '#3b82f6' : '#64748b'} />
                     </View>
-                    <Text style={styles.userTypeTitle}>Meccanico/Officina</Text>
-                    <Text style={styles.userTypeDesc}>
-                        Gestisci clienti, interventi e fatturazione
+                    <Text style={[
+                        styles.userTypeTitle,
+                        userType === 'mechanic' && styles.userTypeTitleActive
+                    ]}>
+                        Meccanico / Officina
+                    </Text>
+                    <Text style={styles.userTypeDescription}>
+                        Gestisci clienti, riparazioni e fatturazione
                     </Text>
                     {userType === 'mechanic' && (
-                        <View style={styles.selectedBadge}>
-                            <CheckCircle size={20} color="#10b981" />
+                        <View style={styles.userTypeCheckmark}>
+                            <CheckCircle size={24} color="#3b82f6" />
                         </View>
                     )}
                 </TouchableOpacity>
@@ -376,13 +360,14 @@ const RegisterScreen = () => {
     );
 
     const renderCredentialsStep = () => (
-        <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>Credenziali</Text>
+        <View style={[styles.stepContainer, isDesktop && styles.stepContainerDesktop]}>
+            <Text style={styles.stepTitle}>Crea il tuo account</Text>
             <Text style={styles.stepSubtitle}>
-                Inserisci email e password per il tuo account
+                Inserisci email e password per iniziare
             </Text>
 
-            <View style={styles.inputContainer}>
+            <View style={[styles.formContainer, isDesktop && styles.formContainerDesktop]}>
+                {/* Email */}
                 <View style={styles.inputWrapper}>
                     <Mail size={20} color="#64748b" style={styles.inputIcon} />
                     <TextInput
@@ -396,7 +381,6 @@ const RegisterScreen = () => {
                         error={!!errors.email}
                         keyboardType="email-address"
                         autoCapitalize="none"
-                        autoComplete="email"
                         style={styles.input}
                         disabled={loading}
                         theme={{
@@ -409,6 +393,7 @@ const RegisterScreen = () => {
                 </View>
                 {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
+                {/* Password */}
                 <View style={styles.inputWrapper}>
                     <Lock size={20} color="#64748b" style={styles.inputIcon} />
                     <TextInput
@@ -434,6 +419,7 @@ const RegisterScreen = () => {
                 </View>
                 {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
+                {/* Confirm Password */}
                 <View style={styles.inputWrapper}>
                     <Lock size={20} color="#64748b" style={styles.inputIcon} />
                     <TextInput
@@ -465,98 +451,99 @@ const RegisterScreen = () => {
     );
 
     const renderPersonalInfoStep = () => (
-        <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>Dati {userType === 'mechanic' ? 'Officina' : 'Personali'}</Text>
+        <View style={[styles.stepContainer, isDesktop && styles.stepContainerDesktop]}>
+            <Text style={styles.stepTitle}>
+                Dati {userType === 'mechanic' ? 'Officina' : 'Personali'}
+            </Text>
             <Text style={styles.stepSubtitle}>
                 {userType === 'mechanic'
                     ? 'Completa il profilo della tua officina'
-                    : 'Completa il tuo profilo'}
+                    : 'Completa il tuo profilo personale'}
             </Text>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={styles.inputContainer}>
-                    {/* Nome */}
-                    <View style={styles.inputWrapper}>
-                        <User size={20} color="#64748b" style={styles.inputIcon} />
-                        <TextInput
-                            mode="outlined"
-                            label="Nome"
-                            value={formData.firstName}
-                            onChangeText={(text) => {
-                                setFormData({ ...formData, firstName: text });
-                                setErrors({ ...errors, firstName: '' });
-                            }}
-                            error={!!errors.firstName}
-                            style={styles.input}
-                            disabled={loading}
-                            theme={{
-                                colors: {
-                                    primary: '#3b82f6',
-                                    outline: errors.firstName ? '#ef4444' : '#e2e8f0',
-                                },
-                            }}
-                        />
-                    </View>
-                    {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+            <ScrollView
+                style={styles.formScrollContainer}
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={[styles.formContainer, isDesktop && styles.formContainerDesktop]}>
+                    {/* Nome e Cognome - Side by side on desktop */}
+                    <View style={[isDesktop && styles.rowInputs]}>
+                        <View style={[styles.inputWrapper, isDesktop && styles.halfWidth]}>
+                            <User size={20} color="#64748b" style={styles.inputIcon} />
+                            <TextInput
+                                mode="outlined"
+                                label="Nome"
+                                value={formData.firstName}
+                                onChangeText={(text) => {
+                                    setFormData({ ...formData, firstName: text });
+                                    setErrors({ ...errors, firstName: '' });
+                                }}
+                                error={!!errors.firstName}
+                                style={styles.input}
+                                disabled={loading}
+                                theme={{
+                                    colors: {
+                                        primary: '#3b82f6',
+                                        outline: errors.firstName ? '#ef4444' : '#e2e8f0',
+                                    },
+                                }}
+                            />
+                        </View>
+                        {errors.firstName && !isDesktop && (
+                            <Text style={styles.errorText}>{errors.firstName}</Text>
+                        )}
 
-                    {/* Cognome */}
-                    <View style={styles.inputWrapper}>
-                        <User size={20} color="#64748b" style={styles.inputIcon} />
-                        <TextInput
-                            mode="outlined"
-                            label="Cognome"
-                            value={formData.lastName}
-                            onChangeText={(text) => {
-                                setFormData({ ...formData, lastName: text });
-                                setErrors({ ...errors, lastName: '' });
-                            }}
-                            error={!!errors.lastName}
-                            style={styles.input}
-                            disabled={loading}
-                            theme={{
-                                colors: {
-                                    primary: '#3b82f6',
-                                    outline: errors.lastName ? '#ef4444' : '#e2e8f0',
-                                },
-                            }}
-                        />
+                        <View style={[styles.inputWrapper, isDesktop && styles.halfWidth]}>
+                            <User size={20} color="#64748b" style={styles.inputIcon} />
+                            <TextInput
+                                mode="outlined"
+                                label="Cognome"
+                                value={formData.lastName}
+                                onChangeText={(text) => {
+                                    setFormData({ ...formData, lastName: text });
+                                    setErrors({ ...errors, lastName: '' });
+                                }}
+                                error={!!errors.lastName}
+                                style={styles.input}
+                                disabled={loading}
+                                theme={{
+                                    colors: {
+                                        primary: '#3b82f6',
+                                        outline: errors.lastName ? '#ef4444' : '#e2e8f0',
+                                    },
+                                }}
+                            />
+                        </View>
+                        {errors.lastName && !isDesktop && (
+                            <Text style={styles.errorText}>{errors.lastName}</Text>
+                        )}
                     </View>
-                    {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
 
-                    {/* Telefono */}
-                    <View style={styles.inputWrapper}>
-                        <Phone size={20} color="#64748b" style={styles.inputIcon} />
-                        <TextInput
-                            mode="outlined"
-                            label={userType === 'mechanic' ? 'Telefono *' : 'Telefono (opzionale)'}
-                            value={formData.phone}
-                            onChangeText={(text) => {
-                                setFormData({ ...formData, phone: text });
-                                setErrors({ ...errors, phone: '' });
-                            }}
-                            error={!!errors.phone}
-                            keyboardType="phone-pad"
-                            style={styles.input}
-                            disabled={loading}
-                            theme={{
-                                colors: {
-                                    primary: '#3b82f6',
-                                    outline: errors.phone ? '#ef4444' : '#e2e8f0',
-                                },
-                            }}
-                        />
-                    </View>
-                    {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+                    {/* Errori desktop */}
+                    {isDesktop && (
+                        <View style={styles.rowInputs}>
+                            {errors.firstName && (
+                                <Text style={[styles.errorText, styles.halfWidth]}>
+                                    {errors.firstName}
+                                </Text>
+                            )}
+                            {errors.lastName && (
+                                <Text style={[styles.errorText, styles.halfWidth]}>
+                                    {errors.lastName}
+                                </Text>
+                            )}
+                        </View>
+                    )}
 
                     {/* Campi specifici per meccanico */}
                     {userType === 'mechanic' && (
                         <>
-                            {/* Nome Officina */}
+                            {/* Workshop Name */}
                             <View style={styles.inputWrapper}>
                                 <Building size={20} color="#64748b" style={styles.inputIcon} />
                                 <TextInput
                                     mode="outlined"
-                                    label="Nome Officina *"
+                                    label="Nome Officina"
                                     value={formData.workshopName}
                                     onChangeText={(text) => {
                                         setFormData({ ...formData, workshopName: text });
@@ -577,12 +564,37 @@ const RegisterScreen = () => {
                                 <Text style={styles.errorText}>{errors.workshopName}</Text>
                             )}
 
-                            {/* Indirizzo */}
+                            {/* Phone */}
+                            <View style={styles.inputWrapper}>
+                                <Phone size={20} color="#64748b" style={styles.inputIcon} />
+                                <TextInput
+                                    mode="outlined"
+                                    label="Telefono"
+                                    value={formData.phone}
+                                    onChangeText={(text) => {
+                                        setFormData({ ...formData, phone: text });
+                                        setErrors({ ...errors, phone: '' });
+                                    }}
+                                    error={!!errors.phone}
+                                    keyboardType="phone-pad"
+                                    style={styles.input}
+                                    disabled={loading}
+                                    theme={{
+                                        colors: {
+                                            primary: '#3b82f6',
+                                            outline: errors.phone ? '#ef4444' : '#e2e8f0',
+                                        },
+                                    }}
+                                />
+                            </View>
+                            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+
+                            {/* Address */}
                             <View style={styles.inputWrapper}>
                                 <MapPin size={20} color="#64748b" style={styles.inputIcon} />
                                 <TextInput
                                     mode="outlined"
-                                    label="Indirizzo Officina *"
+                                    label="Indirizzo"
                                     value={formData.address}
                                     onChangeText={(text) => {
                                         setFormData({ ...formData, address: text });
@@ -599,11 +611,9 @@ const RegisterScreen = () => {
                                     }}
                                 />
                             </View>
-                            {errors.address && (
-                                <Text style={styles.errorText}>{errors.address}</Text>
-                            )}
+                            {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
 
-                            {/* Partita IVA */}
+                            {/* VAT Number */}
                             <View style={styles.inputWrapper}>
                                 <FileText size={20} color="#64748b" style={styles.inputIcon} />
                                 <TextInput
@@ -612,7 +622,6 @@ const RegisterScreen = () => {
                                     value={formData.vatNumber}
                                     onChangeText={(text) => {
                                         setFormData({ ...formData, vatNumber: text });
-                                        setErrors({ ...errors, vatNumber: '' });
                                     }}
                                     keyboardType="numeric"
                                     style={styles.input}
@@ -657,54 +666,77 @@ const RegisterScreen = () => {
             style={styles.container}
         >
             <View style={styles.container}>
-                {/* Header con progress */}
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Crea Account</Text>
-                    <ProgressBar
-                        progress={progress}
-                        color="#3b82f6"
-                        style={styles.progressBar}
-                    />
-                    <Text style={styles.stepIndicator}>
-                        Step {currentStep + 1} di {totalSteps}
-                    </Text>
+                {/* Header con Progress Bar */}
+                <View style={[styles.header, isDesktop && styles.headerDesktop]}>
+                    <View style={[styles.headerContent, isDesktop && styles.headerContentDesktop]}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={handleBack}
+                            disabled={loading}
+                        >
+                            <ArrowLeft size={20} color="#64748b" />
+                        </TouchableOpacity>
+                        <View style={styles.progressContainer}>
+                            <Text style={styles.progressText}>
+                                Passo {currentStep + 1} di {totalSteps}
+                            </Text>
+                            <ProgressBar
+                                progress={progress}
+                                color="#3b82f6"
+                                style={styles.progressBar}
+                            />
+                        </View>
+                        <View style={styles.backButton} />
+                    </View>
                 </View>
 
-                {/* Contenuto step */}
+                {/* Content */}
                 <ScrollView
-                    style={styles.scrollView}
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={[
+                        styles.scrollContent,
+                        isDesktop && styles.scrollContentDesktop
+                    ]}
                     showsVerticalScrollIndicator={false}
                 >
                     {renderStep()}
                 </ScrollView>
 
-                {/* Footer con pulsanti */}
-                <View style={styles.footer}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={handleBack}
-                        disabled={loading}
-                    >
-                        <ArrowLeft size={20} color="#64748b" />
-                        <Text style={styles.backButtonText}>
-                            {currentStep === 0 ? 'Login' : 'Indietro'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[
-                            styles.nextButton,
-                            (loading || (currentStep === 0 && !userType)) && styles.nextButtonDisabled,
-                        ]}
-                        onPress={handleNext}
-                        disabled={loading || (currentStep === 0 && !userType)}
-                    >
-                        <Text style={styles.nextButtonText}>
-                            {loading ? 'Caricamento...' : currentStep === totalSteps - 1 ? 'Registrati' : 'Avanti'}
-                        </Text>
-                        {!loading && <ArrowRight size={20} color="#fff" />}
-                    </TouchableOpacity>
+                {/* Footer con bottoni */}
+                <View style={[styles.footer, isDesktop && styles.footerDesktop]}>
+                    <View style={[styles.footerContent, isDesktop && styles.footerContentDesktop]}>
+                        {currentStep > 0 && (
+                            <TouchableOpacity
+                                style={[styles.backButtonFooter, isDesktop && styles.backButtonFooterDesktop]}
+                                onPress={handleBack}
+                                disabled={loading}
+                            >
+                                <ArrowLeft size={20} color="#64748b" />
+                                <Text style={styles.backButtonText}>Indietro</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={[
+                                styles.nextButton,
+                                loading && styles.nextButtonDisabled,
+                                currentStep === 0 && !userType && styles.nextButtonDisabled,
+                                isDesktop && styles.nextButtonDesktop,
+                                currentStep === 0 && styles.nextButtonFull,
+                            ]}
+                            onPress={handleNext}
+                            disabled={loading || (currentStep === 0 && !userType)}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Text style={styles.nextButtonText}>
+                                        {currentStep === totalSteps - 1 ? 'Completa' : 'Continua'}
+                                    </Text>
+                                    <ArrowRight size={20} color="#fff" />
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
         </KeyboardAvoidingView>
@@ -721,52 +753,82 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8fafc',
     },
     header: {
-        padding: 24,
-        paddingTop: Platform.OS === 'ios' ? 60 : 40,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#e2e8f0',
+        paddingTop: Platform.OS === 'ios' ? 60 : 20,
+        paddingBottom: 16,
     },
-    headerTitle: {
+    headerDesktop: {
+        paddingTop: 20,
+    },
+    headerContent: {
+        paddingHorizontal: 24,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    headerContentDesktop: {
+        maxWidth: 900,
+        width: '100%',
+        alignSelf: 'center',
+    },
+    backButton: {
+        padding: 8,
+        width: 40,
+    },
+    progressContainer: {
+        flex: 1,
+        paddingHorizontal: 16,
+    },
+    progressText: {
+        fontSize: 12,
+        color: '#64748b',
+        marginBottom: 8,
+        textAlign: 'center',
+        fontWeight: '600',
+    },
+    progressBar: {
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#e2e8f0',
+    },
+    scrollContent: {
+        flexGrow: 1,
+        padding: 24,
+    },
+    scrollContentDesktop: {
+        paddingVertical: 48,
+        paddingHorizontal: 32,
+    },
+    stepContainer: {
+        width: '100%',
+    },
+    stepContainerDesktop: {
+        maxWidth: 800,
+        alignSelf: 'center',
+        width: '100%',
+    },
+    stepTitle: {
         fontSize: 28,
         fontWeight: 'bold',
         color: '#1e293b',
-        marginBottom: 16,
-    },
-    progressBar: {
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: '#e2e8f0',
-    },
-    stepIndicator: {
-        fontSize: 14,
-        color: '#64748b',
-        marginTop: 8,
+        marginBottom: 8,
         textAlign: 'center',
     },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 24,
-    },
-    stepContainer: {
-        flex: 1,
-    },
-    stepTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#1e293b',
-        marginBottom: 8,
-    },
     stepSubtitle: {
-        fontSize: 16,
+        fontSize: 15,
         color: '#64748b',
         marginBottom: 32,
-        lineHeight: 24,
+        textAlign: 'center',
+        lineHeight: 22,
     },
     userTypeContainer: {
         gap: 16,
+    },
+    userTypeContainerDesktop: {
+        flexDirection: 'row',
+        gap: 24,
     },
     userTypeCard: {
         backgroundColor: '#fff',
@@ -776,42 +838,65 @@ const styles = StyleSheet.create({
         borderColor: '#e2e8f0',
         position: 'relative',
     },
-    userTypeCardSelected: {
+    userTypeCardDesktop: {
+        flex: 1,
+        minHeight: 280,
+    },
+    userTypeCardActive: {
         borderColor: '#3b82f6',
         backgroundColor: '#eff6ff',
     },
-    iconCircle: {
+    userTypeIconContainer: {
         width: 64,
         height: 64,
         borderRadius: 32,
+        backgroundColor: '#f1f5f9',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 16,
     },
+    userTypeIconContainerActive: {
+        backgroundColor: '#dbeafe',
+    },
     userTypeTitle: {
-        fontSize: 20,
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: 'bold',
         color: '#1e293b',
         marginBottom: 8,
     },
-    userTypeDesc: {
+    userTypeTitleActive: {
+        color: '#3b82f6',
+    },
+    userTypeDescription: {
         fontSize: 14,
         color: '#64748b',
         lineHeight: 20,
     },
-    selectedBadge: {
+    userTypeCheckmark: {
         position: 'absolute',
         top: 16,
         right: 16,
-        backgroundColor: '#d1fae5',
-        borderRadius: 20,
-        padding: 4,
     },
-    inputContainer: {
+    formContainer: {
+        width: '100%',
+    },
+    formContainerDesktop: {
+        maxWidth: 600,
+        alignSelf: 'center',
+    },
+    formScrollContainer: {
+        maxHeight: 400,
+    },
+    rowInputs: {
+        flexDirection: 'row',
         gap: 16,
+    },
+    halfWidth: {
+        flex: 1,
     },
     inputWrapper: {
         position: 'relative',
+        marginBottom: 16,
     },
     inputIcon: {
         position: 'absolute',
@@ -826,27 +911,41 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: 12,
         color: '#ef4444',
-        marginTop: -8,
+        marginTop: -12,
+        marginBottom: 8,
         marginLeft: 16,
     },
     footer: {
-        flexDirection: 'row',
-        padding: 24,
-        gap: 12,
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#e2e8f0',
+        paddingVertical: 16,
+        paddingHorizontal: 24,
     },
-    backButton: {
+    footerDesktop: {
+        paddingVertical: 24,
+    },
+    footerContent: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    footerContentDesktop: {
+        maxWidth: 800,
+        width: '100%',
+        alignSelf: 'center',
+    },
+    backButtonFooter: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 16,
-        paddingHorizontal: 24,
         borderRadius: 12,
         backgroundColor: '#f1f5f9',
         gap: 8,
+    },
+    backButtonFooterDesktop: {
+        maxWidth: 200,
     },
     backButtonText: {
         fontSize: 16,
@@ -859,10 +958,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 16,
-        paddingHorizontal: 24,
         borderRadius: 12,
         backgroundColor: '#3b82f6',
         gap: 8,
+    },
+    nextButtonDesktop: {
+        flex: 1,
+    },
+    nextButtonFull: {
+        flex: 1,
     },
     nextButtonDisabled: {
         backgroundColor: '#94a3b8',
