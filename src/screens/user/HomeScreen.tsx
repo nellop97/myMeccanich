@@ -1,4 +1,4 @@
-// src/screens/HomeScreen.tsx - CON FIREBASE REALE + RESPONSIVE WEB/MOBILE
+// src/screens/user/OwnerHomeScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -13,6 +13,7 @@ import {
     RefreshControl,
     ActivityIndicator,
     useWindowDimensions,
+    Pressable,
 } from 'react-native';
 import {
     Plus,
@@ -20,14 +21,18 @@ import {
     Wrench,
     Calendar,
     CreditCard,
-    Fuel,
-    Droplet,
-    Gauge,
     Car,
+    Clock,
+    CheckCircle,
+    AlertCircle,
+    DollarSign,
+    Settings,
+    ChevronRight,
+    Activity,
+    Gauge,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useStore } from '../../store';
-// Firebase
+import { useAuth } from '../../hooks/useAuth';
 import {
     collection,
     query,
@@ -36,11 +41,44 @@ import {
     limit,
     getDocs,
     onSnapshot,
+    Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+// Date utilities - Nessuna libreria esterna richiesta
 
 // ============================================================
-// INTERFACES
+// DATE UTILITIES (No external libraries)
+// ============================================================
+const formatDate = (date: Date, format: 'short' | 'long' | 'full' = 'long'): string => {
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+        return 'Data non valida';
+    }
+
+    const options: Intl.DateTimeFormatOptions =
+        format === 'short'
+            ? { day: '2-digit', month: 'short', year: 'numeric' }
+            : format === 'long'
+                ? { day: 'numeric', month: 'long', year: 'numeric' }
+                : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+
+    return new Intl.DateTimeFormat('it-IT', options).format(date);
+};
+
+const addDays = (date: Date, days: number): Date => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+};
+
+const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat('it-IT', {
+        style: 'currency',
+        currency: 'EUR',
+    }).format(amount);
+};
+
+// ============================================================
+// TYPES
 // ============================================================
 interface Vehicle {
     id: string;
@@ -48,42 +86,41 @@ interface Vehicle {
     model: string;
     year: number;
     licensePlate: string;
-    currentMileage: number;
-    imageUrl?: string;
+    mileage: number;
     mainImageUrl?: string;
-    color?: string;
+    images?: any[];
     ownerId: string;
+    fuel?: string;
 }
 
 interface Deadline {
     id: string;
     vehicleId: string;
-    type: string;
-    description: string;
-    dueDate: any;
+    type: 'tagliando' | 'revisione' | 'bollo' | 'assicurazione' | 'altro';
+    title: string;
+    dueDate: Date;
     amount?: number;
-    status: string;
-    priority: string;
+    status: 'previsto' | 'stimato' | 'fisso';
+    priority?: 'high' | 'medium' | 'low';
 }
 
-interface Activity {
+interface RecentActivity {
     id: string;
     vehicleId: string;
     type: string;
     description: string;
-    date: any;
+    date: Date;
     cost: number;
     workshopName?: string;
-    location?: string;
 }
 
 // ============================================================
-// HOMESCREEN COMPONENT
+// OWNER HOME SCREEN
 // ============================================================
-const HomeScreen = () => {
+const OwnerHomeScreen = () => {
     const navigation = useNavigation();
-    const { user } = useStore();
-    const { width } = useWindowDimensions();
+    const { user } = useAuth();
+    const { width, height } = useWindowDimensions();
 
     // Responsive breakpoints
     const isDesktop = width >= 1024;
@@ -92,134 +129,134 @@ const HomeScreen = () => {
 
     // Stati
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-    const [selectedCar, setSelectedCar] = useState<Vehicle | null>(null);
+    const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
     const [deadlines, setDeadlines] = useState<Deadline[]>([]);
-    const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+    const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     // ============================================================
-    // LOAD DATA FROM FIREBASE
+    // FIREBASE DATA LOADING
     // ============================================================
     useEffect(() => {
-        if (!user?.id) return;
+        if (!user?.uid) return;
+        loadAllData();
+    }, [user]);
 
-        loadData();
-
-        // Setup real-time listeners
-        const unsubscribeVehicles = setupVehiclesListener();
-        const unsubscribeDeadlines = setupDeadlinesListener();
-        const unsubscribeActivities = setupActivitiesListener();
-
-        return () => {
-            unsubscribeVehicles?.();
-            unsubscribeDeadlines?.();
-            unsubscribeActivities?.();
-        };
-    }, [user?.id]);
-
-    const loadData = async () => {
-        if (!user?.id) return;
-
+    const loadAllData = async () => {
+        setLoading(true);
         try {
-            setLoading(true);
-
-            // Load vehicles
-            await loadVehicles();
-
-            setLoading(false);
+            await Promise.all([
+                loadVehicles(),
+                loadDeadlines(),
+                loadRecentActivities(),
+            ]);
         } catch (error) {
             console.error('Error loading data:', error);
+        } finally {
             setLoading(false);
         }
     };
 
     const loadVehicles = async () => {
-        if (!user?.id) return;
+        if (!user?.uid) return;
 
         try {
-            const vehiclesQuery = query(
+            const q = query(
                 collection(db, 'vehicles'),
-                where('ownerId', '==', user.id),
-                where('isActive', '==', true),
+                where('ownerId', '==', user.uid),
                 orderBy('createdAt', 'desc')
             );
 
-            const snapshot = await getDocs(vehiclesQuery);
+            const snapshot = await getDocs(q);
             const vehiclesData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             })) as Vehicle[];
 
             setVehicles(vehiclesData);
-
-            // Set first vehicle as selected
-            if (vehiclesData.length > 0 && !selectedCar) {
-                setSelectedCar(vehiclesData[0]);
+            if (vehiclesData.length > 0 && !selectedVehicle) {
+                setSelectedVehicle(vehiclesData[0]);
             }
         } catch (error) {
             console.error('Error loading vehicles:', error);
         }
     };
 
-    // Setup real-time listeners
-    const setupVehiclesListener = () => {
-        if (!user?.id) return;
+    const loadDeadlines = async () => {
+        if (!user?.uid || !selectedVehicle?.id) return;
 
-        const q = query(
-            collection(db, 'vehicles'),
-            where('ownerId', '==', user.id),
-            where('isActive', '==', true),
-            orderBy('createdAt', 'desc')
-        );
+        try {
+            const q = query(
+                collection(db, 'deadlines'),
+                where('vehicleId', '==', selectedVehicle.id),
+                where('dueDate', '>', Timestamp.now()),
+                orderBy('dueDate', 'asc'),
+                limit(5)
+            );
 
-        return onSnapshot(q, (snapshot) => {
-            const vehiclesData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Vehicle[];
+            const snapshot = await getDocs(q);
+            const deadlinesData = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    dueDate: data.dueDate?.toDate() || new Date(),
+                };
+            }) as Deadline[];
 
-            setVehicles(vehiclesData);
-
-            if (vehiclesData.length > 0 && !selectedCar) {
-                setSelectedCar(vehiclesData[0]);
+            // Se non ci sono scadenze reali, creiamo alcuni esempi
+            if (deadlinesData.length === 0) {
+                const mockDeadlines: Deadline[] = [
+                    {
+                        id: '1',
+                        vehicleId: selectedVehicle.id,
+                        type: 'tagliando',
+                        title: 'Tagliando',
+                        dueDate: addDays(new Date(), 30),
+                        amount: 150,
+                        status: 'previsto',
+                    },
+                    {
+                        id: '2',
+                        vehicleId: selectedVehicle.id,
+                        type: 'revisione',
+                        title: 'Revisione',
+                        dueDate: addDays(new Date(), 45),
+                        amount: 79,
+                        status: 'stimato',
+                    },
+                    {
+                        id: '3',
+                        vehicleId: selectedVehicle.id,
+                        type: 'bollo',
+                        title: 'Bollo Auto',
+                        dueDate: addDays(new Date(), 60),
+                        amount: 250,
+                        status: 'fisso',
+                    },
+                ];
+                setDeadlines(mockDeadlines);
+            } else {
+                setDeadlines(deadlinesData);
             }
-        });
+        } catch (error) {
+            console.error('Error loading deadlines:', error);
+        }
     };
 
-    const setupDeadlinesListener = () => {
-        if (!selectedCar?.id) return;
+    const loadRecentActivities = async () => {
+        if (!user?.uid || !selectedVehicle?.id) return;
 
-        const q = query(
-            collection(db, 'reminders'),
-            where('vehicleId', '==', selectedCar.id),
-            where('status', '==', 'active'),
-            orderBy('dueDate', 'asc'),
-            limit(5)
-        );
+        try {
+            const q = query(
+                collection(db, 'maintenance_records'),
+                where('vehicleId', '==', selectedVehicle.id),
+                orderBy('date', 'desc'),
+                limit(5)
+            );
 
-        return onSnapshot(q, (snapshot) => {
-            const deadlinesData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Deadline[];
-
-            setDeadlines(deadlinesData);
-        });
-    };
-
-    const setupActivitiesListener = () => {
-        if (!selectedCar?.id) return;
-
-        const q = query(
-            collection(db, 'maintenance_records'),
-            where('vehicleId', '==', selectedCar.id),
-            where('status', '==', 'completed'),
-            orderBy('completedDate', 'desc'),
-            limit(5)
-        );
-
-        return onSnapshot(q, (snapshot) => {
+            const snapshot = await getDocs(q);
             const activitiesData = snapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
@@ -227,139 +264,90 @@ const HomeScreen = () => {
                     vehicleId: data.vehicleId,
                     type: data.type,
                     description: data.description,
-                    date: data.completedDate,
+                    date: data.date?.toDate() || new Date(),
                     cost: data.cost || 0,
                     workshopName: data.workshopName,
-                    location: data.workshopAddress,
                 };
-            }) as Activity[];
+            }) as RecentActivity[];
 
-            setRecentActivities(activitiesData);
-        });
-    };
-
-    // Refresh
-    const onRefresh = async () => {
-        setRefreshing(true);
-        await loadData();
-        setRefreshing(false);
-    };
-
-    // ============================================================
-    // HELPER FUNCTIONS
-    // ============================================================
-    const getIcon = (iconType: string, size = 24, color = '#64748b') => {
-        switch (iconType) {
-            case 'wrench':
-            case 'maintenance':
-                return <Wrench size={size} color={color} />;
-            case 'calendar':
-            case 'inspection':
-                return <Calendar size={size} color={color} />;
-            case 'card':
-            case 'tax':
-            case 'insurance':
-                return <CreditCard size={size} color={color} />;
-            case 'fuel':
-                return <Fuel size={size} color={color} />;
-            case 'gauge':
-            case 'tires':
-            case 'gomme':
-                return <Gauge size={size} color={color} />;
-            case 'droplet':
-                return <Droplet size={size} color={color} />;
-            default:
-                return <Wrench size={size} color={color} />;
+            // Se non ci sono attività, creiamo alcuni esempi
+            if (activitiesData.length === 0) {
+                const mockActivities: RecentActivity[] = [
+                    {
+                        id: '1',
+                        vehicleId: selectedVehicle.id,
+                        type: 'maintenance',
+                        description: 'Sostituzione Olio Motore',
+                        date: new Date('2024-07-12'),
+                        cost: 120,
+                        workshopName: 'Officina Rossi',
+                    },
+                    {
+                        id: '2',
+                        vehicleId: selectedVehicle.id,
+                        type: 'tires',
+                        description: 'Cambio Gomme Invernali',
+                        date: new Date('2023-11-10'),
+                        cost: 450,
+                        workshopName: 'Gommista di fiducia',
+                    },
+                ];
+                setRecentActivities(mockActivities);
+            } else {
+                setRecentActivities(activitiesData);
+            }
+        } catch (error) {
+            console.error('Error loading activities:', error);
         }
     };
 
-    const formatDate = (date: any): string => {
-        if (!date) return '';
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
+        loadAllData().finally(() => setRefreshing(false));
+    }, [selectedVehicle]);
 
-        const d = date.toDate ? date.toDate() : new Date(date);
-        return d.toLocaleDateString('it-IT', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-        });
+    // ============================================================
+    // UI HELPERS
+    // ============================================================
+    const getDeadlineIcon = (type: string) => {
+        switch (type) {
+            case 'tagliando':
+                return <Wrench size={20} color="#64748b" />;
+            case 'revisione':
+                return <CheckCircle size={20} color="#64748b" />;
+            case 'bollo':
+            case 'assicurazione':
+                return <CreditCard size={20} color="#64748b" />;
+            default:
+                return <Calendar size={20} color="#64748b" />;
+        }
     };
 
-    const formatAmount = (amount: number): string => {
-        return new Intl.NumberFormat('it-IT', {
-            style: 'currency',
-            currency: 'EUR',
-        }).format(amount);
+    const getActivityIcon = (type: string) => {
+        switch (type) {
+            case 'maintenance':
+                return <Wrench size={20} color="#64748b" />;
+            case 'tires':
+                return <Car size={20} color="#64748b" />;
+            default:
+                return <Activity size={20} color="#64748b" />;
+        }
     };
 
     // ============================================================
-    // LOADING STATE
+    // RENDER MOBILE
     // ============================================================
-    if (loading) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#3b82f6" />
-                    <Text style={styles.loadingText}>Caricamento...</Text>
-                </View>
-            </SafeAreaView>
-        );
-    }
+    const renderMobile = () => (
+        <SafeAreaView style={[styles.container, styles.containerMobile]}>
+            <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
 
-    // ============================================================
-    // EMPTY STATE
-    // ============================================================
-    if (vehicles.length === 0) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.headerButton} />
-                    <Text style={styles.headerTitle}>I miei veicoli</Text>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => navigation.navigate('Profile' as never)}
-                    >
-                        <User size={28} color="#1e293b" strokeWidth={2.5} />
-                    </TouchableOpacity>
-                </View>
-
-                {/* Empty State */}
-                <View style={styles.emptyContainer}>
-                    <View style={styles.emptyIconContainer}>
-                        <Car size={64} color="#94a3b8" strokeWidth={1.5} />
-                    </View>
-                    <Text style={styles.emptyTitle}>Nessun veicolo</Text>
-                    <Text style={styles.emptyDescription}>
-                        Inizia aggiungendo il tuo primo veicolo per tracciare manutenzioni e spese
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.emptyButton}
-                        onPress={() => navigation.navigate('AddCar' as never)}
-                    >
-                        <Plus size={20} color="#fff" />
-                        <Text style={styles.emptyButtonText}>Aggiungi Veicolo</Text>
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
-        );
-    }
-
-    // ============================================================
-    // RENDER MAIN CONTENT
-    // ============================================================
-    return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
-            {/* Header */}
-            <View style={styles.header}>
+            {/* Header Mobile */}
+            <View style={styles.headerMobile}>
                 <TouchableOpacity
                     style={styles.headerButton}
-                    onPress={() => navigation.navigate('AddCar' as never)}
+                    onPress={() => navigation.navigate('AddVehicle' as never)}
                 >
-                    <Plus size={28} color="#1e293b" strokeWidth={2.5} />
+                    <Plus size={24} color="#1e293b" />
                 </TouchableOpacity>
 
                 <Text style={styles.headerTitle}>I miei veicoli</Text>
@@ -368,485 +356,891 @@ const HomeScreen = () => {
                     style={styles.headerButton}
                     onPress={() => navigation.navigate('Profile' as never)}
                 >
-                    <User size={28} color="#1e293b" strokeWidth={2.5} />
+                    <User size={24} color="#1e293b" />
                 </TouchableOpacity>
             </View>
 
             <ScrollView
                 style={styles.scrollView}
-                contentContainerStyle={[
-                    styles.scrollContent,
-                    isDesktop && styles.scrollContentDesktop,
-                    isTablet && styles.scrollContentTablet,
-                ]}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
                         colors={['#3b82f6']}
-                        tintColor="#3b82f6"
                     />
                 }
             >
-                {/* Main Content Container */}
-                <View style={[
-                    styles.contentContainer,
-                    isDesktop && styles.contentContainerDesktop,
-                ]}>
-                    {/* Selected Car Card */}
-                    <View style={[
-                        styles.carCard,
-                        isDesktop && styles.carCardDesktop,
-                    ]}>
-                        <Image
-                            source={
-                                selectedCar?.mainImageUrl || selectedCar?.imageUrl
-                                    ? { uri: selectedCar.mainImageUrl || selectedCar.imageUrl }
-                                    : require('../../../assets/car-placeholde.png')
-                            }
-                            style={styles.carImage}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.carName}>
-                            {selectedCar?.make} {selectedCar?.model}
-                        </Text>
-                        <Text style={styles.carPlate}>{selectedCar?.licensePlate}</Text>
+                {/* Vehicle Card */}
+                {selectedVehicle && (
+                    <TouchableOpacity
+                        style={styles.vehicleCard}
+                        onPress={() => navigation.navigate('CarProfile', {
+                            carId: selectedVehicle.id
+                        } as never)}
+                        activeOpacity={0.95}
+                    >
+                        {selectedVehicle.mainImageUrl ? (
+                            <Image
+                                source={{ uri: selectedVehicle.mainImageUrl }}
+                                style={styles.vehicleImage}
+                                resizeMode="cover"
+                            />
+                        ) : (
+                            <View style={[styles.vehicleImage, styles.vehicleImagePlaceholder]}>
+                                <Car size={80} color="#cbd5e1" />
+                            </View>
+                        )}
 
-                        <TouchableOpacity
-                            style={styles.selectedButton}
-                            onPress={() => {
-                                navigation.navigate('CarDetail' as never, {
-                                    carId: selectedCar?.id
-                                } as never);
-                            }}
-                        >
-                            <Text style={styles.selectedButtonText}>Selezionata</Text>
+                        <Text style={styles.vehicleModel}>{selectedVehicle.model}</Text>
+                        <Text style={styles.vehiclePlate}>{selectedVehicle.licensePlate}</Text>
+
+                        <TouchableOpacity style={styles.selectButton}>
+                            <Text style={styles.selectButtonText}>Selezionata</Text>
                         </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
+                )}
 
-                    {/* Sections Container - Side by side on desktop */}
-                    <View style={[
-                        styles.sectionsContainer,
-                        isDesktop && styles.sectionsContainerDesktop,
-                    ]}>
-                        {/* Prossime Scadenze */}
-                        <View style={[
-                            styles.section,
-                            isDesktop && styles.sectionDesktop,
-                        ]}>
-                            <Text style={styles.sectionTitle}>Prossime scadenze</Text>
+                {/* Deadlines Section */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Prossime scadenze</Text>
 
-                            {deadlines.length === 0 ? (
-                                <View style={styles.emptySection}>
-                                    <Text style={styles.emptySectionText}>
-                                        Nessuna scadenza imminente
+                    {deadlines.map((deadline) => (
+                        <TouchableOpacity
+                            key={deadline.id}
+                            style={styles.deadlineItem}
+                            onPress={() => navigation.navigate('DeadlineDetail', {
+                                deadlineId: deadline.id
+                            } as never)}
+                        >
+                            <View style={styles.deadlineIcon}>
+                                {getDeadlineIcon(deadline.type)}
+                            </View>
+
+                            <View style={styles.deadlineContent}>
+                                <Text style={styles.deadlineTitle}>{deadline.title}</Text>
+                                <Text style={styles.deadlineDate}>
+                                    Scadenza: {formatDate(deadline.dueDate, 'long')}
+                                </Text>
+                            </View>
+
+                            <View style={styles.deadlineAmount}>
+                                {deadline.amount && (
+                                    <Text style={styles.amountText}>
+                                        {formatCurrency(deadline.amount)}
                                     </Text>
-                                </View>
-                            ) : (
-                                <View style={styles.deadlinesList}>
-                                    {deadlines.map((deadline) => (
-                                        <TouchableOpacity
-                                            key={deadline.id}
-                                            style={styles.deadlineItem}
-                                            onPress={() => {
-                                                console.log('Apri dettaglio scadenza:', deadline.id);
-                                            }}
-                                        >
-                                            <View style={styles.deadlineIconContainer}>
-                                                {getIcon(deadline.type, 24, '#64748b')}
-                                            </View>
-
-                                            <View style={styles.deadlineContent}>
-                                                <Text style={styles.deadlineTitle}>
-                                                    {deadline.description}
-                                                </Text>
-                                                <Text style={styles.deadlineDate}>
-                                                    Scadenza: {formatDate(deadline.dueDate)}
-                                                </Text>
-                                            </View>
-
-                                            {deadline.amount && (
-                                                <View style={styles.deadlineRight}>
-                                                    <Text style={styles.deadlineAmount}>
-                                                        {formatAmount(deadline.amount)}
-                                                    </Text>
-                                                    <Text style={styles.deadlineStatus}>
-                                                        {deadline.status === 'active' ? 'Attiva' : 'Completata'}
-                                                    </Text>
-                                                </View>
-                                            )}
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
-
-                        {/* Attività Recenti */}
-                        <View style={[
-                            styles.section,
-                            isDesktop && styles.sectionDesktop,
-                        ]}>
-                            <Text style={styles.sectionTitle}>Attività Recenti</Text>
-
-                            {recentActivities.length === 0 ? (
-                                <View style={styles.emptySection}>
-                                    <Text style={styles.emptySectionText}>
-                                        Nessuna attività registrata
-                                    </Text>
-                                </View>
-                            ) : (
-                                <View style={styles.activitiesList}>
-                                    {recentActivities.map((activity) => (
-                                        <TouchableOpacity
-                                            key={activity.id}
-                                            style={styles.activityItem}
-                                            onPress={() => {
-                                                console.log('Apri dettaglio attività:', activity.id);
-                                            }}
-                                        >
-                                            <View style={styles.activityIconContainer}>
-                                                {getIcon(activity.type, 24, '#64748b')}
-                                            </View>
-
-                                            <View style={styles.activityContent}>
-                                                <Text style={styles.activityTitle}>
-                                                    {activity.description}
-                                                </Text>
-                                                <Text style={styles.activitySubtitle}>
-                                                    {formatDate(activity.date)}
-                                                    {activity.workshopName && ` - ${activity.workshopName}`}
-                                                </Text>
-                                            </View>
-
-                                            <Text style={styles.activityAmount}>
-                                                {formatAmount(activity.cost)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
-                    </View>
+                                )}
+                                <Text style={styles.amountStatus}>{deadline.status}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    ))}
                 </View>
 
-                {/* Padding bottom */}
-                <View style={{ height: 40 }} />
+                {/* Recent Activities */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Attività Recenti</Text>
+
+                    {recentActivities.map((activity) => (
+                        <TouchableOpacity
+                            key={activity.id}
+                            style={styles.activityItem}
+                            onPress={() => navigation.navigate('MaintenanceDetail', {
+                                maintenanceId: activity.id
+                            } as never)}
+                        >
+                            <View style={styles.activityIcon}>
+                                {getActivityIcon(activity.type)}
+                            </View>
+
+                            <View style={styles.activityContent}>
+                                <Text style={styles.activityTitle}>{activity.description}</Text>
+                                <Text style={styles.activityDate}>
+                                    {formatDate(activity.date, 'long')}
+                                    {activity.workshopName && ` - ${activity.workshopName}`}
+                                </Text>
+                            </View>
+
+                            <Text style={styles.activityCost}>
+                                {formatCurrency(activity.cost)}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <View style={{ height: 100 }} />
             </ScrollView>
         </SafeAreaView>
     );
+
+    // ============================================================
+    // RENDER WEB/DESKTOP
+    // ============================================================
+    const renderDesktop = () => (
+        <View style={[styles.container, styles.containerDesktop]}>
+            <StatusBar barStyle="dark-content" />
+
+            {/* Header Desktop */}
+            <View style={styles.headerDesktop}>
+                <View style={styles.headerDesktopContent}>
+                    <Text style={styles.headerTitleDesktop}>Dashboard Veicoli</Text>
+                    <Text style={styles.headerSubtitle}>
+                        Benvenuto, {user?.displayName || user?.email}
+                    </Text>
+                </View>
+
+                <View style={styles.headerActions}>
+                    <Pressable
+                        style={styles.headerActionButton}
+                        onPress={() => navigation.navigate('AddVehicle' as never)}
+                    >
+                        <Plus size={20} color="#fff" />
+                        <Text style={styles.headerActionText}>Aggiungi Veicolo</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={styles.profileButton}
+                        onPress={() => navigation.navigate('Profile' as never)}
+                    >
+                        <User size={20} color="#475569" />
+                    </Pressable>
+                </View>
+            </View>
+
+            <ScrollView
+                style={styles.scrollViewDesktop}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                    />
+                }
+            >
+                <View style={styles.desktopGrid}>
+                    {/* Left Column - Vehicle & Stats */}
+                    <View style={styles.leftColumn}>
+                        {/* Vehicle Selection */}
+                        <View style={styles.cardDesktop}>
+                            <Text style={styles.cardTitle}>I tuoi veicoli</Text>
+
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={styles.vehiclesScroll}
+                            >
+                                {vehicles.map((vehicle) => (
+                                    <Pressable
+                                        key={vehicle.id}
+                                        style={[
+                                            styles.vehicleCardDesktop,
+                                            selectedVehicle?.id === vehicle.id && styles.vehicleCardSelected
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedVehicle(vehicle);
+                                            loadDeadlines();
+                                            loadRecentActivities();
+                                        }}
+                                    >
+                                        {vehicle.mainImageUrl ? (
+                                            <Image
+                                                source={{ uri: vehicle.mainImageUrl }}
+                                                style={styles.vehicleImageDesktop}
+                                            />
+                                        ) : (
+                                            <View style={[styles.vehicleImageDesktop, styles.vehicleImagePlaceholder]}>
+                                                <Car size={40} color="#cbd5e1" />
+                                            </View>
+                                        )}
+
+                                        <View style={styles.vehicleInfoDesktop}>
+                                            <Text style={styles.vehicleModelDesktop}>
+                                                {vehicle.make} {vehicle.model}
+                                            </Text>
+                                            <Text style={styles.vehiclePlateDesktop}>
+                                                {vehicle.licensePlate}
+                                            </Text>
+                                            <View style={styles.vehicleStats}>
+                                                <View style={styles.statItem}>
+                                                    <Gauge size={14} color="#64748b" />
+                                                    <Text style={styles.statText}>
+                                                        {vehicle.mileage?.toLocaleString()} km
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </View>
+
+                                        {selectedVehicle?.id === vehicle.id && (
+                                            <View style={styles.selectedBadge}>
+                                                <CheckCircle size={16} color="#fff" />
+                                            </View>
+                                        )}
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+                        </View>
+
+                        {/* Quick Stats */}
+                        <View style={styles.statsGrid}>
+                            <View style={[styles.statCard, { backgroundColor: '#f0f9ff' }]}>
+                                <View style={styles.statIconContainer}>
+                                    <Calendar size={24} color="#0ea5e9" />
+                                </View>
+                                <Text style={styles.statValue}>{deadlines.length}</Text>
+                                <Text style={styles.statLabel}>Scadenze</Text>
+                            </View>
+
+                            <View style={[styles.statCard, { backgroundColor: '#f0fdf4' }]}>
+                                <View style={styles.statIconContainer}>
+                                    <CheckCircle size={24} color="#22c55e" />
+                                </View>
+                                <Text style={styles.statValue}>{recentActivities.length}</Text>
+                                <Text style={styles.statLabel}>Interventi</Text>
+                            </View>
+
+                            <View style={[styles.statCard, { backgroundColor: '#fef3c7' }]}>
+                                <View style={styles.statIconContainer}>
+                                    <DollarSign size={24} color="#f59e0b" />
+                                </View>
+                                <Text style={styles.statValue}>
+                                    {formatCurrency(
+                                        recentActivities.reduce((acc, a) => acc + a.cost, 0)
+                                    )}
+                                </Text>
+                                <Text style={styles.statLabel}>Spese Totali</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Right Column - Deadlines & Activities */}
+                    <View style={styles.rightColumn}>
+                        {/* Deadlines */}
+                        <View style={styles.cardDesktop}>
+                            <View style={styles.cardHeader}>
+                                <Text style={styles.cardTitle}>Prossime Scadenze</Text>
+                                <TouchableOpacity>
+                                    <Text style={styles.viewAllLink}>Vedi tutte</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.deadlinesList}>
+                                {deadlines.map((deadline) => (
+                                    <Pressable
+                                        key={deadline.id}
+                                        style={styles.deadlineItemDesktop}
+                                        onPress={() => navigation.navigate('DeadlineDetail', {
+                                            deadlineId: deadline.id
+                                        } as never)}
+                                    >
+                                        <View style={styles.deadlineLeft}>
+                                            <View style={styles.deadlineIconDesktop}>
+                                                {getDeadlineIcon(deadline.type)}
+                                            </View>
+                                            <View>
+                                                <Text style={styles.deadlineTitleDesktop}>
+                                                    {deadline.title}
+                                                </Text>
+                                                <Text style={styles.deadlineDateDesktop}>
+                                                    {formatDate(deadline.dueDate, 'long')}
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.deadlineRight}>
+                                            {deadline.amount && (
+                                                <Text style={styles.deadlineAmountDesktop}>
+                                                    {formatCurrency(deadline.amount)}
+                                                </Text>
+                                            )}
+                                            <View style={[
+                                                styles.statusBadge,
+                                                deadline.status === 'fisso' && styles.statusFixed,
+                                                deadline.status === 'stimato' && styles.statusEstimated,
+                                                deadline.status === 'previsto' && styles.statusExpected,
+                                            ]}>
+                                                <Text style={styles.statusText}>{deadline.status}</Text>
+                                            </View>
+                                        </View>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+
+                        {/* Recent Activities */}
+                        <View style={styles.cardDesktop}>
+                            <View style={styles.cardHeader}>
+                                <Text style={styles.cardTitle}>Attività Recenti</Text>
+                                <TouchableOpacity>
+                                    <Text style={styles.viewAllLink}>Vedi storico</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.activitiesList}>
+                                {recentActivities.map((activity) => (
+                                    <Pressable
+                                        key={activity.id}
+                                        style={styles.activityItemDesktop}
+                                        onPress={() => navigation.navigate('MaintenanceDetail', {
+                                            maintenanceId: activity.id
+                                        } as never)}
+                                    >
+                                        <View style={styles.activityLeft}>
+                                            <View style={styles.activityIconDesktop}>
+                                                {getActivityIcon(activity.type)}
+                                            </View>
+                                            <View>
+                                                <Text style={styles.activityTitleDesktop}>
+                                                    {activity.description}
+                                                </Text>
+                                                <Text style={styles.activityDateDesktop}>
+                                                    {formatDate(activity.date, 'short')}
+                                                    {activity.workshopName && ` • ${activity.workshopName}`}
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <Text style={styles.activityCostDesktop}>
+                                            {formatCurrency(activity.cost)}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            </ScrollView>
+        </View>
+    );
+
+    // ============================================================
+    // MAIN RENDER
+    // ============================================================
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text style={styles.loadingText}>Caricamento dati...</Text>
+            </View>
+        );
+    }
+
+    return isDesktop || isTablet ? renderDesktop() : renderMobile();
 };
 
 // ============================================================
 // STYLES
 // ============================================================
-
 const styles = StyleSheet.create({
+    // Container
     container: {
         flex: 1,
+        backgroundColor: '#f8fafc',
+    },
+    containerMobile: {
         backgroundColor: '#fff',
     },
+    containerDesktop: {
+        backgroundColor: '#f1f5f9',
+    },
+
+    // Loading
     loadingContainer: {
         flex: 1,
-        alignItems: 'center',
         justifyContent: 'center',
+        alignItems: 'center',
         backgroundColor: '#f8fafc',
     },
     loadingText: {
-        marginTop: 16,
+        marginTop: 12,
         fontSize: 16,
         color: '#64748b',
-        fontWeight: '500',
     },
-    header: {
+
+    // ============================================================
+    // MOBILE STYLES
+    // ============================================================
+    headerMobile: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+        paddingBottom: 16,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#f1f5f9',
+        borderBottomColor: '#e2e8f0',
     },
     headerButton: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
     },
     headerTitle: {
         fontSize: 20,
         fontWeight: '600',
         color: '#1e293b',
-        letterSpacing: -0.3,
     },
+
     scrollView: {
         flex: 1,
         backgroundColor: '#f8fafc',
     },
-    scrollContent: {
-        paddingHorizontal: 20,
-    },
-    scrollContentTablet: {
-        paddingHorizontal: 40,
-    },
-    scrollContentDesktop: {
-        paddingHorizontal: 0,
-    },
-    contentContainer: {
-        width: '100%',
-    },
-    contentContainerDesktop: {
-        maxWidth: 1200,
-        alignSelf: 'center',
-        width: '100%',
-        paddingHorizontal: 40,
-    },
 
-    // Car Card
-    carCard: {
+    // Vehicle Card Mobile
+    vehicleCard: {
         backgroundColor: '#fff',
-        borderRadius: 24,
-        marginTop: 24,
-        marginBottom: 8,
-        padding: 24,
+        marginHorizontal: 20,
+        marginTop: 20,
+        borderRadius: 16,
+        padding: 16,
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
+        shadowOpacity: 0.05,
         shadowRadius: 8,
-        elevation: 3,
+        elevation: 2,
     },
-    carCardDesktop: {
-        maxWidth: 600,
-        alignSelf: 'center',
-    },
-    carImage: {
+    vehicleImage: {
         width: '100%',
         height: 180,
+        borderRadius: 12,
+        backgroundColor: '#f1f5f9',
         marginBottom: 16,
     },
-    carName: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#1e293b',
-        marginBottom: 6,
-        letterSpacing: -0.5,
-    },
-    carPlate: {
-        fontSize: 18,
-        fontWeight: '500',
-        color: '#64748b',
-        marginBottom: 20,
-        letterSpacing: 1,
-    },
-    selectedButton: {
-        backgroundColor: '#3b82f6',
-        paddingHorizontal: 48,
-        paddingVertical: 14,
-        borderRadius: 50,
-        shadowColor: '#3b82f6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    selectedButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-        letterSpacing: 0.3,
-    },
-
-    // Sections Container
-    sectionsContainer: {
-        marginTop: 32,
-        gap: 32,
-    },
-    sectionsContainerDesktop: {
-        flexDirection: 'row',
-        gap: 24,
-        alignItems: 'flex-start',
-    },
-
-    // Section
-    section: {
-        flex: 1,
-    },
-    sectionDesktop: {
-        minWidth: 0,
-    },
-    sectionTitle: {
-        fontSize: 22,
-        fontWeight: '700',
-        color: '#1e293b',
-        marginBottom: 16,
-        letterSpacing: -0.5,
-    },
-    emptySection: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 32,
+    vehicleImagePlaceholder: {
+        justifyContent: 'center',
         alignItems: 'center',
     },
-    emptySectionText: {
-        fontSize: 15,
-        color: '#94a3b8',
-        textAlign: 'center',
+    vehicleModel: {
+        fontSize: 22,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 4,
+    },
+    vehiclePlate: {
+        fontSize: 16,
+        color: '#64748b',
+        marginBottom: 16,
+    },
+    selectButton: {
+        backgroundColor: '#3b82f6',
+        paddingHorizontal: 24,
+        paddingVertical: 10,
+        borderRadius: 20,
+    },
+    selectButtonText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
     },
 
-    // Deadlines
-    deadlinesList: {
-        gap: 12,
+    // Sections
+    section: {
+        marginTop: 24,
+        paddingHorizontal: 20,
     },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 16,
+    },
+
+    // Deadline Items
     deadlineItem: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#fff',
-        borderRadius: 16,
         padding: 16,
+        borderRadius: 12,
+        marginBottom: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
+        shadowOpacity: 0.03,
         shadowRadius: 4,
-        elevation: 2,
+        elevation: 1,
     },
-    deadlineIconContainer: {
-        width: 56,
-        height: 56,
-        borderRadius: 14,
-        backgroundColor: '#f8fafc',
-        alignItems: 'center',
+    deadlineIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f1f5f9',
         justifyContent: 'center',
-        marginRight: 14,
+        alignItems: 'center',
+        marginRight: 12,
     },
     deadlineContent: {
         flex: 1,
     },
     deadlineTitle: {
-        fontSize: 17,
+        fontSize: 16,
         fontWeight: '600',
         color: '#1e293b',
-        marginBottom: 4,
-        letterSpacing: -0.2,
+        marginBottom: 2,
     },
     deadlineDate: {
         fontSize: 14,
         color: '#64748b',
-        fontWeight: '400',
-    },
-    deadlineRight: {
-        alignItems: 'flex-end',
     },
     deadlineAmount: {
-        fontSize: 20,
-        fontWeight: '700',
+        alignItems: 'flex-end',
+    },
+    amountText: {
+        fontSize: 16,
+        fontWeight: '600',
         color: '#1e293b',
         marginBottom: 2,
-        letterSpacing: -0.3,
     },
-    deadlineStatus: {
-        fontSize: 13,
+    amountStatus: {
+        fontSize: 12,
         color: '#64748b',
-        fontWeight: '500',
+        fontStyle: 'italic',
     },
 
-    // Activities
-    activitiesList: {
-        gap: 12,
-    },
+    // Activity Items
     activityItem: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#fff',
-        borderRadius: 16,
         padding: 16,
+        borderRadius: 12,
+        marginBottom: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
+        shadowOpacity: 0.03,
         shadowRadius: 4,
-        elevation: 2,
+        elevation: 1,
     },
-    activityIconContainer: {
-        width: 56,
-        height: 56,
-        borderRadius: 14,
-        backgroundColor: '#f8fafc',
-        alignItems: 'center',
+    activityIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f1f5f9',
         justifyContent: 'center',
-        marginRight: 14,
+        alignItems: 'center',
+        marginRight: 12,
     },
     activityContent: {
         flex: 1,
     },
     activityTitle: {
-        fontSize: 17,
+        fontSize: 16,
         fontWeight: '600',
         color: '#1e293b',
-        marginBottom: 4,
-        letterSpacing: -0.2,
+        marginBottom: 2,
     },
-    activitySubtitle: {
+    activityDate: {
         fontSize: 14,
         color: '#64748b',
-        fontWeight: '400',
-        lineHeight: 18,
     },
-    activityAmount: {
-        fontSize: 18,
-        fontWeight: '700',
+    activityCost: {
+        fontSize: 16,
+        fontWeight: '600',
         color: '#1e293b',
-        letterSpacing: -0.3,
     },
 
-    // Empty State
-    emptyContainer: {
+    // ============================================================
+    // DESKTOP STYLES
+    // ============================================================
+    headerDesktop: {
+        backgroundColor: '#1e293b',
+        padding: 24,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    headerDesktopContent: {
         flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 40,
     },
-    emptyIconContainer: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: '#f1f5f9',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 24,
-    },
-    emptyTitle: {
-        fontSize: 24,
+    headerTitleDesktop: {
+        fontSize: 28,
         fontWeight: '700',
-        color: '#1e293b',
-        marginBottom: 12,
+        color: '#fff',
+        marginBottom: 4,
     },
-    emptyDescription: {
+    headerSubtitle: {
         fontSize: 16,
-        color: '#64748b',
-        textAlign: 'center',
-        lineHeight: 24,
-        marginBottom: 32,
+        color: '#94a3b8',
     },
-    emptyButton: {
+    headerActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    headerActionButton: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
         backgroundColor: '#3b82f6',
-        paddingHorizontal: 32,
-        paddingVertical: 16,
-        borderRadius: 12,
-        shadowColor: '#3b82f6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
     },
-    emptyButtonText: {
+    headerActionText: {
         color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    profileButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#fff',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    scrollViewDesktop: {
+        flex: 1,
+    },
+
+    desktopGrid: {
+        flexDirection: 'row',
+        padding: 24,
+        gap: 24,
+        maxWidth: 1400,
+        alignSelf: 'center',
+        width: '100%',
+    },
+
+    leftColumn: {
+        flex: 2,
+        gap: 24,
+    },
+    rightColumn: {
+        flex: 3,
+        gap: 24,
+    },
+
+    // Cards Desktop
+    cardDesktop: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    cardTitle: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: '#1e293b',
+    },
+    viewAllLink: {
+        fontSize: 14,
+        color: '#3b82f6',
+        fontWeight: '500',
+    },
+
+    // Vehicle Cards Desktop
+    vehiclesScroll: {
+        marginTop: 16,
+    },
+    vehicleCardDesktop: {
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        padding: 16,
+        marginRight: 16,
+        width: 280,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    vehicleCardSelected: {
+        borderColor: '#3b82f6',
+        backgroundColor: '#eff6ff',
+    },
+    vehicleImageDesktop: {
+        width: 80,
+        height: 60,
+        borderRadius: 8,
+        marginRight: 12,
+        backgroundColor: '#e2e8f0',
+    },
+    vehicleInfoDesktop: {
+        flex: 1,
+    },
+    vehicleModelDesktop: {
         fontSize: 16,
         fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 2,
+    },
+    vehiclePlateDesktop: {
+        fontSize: 14,
+        color: '#64748b',
+        marginBottom: 8,
+    },
+    vehicleStats: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    statItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    statText: {
+        fontSize: 12,
+        color: '#64748b',
+    },
+    selectedBadge: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#3b82f6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // Stats Grid
+    statsGrid: {
+        flexDirection: 'row',
+        gap: 16,
+    },
+    statCard: {
+        flex: 1,
+        padding: 20,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    statIconContainer: {
+        marginBottom: 12,
+    },
+    statValue: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#1e293b',
+        marginBottom: 4,
+    },
+    statLabel: {
+        fontSize: 14,
+        color: '#64748b',
+    },
+
+    // Deadlines Desktop
+    deadlinesList: {
+        gap: 12,
+    },
+    deadlineItemDesktop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#f8fafc',
+        borderRadius: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: '#3b82f6',
+    },
+    deadlineLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    deadlineIconDesktop: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#fff',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    deadlineTitleDesktop: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 2,
+    },
+    deadlineDateDesktop: {
+        fontSize: 13,
+        color: '#64748b',
+    },
+    deadlineRight: {
+        alignItems: 'flex-end',
+        gap: 4,
+    },
+    deadlineAmountDesktop: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1e293b',
+    },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    statusFixed: {
+        backgroundColor: '#fee2e2',
+    },
+    statusEstimated: {
+        backgroundColor: '#fef3c7',
+    },
+    statusExpected: {
+        backgroundColor: '#dbeafe',
+    },
+    statusText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#64748b',
+        textTransform: 'uppercase',
+    },
+
+    // Activities Desktop
+    activitiesList: {
+        gap: 12,
+    },
+    activityItemDesktop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#f8fafc',
+        borderRadius: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: '#10b981',
+    },
+    activityLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    activityIconDesktop: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#fff',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    activityTitleDesktop: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1e293b',
+        marginBottom: 2,
+    },
+    activityDateDesktop: {
+        fontSize: 13,
+        color: '#64748b',
+    },
+    activityCostDesktop: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1e293b',
     },
 });
 
-export default HomeScreen;
+export default OwnerHomeScreen;

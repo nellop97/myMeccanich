@@ -105,7 +105,7 @@ function AuthNavigator() {
     return (
         <AuthStack.Navigator
             screenOptions={{
-                headerShown: true,
+                headerShown: false,
                 headerShadowVisible: false,
             }}
         >
