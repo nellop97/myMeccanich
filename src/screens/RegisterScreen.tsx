@@ -1,4 +1,4 @@
-// src/screens/RegisterScreen.tsx - VERSIONE AGGIORNATA CON NUOVO STILE
+// src/screens/RegisterScreen.tsx - CON LOGIN AUTOMATICO E ANALYTICS
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -10,7 +10,7 @@ import {
     Alert,
     Animated,
 } from 'react-native';
-import { Text, ProgressBar, TextInput, Button } from 'react-native-paper';
+import { Text, ProgressBar, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import {
     Mail,
@@ -27,8 +27,14 @@ import {
 
 // Firebase
 import { auth, db } from '../services/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+
+// Analytics
+import { logRegistration } from '../utils/analytics';
+
+// Store
+import { useStore } from '../store';
 
 type UserType = 'owner' | 'mechanic';
 
@@ -46,6 +52,7 @@ interface FormData {
 
 const RegisterScreen = () => {
     const navigation = useNavigation();
+    const { setUser } = useStore();
 
     // Stati
     const [currentStep, setCurrentStep] = useState(0);
@@ -68,7 +75,7 @@ const RegisterScreen = () => {
     const fadeAnim = useState(new Animated.Value(1))[0];
     const slideAnim = useState(new Animated.Value(0))[0];
 
-    const totalSteps = userType === 'mechanic' ? 3 : 3;
+    const totalSteps = 3;
     const progress = (currentStep + 1) / totalSteps;
 
     // Animazione cambio step
@@ -93,7 +100,6 @@ const RegisterScreen = () => {
         const newErrors: Partial<FormData> = {};
 
         if (currentStep === 1) {
-            // Validazione credenziali
             if (!formData.email.trim()) {
                 newErrors.email = 'Email richiesta';
             } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -112,7 +118,6 @@ const RegisterScreen = () => {
         }
 
         if (currentStep === 2) {
-            // Validazione dati personali
             if (!formData.firstName.trim()) {
                 newErrors.firstName = 'Nome richiesto';
             }
@@ -149,14 +154,16 @@ const RegisterScreen = () => {
         }
     };
 
-    // Registrazione
+    // Registrazione CON LOGIN AUTOMATICO
     const handleRegister = async () => {
         if (!validateStep()) return;
 
         setLoading(true);
 
         try {
-            // Crea utente Firebase Auth
+            console.log('🔐 Inizio registrazione...');
+
+            // 1. Crea utente Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
                 formData.email.trim(),
@@ -164,39 +171,74 @@ const RegisterScreen = () => {
             );
 
             const userId = userCredential.user.uid;
+            console.log('✅ Utente creato su Firebase Auth:', userId);
 
-            // Salva dati utente in Firestore
-            await setDoc(doc(db, 'users', userId), {
+            // 2. Determina il tipo di utente per Firestore
+            const firestoreUserType = userType === 'owner' ? 'user' : 'mechanic';
+
+            // 3. Salva dati utente in Firestore
+            const userData = {
                 uid: userId,
                 email: formData.email.trim(),
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
                 name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-                phone: formData.phone.trim(),
+                phone: formData.phone.trim() || null,
                 role: userType,
-                userType: userType === 'owner' ? 'user' : 'mechanic',
-                workshopName: userType === 'mechanic' ? formData.workshopName?.trim() : null,
-                vatNumber: userType === 'mechanic' ? formData.vatNumber?.trim() : null,
+                userType: firestoreUserType,
+                workshopName: userType === 'mechanic' ? formData.workshopName?.trim() || null : null,
+                vatNumber: userType === 'mechanic' ? formData.vatNumber?.trim() || null : null,
                 address: formData.address?.trim() || null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 isActive: true,
                 profileComplete: true,
                 emailVerified: false,
+            };
+
+            await setDoc(doc(db, 'users', userId), userData);
+            console.log('✅ Dati utente salvati su Firestore');
+
+            // 4. Log analytics
+            await logRegistration(firestoreUserType);
+            console.log('✅ Analytics registrato');
+
+            // 5. Aggiorna lo store Zustand immediatamente
+            setUser({
+                id: userId,
+                name: userData.name,
+                email: userData.email,
+                isLoggedIn: true,
+                isMechanic: userType === 'mechanic',
+                phoneNumber: userData.phone || undefined,
+                emailVerified: false,
+                workshopName: userData.workshopName || undefined,
+                workshopAddress: userData.address || undefined,
+                vatNumber: userData.vatNumber || undefined,
             });
 
+            console.log('✅ Store aggiornato con:', {
+                isMechanic: userType === 'mechanic',
+                userType: firestoreUserType,
+            });
+
+            // 6. Mostra successo e naviga alla homepage corretta
             Alert.alert(
                 'Successo! 🎉',
-                'Registrazione completata. Benvenuto!',
+                `Benvenuto ${formData.firstName}! Il tuo account è stato creato.`,
                 [
                     {
                         text: 'OK',
-                        onPress: () => navigation.navigate('Login' as never),
+                        onPress: () => {
+                            // La navigazione sarà gestita automaticamente da AppNavigator
+                            // grazie all'aggiornamento dello store con isLoggedIn: true
+                            console.log('✅ Navigazione automatica alla homepage...');
+                        },
                     },
                 ]
             );
         } catch (error: any) {
-            console.error('Errore registrazione:', error);
+            console.error('❌ Errore registrazione:', error);
 
             let errorMessage = 'Errore durante la registrazione';
 
@@ -206,6 +248,8 @@ const RegisterScreen = () => {
                 errorMessage = 'Password troppo debole';
             } else if (error.code === 'auth/network-request-failed') {
                 errorMessage = 'Errore di connessione';
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Email non valida';
             }
 
             Alert.alert('Errore', errorMessage);
@@ -522,7 +566,6 @@ const RegisterScreen = () => {
 
     return (
         <View style={styles.container}>
-            {/* Progress Bar */}
             <View style={styles.progressContainer}>
                 <ProgressBar progress={progress} color="#3b82f6" style={styles.progressBar} />
             </View>
@@ -537,7 +580,6 @@ const RegisterScreen = () => {
                     keyboardShouldPersistTaps="handled"
                 >
                     <View style={styles.content}>
-                        {/* Header */}
                         <View style={styles.header}>
                             <Text style={styles.mainTitle}>Registrazione</Text>
                             <Text style={styles.mainSubtitle}>
@@ -545,10 +587,8 @@ const RegisterScreen = () => {
                             </Text>
                         </View>
 
-                        {/* Step Content */}
                         {renderStep()}
 
-                        {/* Navigation Buttons */}
                         <View style={styles.buttonContainer}>
                             {currentStep > 0 && (
                                 <TouchableOpacity
@@ -583,7 +623,6 @@ const RegisterScreen = () => {
                             </TouchableOpacity>
                         </View>
 
-                        {/* Login Link */}
                         {currentStep === 0 && (
                             <View style={styles.loginContainer}>
                                 <Text style={styles.loginText}>Hai già un account? </Text>
@@ -627,8 +666,6 @@ const styles = StyleSheet.create({
         maxWidth: 480,
         alignSelf: 'center',
     },
-
-    // Header
     header: {
         alignItems: 'center',
         marginBottom: 32,
@@ -643,8 +680,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#64748b',
     },
-
-    // Steps
     stepContainer: {
         marginBottom: 24,
     },
@@ -659,8 +694,6 @@ const styles = StyleSheet.create({
         color: '#64748b',
         marginBottom: 24,
     },
-
-    // User Type Cards
     userTypeContainer: {
         gap: 16,
     },
@@ -701,8 +734,6 @@ const styles = StyleSheet.create({
         top: 16,
         right: 16,
     },
-
-    // Input Container
     inputContainer: {
         gap: 16,
     },
@@ -724,8 +755,6 @@ const styles = StyleSheet.create({
         marginTop: -12,
         marginLeft: 4,
     },
-
-    // Buttons
     buttonContainer: {
         flexDirection: 'row',
         gap: 12,
@@ -763,8 +792,6 @@ const styles = StyleSheet.create({
     buttonDisabled: {
         opacity: 0.5,
     },
-
-    // Login Link
     loginContainer: {
         flexDirection: 'row',
         justifyContent: 'center',

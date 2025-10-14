@@ -1,4 +1,4 @@
-// src/screens/user/HomeScreen.tsx - VERSIONE AGGIORNATA CON NUOVO STILE
+// src/screens/user/HomeScreen.tsx - CON SKELETON LOADER E ANALYTICS
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     SafeAreaView,
@@ -9,11 +9,8 @@ import {
     StatusBar,
     RefreshControl,
     Alert,
-    ActivityIndicator,
-    Dimensions,
-    Image,
 } from 'react-native';
-import { Text, Card, FAB } from 'react-native-paper';
+import { Text, FAB } from 'react-native-paper';
 import {
     Car,
     Plus,
@@ -21,10 +18,7 @@ import {
     Fuel,
     DollarSign,
     Bell,
-    Calendar,
     ChevronRight,
-    AlertCircle,
-    TrendingUp,
     User,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -33,19 +27,22 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../hooks/useAuth';
 import { useUserData } from '../../hooks/useUserData';
 
-const { width } = Dimensions.get('window');
+// Components
+import { HomeScreenSkeleton } from '../../components/SkeletonLoader';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
+
+// Analytics
+import { logScreenView } from '../../utils/analytics';
 
 const HomeScreen = () => {
     const navigation = useNavigation();
 
     // Hooks per dati
-    const { user, logout } = useAuth();
+    const { user } = useAuth();
     const {
         vehicles,
         recentMaintenance,
         upcomingReminders,
-        recentFuelRecords,
-        recentExpenses,
         loading,
         error,
         refreshData,
@@ -56,6 +53,11 @@ const HomeScreen = () => {
 
     const [refreshing, setRefreshing] = useState(false);
     const [selectedVehicleIndex, setSelectedVehicleIndex] = useState(0);
+
+    // Log screen view
+    useEffect(() => {
+        logScreenView('HomeScreen', 'HomeScreen');
+    }, []);
 
     // Nome utente
     const userName = user?.firstName ||
@@ -97,12 +99,23 @@ const HomeScreen = () => {
         return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
-    // Loading
-    if (loading) {
+    // Loading con Skeleton
+    if (loading && !refreshing) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text style={styles.loadingText}>Caricamento dati...</Text>
+            <ErrorBoundary>
+                <HomeScreenSkeleton />
+            </ErrorBoundary>
+        );
+    }
+
+    // Errore
+    if (error && !refreshing) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>Si è verificato un errore</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={refreshData}>
+                    <Text style={styles.retryText}>Riprova</Text>
+                </TouchableOpacity>
             </View>
         );
     }
@@ -125,288 +138,286 @@ const HomeScreen = () => {
     );
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#3b82f6" />
+        <ErrorBoundary>
+            <View style={styles.container}>
+                <StatusBar barStyle="light-content" backgroundColor="#3b82f6" />
 
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={styles.headerContent}>
-                    <View>
-                        <Text style={styles.headerGreeting}>Ciao, {userName}! 👋</Text>
-                        <Text style={styles.headerSubtitle}>
-                            {hasOverdueReminders
-                                ? '⚠️ Hai scadenze da controllare'
-                                : 'Tutto sotto controllo'}
-                        </Text>
+                {/* Header */}
+                <View style={styles.header}>
+                    <View style={styles.headerContent}>
+                        <View>
+                            <Text style={styles.headerGreeting}>Ciao, {userName}! 👋</Text>
+                            <Text style={styles.headerSubtitle}>
+                                {hasOverdueReminders
+                                    ? '⚠️ Hai scadenze da controllare'
+                                    : 'Tutto sotto controllo'}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            style={styles.profileButton}
+                            onPress={() => handleNavigation('Profile', { userId: user?.uid })}
+                        >
+                            <User size={24} color="#fff" />
+                        </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                        style={styles.profileButton}
-                        onPress={() => handleNavigation('Profile', { userId: user?.uid })}
-                    >
-                        <User size={24} color="#fff" />
-                    </TouchableOpacity>
                 </View>
-            </View>
 
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-            >
-                {/* Sezione Veicoli */}
-                {hasVehicles ? (
-                    <View style={styles.vehicleSection}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>I miei veicoli</Text>
-                            <TouchableOpacity onPress={() => handleNavigation('VehicleList')}>
-                                <Text style={styles.seeAllLink}>Vedi tutti</Text>
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    }
+                >
+                    {/* Sezione Veicoli */}
+                    {hasVehicles ? (
+                        <View style={styles.vehicleSection}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>I miei veicoli</Text>
+                                <TouchableOpacity onPress={() => handleNavigation('VehicleList')}>
+                                    <Text style={styles.seeAllLink}>Vedi tutti</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Card Veicolo */}
+                            <TouchableOpacity
+                                style={styles.vehicleCard}
+                                onPress={() => handleNavigation('CarDetail', { carId: selectedVehicle?.id })}
+                                activeOpacity={0.9}
+                            >
+                                <View style={styles.vehicleCardHeader}>
+                                    <View>
+                                        <Text style={styles.vehicleMake}>
+                                            {selectedVehicle?.make} {selectedVehicle?.model}
+                                        </Text>
+                                        <Text style={styles.vehiclePlate}>{selectedVehicle?.licensePlate}</Text>
+                                    </View>
+                                    <View style={styles.selectedIndicator}>
+                                        <Text style={styles.selectedIndicatorText}>Selezionata</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.vehicleStats}>
+                                    <View style={styles.vehicleStat}>
+                                        <Text style={styles.vehicleStatValue}>
+                                            {selectedVehicle?.currentMileage?.toLocaleString() || '0'} km
+                                        </Text>
+                                        <Text style={styles.vehicleStatLabel}>Chilometraggio</Text>
+                                    </View>
+                                    <View style={styles.vehicleStat}>
+                                        <Text style={styles.vehicleStatValue}>
+                                            {selectedVehicle?.year}
+                                        </Text>
+                                        <Text style={styles.vehicleStatLabel}>Anno</Text>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
+
+                            {vehicles.length > 1 && (
+                                <View style={styles.paginationDots}>
+                                    {vehicles.map((_, index) => (
+                                        <TouchableOpacity
+                                            key={index}
+                                            onPress={() => setSelectedVehicleIndex(index)}
+                                        >
+                                            <View
+                                                style={[
+                                                    styles.dot,
+                                                    index === selectedVehicleIndex && styles.dotActive,
+                                                ]}
+                                            />
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+                    ) : (
+                        <View style={styles.emptyStateCard}>
+                            <Car size={48} color="#64748b" />
+                            <Text style={styles.emptyStateTitle}>Nessun veicolo</Text>
+                            <Text style={styles.emptyStateText}>
+                                Aggiungi il tuo primo veicolo per iniziare
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.addVehicleButton}
+                                onPress={() => handleNavigation('AddCar')}
+                            >
+                                <Plus size={20} color="#fff" />
+                                <Text style={styles.addVehicleButtonText}>Aggiungi Veicolo</Text>
                             </TouchableOpacity>
                         </View>
+                    )}
 
-                        {/* Card Veicolo */}
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            pagingEnabled
-                            onMomentumScrollEnd={(event) => {
-                                const index = Math.round(event.nativeEvent.contentOffset.x / (width - 40));
-                                setSelectedVehicleIndex(index);
-                            }}
-                            contentContainerStyle={styles.vehicleCardsContainer}
-                        >
-                            {vehicles.map((vehicle, index) => (
+                    {/* Promemoria di Oggi */}
+                    {hasVehicles && vehicleReminders.length > 0 && (
+                        <View style={styles.remindersSection}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>Promemoria di Oggi</Text>
+                                <TouchableOpacity onPress={() => handleNavigation('RemindersList')}>
+                                    <ChevronRight size={20} color="#3b82f6" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {vehicleReminders.slice(0, 2).map((reminder) => (
                                 <TouchableOpacity
-                                    key={vehicle.id}
-                                    style={styles.vehicleCard}
-                                    onPress={() => handleNavigation('CarDetail', { carId: vehicle.id })}
-                                    activeOpacity={0.9}
+                                    key={reminder.id}
+                                    style={[
+                                        styles.reminderCard,
+                                        reminder.status === 'overdue' && styles.reminderCardOverdue,
+                                    ]}
+                                    onPress={() => handleNavigation('ReminderDetail', { reminderId: reminder.id })}
                                 >
-                                    <View style={styles.vehicleCardHeader}>
-                                        <View>
-                                            <Text style={styles.vehicleMake}>{vehicle.make} {vehicle.model}</Text>
-                                            <Text style={styles.vehiclePlate}>{vehicle.licensePlate}</Text>
-                                        </View>
-                                        <View style={styles.selectedIndicator}>
-                                            <Text style={styles.selectedIndicatorText}>Selezionata</Text>
-                                        </View>
+                                    <View style={[
+                                        styles.reminderIcon,
+                                        reminder.status === 'overdue'
+                                            ? styles.reminderIconOverdue
+                                            : styles.reminderIconNormal,
+                                    ]}>
+                                        <Car size={24} color={reminder.status === 'overdue' ? '#ef4444' : '#3b82f6'} />
                                     </View>
-
-                                    <View style={styles.vehicleStats}>
-                                        <View style={styles.vehicleStat}>
-                                            <Text style={styles.vehicleStatValue}>
-                                                {vehicle.currentMileage?.toLocaleString() || '0'} km
-                                            </Text>
-                                            <Text style={styles.vehicleStatLabel}>Chilometraggio</Text>
-                                        </View>
-                                        <View style={styles.vehicleStat}>
-                                            <Text style={styles.vehicleStatValue}>
-                                                {vehicle.year}
-                                            </Text>
-                                            <Text style={styles.vehicleStatLabel}>Anno</Text>
-                                        </View>
+                                    <View style={styles.reminderContent}>
+                                        <Text style={styles.reminderTitle}>{reminder.title}</Text>
+                                        <Text style={styles.reminderDate}>
+                                            {reminder.status === 'overdue' ? 'Scadenza: ' : 'Scadenza: '}
+                                            {formatDate(reminder.dueDate)}
+                                        </Text>
                                     </View>
+                                    <ChevronRight size={20} color="#64748b" />
                                 </TouchableOpacity>
                             ))}
-                        </ScrollView>
-
-                        {vehicles.length > 1 && (
-                            <View style={styles.paginationDots}>
-                                {vehicles.map((_, index) => (
-                                    <View
-                                        key={index}
-                                        style={[
-                                            styles.dot,
-                                            index === selectedVehicleIndex && styles.dotActive,
-                                        ]}
-                                    />
-                                ))}
-                            </View>
-                        )}
-                    </View>
-                ) : (
-                    <View style={styles.emptyStateCard}>
-                        <Car size={48} color="#64748b" />
-                        <Text style={styles.emptyStateTitle}>Nessun veicolo</Text>
-                        <Text style={styles.emptyStateText}>
-                            Aggiungi il tuo primo veicolo per iniziare
-                        </Text>
-                        <TouchableOpacity
-                            style={styles.addVehicleButton}
-                            onPress={() => handleNavigation('AddCar')}
-                        >
-                            <Plus size={20} color="#fff" />
-                            <Text style={styles.addVehicleButtonText}>Aggiungi Veicolo</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {/* Promemoria di Oggi */}
-                {vehicleReminders.length > 0 && (
-                    <View style={styles.remindersSection}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Promemoria di Oggi</Text>
-                            <TouchableOpacity onPress={() => handleNavigation('RemindersList')}>
-                                <ChevronRight size={20} color="#3b82f6" />
-                            </TouchableOpacity>
                         </View>
+                    )}
 
-                        {vehicleReminders.slice(0, 2).map((reminder) => (
-                            <TouchableOpacity
-                                key={reminder.id}
-                                style={[
-                                    styles.reminderCard,
-                                    reminder.status === 'overdue' && styles.reminderCardOverdue,
-                                ]}
-                                onPress={() => handleNavigation('ReminderDetail', { reminderId: reminder.id })}
-                            >
-                                <View style={[
-                                    styles.reminderIcon,
-                                    reminder.status === 'overdue'
-                                        ? styles.reminderIconOverdue
-                                        : styles.reminderIconNormal,
-                                ]}>
-                                    <Car size={24} color={reminder.status === 'overdue' ? '#ef4444' : '#3b82f6'} />
+                    {/* Storico Manutenzioni */}
+                    {hasVehicles && vehicleMaintenance.length > 0 && (
+                        <View style={styles.maintenanceSection}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>Storico Manutenzioni</Text>
+                                <TouchableOpacity
+                                    onPress={() => handleNavigation('CarMaintenance', {
+                                        carId: selectedVehicle?.id
+                                    })}
+                                >
+                                    <Text style={styles.seeAllLink}>Vedi tutto</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {vehicleMaintenance.slice(0, 3).map((maintenance) => (
+                                <TouchableOpacity
+                                    key={maintenance.id}
+                                    style={styles.maintenanceCard}
+                                    onPress={() => handleNavigation('MaintenanceDetail', {
+                                        maintenanceId: maintenance.id
+                                    })}
+                                >
+                                    <View style={styles.maintenanceIcon}>
+                                        <Wrench size={20} color="#3b82f6" />
+                                    </View>
+                                    <View style={styles.maintenanceContent}>
+                                        <Text style={styles.maintenanceTitle}>
+                                            {maintenance.description || maintenance.type}
+                                        </Text>
+                                        <Text style={styles.maintenanceDate}>
+                                            {formatDate(maintenance.completedDate)}
+                                        </Text>
+                                    </View>
+                                    <ChevronRight size={20} color="#64748b" />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+
+                    {/* Quick Stats */}
+                    {hasVehicles && (
+                        <View style={styles.statsSection}>
+                            <Text style={styles.sectionTitle}>Statistiche</Text>
+                            <View style={styles.statsGrid}>
+                                <View style={styles.statCard}>
+                                    <View style={[styles.statIcon, { backgroundColor: '#3b82f620' }]}>
+                                        <Car size={24} color="#3b82f6" />
+                                    </View>
+                                    <Text style={styles.statValue}>{stats.vehiclesCount}</Text>
+                                    <Text style={styles.statLabel}>Veicoli</Text>
                                 </View>
-                                <View style={styles.reminderContent}>
-                                    <Text style={styles.reminderTitle}>{reminder.title}</Text>
-                                    <Text style={styles.reminderDate}>
-                                        {reminder.status === 'overdue' ? 'Scadenza: ' : 'Scadenza: '}
-                                        {formatDate(reminder.dueDate)}
+
+                                <View style={styles.statCard}>
+                                    <View style={[styles.statIcon, { backgroundColor: '#f59e0b20' }]}>
+                                        <Wrench size={24} color="#f59e0b" />
+                                    </View>
+                                    <Text style={styles.statValue}>{stats.maintenanceCount}</Text>
+                                    <Text style={styles.statLabel}>Manutenzioni</Text>
+                                </View>
+
+                                <View style={styles.statCard}>
+                                    <View style={[styles.statIcon, { backgroundColor: '#10b98120' }]}>
+                                        <DollarSign size={24} color="#10b981" />
+                                    </View>
+                                    <Text style={styles.statValue}>
+                                        {formatCurrency(stats.totalExpenses + stats.totalFuelCost)}
                                     </Text>
+                                    <Text style={styles.statLabel}>Spese</Text>
                                 </View>
-                                <ChevronRight size={20} color="#64748b" />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
-                {/* Storico Manutenzioni */}
-                {vehicleMaintenance.length > 0 && (
-                    <View style={styles.maintenanceSection}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Storico Manutenzioni</Text>
-                            <TouchableOpacity
-                                onPress={() => handleNavigation('CarMaintenance', {
-                                    carId: selectedVehicle?.id
-                                })}
-                            >
-                                <Text style={styles.seeAllLink}>Vedi tutto</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {vehicleMaintenance.slice(0, 3).map((maintenance) => (
-                            <TouchableOpacity
-                                key={maintenance.id}
-                                style={styles.maintenanceCard}
-                                onPress={() => handleNavigation('MaintenanceDetail', {
-                                    maintenanceId: maintenance.id
-                                })}
-                            >
-                                <View style={styles.maintenanceIcon}>
-                                    <Wrench size={20} color="#3b82f6" />
-                                </View>
-                                <View style={styles.maintenanceContent}>
-                                    <Text style={styles.maintenanceTitle}>
-                                        {maintenance.description || maintenance.type}
-                                    </Text>
-                                    <Text style={styles.maintenanceDate}>
-                                        {formatDate(maintenance.completedDate)}
-                                    </Text>
-                                </View>
-                                <ChevronRight size={20} color="#64748b" />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
-                {/* Quick Stats */}
-                <View style={styles.statsSection}>
-                    <Text style={styles.sectionTitle}>Statistiche</Text>
-                    <View style={styles.statsGrid}>
-                        <View style={styles.statCard}>
-                            <View style={[styles.statIcon, { backgroundColor: '#3b82f620' }]}>
-                                <Car size={24} color="#3b82f6" />
                             </View>
-                            <Text style={styles.statValue}>{stats.vehiclesCount}</Text>
-                            <Text style={styles.statLabel}>Veicoli</Text>
                         </View>
+                    )}
 
-                        <View style={styles.statCard}>
-                            <View style={[styles.statIcon, { backgroundColor: '#f59e0b20' }]}>
-                                <Wrench size={24} color="#f59e0b" />
+                    {/* Azioni Rapide */}
+                    {hasVehicles && (
+                        <View style={styles.quickActionsSection}>
+                            <Text style={styles.sectionTitle}>Azioni Rapide</Text>
+                            <View style={styles.quickActionsGrid}>
+                                <TouchableOpacity
+                                    style={styles.quickActionCard}
+                                    onPress={() => handleNavigation('AddMaintenance', {
+                                        carId: selectedVehicle?.id
+                                    })}
+                                >
+                                    <Wrench size={24} color="#3b82f6" />
+                                    <Text style={styles.quickActionLabel}>Manutenzione</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.quickActionCard}
+                                    onPress={() => handleNavigation('AddFuel', {
+                                        carId: selectedVehicle?.id
+                                    })}
+                                >
+                                    <Fuel size={24} color="#f59e0b" />
+                                    <Text style={styles.quickActionLabel}>Rifornimento</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.quickActionCard}
+                                    onPress={() => handleNavigation('AddExpense', {
+                                        carId: selectedVehicle?.id
+                                    })}
+                                >
+                                    <DollarSign size={24} color="#10b981" />
+                                    <Text style={styles.quickActionLabel}>Spesa</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.quickActionCard}
+                                    onPress={() => handleNavigation('RemindersList')}
+                                >
+                                    <Bell size={24} color="#ef4444" />
+                                    <Text style={styles.quickActionLabel}>Promemoria</Text>
+                                </TouchableOpacity>
                             </View>
-                            <Text style={styles.statValue}>{stats.maintenanceCount}</Text>
-                            <Text style={styles.statLabel}>Manutenzioni</Text>
                         </View>
+                    )}
+                </ScrollView>
 
-                        <View style={styles.statCard}>
-                            <View style={[styles.statIcon, { backgroundColor: '#10b98120' }]}>
-                                <DollarSign size={24} color="#10b981" />
-                            </View>
-                            <Text style={styles.statValue}>
-                                {formatCurrency(stats.totalExpenses + stats.totalFuelCost)}
-                            </Text>
-                            <Text style={styles.statLabel}>Spese</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* Azioni Rapide */}
-                <View style={styles.quickActionsSection}>
-                    <Text style={styles.sectionTitle}>Azioni Rapide</Text>
-                    <View style={styles.quickActionsGrid}>
-                        <TouchableOpacity
-                            style={styles.quickActionCard}
-                            onPress={() => handleNavigation('AddMaintenance', {
-                                carId: selectedVehicle?.id
-                            })}
-                        >
-                            <Wrench size={24} color="#3b82f6" />
-                            <Text style={styles.quickActionLabel}>Manutenzione</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionCard}
-                            onPress={() => handleNavigation('AddFuel', {
-                                carId: selectedVehicle?.id
-                            })}
-                        >
-                            <Fuel size={24} color="#f59e0b" />
-                            <Text style={styles.quickActionLabel}>Rifornimento</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionCard}
-                            onPress={() => handleNavigation('AddExpense', {
-                                carId: selectedVehicle?.id
-                            })}
-                        >
-                            <DollarSign size={24} color="#10b981" />
-                            <Text style={styles.quickActionLabel}>Spesa</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionCard}
-                            onPress={() => handleNavigation('RemindersList')}
-                        >
-                            <Bell size={24} color="#ef4444" />
-                            <Text style={styles.quickActionLabel}>Promemoria</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </ScrollView>
-
-            {/* FAB per aggiungere veicolo */}
-            <FAB
-                icon="plus"
-                style={styles.fab}
-                onPress={() => handleNavigation('AddCar')}
-                color="#fff"
-            />
-        </View>
+                {/* FAB per aggiungere veicolo */}
+                <FAB
+                    icon="plus"
+                    style={styles.fab}
+                    onPress={() => handleNavigation('AddCar')}
+                    color="#fff"
+                />
+            </View>
+        </ErrorBoundary>
     );
 };
 
@@ -415,16 +426,29 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#f8fafc',
     },
-    loadingContainer: {
+    errorContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        padding: 20,
         backgroundColor: '#f8fafc',
     },
-    loadingText: {
-        marginTop: 16,
+    errorText: {
         fontSize: 16,
-        color: '#64748b',
+        color: '#ef4444',
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    retryButton: {
+        backgroundColor: '#3b82f6',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+    },
+    retryText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
     },
 
     // Header
@@ -491,15 +515,10 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         paddingHorizontal: 20,
     },
-    vehicleCardsContainer: {
-        paddingRight: 20,
-    },
     vehicleCard: {
-        width: width - 40,
         backgroundColor: '#fff',
         borderRadius: 16,
         padding: 20,
-        marginRight: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,

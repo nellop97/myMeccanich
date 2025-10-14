@@ -24,6 +24,7 @@
     "expo-dev-client": "~6.0.15",
     "expo-document-picker": "~14.0.7",
     "expo-firebase-core": "^3.1.0",
+    "expo-image-manipulator": "~14.0.7",
     "expo-image-picker": "~17.0.8",
     "expo-linear-gradient": "~15.0.7",
     "expo-linking": "~8.0.8",
@@ -44,6 +45,7 @@
     "react-native-web": "^0.21.0",
     "styleq": "^0.2.1",
     "tslib": "^2.8.1",
+    "undefined": "react-native-firebase/analytic",
     "zustand": "4.5.5"
   },
   "devDependencies": {
