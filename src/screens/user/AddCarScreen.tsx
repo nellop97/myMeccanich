@@ -1,160 +1,231 @@
-// src/screens/user/AddCarScreen.tsx - VERSIONE MODERNA E RAFFINATA
-import React, { useState } from 'react';
+// src/screens/user/AddCarScreen.tsx
+import React, { useState, useEffect, useRef } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
     View,
     Text,
-    TouchableOpacity,
-    KeyboardAvoidingView,
-    Platform,
-    StatusBar,
     StyleSheet,
-    Alert,
-    Dimensions,
+    ScrollView,
+    TouchableOpacity,
     TextInput,
-    ActivityIndicator,
-    Modal
+    Alert,
+    FlatList,
+    Modal,
+    Animated,
+    Keyboard,
+    Dimensions,
+    Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { UniversalDatePicker } from '../../components';
 import {
-    ArrowLeft,
-    Calendar,
     Car,
-    DollarSign,
-    FileText,
-    Save,
-    Key,
-    Hash,
-    Palette,
-    Check,
-    ChevronRight,
-    ChevronLeft,
-    Gauge,
     X,
-    Sparkles,
+    Check,
+    ChevronDown,
+    Calendar,
+    DollarSign,
+    Gauge,
+    FileText,
+    Search,
 } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
-import { db, auth } from '../../services/firebase';
+// Firebase
+import { auth, db } from '../../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-import { useAppThemeManager } from '../../hooks/useTheme';
-import { useCarsStore } from '../../store/useCarsStore';
+// Database auto
+import {
+    searchMakes,
+    searchModelsByMake,
+    getAllMakesSorted,
+    CarMake,
+    CarModel,
+} from '../../data/carDatabase';
 
-const { width: screenWidth } = Dimensions.get('window');
+// Store
+import { useStore } from '../../store';
 
-const CAR_COLORS = [
-    { name: 'Bianco', value: '#FFFFFF', border: '#E5E5EA' },
-    { name: 'Nero', value: '#000000' },
-    { name: 'Argento', value: '#C0C0C0' },
-    { name: 'Grigio', value: '#808080' },
-    { name: 'Rosso', value: '#FF0000' },
-    { name: 'Blu', value: '#0000FF' },
-    { name: 'Verde', value: '#008000' },
-    { name: 'Marrone', value: '#8B4513' },
-    { name: 'Giallo', value: '#FFFF00' },
-    { name: 'Arancione', value: '#FFA500' },
+const { width, height } = Dimensions.get('window');
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+
+// Tipi di carburante
+const FUEL_TYPES = [
+    { id: 'benzina', name: 'Benzina', icon: '⛽' },
+    { id: 'diesel', name: 'Diesel', icon: '🚗' },
+    { id: 'gpl', name: 'GPL', icon: '🔵' },
+    { id: 'metano', name: 'Metano', icon: '🔴' },
+    { id: 'elettrica', name: 'Elettrica', icon: '⚡' },
+    { id: 'ibrida', name: 'Ibrida', icon: '🔋' },
+    { id: 'ibrida_plugin', name: 'Ibrida Plug-in', icon: '🔌' },
 ];
+
+// Colori disponibili
+const CAR_COLORS = [
+    { id: 'black', name: 'Nero', hex: '#1a1a1a', textColor: '#fff' },
+    { id: 'white', name: 'Bianco', hex: '#ffffff', textColor: '#000', border: '#e5e7eb' },
+    { id: 'gray', name: 'Grigio', hex: '#6b7280', textColor: '#fff' },
+    { id: 'silver', name: 'Argento', hex: '#9ca3af', textColor: '#000' },
+    { id: 'red', name: 'Rosso', hex: '#ef4444', textColor: '#fff' },
+    { id: 'blue', name: 'Blu', hex: '#3b82f6', textColor: '#fff' },
+    { id: 'green', name: 'Verde', hex: '#10b981', textColor: '#fff' },
+    { id: 'yellow', name: 'Giallo', hex: '#fbbf24', textColor: '#000' },
+    { id: 'orange', name: 'Arancione', hex: '#f97316', textColor: '#fff' },
+    { id: 'brown', name: 'Marrone', hex: '#92400e', textColor: '#fff' },
+];
+
+interface FormData {
+    make: string;
+    makeId: string;
+    model: string;
+    year: string;
+    licensePlate: string;
+    vin: string;
+    fuelType: string;
+    color: string;
+    currentMileage: string;
+    purchaseDate: string;
+    purchasePrice: string;
+    notes: string;
+}
 
 const AddCarScreen = () => {
     const navigation = useNavigation();
-    const { colors, isDark } = useAppThemeManager();
-    const { addVehicle: addCarToStore } = useCarsStore();
+    const { user, addCarToStore } = useStore();
 
-    const [formData, setFormData] = useState({
+    // Stati form
+    const [formData, setFormData] = useState<FormData>({
         make: '',
+        makeId: '',
         model: '',
-        year: '',
-        color: CAR_COLORS[0].value,
+        year: new Date().getFullYear().toString(),
         licensePlate: '',
         vin: '',
-        purchaseDate: new Date(),
+        fuelType: 'benzina',
+        color: '#1a1a1a',
+        currentMileage: '0',
+        purchaseDate: '',
         purchasePrice: '',
-        purchaseMileage: '',
-        currentMileage: '',
-        insuranceCompany: '',
-        insuranceExpiry: new Date(),
         notes: '',
     });
 
-    const [currentStep, setCurrentStep] = useState(0);
+    const [errors, setErrors] = useState<Partial<FormData>>({});
     const [isLoading, setIsLoading] = useState(false);
+
+    // Stati per autocomplete
+    const [showMakeDropdown, setShowMakeDropdown] = useState(false);
+    const [showModelDropdown, setShowModelDropdown] = useState(false);
+    const [showYearDropdown, setShowYearDropdown] = useState(false);
+    const [showFuelTypeDropdown, setShowFuelTypeDropdown] = useState(false);
     const [showColorPicker, setShowColorPicker] = useState(false);
-    const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const validateStep = (step: number): boolean => {
-        const newErrors: Record<string, string> = {};
+    const [makesSuggestions, setMakesSuggestions] = useState<CarMake[]>([]);
+    const [modelsSuggestions, setModelsSuggestions] = useState<CarModel[]>([]);
+    const [yearsSuggestions, setYearsSuggestions] = useState<number[]>([]);
 
-        switch (step) {
-            case 0:
-                if (!formData.make.trim()) newErrors.make = 'Marca obbligatoria';
-                if (!formData.model.trim()) newErrors.model = 'Modello obbligatorio';
-                if (!formData.year.trim()) {
-                    newErrors.year = 'Anno obbligatorio';
-                } else if (parseInt(formData.year) < 1900 || parseInt(formData.year) > new Date().getFullYear() + 1) {
-                    newErrors.year = 'Anno non valido';
-                }
-                break;
-            case 1:
-                if (!formData.licensePlate.trim()) newErrors.licensePlate = 'Targa obbligatoria';
-                break;
-            case 2:
-                if (formData.purchasePrice && isNaN(parseFloat(formData.purchasePrice))) {
-                    newErrors.purchasePrice = 'Prezzo non valido';
-                }
-                if (formData.purchaseMileage && isNaN(parseInt(formData.purchaseMileage))) {
-                    newErrors.purchaseMileage = 'Chilometraggio non valido';
-                }
-                if (formData.currentMileage && isNaN(parseInt(formData.currentMileage))) {
-                    newErrors.currentMileage = 'Chilometraggio non valido';
-                }
-                break;
+    // Riferimenti
+    const makeInputRef = useRef<TextInput>(null);
+    const modelInputRef = useRef<TextInput>(null);
+
+    // Inizializza suggerimenti marche
+    useEffect(() => {
+        setMakesSuggestions(getAllMakesSorted());
+    }, []);
+
+    // Aggiorna suggerimenti quando cambia la marca
+    useEffect(() => {
+        if (formData.makeId) {
+            const models = searchModelsByMake(formData.makeId);
+            setModelsSuggestions(models);
         }
+    }, [formData.makeId]);
+
+    // Aggiorna anni disponibili quando cambia il modello
+    useEffect(() => {
+        if (formData.makeId && formData.model) {
+            const models = searchModelsByMake(formData.makeId);
+            const selectedModel = models.find(m => m.name === formData.model);
+            if (selectedModel) {
+                setYearsSuggestions(selectedModel.years.sort((a, b) => b - a));
+            }
+        }
+    }, [formData.makeId, formData.model]);
+
+    // Handlers
+    const handleMakeSearch = (text: string) => {
+        setFormData(prev => ({ ...prev, make: text, makeId: '', model: '', year: '' }));
+        if (text.length > 0) {
+            const results = searchMakes(text);
+            setMakesSuggestions(results);
+            setShowMakeDropdown(true);
+        } else {
+            setMakesSuggestions(getAllMakesSorted());
+            setShowMakeDropdown(true);
+        }
+    };
+
+    const handleSelectMake = (make: CarMake) => {
+        setFormData(prev => ({
+            ...prev,
+            make: make.name,
+            makeId: make.id,
+            model: '',
+            year: '',
+        }));
+        setShowMakeDropdown(false);
+        setModelsSuggestions(make.models);
+        Keyboard.dismiss();
+        // Focus sul campo modello dopo 100ms
+        setTimeout(() => modelInputRef.current?.focus(), 100);
+    };
+
+    const handleModelSearch = (text: string) => {
+        setFormData(prev => ({ ...prev, model: text }));
+        if (formData.makeId && text.length > 0) {
+            const results = searchModelsByMake(formData.makeId, text);
+            setModelsSuggestions(results);
+            setShowModelDropdown(true);
+        } else if (formData.makeId) {
+            const results = searchModelsByMake(formData.makeId);
+            setModelsSuggestions(results);
+            setShowModelDropdown(true);
+        }
+    };
+
+    const handleSelectModel = (model: CarModel) => {
+        setFormData(prev => ({ ...prev, model: model.name }));
+        setShowModelDropdown(false);
+        setYearsSuggestions(model.years.sort((a, b) => b - a));
+        Keyboard.dismiss();
+    };
+
+    const validateForm = (): boolean => {
+        const newErrors: Partial<FormData> = {};
+
+        if (!formData.make.trim()) newErrors.make = 'Marca obbligatoria';
+        if (!formData.model.trim()) newErrors.model = 'Modello obbligatorio';
+        if (!formData.year) newErrors.year = 'Anno obbligatorio';
+        if (!formData.licensePlate.trim()) newErrors.licensePlate = 'Targa obbligatoria';
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleNext = () => {
-        if (validateStep(currentStep)) {
-            if (currentStep < 3) {
-                setCurrentStep(currentStep + 1);
-            } else {
-                handleSubmit();
-            }
-        }
-    };
-
-    const handleBack = () => {
-        if (currentStep > 0) {
-            setCurrentStep(currentStep - 1);
-            setErrors({});
-        }
-    };
-
-    const updateFormData = (field: string, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-        if (errors[field]) {
-            setErrors(prev => {
-                const newErrors = { ...prev };
-                delete newErrors[field];
-                return newErrors;
-            });
-        }
-    };
-
     const handleSubmit = async () => {
-        if (!validateStep(currentStep)) return;
+        if (!validateForm()) {
+            Alert.alert('Errore', 'Compila tutti i campi obbligatori');
+            return;
+        }
+
+        if (!user?.uid) {
+            Alert.alert('Errore', 'Utente non autenticato');
+            return;
+        }
 
         setIsLoading(true);
 
         try {
-            const user = auth.currentUser;
-            if (!user) throw new Error('Utente non autenticato');
-
-            const now = new Date();
+            const now = new Date().toISOString();
 
             const firestoreData = {
                 userId: user.uid,
@@ -165,13 +236,10 @@ const AddCarScreen = () => {
                 color: formData.color,
                 licensePlate: formData.licensePlate.trim().toUpperCase(),
                 vin: formData.vin.trim().toUpperCase() || null,
-                purchaseDate: formData.purchaseDate,
+                fuelType: formData.fuelType,
+                currentMileage: formData.currentMileage ? parseInt(formData.currentMileage) : 0,
+                purchaseDate: formData.purchaseDate || null,
                 purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
-                purchaseMileage: formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
-                currentMileage: formData.currentMileage ? parseInt(formData.currentMileage) :
-                    formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
-                insuranceCompany: formData.insuranceCompany.trim() || null,
-                insuranceExpiry: formData.insuranceExpiry || null,
                 notes: formData.notes.trim() || null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
@@ -191,13 +259,10 @@ const AddCarScreen = () => {
                 color: formData.color,
                 licensePlate: formData.licensePlate.trim().toUpperCase(),
                 vin: formData.vin.trim().toUpperCase() || null,
-                purchaseDate: formData.purchaseDate,
+                fuelType: formData.fuelType,
+                currentMileage: formData.currentMileage ? parseInt(formData.currentMileage) : 0,
+                purchaseDate: formData.purchaseDate || null,
                 purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null,
-                purchaseMileage: formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
-                currentMileage: formData.currentMileage ? parseInt(formData.currentMileage) :
-                    formData.purchaseMileage ? parseInt(formData.purchaseMileage) : 0,
-                insuranceCompany: formData.insuranceCompany.trim() || null,
-                insuranceExpiry: formData.insuranceExpiry || null,
                 notes: formData.notes.trim() || null,
                 createdAt: now,
                 updatedAt: now,
@@ -207,16 +272,9 @@ const AddCarScreen = () => {
 
             addCarToStore(localStoreData as any);
 
-            Alert.alert(
-                'Successo',
-                'Veicolo aggiunto con successo!',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => navigation.goBack(),
-                    },
-                ]
-            );
+            Alert.alert('Successo', 'Veicolo aggiunto con successo!', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
         } catch (error) {
             console.error('Error adding car:', error);
             Alert.alert('Errore', 'Impossibile aggiungere il veicolo. Riprova.');
@@ -225,577 +283,372 @@ const AddCarScreen = () => {
         }
     };
 
-    const renderColorPicker = () => (
-        <Modal
-            visible={showColorPicker}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowColorPicker(false)}
-        >
-            <TouchableOpacity
-                style={styles.modalOverlay}
-                activeOpacity={1}
-                onPress={() => setShowColorPicker(false)}
-            >
-                <View style={[styles.colorPickerModal, { backgroundColor: colors.surface }]}>
-                    <View style={styles.colorPickerHeader}>
-                        <Text style={[styles.colorPickerTitle, { color: colors.onSurface }]}>
-                            Seleziona Colore
-                        </Text>
-                        <TouchableOpacity 
-                            onPress={() => setShowColorPicker(false)}
-                            style={styles.closeButton}
+    // Render Components
+    const renderDropdown = (
+        visible: boolean,
+        data: any[],
+        onSelect: (item: any) => void,
+        keyExtractor: (item: any) => string,
+        renderItem: (item: any) => React.ReactNode
+    ) => {
+        if (!visible || data.length === 0) return null;
+
+        return (
+            <View style={styles.dropdown}>
+                <FlatList
+                    data={data}
+                    keyExtractor={keyExtractor}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => onSelect(item)}
                         >
-                            <X size={24} color={colors.onSurface} />
+                            {renderItem(item)}
                         </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.colorGrid}>
-                        {CAR_COLORS.map((color) => (
-                            <TouchableOpacity
-                                key={color.value}
-                                style={[
-                                    styles.colorOption,
-                                    {
-                                        backgroundColor: color.value,
-                                        borderColor: color.border || colors.outline,
-                                    },
-                                    formData.color === color.value && styles.colorOptionSelected,
-                                ]}
-                                onPress={() => {
-                                    updateFormData('color', color.value);
-                                    setShowColorPicker(false);
-                                }}
-                            >
-                                {formData.color === color.value && (
-                                    <View style={styles.checkmarkWrapper}>
-                                        <Check size={20} color={color.value === '#FFFFFF' ? '#000' : '#FFF'} strokeWidth={3} />
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </View>
-            </TouchableOpacity>
-        </Modal>
-    );
-
-    const renderStep = () => {
-        switch (currentStep) {
-            case 0:
-                return (
-                    <View style={styles.stepContent}>
-                        <View style={styles.stepHeader}>
-                            <Car size={28} color={colors.primary} strokeWidth={2.5} />
-                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                                Informazioni Base
-                            </Text>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Marca *
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.make ? colors.error : 'transparent',
-                            }]}>
-                                <Car size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. Toyota, BMW, Fiat"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.make}
-                                    onChangeText={(text) => updateFormData('make', text)}
-                                />
-                            </View>
-                            {errors.make && (
-                                <Text style={[styles.errorText, { color: colors.error }]}>
-                                    {errors.make}
-                                </Text>
-                            )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Modello *
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.model ? colors.error : 'transparent',
-                            }]}>
-                                <Car size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. Corolla, Serie 3, Panda"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.model}
-                                    onChangeText={(text) => updateFormData('model', text)}
-                                />
-                            </View>
-                            {errors.model && (
-                                <Text style={[styles.errorText, { color: colors.error }]}>
-                                    {errors.model}
-                                </Text>
-                            )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Anno *
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.year ? colors.error : 'transparent',
-                            }]}>
-                                <Calendar size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. 2023"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.year}
-                                    onChangeText={(text) => updateFormData('year', text)}
-                                    keyboardType="numeric"
-                                    maxLength={4}
-                                />
-                            </View>
-                            {errors.year && (
-                                <Text style={[styles.errorText, { color: colors.error }]}>
-                                    {errors.year}
-                                </Text>
-                            )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Colore
-                            </Text>
-                            <TouchableOpacity
-                                style={[styles.modernInput, {
-                                    backgroundColor: colors.surfaceVariant,
-                                }]}
-                                onPress={() => setShowColorPicker(true)}
-                            >
-                                <Palette size={20} color={colors.primary} strokeWidth={2.5} />
-                                <View style={styles.colorPreview}>
-                                    <View
-                                        style={[
-                                            styles.colorSwatch,
-                                            {
-                                                backgroundColor: formData.color,
-                                                borderColor: formData.color === '#FFFFFF' ? colors.outline : formData.color,
-                                            },
-                                        ]}
-                                    />
-                                    <Text style={[styles.colorName, { color: colors.onSurface }]}>
-                                        {CAR_COLORS.find(c => c.value === formData.color)?.name || 'Seleziona'}
-                                    </Text>
-                                </View>
-                                <ChevronRight size={20} color={colors.onSurfaceVariant} />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                );
-
-            case 1:
-                return (
-                    <View style={styles.stepContent}>
-                        <View style={styles.stepHeader}>
-                            <Key size={28} color={colors.primary} strokeWidth={2.5} />
-                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                                Identificazione
-                            </Text>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Targa *
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.licensePlate ? colors.error : 'transparent',
-                            }]}>
-                                <Key size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. AB123CD"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.licensePlate}
-                                    onChangeText={(text) => updateFormData('licensePlate', text.toUpperCase())}
-                                    autoCapitalize="characters"
-                                />
-                            </View>
-                            {errors.licensePlate && (
-                                <Text style={[styles.errorText, { color: colors.error }]}>
-                                    {errors.licensePlate}
-                                </Text>
-                            )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Numero Telaio (VIN)
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                            }]}>
-                                <Hash size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. WBADT43452G123456 (opzionale)"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.vin}
-                                    onChangeText={(text) => updateFormData('vin', text.toUpperCase())}
-                                    autoCapitalize="characters"
-                                    maxLength={17}
-                                />
-                            </View>
-                            <Text style={[styles.helperText, { color: colors.onSurfaceVariant }]}>
-                                17 caratteri alfanumerici
-                            </Text>
-                        </View>
-                    </View>
-                );
-
-            case 2:
-                return (
-                    <View style={styles.stepContent}>
-                        <View style={styles.stepHeader}>
-                            <DollarSign size={28} color={colors.primary} strokeWidth={2.5} />
-                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                                Informazioni Acquisto
-                            </Text>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Data Acquisto
-                            </Text>
-                            <UniversalDatePicker
-                                value={formData.purchaseDate}
-                                onChange={(date) => updateFormData('purchaseDate', date)}
-                                maximumDate={new Date()}
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Prezzo di Acquisto
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.purchasePrice ? colors.error : 'transparent',
-                            }]}>
-                                <DollarSign size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. 15000"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.purchasePrice}
-                                    onChangeText={(text) => updateFormData('purchasePrice', text)}
-                                    keyboardType="decimal-pad"
-                                />
-                                <Text style={[styles.currency, { color: colors.onSurfaceVariant }]}>
-                                    €
-                                </Text>
-                            </View>
-                            {errors.purchasePrice && (
-                                <Text style={[styles.errorText, { color: colors.error }]}>
-                                    {errors.purchasePrice}
-                                </Text>
-                            )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Chilometraggio all'Acquisto
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.purchaseMileage ? colors.error : 'transparent',
-                            }]}>
-                                <Gauge size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. 50000"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.purchaseMileage}
-                                    onChangeText={(text) => updateFormData('purchaseMileage', text)}
-                                    keyboardType="numeric"
-                                />
-                                <Text style={[styles.currency, { color: colors.onSurfaceVariant }]}>
-                                    km
-                                </Text>
-                            </View>
-                            {errors.purchaseMileage && (
-                                <Text style={[styles.errorText, { color: colors.error }]}>
-                                    {errors.purchaseMileage}
-                                </Text>
-                            )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Chilometraggio Attuale
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.currentMileage ? colors.error : 'transparent',
-                            }]}>
-                                <Gauge size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. 55000"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.currentMileage}
-                                    onChangeText={(text) => updateFormData('currentMileage', text)}
-                                    keyboardType="numeric"
-                                />
-                                <Text style={[styles.currency, { color: colors.onSurfaceVariant }]}>
-                                    km
-                                </Text>
-                            </View>
-                            {errors.currentMileage && (
-                                <Text style={[styles.errorText, { color: colors.error }]}>
-                                    {errors.currentMileage}
-                                </Text>
-                            )}
-                        </View>
-                    </View>
-                );
-
-            case 3:
-                return (
-                    <View style={styles.stepContent}>
-                        <View style={styles.stepHeader}>
-                            <FileText size={28} color={colors.primary} strokeWidth={2.5} />
-                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>
-                                Assicurazione e Note
-                            </Text>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Compagnia Assicurativa
-                            </Text>
-                            <View style={[styles.modernInput, {
-                                backgroundColor: colors.surfaceVariant,
-                            }]}>
-                                <FileText size={20} color={colors.primary} strokeWidth={2.5} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    placeholder="es. Generali, Allianz"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.insuranceCompany}
-                                    onChangeText={(text) => updateFormData('insuranceCompany', text)}
-                                />
-                            </View>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Scadenza Assicurazione
-                            </Text>
-                            <UniversalDatePicker
-                                value={formData.insuranceExpiry}
-                                onChange={(date) => updateFormData('insuranceExpiry', date)}
-                                minimumDate={new Date()}
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                                Note
-                            </Text>
-                            <View style={[styles.textAreaContainer, {
-                                backgroundColor: colors.surfaceVariant,
-                            }]}>
-                                <TextInput
-                                    style={[styles.textArea, { color: colors.onSurface }]}
-                                    placeholder="Aggiungi note o informazioni aggiuntive..."
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                    value={formData.notes}
-                                    onChangeText={(text) => updateFormData('notes', text)}
-                                    multiline
-                                    numberOfLines={4}
-                                    textAlignVertical="top"
-                                />
-                            </View>
-                        </View>
-                    </View>
-                );
-
-            default:
-                return null;
-        }
+                    )}
+                    style={styles.dropdownList}
+                    keyboardShouldPersistTaps="handled"
+                />
+            </View>
+        );
     };
 
-    const steps = [
-        { title: 'Info Base', icon: Car },
-        { title: 'Identificazione', icon: Key },
-        { title: 'Acquisto', icon: DollarSign },
-        { title: 'Altro', icon: FileText },
-    ];
-
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-            <StatusBar
-                barStyle={isDark ? 'light-content' : 'dark-content'}
-                backgroundColor="transparent"
-                translucent
-            />
+        <SafeAreaView style={styles.container} edges={['bottom']}>
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
+                    <X size={24} color="#0f172a" />
+                </TouchableOpacity>
+                <View style={styles.headerCenter}>
+                    <Car size={24} color="#3b82f6" />
+                    <Text style={styles.headerTitle}>Aggiungi Veicolo</Text>
+                </View>
+                <View style={styles.headerButton} />
+            </View>
 
-            <LinearGradient
-                colors={isDark 
-                    ? ['#1e1b4b', '#312e81'] 
-                    : ['#6366f1', '#8b5cf6']
-                }
-                style={styles.headerGradient}
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={[
+                    styles.scrollContent,
+                    isDesktop && styles.scrollContentDesktop,
+                ]}
+                keyboardShouldPersistTaps="handled"
             >
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <ArrowLeft size={24} color="#fff" strokeWidth={2.5} />
-                    </TouchableOpacity>
+                {/* Sezione: Informazioni Base */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Informazioni Base *</Text>
 
-                    <View style={styles.headerTitleWrapper}>
-                        <Sparkles size={20} color="#fff" style={{ marginRight: 8 }} />
-                        <Text style={styles.headerTitle}>Aggiungi Veicolo</Text>
+                    {/* Marca */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Marca *</Text>
+                        <View style={[styles.input, errors.make && styles.inputError]}>
+                            <Search size={20} color="#94a3b8" />
+                            <TextInput
+                                ref={makeInputRef}
+                                style={styles.textInput}
+                                placeholder="Cerca marca (es. Fiat, BMW...)"
+                                placeholderTextColor="#94a3b8"
+                                value={formData.make}
+                                onChangeText={handleMakeSearch}
+                                onFocus={() => setShowMakeDropdown(true)}
+                            />
+                        </View>
+                        {errors.make && <Text style={styles.errorText}>{errors.make}</Text>}
+
+                        {renderDropdown(
+                            showMakeDropdown,
+                            makesSuggestions,
+                            handleSelectMake,
+                            (item) => item.id,
+                            (item) => (
+                                <View style={styles.suggestionItem}>
+                                    <Text style={styles.suggestionText}>{item.name}</Text>
+                                    <Text style={styles.suggestionCount}>
+                                        {item.models.length} modelli
+                                    </Text>
+                                </View>
+                            )
+                        )}
                     </View>
 
-                    <View style={styles.headerRight} />
+                    {/* Modello */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Modello *</Text>
+                        <View
+                            style={[
+                                styles.input,
+                                errors.model && styles.inputError,
+                                !formData.makeId && styles.inputDisabled,
+                            ]}
+                        >
+                            <Car size={20} color="#94a3b8" />
+                            <TextInput
+                                ref={modelInputRef}
+                                style={styles.textInput}
+                                placeholder={
+                                    formData.makeId
+                                        ? 'Cerca modello...'
+                                        : 'Seleziona prima una marca'
+                                }
+                                placeholderTextColor="#94a3b8"
+                                value={formData.model}
+                                onChangeText={handleModelSearch}
+                                onFocus={() => formData.makeId && setShowModelDropdown(true)}
+                                editable={!!formData.makeId}
+                            />
+                        </View>
+                        {errors.model && <Text style={styles.errorText}>{errors.model}</Text>}
+
+                        {renderDropdown(
+                            showModelDropdown,
+                            modelsSuggestions,
+                            handleSelectModel,
+                            (item) => item.name,
+                            (item) => (
+                                <View style={styles.suggestionItem}>
+                                    <Text style={styles.suggestionText}>{item.name}</Text>
+                                    <Text style={styles.suggestionCount}>
+                                        {item.years[0]} - {item.years[item.years.length - 1]}
+                                    </Text>
+                                </View>
+                            )
+                        )}
+                    </View>
+
+                    {/* Anno */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Anno *</Text>
+                        <TouchableOpacity
+                            style={[
+                                styles.input,
+                                errors.year && styles.inputError,
+                                !formData.model && styles.inputDisabled,
+                            ]}
+                            onPress={() => formData.model && setShowYearDropdown(!showYearDropdown)}
+                            disabled={!formData.model}
+                        >
+                            <Calendar size={20} color="#94a3b8" />
+                            <Text
+                                style={[
+                                    styles.textInput,
+                                    !formData.year && styles.placeholderText,
+                                ]}
+                            >
+                                {formData.year || 'Seleziona anno'}
+                            </Text>
+                            <ChevronDown size={20} color="#94a3b8" />
+                        </TouchableOpacity>
+                        {errors.year && <Text style={styles.errorText}>{errors.year}</Text>}
+
+                        {renderDropdown(
+                            showYearDropdown,
+                            yearsSuggestions,
+                            (year) => {
+                                setFormData(prev => ({ ...prev, year: year.toString() }));
+                                setShowYearDropdown(false);
+                            },
+                            (item) => item.toString(),
+                            (item) => <Text style={styles.suggestionText}>{item}</Text>
+                        )}
+                    </View>
                 </View>
-            </LinearGradient>
 
-            <View style={[styles.progressContainer, { backgroundColor: colors.surface }]}>
-                {steps.map((step, index) => {
-                    const Icon = step.icon;
-                    const isActive = index === currentStep;
-                    const isCompleted = index < currentStep;
+                {/* Sezione: Dettagli Veicolo */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Dettagli Veicolo</Text>
 
-                    return (
-                        <React.Fragment key={index}>
-                            <View style={styles.stepIndicator}>
-                                <View
+                    {/* Targa */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Targa *</Text>
+                        <View style={[styles.input, errors.licensePlate && styles.inputError]}>
+                            <FileText size={20} color="#94a3b8" />
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="XX123YY"
+                                placeholderTextColor="#94a3b8"
+                                value={formData.licensePlate}
+                                onChangeText={(text) =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        licensePlate: text.toUpperCase(),
+                                    }))
+                                }
+                                autoCapitalize="characters"
+                                maxLength={10}
+                            />
+                        </View>
+                        {errors.licensePlate && (
+                            <Text style={styles.errorText}>{errors.licensePlate}</Text>
+                        )}
+                    </View>
+
+                    {/* VIN (opzionale) */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>VIN (Codice telaio)</Text>
+                        <View style={styles.input}>
+                            <FileText size={20} color="#94a3b8" />
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="Opzionale"
+                                placeholderTextColor="#94a3b8"
+                                value={formData.vin}
+                                onChangeText={(text) =>
+                                    setFormData(prev => ({ ...prev, vin: text.toUpperCase() }))
+                                }
+                                autoCapitalize="characters"
+                                maxLength={17}
+                            />
+                        </View>
+                    </View>
+
+                    {/* Tipo Carburante */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Tipo Carburante</Text>
+                        <View style={styles.chipGrid}>
+                            {FUEL_TYPES.map((fuel) => (
+                                <TouchableOpacity
+                                    key={fuel.id}
                                     style={[
-                                        styles.stepCircle,
-                                        {
-                                            backgroundColor: isActive || isCompleted 
-                                                ? colors.primary 
-                                                : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                                        },
+                                        styles.chip,
+                                        formData.fuelType === fuel.id && styles.chipSelected,
                                     ]}
+                                    onPress={() =>
+                                        setFormData(prev => ({ ...prev, fuelType: fuel.id }))
+                                    }
                                 >
-                                    {isCompleted ? (
-                                        <Check size={18} color="#FFF" strokeWidth={3} />
-                                    ) : (
-                                        <Icon 
-                                            size={18} 
-                                            color={isActive ? '#FFF' : colors.onSurfaceVariant} 
-                                            strokeWidth={2.5}
-                                        />
-                                    )}
-                                </View>
-                                <Text
-                                    style={[
-                                        styles.stepLabel,
-                                        {
-                                            color: isActive ? colors.primary : colors.onSurfaceVariant,
-                                            fontWeight: isActive ? '700' : '500',
-                                        },
-                                    ]}
-                                >
-                                    {step.title}
-                                </Text>
-                            </View>
-
-                            {index < steps.length - 1 && (
-                                <View style={styles.stepConnectorWrapper}>
-                                    <View
+                                    <Text style={styles.chipIcon}>{fuel.icon}</Text>
+                                    <Text
                                         style={[
-                                            styles.stepConnector,
-                                            {
-                                                backgroundColor: isCompleted 
-                                                    ? colors.primary 
-                                                    : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-                                            },
+                                            styles.chipText,
+                                            formData.fuelType === fuel.id && styles.chipTextSelected,
                                         ]}
-                                    />
-                                </View>
-                            )}
-                        </React.Fragment>
-                    );
-                })}
-            </View>
+                                    >
+                                        {fuel.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
 
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-            >
-                <ScrollView
-                    style={styles.content}
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {renderStep()}
-                </ScrollView>
-            </KeyboardAvoidingView>
+                    {/* Colore */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Colore</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <View style={styles.colorGrid}>
+                                {CAR_COLORS.map((color) => (
+                                    <TouchableOpacity
+                                        key={color.id}
+                                        style={[
+                                            styles.colorChip,
+                                            { backgroundColor: color.hex },
+                                            color.border && { borderColor: color.border, borderWidth: 1 },
+                                            formData.color === color.hex && styles.colorChipSelected,
+                                        ]}
+                                        onPress={() =>
+                                            setFormData(prev => ({ ...prev, color: color.hex }))
+                                        }
+                                    >
+                                        {formData.color === color.hex && (
+                                            <Check size={16} color={color.textColor} strokeWidth={3} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </ScrollView>
+                    </View>
 
-            <View style={[styles.footer, { 
-                backgroundColor: colors.surface,
-                borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-            }]}>
-                {currentStep > 0 && (
-                    <TouchableOpacity
-                        style={[styles.footerButton, styles.backFooterButton, {
-                            backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                        }]}
-                        onPress={handleBack}
-                        disabled={isLoading}
-                    >
-                        <ChevronLeft size={20} color={colors.onSurface} strokeWidth={2.5} />
-                        <Text style={[styles.backButtonText, { color: colors.onSurface }]}>
-                            Indietro
-                        </Text>
-                    </TouchableOpacity>
-                )}
+                    {/* Chilometraggio */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Chilometraggio Attuale</Text>
+                        <View style={styles.input}>
+                            <Gauge size={20} color="#94a3b8" />
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="0"
+                                placeholderTextColor="#94a3b8"
+                                value={formData.currentMileage}
+                                onChangeText={(text) =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        currentMileage: text.replace(/[^0-9]/g, ''),
+                                    }))
+                                }
+                                keyboardType="numeric"
+                            />
+                            <Text style={styles.unit}>km</Text>
+                        </View>
+                    </View>
+                </View>
 
+                {/* Sezione: Informazioni Acquisto (Opzionali) */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Informazioni Acquisto (Opzionali)</Text>
+
+                    {/* Prezzo Acquisto */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Prezzo di Acquisto</Text>
+                        <View style={styles.input}>
+                            <DollarSign size={20} color="#94a3b8" />
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="0.00"
+                                placeholderTextColor="#94a3b8"
+                                value={formData.purchasePrice}
+                                onChangeText={(text) =>
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        purchasePrice: text.replace(/[^0-9.]/g, ''),
+                                    }))
+                                }
+                                keyboardType="decimal-pad"
+                            />
+                            <Text style={styles.unit}>€</Text>
+                        </View>
+                    </View>
+
+                    {/* Note */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Note</Text>
+                        <View style={[styles.input, styles.textAreaInput]}>
+                            <TextInput
+                                style={[styles.textInput, styles.textArea]}
+                                placeholder="Aggiungi note aggiuntive..."
+                                placeholderTextColor="#94a3b8"
+                                value={formData.notes}
+                                onChangeText={(text) =>
+                                    setFormData(prev => ({ ...prev, notes: text }))
+                                }
+                                multiline
+                                numberOfLines={4}
+                                textAlignVertical="top"
+                            />
+                        </View>
+                    </View>
+                </View>
+            </ScrollView>
+
+            {/* Footer con pulsanti */}
+            <View style={styles.footer}>
                 <TouchableOpacity
-                    style={[
-                        styles.footerButton,
-                        currentStep === 0 && styles.fullWidthButton,
-                    ]}
-                    onPress={handleNext}
+                    style={styles.cancelButton}
+                    onPress={() => navigation.goBack()}
                     disabled={isLoading}
                 >
-                    <LinearGradient
-                        colors={['#6366f1', '#8b5cf6']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.nextButtonGradient}
-                    >
-                        {isLoading ? (
-                            <ActivityIndicator color="#FFF" />
-                        ) : (
-                            <>
-                                <Text style={styles.nextButtonText}>
-                                    {currentStep === 3 ? 'Salva Veicolo' : 'Avanti'}
-                                </Text>
-                                {currentStep === 3 ? (
-                                    <Save size={20} color="#FFF" strokeWidth={2.5} />
-                                ) : (
-                                    <ChevronRight size={20} color="#FFF" strokeWidth={2.5} />
-                                )}
-                            </>
-                        )}
-                    </LinearGradient>
+                    <Text style={styles.cancelButtonText}>Annulla</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+                    onPress={handleSubmit}
+                    disabled={isLoading}
+                >
+                    <Check size={20} color="#fff" />
+                    <Text style={styles.submitButtonText}>
+                        {isLoading ? 'Salvataggio...' : 'Salva Veicolo'}
+                    </Text>
                 </TouchableOpacity>
             </View>
-
-            {renderColorPicker()}
         </SafeAreaView>
     );
 };
@@ -803,241 +656,273 @@ const AddCarScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#f8fafc',
     },
-    headerGradient: {
-        paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
-    },
+
+    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
         paddingVertical: 16,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
     },
-    backButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerTitleWrapper: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#fff',
-        letterSpacing: -0.5,
-    },
-    headerRight: {
-        width: 44,
-    },
-    progressContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 20,
-    },
-    stepIndicator: {
-        alignItems: 'center',
-    },
-    stepCircle: {
+    headerButton: {
         width: 40,
         height: 40,
-        borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 6,
     },
-    stepLabel: {
-        fontSize: 11,
-    },
-    stepConnectorWrapper: {
-        flex: 1,
+    headerCenter: {
+        flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 26,
+        gap: 12,
     },
-    stepConnector: {
-        width: '100%',
-        height: 3,
-        borderRadius: 1.5,
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#0f172a',
     },
-    content: {
+
+    // ScrollView
+    scrollView: {
         flex: 1,
     },
     scrollContent: {
-        padding: 24,
+        padding: 20,
+        paddingBottom: 100,
     },
-    stepContent: {
-        paddingBottom: 20,
+    scrollContentDesktop: {
+        maxWidth: 800,
+        alignSelf: 'center',
+        width: '100%',
     },
-    stepHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 28,
-        gap: 12,
+
+    // Sections
+    section: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    stepTitle: {
-        fontSize: 26,
+    sectionTitle: {
+        fontSize: 18,
         fontWeight: '700',
-        letterSpacing: -0.5,
+        color: '#0f172a',
+        marginBottom: 16,
     },
-    inputGroup: {
-        marginBottom: 24,
+
+    // Input Container
+    inputContainer: {
+        marginBottom: 20,
     },
     label: {
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '600',
-        marginBottom: 10,
-        letterSpacing: -0.2,
-    },
-    modernInput: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 18,
-        paddingVertical: 16,
-        borderRadius: 16,
-        borderWidth: 2,
+        color: '#64748b',
+        marginBottom: 8,
     },
     input: {
-        flex: 1,
-        fontSize: 16,
-        marginLeft: 12,
-        fontWeight: '500',
-    },
-    currency: {
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    helperText: {
-        fontSize: 13,
-        marginTop: 6,
-        marginLeft: 4,
-    },
-    errorText: {
-        fontSize: 13,
-        marginTop: 6,
-        marginLeft: 4,
-        fontWeight: '500',
-    },
-    colorPreview: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        marginLeft: 12,
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        gap: 12,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
     },
-    colorSwatch: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        borderWidth: 2,
-        marginRight: 10,
+    inputError: {
+        borderColor: '#ef4444',
     },
-    colorName: {
+    inputDisabled: {
+        opacity: 0.5,
+    },
+    textInput: {
+        flex: 1,
         fontSize: 16,
-        fontWeight: '500',
+        color: '#0f172a',
+        padding: 0,
     },
-    textAreaContainer: {
-        paddingHorizontal: 18,
-        paddingVertical: 16,
-        borderRadius: 16,
+    placeholderText: {
+        color: '#94a3b8',
+    },
+    textAreaInput: {
+        paddingVertical: 12,
+        alignItems: 'flex-start',
     },
     textArea: {
-        fontSize: 16,
-        minHeight: 120,
-        fontWeight: '500',
+        minHeight: 100,
+        textAlignVertical: 'top',
     },
-    footer: {
-        flexDirection: 'row',
+    unit: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#64748b',
+    },
+    errorText: {
+        fontSize: 12,
+        color: '#ef4444',
+        marginTop: 4,
+    },
+
+    // Dropdown
+    dropdown: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        marginTop: 8,
+        maxHeight: 250,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 5,
+    },
+    dropdownList: {
+        borderRadius: 12,
+    },
+    dropdownItem: {
         padding: 16,
-        gap: 12,
-        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
     },
-    footerButton: {
-        flex: 1,
-        borderRadius: 16,
-        overflow: 'hidden',
-    },
-    backFooterButton: {
-        flex: 1,
-    },
-    fullWidthButton: {
-        flex: 1,
-    },
-    backButtonText: {
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    nextButtonGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 18,
-        paddingHorizontal: 24,
-        gap: 10,
-    },
-    nextButtonText: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#FFF',
-        letterSpacing: -0.3,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    colorPickerModal: {
-        width: screenWidth - 48,
-        maxWidth: 400,
-        borderRadius: 24,
-        padding: 24,
-    },
-    colorPickerHeader: {
+    suggestionItem: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
     },
-    colorPickerTitle: {
-        fontSize: 22,
-        fontWeight: '700',
-        letterSpacing: -0.5,
+    suggestionText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#0f172a',
     },
-    closeButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
+    suggestionCount: {
+        fontSize: 12,
+        color: '#94a3b8',
     },
-    colorGrid: {
+
+    // Chips
+    chipGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 16,
-        justifyContent: 'center',
+        gap: 8,
     },
-    colorOption: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        borderWidth: 3,
+    chip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        gap: 6,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    chipSelected: {
+        backgroundColor: '#dbeafe',
+        borderColor: '#3b82f6',
+    },
+    chipIcon: {
+        fontSize: 16,
+    },
+    chipText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#64748b',
+    },
+    chipTextSelected: {
+        color: '#1e40af',
+        fontWeight: '600',
+    },
+
+    // Colors
+    colorGrid: {
+        flexDirection: 'row',
+        gap: 12,
+        paddingVertical: 4,
+    },
+    colorChip: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
-    colorOptionSelected: {
-        borderWidth: 4,
-        transform: [{ scale: 1.1 }],
+    colorChipSelected: {
+        borderWidth: 3,
+        borderColor: '#3b82f6',
     },
-    checkmarkWrapper: {
-        backgroundColor: 'rgba(0,0,0,0.1)',
-        borderRadius: 20,
-        padding: 4,
+
+    // Footer
+    footer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        padding: 20,
+        gap: 12,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#e2e8f0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    cancelButton: {
+        flex: 1,
+        paddingVertical: 16,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#64748b',
+    },
+    submitButton: {
+        flex: 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        borderRadius: 12,
+        backgroundColor: '#3b82f6',
+        gap: 8,
+        shadowColor: '#3b82f6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    submitButtonDisabled: {
+        opacity: 0.5,
+    },
+    submitButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
     },
 });
 
