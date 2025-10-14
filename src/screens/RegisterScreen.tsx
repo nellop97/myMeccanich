@@ -1,4 +1,4 @@
-// src/screens/RegisterScreen.tsx - CON LOGIN AUTOMATICO E ANALYTICS
+// src/screens/RegisterScreen.tsx - VERSIONE CORRETTA
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -23,11 +23,13 @@ import {
     Car,
     Wrench,
     CheckCircle,
+    MapPin,
+    FileText,
 } from 'lucide-react-native';
 
 // Firebase
 import { auth, db } from '../services/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Analytics
@@ -124,8 +126,16 @@ const RegisterScreen = () => {
             if (!formData.lastName.trim()) {
                 newErrors.lastName = 'Cognome richiesto';
             }
-            if (userType === 'mechanic' && !formData.workshopName?.trim()) {
-                newErrors.workshopName = 'Nome officina richiesto';
+            if (userType === 'mechanic') {
+                if (!formData.workshopName?.trim()) {
+                    newErrors.workshopName = 'Nome officina richiesto';
+                }
+                if (!formData.phone?.trim()) {
+                    newErrors.phone = 'Numero di telefono richiesto per meccanici';
+                }
+                if (!formData.address?.trim()) {
+                    newErrors.address = 'Indirizzo richiesto per meccanici';
+                }
             }
         }
 
@@ -154,7 +164,9 @@ const RegisterScreen = () => {
         }
     };
 
-    // Registrazione CON LOGIN AUTOMATICO
+    // ============================================================
+    // REGISTRAZIONE CORRETTA CON TUTTI I CAMPI NECESSARI
+    // ============================================================
     const handleRegister = async () => {
         if (!validateStep()) return;
 
@@ -176,19 +188,17 @@ const RegisterScreen = () => {
             // 2. Determina il tipo di utente per Firestore
             const firestoreUserType = userType === 'owner' ? 'user' : 'mechanic';
 
-            // 3. Salva dati utente in Firestore
-            const userData = {
+            // 3. Prepara i dati utente base (comuni a tutti)
+            const baseUserData = {
                 uid: userId,
                 email: formData.email.trim(),
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
                 name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-                phone: formData.phone.trim() || null,
+                phone: formData.phone.trim() || '',
                 role: userType,
                 userType: firestoreUserType,
-                workshopName: userType === 'mechanic' ? formData.workshopName?.trim() || null : null,
-                vatNumber: userType === 'mechanic' ? formData.vatNumber?.trim() || null : null,
-                address: formData.address?.trim() || null,
+                loginProvider: 'email',
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 isActive: true,
@@ -196,33 +206,82 @@ const RegisterScreen = () => {
                 emailVerified: false,
             };
 
+            // 4. Aggiungi campi specifici per il meccanico
+            let userData;
+
+            if (userType === 'mechanic') {
+                // ✅ TUTTI I CAMPI NECESSARI PER IL MECCANICO
+                userData = {
+                    ...baseUserData,
+                    workshopName: formData.workshopName?.trim() || '',
+                    vatNumber: formData.vatNumber?.trim() || '',
+                    address: formData.address?.trim() || '',
+                    mechanicLicense: '', // Campo vuoto ma presente
+                    rating: 0, // Rating iniziale
+                    reviewsCount: 0, // Numero recensioni iniziale
+                    verified: false, // Account non verificato inizialmente
+                };
+
+                console.log('✅ Dati meccanico preparati:', {
+                    workshopName: userData.workshopName,
+                    vatNumber: userData.vatNumber,
+                    address: userData.address,
+                    rating: userData.rating,
+                    reviewsCount: userData.reviewsCount,
+                    verified: userData.verified,
+                });
+            } else {
+                // Dati per proprietario auto
+                userData = {
+                    ...baseUserData,
+                    workshopName: null,
+                    vatNumber: null,
+                    address: formData.address?.trim() || null,
+                };
+            }
+
+            // 5. Salva su Firestore
             await setDoc(doc(db, 'users', userId), userData);
             console.log('✅ Dati utente salvati su Firestore');
 
-            // 4. Log analytics
+            // 6. Log analytics
             await logRegistration(firestoreUserType);
             console.log('✅ Analytics registrato');
 
-            // 5. Aggiorna lo store Zustand immediatamente
+            // 7. Aggiorna lo store Zustand con TUTTI i dati necessari
             setUser({
                 id: userId,
+                uid: userId,
                 name: userData.name,
                 email: userData.email,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
                 isLoggedIn: true,
                 isMechanic: userType === 'mechanic',
+                userType: firestoreUserType,
                 phoneNumber: userData.phone || undefined,
                 emailVerified: false,
-                workshopName: userData.workshopName || undefined,
-                workshopAddress: userData.address || undefined,
-                vatNumber: userData.vatNumber || undefined,
+                loginProvider: 'email',
+                // Dati specifici meccanico
+                ...(userType === 'mechanic' && {
+                    workshopName: userData.workshopName || undefined,
+                    workshopAddress: userData.address || undefined,
+                    vatNumber: userData.vatNumber || undefined,
+                    mechanicLicense: userData.mechanicLicense || undefined,
+                    rating: userData.rating,
+                    reviewsCount: userData.reviewsCount,
+                    verified: userData.verified,
+                }),
             });
 
             console.log('✅ Store aggiornato con:', {
                 isMechanic: userType === 'mechanic',
                 userType: firestoreUserType,
+                hasAllFields: userType === 'mechanic' ?
+                    'rating' in userData && 'verified' in userData : true,
             });
 
-            // 6. Mostra successo e naviga alla homepage corretta
+            // 8. Mostra successo
             Alert.alert(
                 'Successo! 🎉',
                 `Benvenuto ${formData.firstName}! Il tuo account è stato creato.`,
@@ -231,8 +290,7 @@ const RegisterScreen = () => {
                         text: 'OK',
                         onPress: () => {
                             // La navigazione sarà gestita automaticamente da AppNavigator
-                            // grazie all'aggiornamento dello store con isLoggedIn: true
-                            console.log('✅ Navigazione automatica alla homepage...');
+                            console.log('✅ Registrazione completata, redirect automatico...');
                         },
                     },
                 ]
@@ -258,31 +316,19 @@ const RegisterScreen = () => {
         }
     };
 
-    // Render Steps
-    const renderStep = () => {
-        return (
-            <Animated.View
-                style={{
-                    opacity: fadeAnim,
-                    transform: [{ translateY: slideAnim }],
-                }}
-            >
-                {currentStep === 0 && renderUserTypeSelection()}
-                {currentStep === 1 && renderCredentialsStep()}
-                {currentStep === 2 && renderPersonalInfoStep()}
-            </Animated.View>
-        );
-    };
+    // ============================================================
+    // RENDER STEPS
+    // ============================================================
 
     const renderUserTypeSelection = () => (
         <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>Chi sei?</Text>
+            <Text style={styles.stepTitle}>Scegli il tuo profilo</Text>
             <Text style={styles.stepSubtitle}>
-                Scegli il tipo di account che desideri creare
+                Seleziona come vuoi utilizzare l'app
             </Text>
 
             <View style={styles.userTypeContainer}>
-                {/* Proprietario */}
+                {/* Proprietario auto */}
                 <TouchableOpacity
                     style={[
                         styles.userTypeCard,
@@ -295,7 +341,7 @@ const RegisterScreen = () => {
                     </View>
                     <Text style={styles.userTypeTitle}>Proprietario Auto</Text>
                     <Text style={styles.userTypeDesc}>
-                        Gestisci le tue auto, manutenzioni e scadenze
+                        Gestisci le tue auto e le manutenzioni
                     </Text>
                     {userType === 'owner' && (
                         <View style={styles.selectedBadge}>
@@ -420,290 +466,314 @@ const RegisterScreen = () => {
 
     const renderPersonalInfoStep = () => (
         <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>Dati Personali</Text>
+            <Text style={styles.stepTitle}>Dati {userType === 'mechanic' ? 'Officina' : 'Personali'}</Text>
             <Text style={styles.stepSubtitle}>
                 {userType === 'mechanic'
                     ? 'Completa il profilo della tua officina'
                     : 'Completa il tuo profilo'}
             </Text>
 
-            <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                    <User size={20} color="#64748b" style={styles.inputIcon} />
-                    <TextInput
-                        mode="outlined"
-                        label="Nome"
-                        value={formData.firstName}
-                        onChangeText={(text) => {
-                            setFormData({ ...formData, firstName: text });
-                            setErrors({ ...errors, firstName: '' });
-                        }}
-                        error={!!errors.firstName}
-                        autoCapitalize="words"
-                        style={styles.input}
-                        disabled={loading}
-                        theme={{
-                            colors: {
-                                primary: '#3b82f6',
-                                outline: errors.firstName ? '#ef4444' : '#e2e8f0',
-                            },
-                        }}
-                    />
-                </View>
-                {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+            <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.inputContainer}>
+                    {/* Nome */}
+                    <View style={styles.inputWrapper}>
+                        <User size={20} color="#64748b" style={styles.inputIcon} />
+                        <TextInput
+                            mode="outlined"
+                            label="Nome"
+                            value={formData.firstName}
+                            onChangeText={(text) => {
+                                setFormData({ ...formData, firstName: text });
+                                setErrors({ ...errors, firstName: '' });
+                            }}
+                            error={!!errors.firstName}
+                            style={styles.input}
+                            disabled={loading}
+                            theme={{
+                                colors: {
+                                    primary: '#3b82f6',
+                                    outline: errors.firstName ? '#ef4444' : '#e2e8f0',
+                                },
+                            }}
+                        />
+                    </View>
+                    {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
 
-                <View style={styles.inputWrapper}>
-                    <User size={20} color="#64748b" style={styles.inputIcon} />
-                    <TextInput
-                        mode="outlined"
-                        label="Cognome"
-                        value={formData.lastName}
-                        onChangeText={(text) => {
-                            setFormData({ ...formData, lastName: text });
-                            setErrors({ ...errors, lastName: '' });
-                        }}
-                        error={!!errors.lastName}
-                        autoCapitalize="words"
-                        style={styles.input}
-                        disabled={loading}
-                        theme={{
-                            colors: {
-                                primary: '#3b82f6',
-                                outline: errors.lastName ? '#ef4444' : '#e2e8f0',
-                            },
-                        }}
-                    />
-                </View>
-                {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
+                    {/* Cognome */}
+                    <View style={styles.inputWrapper}>
+                        <User size={20} color="#64748b" style={styles.inputIcon} />
+                        <TextInput
+                            mode="outlined"
+                            label="Cognome"
+                            value={formData.lastName}
+                            onChangeText={(text) => {
+                                setFormData({ ...formData, lastName: text });
+                                setErrors({ ...errors, lastName: '' });
+                            }}
+                            error={!!errors.lastName}
+                            style={styles.input}
+                            disabled={loading}
+                            theme={{
+                                colors: {
+                                    primary: '#3b82f6',
+                                    outline: errors.lastName ? '#ef4444' : '#e2e8f0',
+                                },
+                            }}
+                        />
+                    </View>
+                    {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
 
-                <View style={styles.inputWrapper}>
-                    <Phone size={20} color="#64748b" style={styles.inputIcon} />
-                    <TextInput
-                        mode="outlined"
-                        label="Telefono (opzionale)"
-                        value={formData.phone}
-                        onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                        keyboardType="phone-pad"
-                        style={styles.input}
-                        disabled={loading}
-                        theme={{
-                            colors: {
-                                primary: '#3b82f6',
-                                outline: '#e2e8f0',
-                            },
-                        }}
-                    />
-                </View>
+                    {/* Telefono */}
+                    <View style={styles.inputWrapper}>
+                        <Phone size={20} color="#64748b" style={styles.inputIcon} />
+                        <TextInput
+                            mode="outlined"
+                            label={userType === 'mechanic' ? 'Telefono *' : 'Telefono (opzionale)'}
+                            value={formData.phone}
+                            onChangeText={(text) => {
+                                setFormData({ ...formData, phone: text });
+                                setErrors({ ...errors, phone: '' });
+                            }}
+                            error={!!errors.phone}
+                            keyboardType="phone-pad"
+                            style={styles.input}
+                            disabled={loading}
+                            theme={{
+                                colors: {
+                                    primary: '#3b82f6',
+                                    outline: errors.phone ? '#ef4444' : '#e2e8f0',
+                                },
+                            }}
+                        />
+                    </View>
+                    {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
 
-                {userType === 'mechanic' && (
-                    <>
-                        <View style={styles.inputWrapper}>
-                            <Building size={20} color="#64748b" style={styles.inputIcon} />
-                            <TextInput
-                                mode="outlined"
-                                label="Nome Officina"
-                                value={formData.workshopName}
-                                onChangeText={(text) => {
-                                    setFormData({ ...formData, workshopName: text });
-                                    setErrors({ ...errors, workshopName: '' });
-                                }}
-                                error={!!errors.workshopName}
-                                autoCapitalize="words"
-                                style={styles.input}
-                                disabled={loading}
-                                theme={{
-                                    colors: {
-                                        primary: '#3b82f6',
-                                        outline: errors.workshopName ? '#ef4444' : '#e2e8f0',
-                                    },
-                                }}
-                            />
-                        </View>
-                        {errors.workshopName && (
-                            <Text style={styles.errorText}>{errors.workshopName}</Text>
-                        )}
-
-                        <View style={styles.inputWrapper}>
-                            <TextInput
-                                mode="outlined"
-                                label="Partita IVA (opzionale)"
-                                value={formData.vatNumber}
-                                onChangeText={(text) => setFormData({ ...formData, vatNumber: text })}
-                                style={styles.input}
-                                disabled={loading}
-                                theme={{
-                                    colors: {
-                                        primary: '#3b82f6',
-                                        outline: '#e2e8f0',
-                                    },
-                                }}
-                            />
-                        </View>
-
-                        <View style={styles.inputWrapper}>
-                            <TextInput
-                                mode="outlined"
-                                label="Indirizzo (opzionale)"
-                                value={formData.address}
-                                onChangeText={(text) => setFormData({ ...formData, address: text })}
-                                style={styles.input}
-                                disabled={loading}
-                                multiline
-                                numberOfLines={2}
-                                theme={{
-                                    colors: {
-                                        primary: '#3b82f6',
-                                        outline: '#e2e8f0',
-                                    },
-                                }}
-                            />
-                        </View>
-                    </>
-                )}
-            </View>
-        </View>
-    );
-
-    return (
-        <View style={styles.container}>
-            <View style={styles.progressContainer}>
-                <ProgressBar progress={progress} color="#3b82f6" style={styles.progressBar} />
-            </View>
-
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.keyboardView}
-            >
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <View style={styles.content}>
-                        <View style={styles.header}>
-                            <Text style={styles.mainTitle}>Registrazione</Text>
-                            <Text style={styles.mainSubtitle}>
-                                Passo {currentStep + 1} di {totalSteps}
-                            </Text>
-                        </View>
-
-                        {renderStep()}
-
-                        <View style={styles.buttonContainer}>
-                            {currentStep > 0 && (
-                                <TouchableOpacity
-                                    style={[styles.button, styles.backButton]}
-                                    onPress={handleBack}
+                    {/* Campi specifici per meccanico */}
+                    {userType === 'mechanic' && (
+                        <>
+                            {/* Nome Officina */}
+                            <View style={styles.inputWrapper}>
+                                <Building size={20} color="#64748b" style={styles.inputIcon} />
+                                <TextInput
+                                    mode="outlined"
+                                    label="Nome Officina *"
+                                    value={formData.workshopName}
+                                    onChangeText={(text) => {
+                                        setFormData({ ...formData, workshopName: text });
+                                        setErrors({ ...errors, workshopName: '' });
+                                    }}
+                                    error={!!errors.workshopName}
+                                    style={styles.input}
                                     disabled={loading}
-                                >
-                                    <ArrowLeft size={20} color="#64748b" />
-                                    <Text style={styles.backButtonText}>Indietro</Text>
-                                </TouchableOpacity>
+                                    theme={{
+                                        colors: {
+                                            primary: '#3b82f6',
+                                            outline: errors.workshopName ? '#ef4444' : '#e2e8f0',
+                                        },
+                                    }}
+                                />
+                            </View>
+                            {errors.workshopName && (
+                                <Text style={styles.errorText}>{errors.workshopName}</Text>
                             )}
 
-                            <TouchableOpacity
-                                style={[
-                                    styles.button,
-                                    styles.nextButton,
-                                    (currentStep === 0 && !userType) || loading
-                                        ? styles.buttonDisabled
-                                        : {},
-                                ]}
-                                onPress={handleNext}
-                                disabled={(currentStep === 0 && !userType) || loading}
-                            >
-                                <Text style={styles.nextButtonText}>
-                                    {loading
-                                        ? 'Attendi...'
-                                        : currentStep === totalSteps - 1
-                                            ? 'Completa'
-                                            : 'Avanti'}
-                                </Text>
-                                {!loading && <ArrowRight size={20} color="#fff" />}
-                            </TouchableOpacity>
-                        </View>
-
-                        {currentStep === 0 && (
-                            <View style={styles.loginContainer}>
-                                <Text style={styles.loginText}>Hai già un account? </Text>
-                                <TouchableOpacity onPress={() => navigation.navigate('Login' as never)}>
-                                    <Text style={styles.loginLink}>Accedi</Text>
-                                </TouchableOpacity>
+                            {/* Indirizzo */}
+                            <View style={styles.inputWrapper}>
+                                <MapPin size={20} color="#64748b" style={styles.inputIcon} />
+                                <TextInput
+                                    mode="outlined"
+                                    label="Indirizzo Officina *"
+                                    value={formData.address}
+                                    onChangeText={(text) => {
+                                        setFormData({ ...formData, address: text });
+                                        setErrors({ ...errors, address: '' });
+                                    }}
+                                    error={!!errors.address}
+                                    style={styles.input}
+                                    disabled={loading}
+                                    theme={{
+                                        colors: {
+                                            primary: '#3b82f6',
+                                            outline: errors.address ? '#ef4444' : '#e2e8f0',
+                                        },
+                                    }}
+                                />
                             </View>
-                        )}
-                    </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+                            {errors.address && (
+                                <Text style={styles.errorText}>{errors.address}</Text>
+                            )}
+
+                            {/* Partita IVA */}
+                            <View style={styles.inputWrapper}>
+                                <FileText size={20} color="#64748b" style={styles.inputIcon} />
+                                <TextInput
+                                    mode="outlined"
+                                    label="Partita IVA (opzionale)"
+                                    value={formData.vatNumber}
+                                    onChangeText={(text) => {
+                                        setFormData({ ...formData, vatNumber: text });
+                                        setErrors({ ...errors, vatNumber: '' });
+                                    }}
+                                    keyboardType="numeric"
+                                    style={styles.input}
+                                    disabled={loading}
+                                    theme={{
+                                        colors: {
+                                            primary: '#3b82f6',
+                                            outline: '#e2e8f0',
+                                        },
+                                    }}
+                                />
+                            </View>
+                        </>
+                    )}
+                </View>
+            </ScrollView>
         </View>
     );
+
+    const renderStep = () => {
+        return (
+            <Animated.View
+                style={{
+                    opacity: fadeAnim,
+                    transform: [{ translateY: slideAnim }],
+                }}
+            >
+                {currentStep === 0 && renderUserTypeSelection()}
+                {currentStep === 1 && renderCredentialsStep()}
+                {currentStep === 2 && renderPersonalInfoStep()}
+            </Animated.View>
+        );
+    };
+
+    // ============================================================
+    // RENDER PRINCIPALE
+    // ============================================================
+
+    return (
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.container}
+        >
+            <View style={styles.container}>
+                {/* Header con progress */}
+                <View style={styles.header}>
+                    <Text style={styles.headerTitle}>Crea Account</Text>
+                    <ProgressBar
+                        progress={progress}
+                        color="#3b82f6"
+                        style={styles.progressBar}
+                    />
+                    <Text style={styles.stepIndicator}>
+                        Step {currentStep + 1} di {totalSteps}
+                    </Text>
+                </View>
+
+                {/* Contenuto step */}
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {renderStep()}
+                </ScrollView>
+
+                {/* Footer con pulsanti */}
+                <View style={styles.footer}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={handleBack}
+                        disabled={loading}
+                    >
+                        <ArrowLeft size={20} color="#64748b" />
+                        <Text style={styles.backButtonText}>
+                            {currentStep === 0 ? 'Login' : 'Indietro'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[
+                            styles.nextButton,
+                            (loading || (currentStep === 0 && !userType)) && styles.nextButtonDisabled,
+                        ]}
+                        onPress={handleNext}
+                        disabled={loading || (currentStep === 0 && !userType)}
+                    >
+                        <Text style={styles.nextButtonText}>
+                            {loading ? 'Caricamento...' : currentStep === totalSteps - 1 ? 'Registrati' : 'Avanti'}
+                        </Text>
+                        {!loading && <ArrowRight size={20} color="#fff" />}
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </KeyboardAvoidingView>
+    );
 };
+
+// ============================================================
+// STYLES
+// ============================================================
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8fafc',
     },
-    progressContainer: {
-        paddingHorizontal: 20,
+    header: {
+        padding: 24,
         paddingTop: Platform.OS === 'ios' ? 60 : 40,
-        paddingBottom: 16,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
+    },
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: '#1e293b',
+        marginBottom: 16,
     },
     progressBar: {
         height: 4,
         borderRadius: 2,
         backgroundColor: '#e2e8f0',
     },
-    keyboardView: {
+    stepIndicator: {
+        fontSize: 14,
+        color: '#64748b',
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    scrollView: {
         flex: 1,
     },
     scrollContent: {
-        flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingBottom: 40,
-    },
-    content: {
-        width: '100%',
-        maxWidth: 480,
-        alignSelf: 'center',
-    },
-    header: {
-        alignItems: 'center',
-        marginBottom: 32,
-    },
-    mainTitle: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: '#0f172a',
-        marginBottom: 8,
-    },
-    mainSubtitle: {
-        fontSize: 16,
-        color: '#64748b',
+        padding: 24,
     },
     stepContainer: {
-        marginBottom: 24,
+        flex: 1,
     },
     stepTitle: {
         fontSize: 24,
-        fontWeight: '700',
-        color: '#0f172a',
+        fontWeight: 'bold',
+        color: '#1e293b',
         marginBottom: 8,
     },
     stepSubtitle: {
         fontSize: 16,
         color: '#64748b',
-        marginBottom: 24,
+        marginBottom: 32,
+        lineHeight: 24,
     },
     userTypeContainer: {
         gap: 16,
     },
     userTypeCard: {
         backgroundColor: '#fff',
-        padding: 24,
         borderRadius: 16,
+        padding: 24,
         borderWidth: 2,
         borderColor: '#e2e8f0',
-        alignItems: 'center',
         position: 'relative',
     },
     userTypeCardSelected: {
@@ -720,19 +790,22 @@ const styles = StyleSheet.create({
     },
     userTypeTitle: {
         fontSize: 20,
-        fontWeight: '700',
-        color: '#0f172a',
+        fontWeight: '600',
+        color: '#1e293b',
         marginBottom: 8,
     },
     userTypeDesc: {
         fontSize: 14,
         color: '#64748b',
-        textAlign: 'center',
+        lineHeight: 20,
     },
     selectedBadge: {
         position: 'absolute',
         top: 16,
         right: 16,
+        backgroundColor: '#d1fae5',
+        borderRadius: 20,
+        padding: 4,
     },
     inputContainer: {
         gap: 16,
@@ -740,40 +813,40 @@ const styles = StyleSheet.create({
     inputWrapper: {
         position: 'relative',
     },
-    input: {
-        backgroundColor: '#fff',
-    },
     inputIcon: {
         position: 'absolute',
-        left: 12,
-        top: 20,
+        left: 16,
+        top: 28,
         zIndex: 1,
     },
+    input: {
+        backgroundColor: '#fff',
+        paddingLeft: 48,
+    },
     errorText: {
+        fontSize: 12,
         color: '#ef4444',
-        fontSize: 14,
-        marginTop: -12,
-        marginLeft: 4,
+        marginTop: -8,
+        marginLeft: 16,
     },
-    buttonContainer: {
+    footer: {
         flexDirection: 'row',
+        padding: 24,
         gap: 12,
-        marginTop: 32,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#e2e8f0',
     },
-    button: {
+    backButton: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 16,
         paddingHorizontal: 24,
         borderRadius: 12,
+        backgroundColor: '#f1f5f9',
         gap: 8,
-    },
-    backButton: {
-        flex: 1,
-        backgroundColor: '#fff',
-        borderWidth: 2,
-        borderColor: '#e2e8f0',
     },
     backButtonText: {
         fontSize: 16,
@@ -782,30 +855,22 @@ const styles = StyleSheet.create({
     },
     nextButton: {
         flex: 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        borderRadius: 12,
         backgroundColor: '#3b82f6',
+        gap: 8,
+    },
+    nextButtonDisabled: {
+        backgroundColor: '#94a3b8',
     },
     nextButtonText: {
         fontSize: 16,
         fontWeight: '600',
         color: '#fff',
-    },
-    buttonDisabled: {
-        opacity: 0.5,
-    },
-    loginContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 24,
-    },
-    loginText: {
-        fontSize: 15,
-        color: '#64748b',
-    },
-    loginLink: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#3b82f6',
     },
 });
 
