@@ -1,4 +1,6 @@
-// src/components/form/FormComponents.tsx
+// src/components/shared/FormComponents.tsx
+// Componenti form riutilizzabili multipiattaforma
+
 import React from 'react';
 import {
     View,
@@ -6,108 +8,74 @@ import {
     TextInput,
     TouchableOpacity,
     StyleSheet,
+    Platform,
     TextInputProps,
 } from 'react-native';
 import { LucideIcon } from 'lucide-react-native';
 
 // ============================================
-// FORM INPUT CON ICONA
+// DATE INPUT MULTIPIATTAFORMA
 // ============================================
-interface FormInputProps extends TextInputProps {
-    label?: string;
+interface DateInputProps {
+    label: string;
+    value?: Date;
+    onChange: (date?: Date) => void;
+    placeholder?: string;
     icon?: LucideIcon;
-    iconColor?: string;
     error?: string;
-    required?: boolean;
-    rightElement?: React.ReactNode;
-    containerStyle?: any;
 }
 
-export const FormInput: React.FC<FormInputProps> = ({
+export const DateInput: React.FC<DateInputProps> = ({
                                                         label,
+                                                        value,
+                                                        onChange,
+                                                        placeholder = 'GG/MM/AAAA',
                                                         icon: Icon,
-                                                        iconColor = '#94a3b8',
                                                         error,
-                                                        required = false,
-                                                        rightElement,
-                                                        containerStyle,
-                                                        ...textInputProps
                                                     }) => {
-    return (
-        <View style={[styles.inputContainer, containerStyle]}>
-            {label && (
-                <Text style={styles.label}>
-                    {label} {required && <Text style={styles.required}>*</Text>}
-                </Text>
-            )}
-            <View style={[styles.input, error && styles.inputError]}>
-                {Icon && <Icon size={20} color={iconColor} />}
-                <TextInput
-                    style={styles.textInput}
-                    placeholderTextColor="#94a3b8"
-                    {...textInputProps}
-                />
-                {rightElement}
+    if (Platform.OS === 'web') {
+        return (
+            <View style={styles.fieldContainer}>
+                <Text style={styles.label}>{label}</Text>
+                <View style={[styles.inputWrapper, error && styles.inputError]}>
+                    {Icon && <Icon size={20} color="#64748b" />}
+                    <input
+                        type="date"
+                        value={value ? value.toISOString().split('T')[0] : ''}
+                        onChange={(e) =>
+                            onChange(e.target.value ? new Date(e.target.value) : undefined)
+                        }
+                        placeholder={placeholder}
+                        style={{
+                            flex: 1,
+                            fontSize: 16,
+                            color: '#1e293b',
+                            border: 'none',
+                            outline: 'none',
+                            backgroundColor: 'transparent',
+                        }}
+                    />
+                </View>
+                {error && <Text style={styles.errorText}>{error}</Text>}
             </View>
-            {error && <Text style={styles.errorText}>{error}</Text>}
-        </View>
-    );
-};
+        );
+    }
 
-// ============================================
-// FORM SELECT / DROPDOWN BUTTON
-// ============================================
-interface FormSelectProps {
-    label?: string;
-    icon?: LucideIcon;
-    iconColor?: string;
-    value: string;
-    placeholder: string;
-    onPress: () => void;
-    error?: string;
-    required?: boolean;
-    disabled?: boolean;
-    rightIcon?: LucideIcon;
-}
-
-export const FormSelect: React.FC<FormSelectProps> = ({
-                                                          label,
-                                                          icon: Icon,
-                                                          iconColor = '#94a3b8',
-                                                          value,
-                                                          placeholder,
-                                                          onPress,
-                                                          error,
-                                                          required = false,
-                                                          disabled = false,
-                                                          rightIcon: RightIcon,
-                                                      }) => {
+    // Mobile: usa TextInput con DateTimePicker nativo
     return (
-        <View style={styles.inputContainer}>
-            {label && (
-                <Text style={styles.label}>
-                    {label} {required && <Text style={styles.required}>*</Text>}
-                </Text>
-            )}
+        <View style={styles.fieldContainer}>
+            <Text style={styles.label}>{label}</Text>
             <TouchableOpacity
-                style={[
-                    styles.input,
-                    error && styles.inputError,
-                    disabled && styles.inputDisabled,
-                ]}
-                onPress={onPress}
-                disabled={disabled}
+                style={[styles.inputWrapper, error && styles.inputError]}
+                onPress={() => {
+                    // TODO: Aprire DateTimePicker mobile
+                    console.log('Open date picker');
+                }}
             >
-                {Icon && <Icon size={20} color={iconColor} />}
-                <Text
-                    style={[
-                        styles.textInput,
-                        !value && styles.placeholderText,
-                    ]}
-                >
-                    {value || placeholder}
+                {Icon && <Icon size={20} color="#64748b" />}
+                <Text style={styles.inputText}>
+                    {value ? value.toLocaleDateString('it-IT') : placeholder}
                 </Text>
-                {RightIcon && <RightIcon size={20} color={iconColor} />}
             </TouchableOpacity>
             {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
@@ -115,7 +83,171 @@ export const FormSelect: React.FC<FormSelectProps> = ({
 };
 
 // ============================================
-// FORM CHIP SELECTOR (es. tipo carburante)
+// NUMBER INPUT CON UNITÀ
+// ============================================
+interface NumberInputProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
+    label: string;
+    value?: number;
+    onChange: (value?: number) => void;
+    unit?: string;
+    icon?: LucideIcon;
+    error?: string;
+    min?: number;
+    max?: number;
+}
+
+export const NumberInput: React.FC<NumberInputProps> = ({
+                                                            label,
+                                                            value,
+                                                            onChange,
+                                                            unit,
+                                                            icon: Icon,
+                                                            error,
+                                                            placeholder,
+                                                            min,
+                                                            max,
+                                                            ...textInputProps
+                                                        }) => {
+    const handleChange = (text: string) => {
+        if (text === '') {
+            onChange(undefined);
+            return;
+        }
+
+        const num = parseFloat(text);
+        if (!isNaN(num)) {
+            if (min !== undefined && num < min) return;
+            if (max !== undefined && num > max) return;
+            onChange(num);
+        }
+    };
+
+    if (Platform.OS === 'web') {
+        return (
+            <View style={styles.fieldContainer}>
+                <Text style={styles.label}>{label}</Text>
+                <View style={[styles.inputWrapper, error && styles.inputError]}>
+                    {Icon && <Icon size={20} color="#64748b" />}
+                    <input
+                        type="number"
+                        value={value?.toString() || ''}
+                        onChange={(e) => handleChange(e.target.value)}
+                        placeholder={placeholder}
+                        min={min}
+                        max={max}
+                        style={{
+                            flex: 1,
+                            fontSize: 16,
+                            color: '#1e293b',
+                            border: 'none',
+                            outline: 'none',
+                            backgroundColor: 'transparent',
+                        }}
+                        {...textInputProps}
+                    />
+                    {unit && <Text style={styles.unitText}>{unit}</Text>}
+                </View>
+                {error && <Text style={styles.errorText}>{error}</Text>}
+            </View>
+        );
+    }
+
+    return (
+        <View style={styles.fieldContainer}>
+            <Text style={styles.label}>{label}</Text>
+            <View style={[styles.inputWrapper, error && styles.inputError]}>
+                {Icon && <Icon size={20} color="#64748b" />}
+                <TextInput
+                    style={styles.textInputNative}
+                    value={value?.toString() || ''}
+                    onChangeText={handleChange}
+                    placeholder={placeholder}
+                    keyboardType="numeric"
+                    placeholderTextColor="#94a3b8"
+                    {...textInputProps}
+                />
+                {unit && <Text style={styles.unitText}>{unit}</Text>}
+            </View>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+    );
+};
+
+// ============================================
+// TEXT INPUT STANDARD
+// ============================================
+interface StandardInputProps extends TextInputProps {
+    label: string;
+    icon?: LucideIcon;
+    error?: string;
+    helperText?: string;
+    required?: boolean;
+    rightElement?: React.ReactNode;
+}
+
+export const StandardInput: React.FC<StandardInputProps> = ({
+                                                                label,
+                                                                icon: Icon,
+                                                                error,
+                                                                helperText,
+                                                                required,
+                                                                rightElement,
+                                                                ...textInputProps
+                                                            }) => {
+    if (Platform.OS === 'web') {
+        return (
+            <View style={styles.fieldContainer}>
+                <Text style={styles.label}>
+                    {label} {required && <Text style={styles.required}>*</Text>}
+                </Text>
+                <View style={[styles.inputWrapper, error && styles.inputError]}>
+                    {Icon && <Icon size={20} color="#64748b" />}
+                    <input
+                        type="text"
+                        style={{
+                            flex: 1,
+                            fontSize: 16,
+                            color: '#1e293b',
+                            border: 'none',
+                            outline: 'none',
+                            backgroundColor: 'transparent',
+                        }}
+                        {...textInputProps}
+                    />
+                    {rightElement}
+                </View>
+                {error && <Text style={styles.errorText}>{error}</Text>}
+                {helperText && !error && (
+                    <Text style={styles.helperText}>{helperText}</Text>
+                )}
+            </View>
+        );
+    }
+
+    return (
+        <View style={styles.fieldContainer}>
+            <Text style={styles.label}>
+                {label} {required && <Text style={styles.required}>*</Text>}
+            </Text>
+            <View style={[styles.inputWrapper, error && styles.inputError]}>
+                {Icon && <Icon size={20} color="#64748b" />}
+                <TextInput
+                    style={styles.textInputNative}
+                    placeholderTextColor="#94a3b8"
+                    {...textInputProps}
+                />
+                {rightElement}
+            </View>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+            {helperText && !error && (
+                <Text style={styles.helperText}>{helperText}</Text>
+            )}
+        </View>
+    );
+};
+
+// ============================================
+// CHIP SELECTOR
 // ============================================
 interface ChipOption {
     id: string;
@@ -123,24 +255,28 @@ interface ChipOption {
     icon?: string;
 }
 
-interface FormChipSelectorProps {
-    label?: string;
+interface ChipSelectorProps {
+    label: string;
     options: ChipOption[];
     selectedId: string;
     onSelect: (id: string) => void;
-    multiSelect?: boolean;
+    required?: boolean;
+    error?: string;
 }
 
-export const FormChipSelector: React.FC<FormChipSelectorProps> = ({
-                                                                      label,
-                                                                      options,
-                                                                      selectedId,
-                                                                      onSelect,
-                                                                      multiSelect = false,
-                                                                  }) => {
+export const ChipSelector: React.FC<ChipSelectorProps> = ({
+                                                              label,
+                                                              options,
+                                                              selectedId,
+                                                              onSelect,
+                                                              required,
+                                                              error,
+                                                          }) => {
     return (
-        <View style={styles.inputContainer}>
-            {label && <Text style={styles.label}>{label}</Text>}
+        <View style={styles.fieldContainer}>
+            <Text style={styles.label}>
+                {label} {required && <Text style={styles.required}>*</Text>}
+            </Text>
             <View style={styles.chipGrid}>
                 {options.map((option) => {
                     const isSelected = selectedId === option.id;
@@ -150,9 +286,7 @@ export const FormChipSelector: React.FC<FormChipSelectorProps> = ({
                             style={[styles.chip, isSelected && styles.chipSelected]}
                             onPress={() => onSelect(option.id)}
                         >
-                            {option.icon && (
-                                <Text style={styles.chipIcon}>{option.icon}</Text>
-                            )}
+                            {option.icon && <Text style={styles.chipIcon}>{option.icon}</Text>}
                             <Text
                                 style={[
                                     styles.chipText,
@@ -165,127 +299,64 @@ export const FormChipSelector: React.FC<FormChipSelectorProps> = ({
                     );
                 })}
             </View>
+            {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
     );
 };
 
 // ============================================
-// FORM COLOR PICKER
+// MODAL PICKER (per liste lunghe)
 // ============================================
-interface ColorOption {
-    id: string;
-    name: string;
-    hex: string;
-    textColor?: string;
-    border?: string;
-}
-
-interface FormColorPickerProps {
-    label?: string;
-    colors: ColorOption[];
-    selectedColor: string;
-    onSelectColor: (hex: string) => void;
-}
-
-export const FormColorPicker: React.FC<FormColorPickerProps> = ({
-                                                                    label,
-                                                                    colors,
-                                                                    selectedColor,
-                                                                    onSelectColor,
-                                                                }) => {
-    return (
-        <View style={styles.inputContainer}>
-            {label && <Text style={styles.label}>{label}</Text>}
-            <View style={styles.colorGrid}>
-                {colors.map((color) => {
-                    const isSelected = selectedColor === color.hex;
-                    return (
-                        <TouchableOpacity
-                            key={color.id}
-                            style={[
-                                styles.colorChip,
-                                { backgroundColor: color.hex },
-                                color.border && {
-                                    borderColor: color.border,
-                                    borderWidth: 1,
-                                },
-                                isSelected && styles.colorChipSelected,
-                            ]}
-                            onPress={() => onSelectColor(color.hex)}
-                        >
-                            {isSelected && (
-                                <View style={styles.colorCheckmark}>
-                                    <Text style={{ color: color.textColor || '#fff' }}>✓</Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-        </View>
-    );
-};
-
-// ============================================
-// FORM SECTION HEADER
-// ============================================
-interface FormSectionProps {
-    title: string;
-    subtitle?: string;
-    children: React.ReactNode;
-    containerStyle?: any;
-}
-
-export const FormSection: React.FC<FormSectionProps> = ({
-                                                            title,
-                                                            subtitle,
-                                                            children,
-                                                            containerStyle,
-                                                        }) => {
-    return (
-        <View style={[styles.section, containerStyle]}>
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{title}</Text>
-                {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
-            </View>
-            {children}
-        </View>
-    );
-};
-
-// ============================================
-// FORM TEXTAREA
-// ============================================
-interface FormTextAreaProps extends TextInputProps {
-    label?: string;
+interface ModalPickerProps {
+    label: string;
+    value: string;
+    placeholder: string;
+    options: string[];
+    onSelect: (value: string) => void;
+    icon?: LucideIcon;
     error?: string;
     required?: boolean;
 }
 
-export const FormTextArea: React.FC<FormTextAreaProps> = ({
-                                                              label,
-                                                              error,
-                                                              required = false,
-                                                              ...textInputProps
-                                                          }) => {
+export const ModalPicker: React.FC<ModalPickerProps> = ({
+                                                            label,
+                                                            value,
+                                                            placeholder,
+                                                            options,
+                                                            onSelect,
+                                                            icon: Icon,
+                                                            error,
+                                                            required,
+                                                        }) => {
+    const [showModal, setShowModal] = React.useState(false);
+
     return (
-        <View style={styles.inputContainer}>
-            {label && (
-                <Text style={styles.label}>
-                    {label} {required && <Text style={styles.required}>*</Text>}
+        <View style={styles.fieldContainer}>
+            <Text style={styles.label}>
+                {label} {required && <Text style={styles.required}>*</Text>}
+            </Text>
+            <TouchableOpacity
+                style={[
+                    styles.pickerButton,
+                    error && styles.inputError,
+                    !value && styles.pickerButtonEmpty,
+                ]}
+                onPress={() => setShowModal(true)}
+            >
+                {Icon && <Icon size={20} color="#64748b" />}
+                <Text
+                    style={[
+                        styles.pickerButtonText,
+                        !value && styles.pickerButtonTextEmpty,
+                    ]}
+                >
+                    {value || placeholder}
                 </Text>
-            )}
-            <View style={[styles.input, styles.textAreaInput, error && styles.inputError]}>
-                <TextInput
-                    style={[styles.textInput, styles.textArea]}
-                    placeholderTextColor="#94a3b8"
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    {...textInputProps}
-                />
-            </View>
+                <Text style={styles.pickerArrow}>▼</Text>
+            </TouchableOpacity>
             {error && <Text style={styles.errorText}>{error}</Text>}
+
+            {/* TODO: Implementare modale per selezione */}
         </View>
     );
 };
@@ -294,143 +365,170 @@ export const FormTextArea: React.FC<FormTextAreaProps> = ({
 // STYLES
 // ============================================
 const styles = StyleSheet.create({
-    // Input Container
-    inputContainer: {
+    fieldContainer: {
         marginBottom: 20,
     },
     label: {
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '600',
-        color: '#64748b',
-        marginBottom: 8,
+        color: '#1e293b',
+        marginBottom: 12,
+        letterSpacing: -0.2,
     },
     required: {
         color: '#ef4444',
     },
-    input: {
+
+    // Input Wrapper
+    inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f8fafc',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        gap: 12,
-        borderWidth: 1,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+        borderWidth: 2,
         borderColor: '#e2e8f0',
+        gap: 12,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 2,
+            },
+            android: {
+                elevation: 1,
+            },
+            web: {
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+            },
+        }),
     },
     inputError: {
         borderColor: '#ef4444',
     },
-    inputDisabled: {
-        opacity: 0.5,
-    },
-    textInput: {
+
+    textInputNative: {
         flex: 1,
         fontSize: 16,
-        color: '#0f172a',
+        color: '#1e293b',
         padding: 0,
     },
-    placeholderText: {
-        color: '#94a3b8',
-    },
-    textAreaInput: {
-        paddingVertical: 12,
-        alignItems: 'flex-start',
-    },
-    textArea: {
-        minHeight: 100,
-        textAlignVertical: 'top',
-    },
-    errorText: {
-        fontSize: 12,
-        color: '#ef4444',
-        marginTop: 4,
-    },
-
-    // Chips
-    chipGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    chip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f1f5f9',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
-        gap: 6,
-        borderWidth: 2,
-        borderColor: 'transparent',
-    },
-    chipSelected: {
-        backgroundColor: '#dbeafe',
-        borderColor: '#3b82f6',
-    },
-    chipIcon: {
+    inputText: {
+        flex: 1,
         fontSize: 16,
+        color: '#1e293b',
     },
-    chipText: {
+    unitText: {
         fontSize: 14,
-        fontWeight: '500',
         color: '#64748b',
-    },
-    chipTextSelected: {
-        color: '#1e40af',
         fontWeight: '600',
     },
 
-    // Colors
-    colorGrid: {
+    errorText: {
+        fontSize: 13,
+        color: '#ef4444',
+        marginTop: 6,
+        marginLeft: 4,
+    },
+    helperText: {
+        fontSize: 13,
+        color: '#64748b',
+        marginTop: 6,
+        marginLeft: 4,
+    },
+
+    // Chip Selector
+    chipGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 12,
     },
-    colorChip: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
+    chip: {
+        flexDirection: 'row',
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
+        gap: 8,
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 2,
+            },
+            android: {
+                elevation: 1,
+            },
+            web: {
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+            },
+        }),
     },
-    colorChipSelected: {
-        borderWidth: 3,
+    chipSelected: {
+        backgroundColor: '#eff6ff',
         borderColor: '#3b82f6',
     },
-    colorCheckmark: {
-        fontSize: 16,
-        fontWeight: 'bold',
+    chipIcon: {
+        fontSize: 18,
+    },
+    chipText: {
+        fontSize: 15,
+        color: '#64748b',
+        fontWeight: '500',
+    },
+    chipTextSelected: {
+        color: '#3b82f6',
+        fontWeight: '600',
     },
 
-    // Section
-    section: {
+    // Modal Picker
+    pickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         backgroundColor: '#fff',
         borderRadius: 16,
-        padding: 20,
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+        borderWidth: 2,
+        borderColor: '#e2e8f0',
+        gap: 12,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 2,
+            },
+            android: {
+                elevation: 1,
+            },
+            web: {
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+            },
+        }),
     },
-    sectionHeader: {
-        marginBottom: 16,
+    pickerButtonEmpty: {
+        borderColor: '#cbd5e1',
     },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#0f172a',
-        marginBottom: 4,
+    pickerButtonText: {
+        flex: 1,
+        fontSize: 16,
+        color: '#1e293b',
+        fontWeight: '500',
     },
-    sectionSubtitle: {
-        fontSize: 14,
+    pickerButtonTextEmpty: {
+        color: '#94a3b8',
+        fontWeight: '400',
+    },
+    pickerArrow: {
+        fontSize: 12,
         color: '#64748b',
     },
 });

@@ -41,7 +41,7 @@ import {
   Package,
   Car
 } from 'lucide-react-native';
-import { SecurityService } from '../../services/SecurityService';
+import { SecurityService } from '../../security/SecurityService';
 import { MaintenanceService } from '../../services/MaintenanceService';
 import { VehicleService } from '../../services/VehicleService';
 import { useAppThemeManager } from '../../hooks/useTheme';

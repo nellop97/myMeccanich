@@ -1,17 +1,43 @@
-// src/navigation/AppNavigator.tsx - SENZA TAB NAVIGATOR
+// AppNavigator.tsx
+// Navigator completo con tutte le schermate del progetto
+
 import React, { useState, useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useStore } from '../store';
 
-// ============================================================
+// ============================================
 // AUTH SCREENS
-// ============================================================
+// ============================================
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 
-// ============================================================
+// ============================================
+// USER (OWNER) SCREENS
+// ============================================
+import HomeScreen from '../screens/user/HomeScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import CarDetailScreen from '../screens/user/CarDetailScreen';
+import AddVehicleScreen from '../screens/user/AddVehicleScreen';
+import VehicleListScreen from '../screens/user/VehicleListScreen';
+import CarsListScreen from '../screens/user/CarsListScreen';
+import MaintenanceHistoryScreen from '../screens/user/MaintenanceHistoryScreen';
+import AddMaintenanceScreen from '../screens/user/AddMaintenanceScreen';
+import FuelTrackingScreen from '../screens/user/FuelTrackingScreen';
+import ExpenseTrackerScreen from '../screens/user/ExpenseTrackerScreen';
+import CarExpensesScreen from '../screens/user/CarExpensesScreen';
+import OwnershipTransferScreen from '../screens/user/OwnershipTransferScreen';
+
+// Placeholder screens (se non esistono ancora, crea file vuoti)
+// import AddFuelScreen from '../screens/user/AddFuelScreen';
+// import AddExpenseScreen from '../screens/user/AddExpenseScreen';
+// import AddDocumentScreen from '../screens/user/AddDocumentScreen';
+// import RemindersScreen from '../screens/user/RemindersScreen';
+
+// ============================================
 // MECHANIC SCREENS
-// ============================================================
+// ============================================
 import MechanicDashboard from '../screens/mechanic/MechanicDashboard';
 import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen';
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
@@ -21,72 +47,76 @@ import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScre
 import CreateInvoiceScreen from '../screens/mechanic/CreateInvoiceScreen';
 import CustomersListScreen from '../screens/mechanic/CustomersListScreen';
 import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
+import CustomerDetailScreen from '../screens/mechanic/CustomerDetailScreen';
 
-// ============================================================
-// USER (PROPRIETARIO) SCREENS
-// ============================================================
-// Schermate User
-import HomeScreen from '../screens/user/HomeScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import CarDetailScreen from '../screens/user/CarDetailScreen';
-import AddCarScreen from '../screens/user/AddCarScreen';
-import VehicleListScreen from '../screens/user/VehicleListScreen';
-
-
-// ============================================================
-// SHARED SCREENS
-// ============================================================
-import ProfileScreen from '../screens/ProfileScreen';
-
-// Store
-import { useStore } from '../store';
-
-// ============================================================
-// TYPES
-// ============================================================
+// ============================================
+// TYPE DEFINITIONS
+// ============================================
 export type RootStackParamList = {
     // Auth
     Auth: undefined;
+    Login: undefined;
+    Register: undefined;
+    ForgotPassword: undefined;
+
+    // User (Owner) Home
+    Home: undefined;
+    Settings: undefined;
+    Profile: { userId?: string };
+
+    // Vehicle Management
+    AddVehicle: undefined;
+    CarDetail: { carId: string };
+    VehicleList: undefined;
+    CarsList: undefined;
+    OwnershipTransfer: { carId: string };
+
+    // Maintenance
+    MaintenanceHistory: { carId: string };
+    AddMaintenance: { carId?: string };
+
+    // Fuel
+    FuelTracking: { carId: string };
+    AddFuel: { carId?: string };
+
+    // Expenses
+    ExpenseTracker: undefined;
+    CarExpenses: { carId: string };
+    AddExpense: { carId?: string };
+
+    // Documents
+    AddDocument: { carId?: string };
+
+    // Reminders
+    Reminders: undefined;
 
     // Mechanic Home
     HomeMechanic: undefined;
 
-    // User Home (SENZA TABS)
-    Home: undefined;
-    Settings: undefined;
-    AddCar: undefined;
-
-    // Mechanic Screens
-    CarDetail: { carId: string };
+    // Workshop
     AllCarsInWorkshop: undefined;
     RepairPartsManagement: { carId: string; repairId: string };
     NewAppointment: undefined;
     MechanicCalendar: undefined;
+
+    // Invoicing
     InvoicingDashboard: undefined;
     CreateInvoice: {
         vehicleId?: string;
         repairId?: string;
         customerId?: string;
-        type?: 'customer' | 'supplier' | 'expense' | 'other'
+        type?: 'customer' | 'supplier' | 'expense' | 'other';
     };
-    CustomersList: undefined;
-    AddCustomer: undefined;
-    EditCustomer: { customerId: string };
-    CustomerDetail: { customerId: string };
     InvoiceDetail: { invoiceId: string };
     InvoicesList: undefined;
     InvoiceTemplates: undefined;
     InvoiceReports: undefined;
 
-    // User Screens (Proprietario)
-    AddMaintenance: { carId?: string };
-    AddFuel: { carId?: string };
-    AddExpense: { carId?: string };
-    AddDocument: { carId?: string };
-    Reminders: undefined;
-
-    // Shared
-    Profile: { userId?: string };
+    // Customers
+    CustomersList: undefined;
+    AddCustomer: undefined;
+    EditCustomer: { customerId: string };
+    CustomerDetail: { customerId: string };
 };
 
 export type AuthStackParamList = {
@@ -98,9 +128,9 @@ export type AuthStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 
-// ============================================================
+// ============================================
 // AUTH NAVIGATOR
-// ============================================================
+// ============================================
 function AuthNavigator() {
     return (
         <AuthStack.Navigator
@@ -109,39 +139,33 @@ function AuthNavigator() {
                 headerShadowVisible: false,
             }}
         >
-            <AuthStack.Screen
-                name="Login"
-                component={LoginScreen}
-                options={{
-                    title: 'Accedi',
-                    headerBackTitle: 'Indietro',
-                }}
-            />
-            <AuthStack.Screen
-                name="Register"
-                component={RegisterScreen}
-                options={{
-                    title: 'Registrati',
-                    headerBackTitle: 'Indietro',
-                    animation: 'slide_from_right',
-                }}
-            />
-            <AuthStack.Screen
-                name="ForgotPassword"
-                component={ForgotPasswordScreen}
-                options={{
-                    title: 'Password Dimenticata',
-                    headerBackTitle: 'Indietro',
-                    animation: 'slide_from_right',
-                }}
-            />
+            <AuthStack.Screen name="Login" component={LoginScreen} />
+            <AuthStack.Screen name="Register" component={RegisterScreen} />
+            <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </AuthStack.Navigator>
     );
 }
 
-// ============================================================
-// APP NAVIGATOR PRINCIPALE
-// ============================================================
+// ============================================
+// PLACEHOLDER COMPONENTS
+// ============================================
+// Placeholder per schermate non ancora create
+const PlaceholderScreen = ({ route }: any) => {
+    return (
+        <div style={{ padding: 20 }}>
+            <h1>Schermata in Sviluppo</h1>
+            <p>
+                Screen: {route.name}
+                <br />
+                Params: {JSON.stringify(route.params || {})}
+            </p>
+        </div>
+    );
+};
+
+// ============================================
+// MAIN APP NAVIGATOR
+// ============================================
 export default function AppNavigator() {
     const { user } = useStore();
     const [isInitialRender, setIsInitialRender] = useState(true);
@@ -150,7 +174,7 @@ export default function AppNavigator() {
         if (isInitialRender) {
             setIsInitialRender(false);
         }
-    }, []);
+    }, [isInitialRender]);
 
     const isAuthenticated = !isInitialRender && user?.isLoggedIn;
     const isMechanic = user?.isMechanic;
@@ -159,279 +183,402 @@ export default function AppNavigator() {
         isAuthenticated,
         isMechanic,
         userType: user?.userType,
-        role: user?.role,
     });
 
     return (
-        <Stack.Navigator screenOptions={{ headerShown: true }}>
-            {isAuthenticated ? (
-                isMechanic ? (
-                    // ========================================
-                    // STACK PER MECCANICI
-                    // ========================================
-                    <Stack.Group>
-                        {/* Home Meccanico */}
-                        <Stack.Screen
-                            name="HomeMechanic"
-                            component={MechanicDashboard}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+            {!isAuthenticated ? (
+                // ========================================
+                // NOT AUTHENTICATED - Auth Screens
+                // ========================================
+                <Stack.Screen name="Auth" component={AuthNavigator} />
+            ) : isMechanic ? (
+                // ========================================
+                // MECHANIC NAVIGATOR
+                // ========================================
+                <Stack.Group>
+                    {/* Home */}
+                    <Stack.Screen
+                        name="HomeMechanic"
+                        component={MechanicDashboard}
+                        options={{ headerShown: false }}
+                    />
 
-                        {/* Schermate Auto */}
-                        <Stack.Screen
-                            name="AddCarScreen"
-                            component={AddCarScreen}
-                            options={{
-                                title: 'Dettaglio Auto',
-                                headerShown: true,
-                                headerBackTitle: 'Indietro',
-                            }}
-                        />
-                        <Stack.Screen
-                            name="CarDetail"
-                            component={CarDetailScreen}
-                            options={{
-                                title: 'Dettaglio Auto',
-                                headerShown: true,
-                                headerBackTitle: 'Indietro',
-                            }}
-                        />
-                        <Stack.Screen
-                            name="AllCarsInWorkshop"
-                            component={AllCarsInWorkshopScreen}
-                            options={{
-                                title: 'Auto in Officina',
-                                headerShown: false,
-                            }}
-                        />
+                    {/* Workshop */}
+                    <Stack.Screen
+                        name="AllCarsInWorkshop"
+                        component={AllCarsInWorkshopScreen}
+                        options={{
+                            title: 'Auto in Officina',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
 
-                        {/* Gestione Riparazioni */}
-                        <Stack.Screen
-                            name="RepairPartsManagement"
-                            component={RepairPartsManagementScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
+                    <Stack.Screen
+                        name="RepairPartsManagement"
+                        component={RepairPartsManagementScreen}
+                        options={{
+                            title: 'Gestione Ricambi',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
 
-                        {/* Appuntamenti */}
-                        <Stack.Screen
-                            name="NewAppointment"
-                            component={NewAppointmentScreen}
-                            options={{
-                                title: 'Nuovo Appuntamento',
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="MechanicCalendar"
-                            component={MechanicCalendarScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
+                    <Stack.Screen
+                        name="NewAppointment"
+                        component={NewAppointmentScreen}
+                        options={{
+                            title: 'Nuovo Appuntamento',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
 
-                        {/* Fatturazione */}
-                        <Stack.Screen
-                            name="InvoicingDashboard"
-                            component={InvoicingDashboardScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="CreateInvoice"
-                            component={CreateInvoiceScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
+                    <Stack.Screen
+                        name="MechanicCalendar"
+                        component={MechanicCalendarScreen}
+                        options={{
+                            title: 'Calendario',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
 
-                        {/* Clienti */}
-                        <Stack.Screen
-                            name="CustomersList"
-                            component={CustomersListScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="AddCustomer"
-                            component={AddCustomerScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="EditCustomer"
-                            component={AddCustomerScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
+                    {/* Invoicing */}
+                    <Stack.Screen
+                        name="InvoicingDashboard"
+                        component={InvoicingDashboardScreen}
+                        options={{
+                            title: 'Fatturazione',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
 
-                        {/* Schermate placeholder future */}
-                        <Stack.Screen
-                            name="CustomerDetail"
-                            component={CustomersListScreen}
-                            options={{
-                                title: 'Dettaglio Cliente',
-                                headerShown: true,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="InvoiceDetail"
-                            component={InvoicingDashboardScreen}
-                            options={{
-                                title: 'Dettaglio Fattura',
-                                headerShown: true,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="InvoicesList"
-                            component={InvoicingDashboardScreen}
-                            options={{
-                                title: 'Elenco Fatture',
-                                headerShown: true,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="InvoiceTemplates"
-                            component={InvoicingDashboardScreen}
-                            options={{
-                                title: 'Modelli Fattura',
-                                headerShown: true,
-                            }}
-                        />
-                        <Stack.Screen
-                            name="InvoiceReports"
-                            component={InvoicingDashboardScreen}
-                            options={{
-                                title: 'Report Fatturazione',
-                                headerShown: true,
-                            }}
-                        />
-                    </Stack.Group>
-                ) : (
-                    // ========================================
-                    // STACK PER PROPRIETARI AUTO (SENZA TABS)
-                    // ========================================
-                    <Stack.Group>
-                        {/* Home Proprietario (SENZA TABS) */}
-                        <Stack.Screen
-                            name="Home"
-                            component={HomeScreen}
-                            options={{
-                                headerShown: false,
-                            }}
-                        />
+                    <Stack.Screen
+                        name="CreateInvoice"
+                        component={CreateInvoiceScreen}
+                        options={{
+                            title: 'Nuova Fattura',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
 
-                        {/* Settings */}
-                        <Stack.Screen
-                            name="Settings"
-                            component={SettingsScreen}
-                            options={{
-                                title: 'Impostazioni',
-                                headerShown: true,
-                                headerBackTitle: 'Indietro',
-                            }}
-                        />
+                    <Stack.Screen
+                        name="InvoiceDetail"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Dettaglio Fattura',
+                            headerShown: false,
+                        }}
+                    />
 
-                        {/* Add Car */}
-                        <Stack.Screen
-                            name="AddCar"
-                            component={HomeScreen}
-                            options={{
-                                title: 'Aggiungi Auto',
-                                headerShown: true,
-                                headerBackTitle: 'Indietro',
-                                presentation: 'modal',
-                            }}
-                        />
+                    <Stack.Screen
+                        name="InvoicesList"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Elenco Fatture',
+                            headerShown: false,
+                        }}
+                    />
 
-                        {/* Schermate Auto */}
-                        <Stack.Screen
-                            name="CarDetail"
-                            component={CarDetailScreen}
-                            options={{
-                                title: 'Dettaglio Auto',
-                                headerShown: true,
-                                headerBackTitle: 'Indietro',
-                            }}
-                        />
+                    <Stack.Screen
+                        name="InvoiceTemplates"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Modelli Fattura',
+                            headerShown: false,
+                        }}
+                    />
 
-                        {/* Gestione Manutenzioni/Spese */}
-                        <Stack.Screen
-                            name="AddMaintenance"
-                            component={HomeScreen}
-                            options={{
-                                title: 'Aggiungi Manutenzione',
-                                headerShown: true,
-                                presentation: 'modal',
-                            }}
-                        />
-                        <Stack.Screen
-                            name="AddFuel"
-                            component={HomeScreen}
-                            options={{
-                                title: 'Aggiungi Rifornimento',
-                                headerShown: true,
-                                presentation: 'modal',
-                            }}
-                        />
-                        <Stack.Screen
-                            name="AddExpense"
-                            component={HomeScreen}
-                            options={{
-                                title: 'Aggiungi Spesa',
-                                headerShown: true,
-                                presentation: 'modal',
-                            }}
-                        />
-                        <Stack.Screen
-                            name="AddDocument"
-                            component={HomeScreen}
-                            options={{
-                                title: 'Aggiungi Documento',
-                                headerShown: true,
-                                presentation: 'modal',
-                            }}
-                        />
-                        <Stack.Screen
-                            name="Reminders"
-                            component={HomeScreen}
-                            options={{
-                                title: 'Promemoria',
-                                headerShown: true,
-                            }}
-                        />
-                    </Stack.Group>
-                )
+                    <Stack.Screen
+                        name="InvoiceReports"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Report Fatturazione',
+                            headerShown: false,
+                        }}
+                    />
+
+                    {/* Customers */}
+                    <Stack.Screen
+                        name="CustomersList"
+                        component={CustomersListScreen}
+                        options={{
+                            title: 'Clienti',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="AddCustomer"
+                        component={AddCustomerScreen}
+                        options={{
+                            title: 'Nuovo Cliente',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="EditCustomer"
+                        component={AddCustomerScreen}
+                        options={{
+                            title: 'Modifica Cliente',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="CustomerDetail"
+                        component={CustomerDetailScreen}
+                        options={{
+                            title: 'Dettaglio Cliente',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    {/* Car Detail (shared) */}
+                    <Stack.Screen
+                        name="CarDetail"
+                        component={CarDetailScreen}
+                        options={{
+                            title: 'Dettaglio Veicolo',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    {/* Settings */}
+                    <Stack.Screen
+                        name="Settings"
+                        component={SettingsScreen}
+                        options={{
+                            title: 'Impostazioni',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="Profile"
+                        component={ProfileScreen}
+                        options={{
+                            title: 'Profilo',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+                </Stack.Group>
             ) : (
                 // ========================================
-                // STACK PER NON AUTENTICATI
+                // OWNER/USER NAVIGATOR
                 // ========================================
-                <Stack.Screen
-                    name="Auth"
-                    component={AuthNavigator}
-                    options={{ headerShown: false }}
-                />
-            )}
+                <Stack.Group>
+                    {/* Home */}
+                    <Stack.Screen
+                        name="Home"
+                        component={HomeScreen}
+                        options={{ headerShown: false }}
+                    />
 
-            {/* ========================================
-                SCHERMATE COMUNI A TUTTI
-                ======================================== */}
-            <Stack.Screen
-                name="Profile"
-                component={ProfileScreen}
-                options={{
-                    title: 'Profilo',
-                    headerShown: true,
-                    headerBackTitle: 'Indietro',
-                }}
-            />
+                    {/* Vehicle Management */}
+                    <Stack.Screen
+                        name="AddVehicle"
+                        component={AddVehicleScreen}
+                        options={{
+                            headerShown: false,
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="CarDetail"
+                        component={CarDetailScreen}
+                        options={{
+                            title: 'Dettaglio Veicolo',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="VehicleList"
+                        component={VehicleListScreen}
+                        options={{
+                            title: 'I Miei Veicoli',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="CarsList"
+                        component={CarsListScreen}
+                        options={{
+                            title: 'Lista Veicoli',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="OwnershipTransfer"
+                        component={OwnershipTransferScreen}
+                        options={{
+                            title: 'Trasferimento Proprietà',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    {/* Maintenance */}
+                    <Stack.Screen
+                        name="MaintenanceHistory"
+                        component={MaintenanceHistoryScreen}
+                        options={{
+                            title: 'Storico Manutenzioni',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="AddMaintenance"
+                        component={AddMaintenanceScreen}
+                        options={{
+                            title: 'Nuova Manutenzione',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                            presentation: 'modal',
+                        }}
+                    />
+
+                    {/* Fuel */}
+                    <Stack.Screen
+                        name="FuelTracking"
+                        component={FuelTrackingScreen}
+                        options={{
+                            title: 'Rifornimenti',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="AddFuel"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Nuovo Rifornimento',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                            presentation: 'modal',
+                        }}
+                    />
+
+                    {/* Expenses */}
+                    <Stack.Screen
+                        name="ExpenseTracker"
+                        component={ExpenseTrackerScreen}
+                        options={{
+                            title: 'Spese',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="CarExpenses"
+                        component={CarExpensesScreen}
+                        options={{
+                            title: 'Spese Veicolo',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="AddExpense"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Nuova Spesa',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                            presentation: 'modal',
+                        }}
+                    />
+
+                    {/* Documents */}
+                    <Stack.Screen
+                        name="AddDocument"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Aggiungi Documento',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                            presentation: 'modal',
+                        }}
+                    />
+
+                    {/* Reminders */}
+                    <Stack.Screen
+                        name="Reminders"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Promemoria',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    {/* Settings */}
+                    <Stack.Screen
+                        name="Settings"
+                        component={SettingsScreen}
+                        options={{
+                            title: 'Impostazioni',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="Profile"
+                        component={ProfileScreen}
+                        options={{
+                            title: 'Profilo',
+                            headerShown: false,
+                            headerBackTitle: 'Indietro',
+                        }}
+                    />
+                </Stack.Group>
+            )}
         </Stack.Navigator>
     );
+}
+
+// ============================================
+// NAVIGATION HELPERS
+// ============================================
+export const navigationRef = React.createRef<any>();
+
+export function navigate(name: string, params?: any) {
+    navigationRef.current?.navigate(name, params);
+}
+
+export function goBack() {
+    navigationRef.current?.goBack();
+}
+
+export function reset(routeName: string) {
+    navigationRef.current?.reset({
+        index: 0,
+        routes: [{ name: routeName }],
+    });
 }

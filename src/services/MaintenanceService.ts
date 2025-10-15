@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { MaintenanceRecord, MaintenancePart } from '../types/database.types';
-import { SecurityService } from './SecurityService';
+import { SecurityService } from '../security/SecurityService';
 
 export class MaintenanceService {
   private static instance: MaintenanceService;
