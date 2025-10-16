@@ -1,5 +1,5 @@
 // src/screens/mechanic/NewAppointmentScreen.tsx
-// Versione corretta: fix prop name + gestione caso "nessuna auto esistente"
+// Con Firebase Rules Fix + Design Migliorato Step 2 (Web)
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -33,6 +33,10 @@ import {
     Lightbulb,
     Info,
     Plus,
+    Hash,
+    Palette,
+    Gauge,
+    MapPin,
 } from 'lucide-react-native';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
@@ -72,7 +76,6 @@ const NewAppointmentScreen = () => {
     const isDesktop = Platform.OS === 'web' && screenWidth > 768;
     const isTablet = screenWidth >= 768 && screenWidth < 1024;
 
-    // Stati per il form veicolo
     const [vehicleData, setVehicleData] = useState({
         make: '',
         model: '',
@@ -83,7 +86,6 @@ const NewAppointmentScreen = () => {
         mileage: '',
     });
 
-    // Stati per la riparazione
     const [repairData, setRepairData] = useState({
         description: '',
         estimatedCost: '',
@@ -92,19 +94,16 @@ const NewAppointmentScreen = () => {
         notes: '',
     });
 
-    // Stati per date e cliente
     const [startDate, setStartDate] = useState<string | null>(null);
     const [endDate, setEndDate] = useState<string | null>(null);
     const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
 
-    // ⭐ NUOVI STATI per auto-suggerimento
     const [existingCars, setExistingCars] = useState<ExistingCar[]>([]);
     const [loadingExistingCars, setLoadingExistingCars] = useState(false);
     const [showCarSuggestions, setShowCarSuggestions] = useState(false);
     const [selectedExistingCar, setSelectedExistingCar] = useState<ExistingCar | null>(null);
-    const [hasLoadedCars, setHasLoadedCars] = useState(false); // ⭐ Per mostrare messaggio "nessuna auto"
+    const [hasLoadedCars, setHasLoadedCars] = useState(false);
 
-    // Stati UI
     const [showCustomerSearch, setShowCustomerSearch] = useState(false);
     const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -126,7 +125,6 @@ const NewAppointmentScreen = () => {
         info: '#3b82f6',
     };
 
-    // ⭐ CARICA AUTO ESISTENTI DEL CLIENTE quando viene selezionato
     useEffect(() => {
         if (selectedCustomer?.id && user?.id) {
             loadCustomerExistingCars();
@@ -168,8 +166,7 @@ const NewAppointmentScreen = () => {
 
             setExistingCars(cars);
             setHasLoadedCars(true);
-
-            // Mostra suggerimenti se ci sono auto, altrimenti mostra messaggio informativo
+            
             if (cars.length > 0) {
                 setShowCarSuggestions(true);
             }
@@ -181,7 +178,6 @@ const NewAppointmentScreen = () => {
         }
     };
 
-    // ⭐ APPLICA AUTO ESISTENTE al form
     const applyExistingCar = (car: ExistingCar) => {
         setVehicleData({
             make: car.make,
@@ -194,10 +190,9 @@ const NewAppointmentScreen = () => {
         });
         setSelectedExistingCar(car);
         setShowCarSuggestions(false);
-        setCurrentStep(3); // Salta direttamente allo step riparazione
+        setCurrentStep(3);
     };
 
-    // Validazione step
     const validateStep = (step: number): boolean => {
         const newErrors: { [key: string]: string } = {};
 
@@ -307,7 +302,6 @@ const NewAppointmentScreen = () => {
         }
     };
 
-    // ✅ FIX: Usa onSelectUser invece di onSelect
     const handleCustomerSelect = (customer: any) => {
         setSelectedCustomer(customer);
         setShowCustomerSearch(false);
@@ -322,9 +316,7 @@ const NewAppointmentScreen = () => {
         setHasLoadedCars(false);
     };
 
-    // ⭐ RENDER SUGGERIMENTI AUTO ESISTENTI o MESSAGGIO "NESSUNA AUTO"
     const renderCarSuggestionsOrEmptyState = () => {
-        // Loading state
         if (loadingExistingCars) {
             return (
                 <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border, padding: 24, alignItems: 'center' }]}>
@@ -336,7 +328,6 @@ const NewAppointmentScreen = () => {
             );
         }
 
-        // Ha caricato e ci sono auto esistenti
         if (hasLoadedCars && existingCars.length > 0 && showCarSuggestions) {
             return (
                 <View style={[styles.suggestionsCard, { backgroundColor: theme.cardBackground, borderColor: theme.accent }]}>
@@ -399,7 +390,6 @@ const NewAppointmentScreen = () => {
             );
         }
 
-        // ⭐ Ha caricato ma NON ci sono auto - NUOVO MESSAGGIO
         if (hasLoadedCars && existingCars.length === 0) {
             return (
                 <View style={[styles.emptyStateCard, { backgroundColor: darkMode ? '#1e3a5f' : '#eff6ff', borderColor: theme.info }]}>
@@ -426,7 +416,6 @@ const NewAppointmentScreen = () => {
         return null;
     };
 
-    // Render Step Indicator
     const renderStepIndicator = () => {
         const steps = ['Cliente', 'Veicolo', 'Riparazione', 'Date'];
 
@@ -484,7 +473,6 @@ const NewAppointmentScreen = () => {
         );
     };
 
-    // Render Step 1: Cliente
     const renderCustomerStep = () => (
         <View style={styles.stepContent}>
             <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -494,28 +482,35 @@ const NewAppointmentScreen = () => {
                 </View>
 
                 {!selectedCustomer ? (
-                    <View style={styles.emptyState}>
-                        <User size={48} color={theme.textSecondary} />
-                        <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                            Nessun cliente selezionato
-                        </Text>
-                        <TouchableOpacity
-                            style={[styles.primaryButton, { backgroundColor: theme.accent }]}
-                            onPress={() => setShowCustomerSearch(true)}
-                        >
-                            <Search size={20} color="#ffffff" />
-                            <Text style={styles.primaryButtonText}>Cerca Cliente Esistente</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.secondaryButton, { borderColor: theme.accent }]}
-                            onPress={() => setShowQuickAdd(true)}
-                        >
-                            <User size={20} color={theme.accent} />
-                            <Text style={[styles.secondaryButtonText, { color: theme.accent }]}>
-                                Aggiungi Nuovo Cliente
+                    <>
+                        <View style={styles.emptyState}>
+                            <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                                Seleziona un cliente esistente o aggiungine uno nuovo
                             </Text>
-                        </TouchableOpacity>
-                    </View>
+                        </View>
+
+                        {errors.customer && (
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.customer}</Text>
+                        )}
+
+                        <View style={styles.buttonGroup}>
+                            <TouchableOpacity
+                                style={[styles.primaryButton, { backgroundColor: theme.accent }]}
+                                onPress={() => setShowCustomerSearch(true)}
+                            >
+                                <Search size={18} color="#ffffff" />
+                                <Text style={styles.primaryButtonText}>Cerca Cliente</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.secondaryButton, { borderColor: theme.border }]}
+                                onPress={() => setShowQuickAdd(true)}
+                            >
+                                <User size={18} color={theme.text} />
+                                <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Nuovo Cliente</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </>
                 ) : (
                     <View style={[styles.selectedCustomer, { backgroundColor: darkMode ? '#374151' : '#f9fafb' }]}>
                         <View style={styles.customerInfo}>
@@ -546,166 +541,367 @@ const NewAppointmentScreen = () => {
                 )}
             </View>
 
-            {/* ⭐ MOSTRA SUGGERIMENTI AUTO o MESSAGGIO se non ci sono auto */}
             {renderCarSuggestionsOrEmptyState()}
         </View>
     );
 
-    // Render Step 2: Veicolo
-    const renderVehicleStep = () => (
-        <View style={styles.stepContent}>
-            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-                <View style={styles.cardHeader}>
-                    <Car size={20} color={theme.accent} />
-                    <Text style={[styles.cardTitle, { color: theme.text }]}>Dati Veicolo</Text>
+    // ⭐ NUOVO DESIGN STEP 2 - MIGLIRATO PER WEB
+    const renderVehicleStep = () => {
+        if (isDesktop) {
+            // Layout Desktop: 2 colonne + sezioni separate
+            return (
+                <View style={styles.stepContent}>
+                    {selectedExistingCar && (
+                        <View style={[styles.infoBar, { backgroundColor: darkMode ? '#1e3a5f' : '#e0f2fe', marginBottom: 16 }]}>
+                            <CheckCircle size={16} color={theme.success} />
+                            <Text style={[styles.infoBarText, { color: theme.text }]}>
+                                Auto caricata dall'archivio. Puoi modificare i dati se necessario.
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* Sezione 1: Dati Principali */}
+                    <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                        <View style={styles.sectionHeader}>
+                            <Car size={20} color={theme.accent} />
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>Dati Principali</Text>
+                        </View>
+
+                        <View style={styles.desktopGrid}>
+                            {/* Marca */}
+                            <View style={styles.desktopFormGroup}>
+                                <Text style={[styles.label, { color: theme.text }]}>Marca *</Text>
+                                <TextInput
+                                    style={[
+                                        styles.input,
+                                        {
+                                            backgroundColor: theme.inputBackground,
+                                            borderColor: errors.make ? theme.error : theme.border,
+                                            color: theme.text,
+                                        },
+                                    ]}
+                                    value={vehicleData.make}
+                                    onChangeText={(text) => {
+                                        setVehicleData({ ...vehicleData, make: text });
+                                        setErrors({ ...errors, make: '' });
+                                    }}
+                                    placeholder="Es. Ford"
+                                    placeholderTextColor={theme.placeholderColor}
+                                />
+                                {errors.make && (
+                                    <Text style={[styles.errorText, { color: theme.error }]}>{errors.make}</Text>
+                                )}
+                            </View>
+
+                            {/* Modello */}
+                            <View style={styles.desktopFormGroup}>
+                                <Text style={[styles.label, { color: theme.text }]}>Modello *</Text>
+                                <TextInput
+                                    style={[
+                                        styles.input,
+                                        {
+                                            backgroundColor: theme.inputBackground,
+                                            borderColor: errors.model ? theme.error : theme.border,
+                                            color: theme.text,
+                                        },
+                                    ]}
+                                    value={vehicleData.model}
+                                    onChangeText={(text) => {
+                                        setVehicleData({ ...vehicleData, model: text });
+                                        setErrors({ ...errors, model: '' });
+                                    }}
+                                    placeholder="Es. Fiesta"
+                                    placeholderTextColor={theme.placeholderColor}
+                                />
+                                {errors.model && (
+                                    <Text style={[styles.errorText, { color: theme.error }]}>{errors.model}</Text>
+                                )}
+                            </View>
+
+                            {/* Anno */}
+                            <View style={styles.desktopFormGroup}>
+                                <Text style={[styles.label, { color: theme.text }]}>Anno</Text>
+                                <View style={{ position: 'relative' }}>
+                                    <View style={styles.inputIcon}>
+                                        <Calendar size={16} color={theme.textSecondary} />
+                                    </View>
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text, paddingLeft: 40 },
+                                        ]}
+                                        value={vehicleData.year}
+                                        onChangeText={(text) => setVehicleData({ ...vehicleData, year: text })}
+                                        placeholder="2020"
+                                        placeholderTextColor={theme.placeholderColor}
+                                        keyboardType="numeric"
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Targa */}
+                            <View style={styles.desktopFormGroup}>
+                                <Text style={[styles.label, { color: theme.text }]}>Targa *</Text>
+                                <View style={{ position: 'relative' }}>
+                                    <View style={styles.inputIcon}>
+                                        <Hash size={16} color={theme.textSecondary} />
+                                    </View>
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            {
+                                                backgroundColor: theme.inputBackground,
+                                                borderColor: errors.licensePlate ? theme.error : theme.border,
+                                                color: theme.text,
+                                                paddingLeft: 40,
+                                            },
+                                        ]}
+                                        value={vehicleData.licensePlate}
+                                        onChangeText={(text) => {
+                                            setVehicleData({ ...vehicleData, licensePlate: text.toUpperCase() });
+                                            setErrors({ ...errors, licensePlate: '' });
+                                        }}
+                                        placeholder="XX123XX"
+                                        placeholderTextColor={theme.placeholderColor}
+                                        autoCapitalize="characters"
+                                    />
+                                </View>
+                                {errors.licensePlate && (
+                                    <Text style={[styles.errorText, { color: theme.error }]}>{errors.licensePlate}</Text>
+                                )}
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Sezione 2: Dettagli Aggiuntivi */}
+                    <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                        <View style={styles.sectionHeader}>
+                            <Info size={20} color={theme.accent} />
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>Dettagli Aggiuntivi</Text>
+                        </View>
+
+                        <View style={styles.desktopGrid}>
+                            {/* VIN */}
+                            <View style={[styles.desktopFormGroup, { gridColumn: '1 / -1' }]}>
+                                <Text style={[styles.label, { color: theme.text }]}>VIN (opzionale)</Text>
+                                <View style={{ position: 'relative' }}>
+                                    <View style={styles.inputIcon}>
+                                        <MapPin size={16} color={theme.textSecondary} />
+                                    </View>
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text, paddingLeft: 40 },
+                                        ]}
+                                        value={vehicleData.vin}
+                                        onChangeText={(text) => setVehicleData({ ...vehicleData, vin: text })}
+                                        placeholder="17 caratteri alfanumerici"
+                                        placeholderTextColor={theme.placeholderColor}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Colore */}
+                            <View style={styles.desktopFormGroup}>
+                                <Text style={[styles.label, { color: theme.text }]}>Colore</Text>
+                                <View style={{ position: 'relative' }}>
+                                    <View style={styles.inputIcon}>
+                                        <Palette size={16} color={theme.textSecondary} />
+                                    </View>
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text, paddingLeft: 40 },
+                                        ]}
+                                        value={vehicleData.color}
+                                        onChangeText={(text) => setVehicleData({ ...vehicleData, color: text })}
+                                        placeholder="Es. Bianco"
+                                        placeholderTextColor={theme.placeholderColor}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Chilometraggio */}
+                            <View style={styles.desktopFormGroup}>
+                                <Text style={[styles.label, { color: theme.text }]}>Chilometraggio (km)</Text>
+                                <View style={{ position: 'relative' }}>
+                                    <View style={styles.inputIcon}>
+                                        <Gauge size={16} color={theme.textSecondary} />
+                                    </View>
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text, paddingLeft: 40 },
+                                        ]}
+                                        value={vehicleData.mileage}
+                                        onChangeText={(text) => setVehicleData({ ...vehicleData, mileage: text })}
+                                        placeholder="80000"
+                                        placeholderTextColor={theme.placeholderColor}
+                                        keyboardType="numeric"
+                                    />
+                                </View>
+                            </View>
+                        </View>
+                    </View>
                 </View>
+            );
+        }
 
-                {selectedExistingCar && (
-                    <View style={[styles.infoBar, { backgroundColor: darkMode ? '#1e3a5f' : '#e0f2fe' }]}>
-                        <CheckCircle size={16} color={theme.success} />
-                        <Text style={[styles.infoBarText, { color: theme.text }]}>
-                            Auto caricata dall'archivio. Puoi modificare i dati se necessario.
-                        </Text>
-                    </View>
-                )}
-
-                <View style={styles.formGrid}>
-                    <View style={styles.formGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Marca *</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    borderColor: errors.make ? theme.error : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
-                            value={vehicleData.make}
-                            onChangeText={(text) => {
-                                setVehicleData({ ...vehicleData, make: text });
-                                setErrors({ ...errors, make: '' });
-                            }}
-                            placeholder="Es. Ford"
-                            placeholderTextColor={theme.placeholderColor}
-                        />
-                        {errors.make && (
-                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.make}</Text>
-                        )}
+        // Layout Mobile: Stack verticale tradizionale
+        return (
+            <View style={styles.stepContent}>
+                <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                    <View style={styles.cardHeader}>
+                        <Car size={20} color={theme.accent} />
+                        <Text style={[styles.cardTitle, { color: theme.text }]}>Dati Veicolo</Text>
                     </View>
 
-                    <View style={styles.formGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Modello *</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    borderColor: errors.model ? theme.error : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
-                            value={vehicleData.model}
-                            onChangeText={(text) => {
-                                setVehicleData({ ...vehicleData, model: text });
-                                setErrors({ ...errors, model: '' });
-                            }}
-                            placeholder="Es. Fiesta"
-                            placeholderTextColor={theme.placeholderColor}
-                        />
-                        {errors.model && (
-                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.model}</Text>
-                        )}
-                    </View>
+                    {selectedExistingCar && (
+                        <View style={[styles.infoBar, { backgroundColor: darkMode ? '#1e3a5f' : '#e0f2fe' }]}>
+                            <CheckCircle size={16} color={theme.success} />
+                            <Text style={[styles.infoBarText, { color: theme.text }]}>
+                                Auto caricata dall'archivio. Puoi modificare i dati se necessario.
+                            </Text>
+                        </View>
+                    )}
 
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Anno</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
-                            value={vehicleData.year}
-                            onChangeText={(text) => setVehicleData({ ...vehicleData, year: text })}
-                            placeholder="2020"
-                            placeholderTextColor={theme.placeholderColor}
-                            keyboardType="numeric"
-                        />
-                    </View>
+                    <View style={styles.formGrid}>
+                        <View style={styles.formGroup}>
+                            <Text style={[styles.label, { color: theme.text }]}>Marca *</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    {
+                                        backgroundColor: theme.inputBackground,
+                                        borderColor: errors.make ? theme.error : theme.border,
+                                        color: theme.text,
+                                    },
+                                ]}
+                                value={vehicleData.make}
+                                onChangeText={(text) => {
+                                    setVehicleData({ ...vehicleData, make: text });
+                                    setErrors({ ...errors, make: '' });
+                                }}
+                                placeholder="Es. Ford"
+                                placeholderTextColor={theme.placeholderColor}
+                            />
+                            {errors.make && (
+                                <Text style={[styles.errorText, { color: theme.error }]}>{errors.make}</Text>
+                            )}
+                        </View>
 
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Targa *</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    borderColor: errors.licensePlate ? theme.error : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
-                            value={vehicleData.licensePlate}
-                            onChangeText={(text) => {
-                                setVehicleData({ ...vehicleData, licensePlate: text.toUpperCase() });
-                                setErrors({ ...errors, licensePlate: '' });
-                            }}
-                            placeholder="XX123XX"
-                            placeholderTextColor={theme.placeholderColor}
-                            autoCapitalize="characters"
-                        />
-                        {errors.licensePlate && (
-                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.licensePlate}</Text>
-                        )}
-                    </View>
+                        <View style={styles.formGroup}>
+                            <Text style={[styles.label, { color: theme.text }]}>Modello *</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    {
+                                        backgroundColor: theme.inputBackground,
+                                        borderColor: errors.model ? theme.error : theme.border,
+                                        color: theme.text,
+                                    },
+                                ]}
+                                value={vehicleData.model}
+                                onChangeText={(text) => {
+                                    setVehicleData({ ...vehicleData, model: text });
+                                    setErrors({ ...errors, model: '' });
+                                }}
+                                placeholder="Es. Fiesta"
+                                placeholderTextColor={theme.placeholderColor}
+                            />
+                            {errors.model && (
+                                <Text style={[styles.errorText, { color: theme.error }]}>{errors.model}</Text>
+                            )}
+                        </View>
 
-                    <View style={styles.formGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>VIN (opzionale)</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
-                            value={vehicleData.vin}
-                            onChangeText={(text) => setVehicleData({ ...vehicleData, vin: text })}
-                            placeholder="17 caratteri"
-                            placeholderTextColor={theme.placeholderColor}
-                        />
-                    </View>
+                        <View style={styles.formGroup}>
+                            <Text style={[styles.label, { color: theme.text }]}>Anno</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                value={vehicleData.year}
+                                onChangeText={(text) => setVehicleData({ ...vehicleData, year: text })}
+                                placeholder="2020"
+                                placeholderTextColor={theme.placeholderColor}
+                                keyboardType="numeric"
+                            />
+                        </View>
 
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Colore</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
-                            value={vehicleData.color}
-                            onChangeText={(text) => setVehicleData({ ...vehicleData, color: text })}
-                            placeholder="Es. Bianco"
-                            placeholderTextColor={theme.placeholderColor}
-                        />
-                    </View>
+                        <View style={styles.formGroup}>
+                            <Text style={[styles.label, { color: theme.text }]}>Targa *</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    {
+                                        backgroundColor: theme.inputBackground,
+                                        borderColor: errors.licensePlate ? theme.error : theme.border,
+                                        color: theme.text,
+                                    },
+                                ]}
+                                value={vehicleData.licensePlate}
+                                onChangeText={(text) => {
+                                    setVehicleData({ ...vehicleData, licensePlate: text.toUpperCase() });
+                                    setErrors({ ...errors, licensePlate: '' });
+                                }}
+                                placeholder="XX123XX"
+                                placeholderTextColor={theme.placeholderColor}
+                                autoCapitalize="characters"
+                            />
+                            {errors.licensePlate && (
+                                <Text style={[styles.errorText, { color: theme.error }]}>{errors.licensePlate}</Text>
+                            )}
+                        </View>
 
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Chilometraggio</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
-                            value={vehicleData.mileage}
-                            onChangeText={(text) => setVehicleData({ ...vehicleData, mileage: text })}
-                            placeholder="80000"
-                            placeholderTextColor={theme.placeholderColor}
-                            keyboardType="numeric"
-                        />
+                        <View style={styles.formGroup}>
+                            <Text style={[styles.label, { color: theme.text }]}>VIN (opzionale)</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                value={vehicleData.vin}
+                                onChangeText={(text) => setVehicleData({ ...vehicleData, vin: text })}
+                                placeholder="17 caratteri"
+                                placeholderTextColor={theme.placeholderColor}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={[styles.label, { color: theme.text }]}>Colore</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                value={vehicleData.color}
+                                onChangeText={(text) => setVehicleData({ ...vehicleData, color: text })}
+                                placeholder="Es. Bianco"
+                                placeholderTextColor={theme.placeholderColor}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={[styles.label, { color: theme.text }]}>Chilometraggio</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                value={vehicleData.mileage}
+                                onChangeText={(text) => setVehicleData({ ...vehicleData, mileage: text })}
+                                placeholder="80000"
+                                placeholderTextColor={theme.placeholderColor}
+                                keyboardType="numeric"
+                            />
+                        </View>
                     </View>
                 </View>
             </View>
-        </View>
-    );
+        );
+    };
 
-    // Render Step 3: Riparazione
     const renderRepairStep = () => (
         <View style={styles.stepContent}>
             <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -810,7 +1006,6 @@ const NewAppointmentScreen = () => {
         </View>
     );
 
-    // Render Step 4: Date
     const renderDateStep = () => (
         <View style={styles.stepContent}>
             <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -855,7 +1050,10 @@ const NewAppointmentScreen = () => {
             >
                 <ScrollView
                     style={styles.scrollView}
-                    contentContainerStyle={styles.scrollViewContent}
+                    contentContainerStyle={[
+                        styles.scrollViewContent,
+                        isDesktop && { maxWidth: 900, alignSelf: 'center', width: '100%' }
+                    ]}
                     keyboardShouldPersistTaps="handled"
                 >
                     {currentStep === 1 && renderCustomerStep()}
@@ -866,7 +1064,10 @@ const NewAppointmentScreen = () => {
             </KeyboardAvoidingView>
 
             <View style={[styles.footer, { backgroundColor: theme.cardBackground, borderTopColor: theme.border }]}>
-                <View style={styles.footerButtons}>
+                <View style={[
+                    styles.footerButtons,
+                    isDesktop && { maxWidth: 900, alignSelf: 'center', width: '100%' }
+                ]}>
                     {currentStep > 1 && (
                         <TouchableOpacity
                             style={[styles.footerButton, styles.secondaryButton, { borderColor: theme.border }]}
@@ -900,7 +1101,6 @@ const NewAppointmentScreen = () => {
                 </View>
             </View>
 
-            {/* ✅ FIX: Usa onSelectUser */}
             <UserSearchModal
                 visible={showCustomerSearch}
                 onClose={() => setShowCustomerSearch(false)}
@@ -961,7 +1161,7 @@ const styles = StyleSheet.create({
     card: {
         borderRadius: 12,
         borderWidth: 1,
-        padding: 16,
+        padding: 20,
         marginBottom: 16,
     },
     cardHeader: {
@@ -970,10 +1170,38 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     cardTitle: { fontSize: 16, fontWeight: '600', marginLeft: 8 },
+    // ⭐ Nuovi stili per design desktop
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 20,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+    },
+    sectionTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+        marginLeft: 10,
+    },
+    desktopGrid: {
+        display: Platform.OS === 'web' ? 'grid' : 'flex',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: 20,
+        flexDirection: 'column',
+    },
+    desktopFormGroup: {
+        marginBottom: Platform.OS === 'web' ? 0 : 16,
+    },
+    inputIcon: {
+        position: 'absolute',
+        left: 12,
+        top: 14,
+        zIndex: 1,
+    },
     formGrid: { gap: 16 },
     formRow: { flexDirection: 'row', gap: 16 },
     formGroup: { marginBottom: 8 },
-    formGroupHalf: { width: '48%' },
     label: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
     input: {
         borderWidth: 1,
@@ -1090,7 +1318,6 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     infoBarText: { fontSize: 13, flex: 1 },
-    // ⭐ NUOVI STILI per empty state "nessuna auto"
     emptyStateCard: {
         borderRadius: 12,
         borderWidth: 2,
