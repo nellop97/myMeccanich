@@ -1,8 +1,8 @@
 // src/screens/mechanic/NewAppointmentScreen.tsx
-// Schermata completa per aggiungere un veicolo in officina
-// Responsive per Web e Mobile
+// Versione corretta: risolve errore Firebase + auto-suggerimento veicoli
+// Design responsive mobile/web
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
@@ -16,6 +16,7 @@ import {
     Platform,
     Dimensions,
     ActivityIndicator,
+    FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -28,13 +29,16 @@ import {
     Save,
     Search,
     X,
+    Clock,
+    CheckCircle,
+    Lightbulb,
 } from 'lucide-react-native';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 import CalendarAppointmentPicker from './CalendarAppointmentPicker';
 import UserSearchModal from '../../components/UserSearchModal';
 import QuickAddCustomerModal from '../../components/QuickAddCustomerModal';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -45,6 +49,18 @@ interface SelectedCustomer {
     lastName: string;
     email: string;
     phone?: string;
+}
+
+interface ExistingCar {
+    id: string;
+    make: string;
+    model: string;
+    year: string;
+    licensePlate: string;
+    vin?: string;
+    color?: string;
+    mileage?: number;
+    lastService?: string;
 }
 
 const NewAppointmentScreen = () => {
@@ -80,6 +96,12 @@ const NewAppointmentScreen = () => {
     const [endDate, setEndDate] = useState<string | null>(null);
     const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
 
+    // ⭐ NUOVI STATI per auto-suggerimento
+    const [existingCars, setExistingCars] = useState<ExistingCar[]>([]);
+    const [loadingExistingCars, setLoadingExistingCars] = useState(false);
+    const [showCarSuggestions, setShowCarSuggestions] = useState(false);
+    const [selectedExistingCar, setSelectedExistingCar] = useState<ExistingCar | null>(null);
+
     // Stati UI
     const [showCustomerSearch, setShowCustomerSearch] = useState(false);
     const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -99,6 +121,74 @@ const NewAppointmentScreen = () => {
         success: '#10b981',
         warning: '#f59e0b',
         error: '#ef4444',
+    };
+
+    // ⭐ CARICA AUTO ESISTENTI DEL CLIENTE quando viene selezionato
+    useEffect(() => {
+        if (selectedCustomer?.id && user?.id) {
+            loadCustomerExistingCars();
+        } else {
+            setExistingCars([]);
+            setSelectedExistingCar(null);
+        }
+    }, [selectedCustomer]);
+
+    const loadCustomerExistingCars = async () => {
+        if (!selectedCustomer?.id || !user?.id) return;
+
+        setLoadingExistingCars(true);
+        try {
+            // Cerca tutte le auto di questo cliente nell'officina
+            const carsRef = collection(db, 'workshopCars');
+            const q = query(
+                carsRef,
+                where('workshopId', '==', user.id),
+                where('ownerId', '==', selectedCustomer.id)
+            );
+
+            const snapshot = await getDocs(q);
+            const cars: ExistingCar[] = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    make: data.make || '',
+                    model: data.model || '',
+                    year: data.year || '',
+                    licensePlate: data.licensePlate || '',
+                    vin: data.vin,
+                    color: data.color,
+                    mileage: data.mileage,
+                    lastService: data.repairs?.[data.repairs?.length - 1]?.description,
+                };
+            });
+
+            setExistingCars(cars);
+
+            // Se c'è almeno un'auto, mostra il suggerimento
+            if (cars.length > 0) {
+                setShowCarSuggestions(true);
+            }
+        } catch (error) {
+            console.error('Error loading existing cars:', error);
+        } finally {
+            setLoadingExistingCars(false);
+        }
+    };
+
+    // ⭐ APPLICA AUTO ESISTENTE al form
+    const applyExistingCar = (car: ExistingCar) => {
+        setVehicleData({
+            make: car.make,
+            model: car.model,
+            year: car.year,
+            licensePlate: car.licensePlate,
+            vin: car.vin || '',
+            color: car.color || '',
+            mileage: car.mileage?.toString() || '',
+        });
+        setSelectedExistingCar(car);
+        setShowCarSuggestions(false);
+        setCurrentStep(3); // Salta direttamente allo step riparazione
     };
 
     // Validazione step
@@ -155,6 +245,10 @@ const NewAppointmentScreen = () => {
         setIsSubmitting(true);
 
         try {
+            // ✅ FIX: Crea timestamp PRIMA dell'oggetto, NON dentro l'array
+            const now = new Date().toISOString();
+            const repairTimestamp = Timestamp.fromDate(new Date());
+
             // 1. Prepara dati veicolo
             const workshopCarData = {
                 // Dati veicolo
@@ -174,12 +268,12 @@ const NewAppointmentScreen = () => {
 
                 // Metadata officina
                 workshopId: user.id,
-                entryDate: new Date().toISOString(),
+                entryDate: now,
                 isActive: true,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
 
-                // Array riparazioni con prima riparazione
+                // ✅ FIX: Array riparazioni con timestamp come stringhe ISO
                 repairs: [
                     {
                         id: `repair_${Date.now()}`,
@@ -193,8 +287,9 @@ const NewAppointmentScreen = () => {
                         parts: [],
                         notes: repairData.notes.trim() || null,
                         mechanicId: user.id,
-                        createdAt: serverTimestamp(),
-                        updatedAt: serverTimestamp(),
+                        // ⚠️ USA ISO STRING invece di serverTimestamp()
+                        createdAt: now,
+                        updatedAt: now,
                     },
                 ],
             };
@@ -233,6 +328,73 @@ const NewAppointmentScreen = () => {
 
     const removeCustomer = () => {
         setSelectedCustomer(null);
+        setExistingCars([]);
+        setSelectedExistingCar(null);
+    };
+
+    // ⭐ RENDER SUGGERIMENTI AUTO ESISTENTI
+    const renderCarSuggestions = () => {
+        if (!showCarSuggestions || existingCars.length === 0) return null;
+
+        return (
+            <View style={[styles.suggestionsCard, { backgroundColor: theme.cardBackground, borderColor: theme.accent }]}>
+                <View style={styles.suggestionsHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Lightbulb size={20} color={theme.accent} />
+                        <Text style={[styles.suggestionsTitle, { color: theme.text }]}>
+                            Auto già in archivio
+                        </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setShowCarSuggestions(false)}>
+                        <X size={20} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.suggestionsSubtitle, { color: theme.textSecondary }]}>
+                    Questo cliente ha già portato {existingCars.length} {existingCars.length === 1 ? 'auto' : 'auto'}. Seleziona per compilare automaticamente.
+                </Text>
+
+                <FlatList
+                    data={existingCars}
+                    keyExtractor={(item) => item.id}
+                    horizontal={isDesktop}
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginTop: 12 }}
+                    contentContainerStyle={{ gap: 12 }}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={[
+                                styles.carSuggestionItem,
+                                {
+                                    backgroundColor: darkMode ? '#374151' : '#f9fafb',
+                                    borderColor: theme.border,
+                                    minWidth: isDesktop ? 280 : undefined,
+                                },
+                            ]}
+                            onPress={() => applyExistingCar(item)}
+                        >
+                            <View style={styles.carSuggestionIcon}>
+                                <Car size={20} color={theme.accent} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.carSuggestionTitle, { color: theme.text }]}>
+                                    {item.make} {item.model}
+                                </Text>
+                                <Text style={[styles.carSuggestionDetails, { color: theme.textSecondary }]}>
+                                    {item.licensePlate} • {item.year}
+                                </Text>
+                                {item.lastService && (
+                                    <Text style={[styles.carSuggestionLastService, { color: theme.textSecondary }]} numberOfLines={1}>
+                                        Ultimo: {item.lastService}
+                                    </Text>
+                                )}
+                            </View>
+                            <CheckCircle size={18} color={theme.success} />
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
+        );
     };
 
     // Render Step Indicator
@@ -326,12 +488,12 @@ const NewAppointmentScreen = () => {
                         </TouchableOpacity>
                     </View>
                 ) : (
-                    <View style={[styles.selectedCustomer, { backgroundColor: theme.accent + '10' }]}>
+                    <View style={[styles.selectedCustomer, { backgroundColor: darkMode ? '#374151' : '#f9fafb' }]}>
                         <View style={styles.customerInfo}>
                             <View style={[styles.customerAvatar, { backgroundColor: theme.accent }]}>
                                 <Text style={styles.customerAvatarText}>
-                                    {selectedCustomer.firstName.charAt(0)}
-                                    {selectedCustomer.lastName.charAt(0)}
+                                    {selectedCustomer.firstName[0]}
+                                    {selectedCustomer.lastName[0]}
                                 </Text>
                             </View>
                             <View style={styles.customerDetails}>
@@ -343,7 +505,7 @@ const NewAppointmentScreen = () => {
                                 </Text>
                                 {selectedCustomer.phone && (
                                     <Text style={[styles.customerContact, { color: theme.textSecondary }]}>
-                                        📞 {selectedCustomer.phone}
+                                        {selectedCustomer.phone}
                                     </Text>
                                 )}
                             </View>
@@ -353,11 +515,18 @@ const NewAppointmentScreen = () => {
                         </TouchableOpacity>
                     </View>
                 )}
-
-                {errors.customer && (
-                    <Text style={[styles.errorText, { color: theme.error }]}>{errors.customer}</Text>
-                )}
             </View>
+
+            {/* ⭐ MOSTRA SUGGERIMENTI AUTO se disponibili */}
+            {loadingExistingCars && (
+                <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border, padding: 24, alignItems: 'center' }]}>
+                    <ActivityIndicator size="small" color={theme.accent} />
+                    <Text style={[{ color: theme.textSecondary, marginTop: 8 }]}>
+                        Caricamento auto del cliente...
+                    </Text>
+                </View>
+            )}
+            {renderCarSuggestions()}
         </View>
     );
 
@@ -370,78 +539,107 @@ const NewAppointmentScreen = () => {
                     <Text style={[styles.cardTitle, { color: theme.text }]}>Dati Veicolo</Text>
                 </View>
 
+                {selectedExistingCar && (
+                    <View style={[styles.infoBar, { backgroundColor: darkMode ? '#1e3a5f' : '#e0f2fe' }]}>
+                        <CheckCircle size={16} color={theme.success} />
+                        <Text style={[styles.infoBarText, { color: theme.text }]}>
+                            Auto caricata dall'archivio. Puoi modificare i dati se necessario.
+                        </Text>
+                    </View>
+                )}
+
                 <View style={styles.formGrid}>
-                    {/* Marca */}
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
+                    {/* Make */}
+                    <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>
-                            Marca <Text style={{ color: theme.error }}>*</Text>
+                            Marca *
                         </Text>
                         <TextInput
                             style={[
                                 styles.input,
                                 {
                                     backgroundColor: theme.inputBackground,
-                                    color: theme.text,
                                     borderColor: errors.make ? theme.error : theme.border,
+                                    color: theme.text,
                                 },
                             ]}
-                            placeholder="es. Fiat"
-                            placeholderTextColor={theme.placeholderColor}
                             value={vehicleData.make}
                             onChangeText={(text) => {
                                 setVehicleData({ ...vehicleData, make: text });
                                 setErrors({ ...errors, make: '' });
                             }}
+                            placeholder="Es. Ford"
+                            placeholderTextColor={theme.placeholderColor}
                         />
-                        {errors.make && <Text style={[styles.errorText, { color: theme.error }]}>{errors.make}</Text>}
+                        {errors.make && (
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.make}</Text>
+                        )}
                     </View>
 
-                    {/* Modello */}
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
+                    {/* Model */}
+                    <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>
-                            Modello <Text style={{ color: theme.error }}>*</Text>
+                            Modello *
                         </Text>
                         <TextInput
                             style={[
                                 styles.input,
                                 {
                                     backgroundColor: theme.inputBackground,
-                                    color: theme.text,
                                     borderColor: errors.model ? theme.error : theme.border,
+                                    color: theme.text,
                                 },
                             ]}
-                            placeholder="es. Panda"
-                            placeholderTextColor={theme.placeholderColor}
                             value={vehicleData.model}
                             onChangeText={(text) => {
                                 setVehicleData({ ...vehicleData, model: text });
                                 setErrors({ ...errors, model: '' });
                             }}
+                            placeholder="Es. Fiesta"
+                            placeholderTextColor={theme.placeholderColor}
                         />
-                        {errors.model && <Text style={[styles.errorText, { color: theme.error }]}>{errors.model}</Text>}
+                        {errors.model && (
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.model}</Text>
+                        )}
                     </View>
 
-                    {/* Targa */}
+                    {/* Year */}
+                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
+                        <Text style={[styles.label, { color: theme.text }]}>Anno</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                            ]}
+                            value={vehicleData.year}
+                            onChangeText={(text) => setVehicleData({ ...vehicleData, year: text })}
+                            placeholder="2020"
+                            placeholderTextColor={theme.placeholderColor}
+                            keyboardType="numeric"
+                        />
+                    </View>
+
+                    {/* License Plate */}
                     <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
                         <Text style={[styles.label, { color: theme.text }]}>
-                            Targa <Text style={{ color: theme.error }}>*</Text>
+                            Targa *
                         </Text>
                         <TextInput
                             style={[
                                 styles.input,
                                 {
                                     backgroundColor: theme.inputBackground,
-                                    color: theme.text,
                                     borderColor: errors.licensePlate ? theme.error : theme.border,
+                                    color: theme.text,
                                 },
                             ]}
-                            placeholder="es. AB123CD"
-                            placeholderTextColor={theme.placeholderColor}
                             value={vehicleData.licensePlate}
                             onChangeText={(text) => {
                                 setVehicleData({ ...vehicleData, licensePlate: text.toUpperCase() });
                                 setErrors({ ...errors, licensePlate: '' });
                             }}
+                            placeholder="XX123XX"
+                            placeholderTextColor={theme.placeholderColor}
                             autoCapitalize="characters"
                         />
                         {errors.licensePlate && (
@@ -449,81 +647,48 @@ const NewAppointmentScreen = () => {
                         )}
                     </View>
 
-                    {/* Anno */}
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Anno</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
-                            ]}
-                            placeholder="es. 2020"
-                            placeholderTextColor={theme.placeholderColor}
-                            value={vehicleData.year}
-                            onChangeText={(text) => setVehicleData({ ...vehicleData, year: text })}
-                            keyboardType="numeric"
-                            maxLength={4}
-                        />
-                    </View>
-
                     {/* VIN */}
                     <View style={styles.formGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>VIN (Telaio)</Text>
+                        <Text style={[styles.label, { color: theme.text }]}>VIN (opzionale)</Text>
                         <TextInput
                             style={[
                                 styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
                             ]}
-                            placeholder="Numero telaio (opzionale)"
-                            placeholderTextColor={theme.placeholderColor}
                             value={vehicleData.vin}
-                            onChangeText={(text) => setVehicleData({ ...vehicleData, vin: text.toUpperCase() })}
-                            autoCapitalize="characters"
+                            onChangeText={(text) => setVehicleData({ ...vehicleData, vin: text })}
+                            placeholder="17 caratteri"
+                            placeholderTextColor={theme.placeholderColor}
                         />
                     </View>
 
-                    {/* Colore e Chilometri */}
+                    {/* Color */}
                     <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
                         <Text style={[styles.label, { color: theme.text }]}>Colore</Text>
                         <TextInput
                             style={[
                                 styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
                             ]}
-                            placeholder="es. Bianco"
-                            placeholderTextColor={theme.placeholderColor}
                             value={vehicleData.color}
                             onChangeText={(text) => setVehicleData({ ...vehicleData, color: text })}
+                            placeholder="Es. Bianco"
+                            placeholderTextColor={theme.placeholderColor}
                         />
                     </View>
 
+                    {/* Mileage */}
                     <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
                         <Text style={[styles.label, { color: theme.text }]}>Chilometraggio</Text>
                         <TextInput
                             style={[
                                 styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
                             ]}
-                            placeholder="es. 50000"
-                            placeholderTextColor={theme.placeholderColor}
                             value={vehicleData.mileage}
                             onChangeText={(text) => setVehicleData({ ...vehicleData, mileage: text })}
+                            placeholder="80000"
+                            placeholderTextColor={theme.placeholderColor}
                             keyboardType="numeric"
                         />
                     </View>
@@ -542,10 +707,10 @@ const NewAppointmentScreen = () => {
                 </View>
 
                 <View style={styles.formGrid}>
-                    {/* Descrizione */}
+                    {/* Description */}
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>
-                            Descrizione Lavoro <Text style={{ color: theme.error }}>*</Text>
+                            Descrizione Intervento *
                         </Text>
                         <TextInput
                             style={[
@@ -553,11 +718,11 @@ const NewAppointmentScreen = () => {
                                 styles.textArea,
                                 {
                                     backgroundColor: theme.inputBackground,
-                                    color: theme.text,
                                     borderColor: errors.description ? theme.error : theme.border,
+                                    color: theme.text,
                                 },
                             ]}
-                            placeholder="Descrivi il lavoro da eseguire..."
+                            placeholder="Descrivi l'intervento da effettuare"
                             placeholderTextColor={theme.placeholderColor}
                             value={repairData.description}
                             onChangeText={(text) => {
@@ -572,79 +737,64 @@ const NewAppointmentScreen = () => {
                         )}
                     </View>
 
-                    {/* Costo stimato e manodopera */}
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Costo Stimato (€)</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
-                            ]}
-                            placeholder="es. 500"
-                            placeholderTextColor={theme.placeholderColor}
-                            value={repairData.estimatedCost}
-                            onChangeText={(text) => setRepairData({ ...repairData, estimatedCost: text })}
-                            keyboardType="decimal-pad"
-                        />
+                    {/* Costs Grid */}
+                    <View style={[styles.formRow, { flexWrap: isDesktop ? 'nowrap' : 'wrap' }]}>
+                        <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
+                            <Text style={[styles.label, { color: theme.text }]}>Preventivo Totale (€)</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                placeholder="500"
+                                placeholderTextColor={theme.placeholderColor}
+                                value={repairData.estimatedCost}
+                                onChangeText={(text) => setRepairData({ ...repairData, estimatedCost: text })}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+
+                        <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
+                            <Text style={[styles.label, { color: theme.text }]}>Costo Manodopera (€)</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                placeholder="150"
+                                placeholderTextColor={theme.placeholderColor}
+                                value={repairData.laborCost}
+                                onChangeText={(text) => setRepairData({ ...repairData, laborCost: text })}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+
+                        <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
+                            <Text style={[styles.label, { color: theme.text }]}>Ore Stimate</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                placeholder="3"
+                                placeholderTextColor={theme.placeholderColor}
+                                value={repairData.estimatedHours}
+                                onChangeText={(text) => setRepairData({ ...repairData, estimatedHours: text })}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
                     </View>
 
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Costo Manodopera (€)</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
-                            ]}
-                            placeholder="es. 200"
-                            placeholderTextColor={theme.placeholderColor}
-                            value={repairData.laborCost}
-                            onChangeText={(text) => setRepairData({ ...repairData, laborCost: text })}
-                            keyboardType="decimal-pad"
-                        />
-                    </View>
-
-                    {/* Ore stimate */}
-                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
-                        <Text style={[styles.label, { color: theme.text }]}>Ore Stimate</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
-                            ]}
-                            placeholder="es. 4"
-                            placeholderTextColor={theme.placeholderColor}
-                            value={repairData.estimatedHours}
-                            onChangeText={(text) => setRepairData({ ...repairData, estimatedHours: text })}
-                            keyboardType="decimal-pad"
-                        />
-                    </View>
-
-                    {/* Note */}
+                    {/* Notes */}
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>Note Aggiuntive</Text>
                         <TextInput
                             style={[
                                 styles.input,
                                 styles.textArea,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    color: theme.text,
-                                    borderColor: theme.border,
-                                },
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
                             ]}
-                            placeholder="Eventuali note o specifiche..."
+                            placeholder="Note o specifiche particolari"
                             placeholderTextColor={theme.placeholderColor}
                             value={repairData.notes}
                             onChangeText={(text) => setRepairData({ ...repairData, notes: text })}
@@ -702,9 +852,12 @@ const NewAppointmentScreen = () => {
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={100}
             >
-                <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollViewContent}
+                    keyboardShouldPersistTaps="handled"
+                >
                     {currentStep === 1 && renderCustomerStep()}
                     {currentStep === 2 && renderVehicleStep()}
                     {currentStep === 3 && renderRepairStep()}
@@ -712,20 +865,25 @@ const NewAppointmentScreen = () => {
                 </ScrollView>
             </KeyboardAvoidingView>
 
-            {/* Footer Buttons */}
+            {/* Footer */}
             <View style={[styles.footer, { backgroundColor: theme.cardBackground, borderTopColor: theme.border }]}>
                 <View style={styles.footerButtons}>
                     {currentStep > 1 && (
                         <TouchableOpacity
                             style={[styles.footerButton, styles.secondaryButton, { borderColor: theme.border }]}
                             onPress={handleBack}
+                            disabled={isSubmitting}
                         >
                             <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Indietro</Text>
                         </TouchableOpacity>
                     )}
 
                     <TouchableOpacity
-                        style={[styles.footerButton, styles.primaryButton, { backgroundColor: theme.accent }]}
+                        style={[
+                            styles.footerButton,
+                            styles.primaryButton,
+                            { backgroundColor: theme.accent, flex: currentStep === 1 ? 1 : undefined },
+                        ]}
                         onPress={handleNext}
                         disabled={isSubmitting}
                     >
@@ -733,14 +891,10 @@ const NewAppointmentScreen = () => {
                             <ActivityIndicator color="#ffffff" />
                         ) : (
                             <>
-                                {currentStep < 4 ? (
-                                    <Text style={styles.primaryButtonText}>Continua</Text>
-                                ) : (
-                                    <>
-                                        <Save size={20} color="#ffffff" />
-                                        <Text style={styles.primaryButtonText}>Salva</Text>
-                                    </>
-                                )}
+                                {currentStep === 4 ? <Save size={18} color="#ffffff" /> : null}
+                                <Text style={styles.primaryButtonText}>
+                                    {currentStep === 4 ? 'Salva' : 'Avanti'}
+                                </Text>
                             </>
                         )}
                     </TouchableOpacity>
@@ -751,15 +905,13 @@ const NewAppointmentScreen = () => {
             <UserSearchModal
                 visible={showCustomerSearch}
                 onClose={() => setShowCustomerSearch(false)}
-                onSelectUser={handleCustomerSelect}
-                darkMode={darkMode}
+                onSelect={handleCustomerSelect}
             />
 
             <QuickAddCustomerModal
                 visible={showQuickAdd}
                 onClose={() => setShowQuickAdd(false)}
                 onCustomerAdded={handleCustomerSelect}
-                darkMode={darkMode}
             />
         </SafeAreaView>
     );
@@ -774,7 +926,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingVertical: 16,
+        paddingVertical: 12,
         borderBottomWidth: 1,
     },
     backButton: {
@@ -786,14 +938,13 @@ const styles = StyleSheet.create({
     },
     stepIndicatorContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingVertical: 20,
+        paddingVertical: 16,
+        justifyContent: 'space-between',
     },
     stepItem: {
-        alignItems: 'center',
         flex: 1,
+        alignItems: 'center',
         position: 'relative',
     },
     stepCircle: {
@@ -849,6 +1000,10 @@ const styles = StyleSheet.create({
     formGrid: {
         gap: 16,
     },
+    formRow: {
+        flexDirection: 'row',
+        gap: 16,
+    },
     formGroup: {
         marginBottom: 8,
     },
@@ -883,6 +1038,11 @@ const styles = StyleSheet.create({
     emptyStateText: {
         fontSize: 14,
         marginBottom: 8,
+    },
+    buttonGroup: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
     },
     primaryButton: {
         flexDirection: 'row',
@@ -951,6 +1111,70 @@ const styles = StyleSheet.create({
     },
     removeButton: {
         padding: 8,
+    },
+    // ⭐ NUOVI STILI per suggerimenti
+    suggestionsCard: {
+        borderRadius: 12,
+        borderWidth: 2,
+        padding: 16,
+        marginBottom: 16,
+    },
+    suggestionsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    suggestionsTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 8,
+    },
+    suggestionsSubtitle: {
+        fontSize: 14,
+        lineHeight: 20,
+    },
+    carSuggestionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        gap: 12,
+    },
+    carSuggestionIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#e0f2fe',
+    },
+    carSuggestionTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    carSuggestionDetails: {
+        fontSize: 13,
+        marginBottom: 2,
+    },
+    carSuggestionLastService: {
+        fontSize: 12,
+        fontStyle: 'italic',
+        marginTop: 2,
+    },
+    infoBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 16,
+        gap: 8,
+    },
+    infoBarText: {
+        fontSize: 13,
+        flex: 1,
     },
     footer: {
         borderTopWidth: 1,
