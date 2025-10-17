@@ -1,5 +1,5 @@
 // firestore.rules - Firebase Firestore Security Rules
-// Posiziona questo file nella root del progetto e caricalo su Firebase Console
+// CORREZIONE FINALE: Fix per workshop_cars e appointments
 
 rules_version = '2';
 service cloud.firestore {
@@ -73,50 +73,72 @@ service cloud.firestore {
     // ============================================
     // WORKSHOP CARS COLLECTION (veicoli in officina)
     // ============================================
-    match /workshopCars/{carId} {
+    // CORREZIONE: Supporto per workshopId O mechanicId
+    match /workshop_cars/{carId} {
       // Lettura: meccanico proprietario o cliente proprietario del veicolo
       allow read: if isAuthenticated() && (
-        resource.data.workshopId == request.auth.uid ||
+        resource.data.get('workshopId', '') == request.auth.uid ||
+        resource.data.get('mechanicId', '') == request.auth.uid ||
         resource.data.ownerId == request.auth.uid
       );
 
       // Creazione: solo meccanici per la propria officina
+      // Accetta sia workshopId che mechanicId come identificatore del meccanico
       allow create: if isMechanic() &&
-                      request.resource.data.workshopId == request.auth.uid &&
-                      hasRequiredFields(['make', 'model', 'licensePlate', 'workshopId', 'ownerId']);
+                      hasRequiredFields(['make', 'model', 'licensePlate', 'ownerId']) &&
+                      (
+                        request.resource.data.get('workshopId', '') == request.auth.uid ||
+                        request.resource.data.get('mechanicId', '') == request.auth.uid
+                      );
 
       // Aggiornamento: solo il meccanico proprietario
-      allow update: if isMechanicOwner(resource.data.workshopId);
+      allow update: if isAuthenticated() && (
+        resource.data.get('workshopId', '') == request.auth.uid ||
+        resource.data.get('mechanicId', '') == request.auth.uid
+      );
 
       // Cancellazione: solo il meccanico proprietario
-      allow delete: if isMechanicOwner(resource.data.workshopId);
+      allow delete: if isAuthenticated() && (
+        resource.data.get('workshopId', '') == request.auth.uid ||
+        resource.data.get('mechanicId', '') == request.auth.uid
+      );
     }
 
     // ============================================
     // APPOINTMENTS COLLECTION
     // ============================================
+    // CORREZIONE: Supporto per workshopId O mechanicId
     match /appointments/{appointmentId} {
       // Lettura: meccanico o cliente coinvolto
       allow read: if isAuthenticated() && (
-        resource.data.workshopId == request.auth.uid ||
+        resource.data.get('workshopId', '') == request.auth.uid ||
+        resource.data.get('mechanicId', '') == request.auth.uid ||
         resource.data.customerId == request.auth.uid
       );
 
       // Creazione: meccanici per la propria officina o clienti
-      allow create: if isAuthenticated() && (
-        (isMechanic() && request.resource.data.workshopId == request.auth.uid) ||
-        request.resource.data.customerId == request.auth.uid
-      ) && hasRequiredFields(['workshopId', 'customerId', 'scheduledDate', 'description']);
+      // Accetta sia workshopId che mechanicId, ma almeno uno deve corrispondere
+      allow create: if isAuthenticated() &&
+                      hasRequiredFields(['customerId', 'scheduledDate', 'description']) &&
+                      (
+                        (isMechanic() && (
+                          request.resource.data.get('workshopId', '') == request.auth.uid ||
+                          request.resource.data.get('mechanicId', '') == request.auth.uid
+                        )) ||
+                        request.resource.data.customerId == request.auth.uid
+                      );
 
       // Aggiornamento: meccanico o cliente proprietario
       allow update: if isAuthenticated() && (
-        resource.data.workshopId == request.auth.uid ||
+        resource.data.get('workshopId', '') == request.auth.uid ||
+        resource.data.get('mechanicId', '') == request.auth.uid ||
         resource.data.customerId == request.auth.uid
       );
 
       // Cancellazione: solo il meccanico o il cliente
       allow delete: if isAuthenticated() && (
-        resource.data.workshopId == request.auth.uid ||
+        resource.data.get('workshopId', '') == request.auth.uid ||
+        resource.data.get('mechanicId', '') == request.auth.uid ||
         resource.data.customerId == request.auth.uid
       );
     }
@@ -128,7 +150,7 @@ service cloud.firestore {
       // Lettura: meccanico proprietario o il cliente stesso
       allow read: if isAuthenticated() && (
         resource.data.mechanicId == request.auth.uid ||
-        resource.data.userId == request.auth.uid
+        resource.data.get('userId', '') == request.auth.uid
       );
 
       // Creazione: solo meccanici per i propri clienti
@@ -192,6 +214,25 @@ service cloud.firestore {
     }
 
     // ============================================
+    // REVIEWS COLLECTION
+    // ============================================
+    match /reviews/{reviewId} {
+      // Lettura: tutti gli utenti autenticati possono leggere
+      allow read: if isAuthenticated();
+
+      // Creazione: solo utenti autenticati per clienti
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      hasRequiredFields(['mechanicId', 'rating', 'userId']);
+
+      // Aggiornamento: solo l'autore della recensione
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Cancellazione: solo l'autore
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================
     // EXPENSES COLLECTION
     // ============================================
     match /expenses/{expenseId} {
@@ -241,55 +282,13 @@ service cloud.firestore {
 
       // Creazione: utenti autenticati
       allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      hasRequiredFields(['name', 'type', 'url']);
+                      request.resource.data.userId == request.auth.uid;
 
       // Aggiornamento: solo il proprietario
       allow update: if isOwner(resource.data.userId);
 
       // Cancellazione: solo il proprietario
       allow delete: if isOwner(resource.data.userId);
-    }
-
-    // ============================================
-    // REMINDERS COLLECTION
-    // ============================================
-    match /reminders/{reminderId} {
-      // Lettura: solo il proprietario
-      allow read: if isOwner(resource.data.userId);
-
-      // Creazione: utenti autenticati
-      allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      hasRequiredFields(['title', 'dueDate', 'type']);
-
-      // Aggiornamento: solo il proprietario
-      allow update: if isOwner(resource.data.userId);
-
-      // Cancellazione: solo il proprietario
-      allow delete: if isOwner(resource.data.userId);
-    }
-
-    // ============================================
-    // REVIEWS COLLECTION
-    // ============================================
-    match /reviews/{reviewId} {
-      // Lettura: tutti gli utenti autenticati
-      allow read: if isAuthenticated();
-
-      // Creazione: utenti autenticati che hanno avuto servizio
-      allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      hasRequiredFields(['mechanicId', 'rating', 'comment']);
-
-      // Aggiornamento: solo chi ha scritto la recensione
-      allow update: if isOwner(resource.data.userId);
-
-      // Cancellazione: chi ha scritto o il meccanico recensito
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.mechanicId == request.auth.uid
-      );
     }
 
     // ============================================
@@ -299,10 +298,10 @@ service cloud.firestore {
       // Lettura: solo il destinatario
       allow read: if isOwner(resource.data.userId);
 
-      // Creazione: sistema o mittente autorizzato
-      allow create: if isAuthenticated() && hasRequiredFields(['userId', 'message', 'type']);
+      // Creazione: qualsiasi utente autenticato (per notifiche di sistema)
+      allow create: if isAuthenticated();
 
-      // Aggiornamento: solo il destinatario (es. per marcare come letto)
+      // Aggiornamento: solo il destinatario (per marcare come letto)
       allow update: if isOwner(resource.data.userId);
 
       // Cancellazione: solo il destinatario

@@ -1,4 +1,9 @@
 // src/screens/ProfileScreen.tsx
+/**
+ * ProfileScreen - Pagina profilo completa e responsive
+ * Supporta sia Owner che Mechanic con UI adattiva
+ */
+
 import React, { useState } from 'react';
 import {
     View,
@@ -6,357 +11,284 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    Alert,
-    Platform,
-    Dimensions,
-    Switch,
     Image,
+    Alert,
+    ActivityIndicator,
+    Platform,
+    useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, RouteProp, useRoute } from '@react-navigation/native';
 import {
     User,
     Mail,
     Phone,
     MapPin,
+    Briefcase,
+    FileText,
     Camera,
-    Edit,
+    Edit3,
     LogOut,
     Trash2,
     Shield,
-    Bell,
-    Moon,
-    Globe,
-    ChevronRight,
-    Info,
-    HelpCircle,
-    FileText,
+    Award,
     Star,
+    CheckCircle,
+    AlertCircle,
 } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 
-// Hooks personalizzati
-import { useAuth } from '../hooks/useAuth';
-import { useUserData, useAppTheme } from '../hooks/useUserData';
-import { RootStackParamList } from '../navigation/AppNavigator';
-
-const { width } = Dimensions.get('window');
-const isTablet = width >= 768;
-const isDesktop = width >= 1024;
-
-type ProfileScreenRouteProp = RouteProp<RootStackParamList, 'Profile'>;
+import { useProfile } from '../hooks/useProfile';
+import { useStore } from '../store';
+import { signOut } from 'firebase/auth';
+import { auth } from '../services/firebase';
 
 const ProfileScreen = () => {
-    const route = useRoute<ProfileScreenRouteProp>();
-    const { userId } = route.params;
     const navigation = useNavigation();
+    const { width } = useWindowDimensions();
+    const { user, setUser } = useStore();
+    const { profile, loading, uploadProfilePhoto, uploadingPhoto } = useProfile();
 
-    // Hooks
-    const { logout, loading } = useAuth();
-    const {
-        userName,
-        userEmail,
-        isMechanic,
-        isEmailVerified,
-        photoURL,
-        workshopName,
-        workshopAddress,
-        vatNumber,
-    } = useUserData();
-    const { darkMode, toggleDarkMode } = useAppTheme();
+    const [refreshing, setRefreshing] = useState(false);
 
-    // Stati locali
-    const [showLogoutDialog, setShowLogoutDialog] = useState(false);
-    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    // Breakpoints
+    const isDesktop = width >= 1024;
+    const isTablet = width >= 768 && width < 1024;
+    const isMobile = width < 768;
 
-    // Gestione logout
-    const handleLogout = async () => {
-        try {
-            await logout();
-            setShowLogoutDialog(false);
-        } catch (error) {
-            console.error('Errore logout:', error);
-            Alert.alert('Errore', 'Impossibile disconnettere l\'account');
+    const isMechanic = profile?.userType === 'mechanic';
+
+    // Handler: Cambia foto profilo
+    const handleChangePhoto = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (status !== 'granted') {
+            Alert.alert('Permesso negato', 'Abbiamo bisogno del permesso per accedere alle foto');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            try {
+                await uploadProfilePhoto(result.assets[0].uri);
+                Alert.alert('Successo', 'Foto profilo aggiornata!');
+            } catch (error) {
+                Alert.alert('Errore', 'Impossibile aggiornare la foto');
+            }
         }
     };
 
-    const showLogoutConfirmation = () => {
+    // Handler: Modifica profilo
+    const handleEditProfile = () => {
+        navigation.navigate('EditProfile' as never);
+    };
+
+    // Handler: Logout
+    const handleLogout = () => {
         Alert.alert(
-            'Conferma disconnessione',
-            'Sei sicuro di voler disconnettere il tuo account?',
+            'Disconnetti',
+            'Sei sicuro di voler uscire?',
             [
                 { text: 'Annulla', style: 'cancel' },
                 {
                     text: 'Disconnetti',
                     style: 'destructive',
-                    onPress: handleLogout,
-                },
-            ]
-        );
-    };
-
-    // Gestione elimina account
-    const handleDeleteAccount = () => {
-        Alert.alert(
-            'Elimina Account',
-            'Questa azione è irreversibile. Tutti i tuoi dati verranno eliminati permanentemente.',
-            [
-                { text: 'Annulla', style: 'cancel' },
-                {
-                    text: 'Elimina',
-                    style: 'destructive',
-                    onPress: () => {
-                        // Implementa logica eliminazione account
-                        Alert.alert('Info', 'Funzionalità in sviluppo');
+                    onPress: async () => {
+                        try {
+                            await signOut(auth);
+                            setUser(null);
+                        } catch (error) {
+                            Alert.alert('Errore', 'Impossibile disconnettersi');
+                        }
                     },
                 },
             ]
         );
     };
 
-    // Gestione foto profilo
-    const handleChangePhoto = () => {
-        Alert.alert('Info', 'Funzionalità cambio foto in sviluppo');
+    // Handler: Privacy
+    const handlePrivacy = () => {
+        navigation.navigate('Privacy' as never);
     };
 
-    // Render delle sezioni
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Caricamento profilo...</Text>
+            </View>
+        );
+    }
+
+    if (!profile) {
+        return (
+            <View style={styles.errorContainer}>
+                <AlertCircle size={48} color="#EF4444" />
+                <Text style={styles.errorText}>Profilo non trovato</Text>
+            </View>
+        );
+    }
+
+    // Render Header con foto profilo
     const renderHeader = () => (
-        <View style={styles.header}>
-            <View style={styles.avatarContainer}>
-                {photoURL ? (
-                    <Image source={{ uri: photoURL }} style={styles.avatar} />
-                ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <User size={40} color="#fff" />
+        <LinearGradient
+            colors={isMechanic ? ['#FF6B35', '#FF8A65'] : ['#007AFF', '#5AC8FA']}
+            style={styles.header}
+        >
+            <View style={styles.headerContent}>
+                <View style={styles.avatarContainer}>
+                    {profile.photoURL ? (
+                        <Image source={{ uri: profile.photoURL }} style={styles.avatar} />
+                    ) : (
+                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                            <Text style={styles.avatarText}>
+                                {profile.firstName?.[0]}{profile.lastName?.[0]}
+                            </Text>
+                        </View>
+                    )}
+
+                    <TouchableOpacity
+                        style={styles.cameraButton}
+                        onPress={handleChangePhoto}
+                        disabled={uploadingPhoto}
+                    >
+                        {uploadingPhoto ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Camera size={20} color="#FFF" />
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+                <Text style={styles.userName}>
+                    {profile.firstName} {profile.lastName}
+                </Text>
+
+                <View style={styles.badgeContainer}>
+                    <View style={[styles.badge, isMechanic && styles.badgeMechanic]}>
+                        {isMechanic ? (
+                            <Briefcase size={14} color="#FFF" />
+                        ) : (
+                            <User size={14} color="#FFF" />
+                        )}
+                        <Text style={styles.badgeText}>
+                            {isMechanic ? 'Meccanico' : 'Proprietario'}
+                        </Text>
                     </View>
-                )}
-                <TouchableOpacity style={styles.cameraButton} onPress={handleChangePhoto}>
-                    <Camera size={16} color="#fff" />
+
+                    {isMechanic && profile.verified && (
+                        <View style={[styles.badge, styles.badgeVerified]}>
+                            <Shield size={14} color="#FFF" />
+                            <Text style={styles.badgeText}>Verificato</Text>
+                        </View>
+                    )}
+                </View>
+
+                <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
+                    <Edit3 size={16} color="#FFF" />
+                    <Text style={styles.editButtonText}>Modifica Profilo</Text>
                 </TouchableOpacity>
             </View>
-
-            <Text style={styles.userName}>{userName || 'Utente'}</Text>
-            <Text style={styles.userEmail}>{userEmail}</Text>
-
-            {isMechanic && (
-                <View style={styles.badge}>
-                    <Text style={styles.badgeText}>🔧 Meccanico</Text>
-                </View>
-            )}
-
-            {!isEmailVerified && (
-                <View style={[styles.badge, styles.warningBadge]}>
-                    <Text style={styles.badgeTextWarning}>⚠️ Email non verificata</Text>
-                </View>
-            )}
-        </View>
+        </LinearGradient>
     );
 
-    const renderAccountSection = () => (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account</Text>
+    // Render Info Cards
+    const renderInfoSection = () => (
+        <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+            <Text style={styles.sectionTitle}>Informazioni Personali</Text>
 
-            <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => Alert.alert('Info', 'Modifica profilo in sviluppo')}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#3b82f6' }]}>
-                        <Edit size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Modifica Profilo</Text>
-                </View>
-                <ChevronRight size={20} color="#94a3b8" />
-            </TouchableOpacity>
-
-            {isMechanic && (
-                <>
-                    <View style={styles.divider} />
-                    <TouchableOpacity
-                        style={styles.menuItem}
-                        onPress={() => Alert.alert('Info', 'Gestione officina in sviluppo')}
-                    >
-                        <View style={styles.menuItemLeft}>
-                            <View style={[styles.menuIcon, { backgroundColor: '#8b5cf6' }]}>
-                                <MapPin size={20} color="#fff" />
-                            </View>
-                            <View style={styles.menuItemContent}>
-                                <Text style={styles.menuItemText}>Dati Officina</Text>
-                                <Text style={styles.menuItemSubtext}>
-                                    {workshopName || 'Non configurato'}
-                                </Text>
-                            </View>
-                        </View>
-                        <ChevronRight size={20} color="#94a3b8" />
-                    </TouchableOpacity>
-                </>
-            )}
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => Alert.alert('Info', 'Cambia password in sviluppo')}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#f59e0b' }]}>
-                        <Shield size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Sicurezza e Password</Text>
-                </View>
-                <ChevronRight size={20} color="#94a3b8" />
-            </TouchableOpacity>
-        </View>
-    );
-
-    const renderPreferencesSection = () => (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Preferenze</Text>
-
-            <View style={styles.menuItem}>
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#64748b' }]}>
-                        <Moon size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Tema Scuro</Text>
-                </View>
-                <Switch
-                    value={darkMode}
-                    onValueChange={toggleDarkMode}
-                    trackColor={{ false: '#e2e8f0', true: '#3b82f6' }}
-                    thumbColor="#fff"
+            <View style={styles.card}>
+                <InfoItem
+                    icon={Mail}
+                    label="Email"
+                    value={profile.email}
                 />
-            </View>
+                <View style={styles.divider} />
 
-            <View style={styles.divider} />
-
-            <View style={styles.menuItem}>
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#10b981' }]}>
-                        <Bell size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Notifiche</Text>
-                </View>
-                <Switch
-                    value={notificationsEnabled}
-                    onValueChange={setNotificationsEnabled}
-                    trackColor={{ false: '#e2e8f0', true: '#3b82f6' }}
-                    thumbColor="#fff"
+                <InfoItem
+                    icon={Phone}
+                    label="Telefono"
+                    value={profile.phone || 'Non specificato'}
                 />
+
+                {isMechanic && (
+                    <>
+                        <View style={styles.divider} />
+                        <InfoItem
+                            icon={Briefcase}
+                            label="Officina"
+                            value={profile.workshopName || 'Non specificato'}
+                        />
+                        <View style={styles.divider} />
+                        <InfoItem
+                            icon={MapPin}
+                            label="Indirizzo"
+                            value={profile.address || 'Non specificato'}
+                        />
+                        <View style={styles.divider} />
+                        <InfoItem
+                            icon={FileText}
+                            label="P.IVA"
+                            value={profile.vatNumber || 'Non specificato'}
+                        />
+                    </>
+                )}
             </View>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => Alert.alert('Info', 'Cambio lingua in sviluppo')}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#06b6d4' }]}>
-                        <Globe size={20} color="#fff" />
-                    </View>
-                    <View style={styles.menuItemContent}>
-                        <Text style={styles.menuItemText}>Lingua</Text>
-                        <Text style={styles.menuItemSubtext}>Italiano</Text>
-                    </View>
-                </View>
-                <ChevronRight size={20} color="#94a3b8" />
-            </TouchableOpacity>
         </View>
     );
 
-    const renderSupportSection = () => (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Supporto</Text>
+    // Render Stats (solo per meccanici)
+    const renderMechanicStats = () => {
+        if (!isMechanic) return null;
 
-            <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => Alert.alert('Info', 'Centro assistenza in sviluppo')}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#14b8a6' }]}>
-                        <HelpCircle size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Centro Assistenza</Text>
+        return (
+            <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+                <Text style={styles.sectionTitle}>Statistiche</Text>
+
+                <View style={styles.statsContainer}>
+                    <StatCard
+                        icon={Star}
+                        value={profile.rating?.toFixed(1) || '0.0'}
+                        label="Valutazione"
+                        color="#FFB800"
+                    />
+                    <StatCard
+                        icon={Award}
+                        value={profile.reviewsCount?.toString() || '0'}
+                        label="Recensioni"
+                        color="#007AFF"
+                    />
                 </View>
-                <ChevronRight size={20} color="#94a3b8" />
-            </TouchableOpacity>
+            </View>
+        );
+    };
+
+    // Render Actions
+    const renderActions = () => (
+        <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+            <ActionButton
+                icon={Shield}
+                label="Privacy Policy"
+                onPress={handlePrivacy}
+                color="#007AFF"
+            />
 
             <View style={styles.divider} />
 
-            <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => Alert.alert('Info', 'Privacy policy in sviluppo')}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#6366f1' }]}>
-                        <FileText size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Privacy e Termini</Text>
-                </View>
-                <ChevronRight size={20} color="#94a3b8" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => Alert.alert('MyMechanic', 'Versione 1.0.0\n\n© 2024 MyMechanic')}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#94a3b8' }]}>
-                        <Info size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Info App</Text>
-                </View>
-                <ChevronRight size={20} color="#94a3b8" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => Alert.alert('Info', 'Valutazione in sviluppo')}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#f59e0b' }]}>
-                        <Star size={20} color="#fff" />
-                    </View>
-                    <Text style={styles.menuItemText}>Valuta l'App</Text>
-                </View>
-                <ChevronRight size={20} color="#94a3b8" />
-            </TouchableOpacity>
-        </View>
-    );
-
-    const renderDangerZone = () => (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Zona Pericolosa</Text>
-
-            <TouchableOpacity
-                style={[styles.menuItem, styles.dangerItem]}
-                onPress={showLogoutConfirmation}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#ef4444' }]}>
-                        <LogOut size={20} color="#fff" />
-                    </View>
-                    <Text style={[styles.menuItemText, styles.dangerText]}>Disconnetti</Text>
-                </View>
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity
-                style={[styles.menuItem, styles.dangerItem]}
-                onPress={handleDeleteAccount}
-            >
-                <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuIcon, { backgroundColor: '#dc2626' }]}>
-                        <Trash2 size={20} color="#fff" />
-                    </View>
-                    <Text style={[styles.menuItemText, styles.dangerText]}>Elimina Account</Text>
-                </View>
-            </TouchableOpacity>
+            <ActionButton
+                icon={LogOut}
+                label="Disconnetti"
+                onPress={handleLogout}
+                color="#EF4444"
+                destructive
+            />
         </View>
     );
 
@@ -371,21 +303,76 @@ const ProfileScreen = () => {
                 showsVerticalScrollIndicator={false}
             >
                 {renderHeader()}
-                {renderAccountSection()}
-                {renderPreferencesSection()}
-                {renderSupportSection()}
-                {renderDangerZone()}
+                {renderInfoSection()}
+                {renderMechanicStats()}
+                {renderActions()}
 
-                <Text style={styles.version}>Versione 1.0.0</Text>
+                <Text style={styles.version}>MyMechanic v1.0.0</Text>
             </ScrollView>
         </SafeAreaView>
     );
 };
 
+// Componente InfoItem
+const InfoItem = ({ icon: Icon, label, value }: any) => (
+    <View style={styles.infoItem}>
+        <View style={styles.infoIcon}>
+            <Icon size={20} color="#64748B" />
+        </View>
+        <View style={styles.infoContent}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={styles.infoValue}>{value}</Text>
+        </View>
+    </View>
+);
+
+// Componente StatCard
+const StatCard = ({ icon: Icon, value, label, color }: any) => (
+    <View style={styles.statCard}>
+        <Icon size={24} color={color} />
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
+        <Text style={styles.statLabel}>{label}</Text>
+    </View>
+);
+
+// Componente ActionButton
+const ActionButton = ({ icon: Icon, label, onPress, color, destructive }: any) => (
+    <TouchableOpacity style={styles.actionButton} onPress={onPress}>
+        <View style={[styles.actionIcon, { backgroundColor: `${color}15` }]}>
+            <Icon size={20} color={color} />
+        </View>
+        <Text style={[styles.actionLabel, destructive && { color }]}>{label}</Text>
+    </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#F8FAFC',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#64748B',
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        padding: 20,
+    },
+    errorText: {
+        marginTop: 16,
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#EF4444',
     },
     scrollView: {
         flex: 1,
@@ -394,115 +381,244 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     scrollContentDesktop: {
-        maxWidth: 800,
-        alignSelf: 'center',
+        maxWidth: 900,
         width: '100%',
+        alignSelf: 'center',
     },
 
     // Header
     header: {
-        alignItems: 'center',
-        paddingVertical: 32,
+        paddingTop: 40,
+        paddingBottom: 32,
         paddingHorizontal: 20,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e2e8f0',
+        alignItems: 'center',
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 4,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            },
+        }),
+    },
+    headerContent: {
+        alignItems: 'center',
     },
     avatarContainer: {
         position: 'relative',
         marginBottom: 16,
     },
     avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 4,
+        borderColor: '#FFF',
     },
     avatarPlaceholder: {
-        backgroundColor: '#3b82f6',
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    avatarText: {
+        fontSize: 48,
+        fontWeight: '700',
+        color: '#FFF',
     },
     cameraButton: {
         position: 'absolute',
-        right: 0,
-        bottom: 0,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#3b82f6',
+        right: 4,
+        bottom: 4,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 3,
-        borderColor: '#fff',
+        borderColor: '#FFF',
     },
     userName: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: '700',
-        color: '#0f172a',
-        marginBottom: 4,
+        color: '#FFF',
+        marginBottom: 8,
+        textAlign: 'center',
     },
-    userEmail: {
-        fontSize: 14,
-        color: '#64748b',
-        marginBottom: 12,
+    badgeContainer: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 16,
     },
     badge: {
-        backgroundColor: '#dbeafe',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 16,
-        marginTop: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    },
+    badgeMechanic: {
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    },
+    badgeVerified: {
+        backgroundColor: 'rgba(34, 197, 94, 0.9)',
     },
     badgeText: {
         fontSize: 12,
         fontWeight: '600',
-        color: '#1e40af',
+        color: '#FFF',
     },
-    warningBadge: {
-        backgroundColor: '#fef3c7',
+    editButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
     },
-    badgeTextWarning: {
-        fontSize: 12,
+    editButtonText: {
+        fontSize: 14,
         fontWeight: '600',
-        color: '#92400e',
+        color: '#FFF',
     },
 
     // Sections
     section: {
-        backgroundColor: '#fff',
-        marginTop: 24,
-        marginHorizontal: isDesktop ? 0 : 20,
-        borderRadius: 16,
-        padding: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+        marginTop: 20,
+        marginHorizontal: 16,
+    },
+    sectionDesktop: {
+        marginHorizontal: 32,
     },
     sectionTitle: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '700',
-        color: '#0f172a',
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        paddingBottom: 8,
+        color: '#0F172A',
+        marginBottom: 12,
+        paddingHorizontal: 4,
     },
 
-    // Menu Items
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-        minHeight: 60,
+    // Card
+    card: {
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 4,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            },
+        }),
     },
-    menuItemLeft: {
+
+    // Info Item
+    infoItem: {
         flexDirection: 'row',
         alignItems: 'center',
+        padding: 16,
+    },
+    infoIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    infoContent: {
         flex: 1,
     },
-    menuIcon: {
+    infoLabel: {
+        fontSize: 13,
+        color: '#64748B',
+        marginBottom: 2,
+    },
+    infoValue: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#0F172A',
+    },
+
+    // Stats
+    statsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 20,
+        alignItems: 'center',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            },
+        }),
+    },
+    statValue: {
+        fontSize: 32,
+        fontWeight: '700',
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    statLabel: {
+        fontSize: 13,
+        color: '#64748B',
+    },
+
+    // Actions
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 16,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            },
+        }),
+    },
+    actionIcon: {
         width: 40,
         height: 40,
         borderRadius: 20,
@@ -510,39 +626,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 16,
     },
-    menuItemContent: {
-        flex: 1,
-    },
-    menuItemText: {
+    actionLabel: {
         fontSize: 16,
         fontWeight: '500',
-        color: '#0f172a',
-    },
-    menuItemSubtext: {
-        fontSize: 13,
-        color: '#64748b',
-        marginTop: 2,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#f1f5f9',
-        marginLeft: 72,
+        color: '#0F172A',
+        flex: 1,
     },
 
-    // Danger Zone
-    dangerItem: {
-        opacity: 0.9,
-    },
-    dangerText: {
-        color: '#ef4444',
+    // Divider
+    divider: {
+        height: 1,
+        backgroundColor: '#F1F5F9',
     },
 
     // Footer
     version: {
         fontSize: 12,
-        color: '#94a3b8',
+        color: '#94A3B8',
         textAlign: 'center',
         marginTop: 32,
+        marginBottom: 16,
     },
 });
 
