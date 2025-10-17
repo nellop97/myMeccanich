@@ -93,11 +93,13 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
                 >
                     {/* Cilindrata */}
                     <View style={[styles.fieldContainer, styles.flexField]}>
-                        <Text style={styles.label}>Cilindrata (cc)</Text>
+                        <Text style={styles.label}>
+                            Cilindrata <Text style={styles.optionalLabel}>(Opzionale)</Text>
+                        </Text>
                         <View style={styles.inputWrapper}>
                             <input
                                 type="number"
-                                placeholder="es. 1998"
+                                placeholder="" // ✅ RIMOSSO placeholder
                                 value={formData.engineSize?.toString() || ''}
                                 onChange={(e) =>
                                     updateFormData({
@@ -119,11 +121,13 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
 
                     {/* Potenza */}
                     <View style={[styles.fieldContainer, styles.flexField]}>
-                        <Text style={styles.label}>Potenza (CV)</Text>
+                        <Text style={styles.label}>
+                            Potenza <Text style={styles.optionalLabel}>(Opzionale)</Text>
+                        </Text>
                         <View style={styles.inputWrapper}>
                             <input
                                 type="number"
-                                placeholder="es. 150"
+                                placeholder="" // ✅ RIMOSSO placeholder
                                 value={formData.power?.toString() || ''}
                                 onChange={(e) =>
                                     updateFormData({
@@ -146,22 +150,15 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
 
                 {/* Numero di Telaio (VIN) */}
                 <View style={styles.fieldContainer}>
-                    <View style={styles.labelRow}>
-                        <Text style={styles.label}>Numero di Telaio (VIN)</Text>
-                        <TouchableOpacity
-                            onPress={() => setShowVinInfo(!showVinInfo)}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                            <Info size={18} color="#64748b" />
-                        </TouchableOpacity>
-                    </View>
+                    <Text style={styles.label}>
+                        VIN / Telaio <Text style={styles.optionalLabel}>(Opzionale)</Text>
+                    </Text>
 
-                    {showVinInfo && (
-                        <View style={styles.infoBox}>
-                            <Text style={styles.infoText}>
-                                Il VIN (Vehicle Identification Number) è un codice di 17
-                                caratteri che identifica univocamente il tuo veicolo. Lo trovi
-                                sul libretto di circolazione.
+                    {Platform.OS === 'web' && (
+                        <View style={styles.helperTextContainer}>
+                            <Text style={styles.helperText}>
+                                Il numero di telaio identificativo del veicolo.
+                                Lo trovi sul libretto di circolazione.
                             </Text>
                         </View>
                     )}
@@ -169,7 +166,7 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
                     <View style={styles.inputWrapper}>
                         <input
                             type="text"
-                            placeholder="es. ZFA12300001234567"
+                            placeholder="" // ✅ RIMOSSO placeholder
                             value={formData.vin || ''}
                             onChange={(e) =>
                                 updateFormData({ vin: e.target.value.toUpperCase() })

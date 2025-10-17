@@ -24,7 +24,7 @@ import VehicleBasicInfoStep from './AddVehicle/VehicleBasicInfoStep';
 import VehicleTechnicalDetailsStep from './AddVehicle/VehicleTechnicalDetailsStep';
 import VehicleDeadlinesDocumentsStep from './AddVehicle/VehicleDeadlinesDocumentsStep';
 import VehicleSummaryStep from './AddVehicle/VehicleSummaryStep';
-
+import VehicleImagesStep from './AddVehicle/VehicleImagesStep';
 // Types
 import { VehicleFormData, AddVehicleStep } from '../../types/addVehicle.types';
 
@@ -57,8 +57,9 @@ const AddVehicleScreen = () => {
     const [steps, setSteps] = useState<AddVehicleStep[]>([
         { id: 1, title: 'Dati Base', isValid: false, isCompleted: false },
         { id: 2, title: 'Dettagli Tecnici', isValid: false, isCompleted: false },
-        { id: 3, title: 'Scadenze', isValid: true, isCompleted: false }, // Opzionale
-        { id: 4, title: 'Riepilogo', isValid: true, isCompleted: false },
+        { id: 3, title: 'Foto', isValid: true, isCompleted: false }, // NUOVO
+        { id: 4, title: 'Scadenze', isValid: true, isCompleted: false },
+        { id: 5, title: 'Riepilogo', isValid: true, isCompleted: false },
     ]);
 
     // Aggiorna form data
@@ -129,6 +130,9 @@ const AddVehicleScreen = () => {
         try {
             // Prepara dati per Firestore
             const vehicleData = {
+                // ✅ FIX PRINCIPALE: Aggiungi userId per le regole Firestore
+                userId: user.id, // ⚠️ QUESTO CAMPO È OBBLIGATORIO!
+
                 // Dati base
                 make: formData.make,
                 model: formData.model,
@@ -161,7 +165,7 @@ const AddVehicleScreen = () => {
                 notes: formData.notes || null,
 
                 // Metadata
-                ownerId: user.id,
+                ownerId: user.id, // Mantieni anche questo per compatibilità
                 ownerName: user.name || user.email,
                 isActive: true,
                 createdAt: serverTimestamp(),
@@ -186,8 +190,9 @@ const AddVehicleScreen = () => {
                     requirePinForTransfer: true,
                 },
 
-                // Array vuoti iniziali
+                // Array vuoti iniziali - verranno popolati dopo
                 images: [],
+                photos: [], // Per compatibilità con altri screen
                 optionals: [],
             };
 
@@ -204,18 +209,24 @@ const AddVehicleScreen = () => {
                     {
                         text: 'OK',
                         onPress: () => {
-                            // Torna alla home o alla lista veicoli
                             navigation.goBack();
                         },
                     },
                 ]
             );
-        } catch (error) {
+        } catch (error: any) {
             console.error('❌ Errore creazione veicolo:', error);
-            Alert.alert(
-                'Errore',
-                'Si è verificato un errore durante il salvataggio. Riprova.'
-            );
+
+            // Messaggio di errore più dettagliato
+            let errorMessage = 'Si è verificato un errore durante il salvataggio.';
+
+            if (error.code === 'permission-denied') {
+                errorMessage = 'Permessi insufficienti. Verifica di essere autenticato.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
+            Alert.alert('Errore', errorMessage);
         } finally {
             setIsSubmitting(false);
         }
@@ -235,9 +246,19 @@ const AddVehicleScreen = () => {
                 return <VehicleBasicInfoStep {...stepProps} />;
             case 2:
                 return <VehicleTechnicalDetailsStep {...stepProps} />;
-            case 3:
-                return <VehicleDeadlinesDocumentsStep {...stepProps} />;
+            case 3: // NUOVO
+                return (
+                    <VehicleImagesStep
+                        formData={formData}
+                        updateFormData={updateFormData}
+                        onNext={handleNext}
+                        onBack={handleBack}
+                        userId={user.id}
+                    />
+                );
             case 4:
+                return <VehicleDeadlinesDocumentsStep {...stepProps} />;
+            case 5:
                 return (
                     <VehicleSummaryStep
                         {...stepProps}

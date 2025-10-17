@@ -83,9 +83,6 @@ const VehicleBasicInfoStep: React.FC<Props> = ({
                         </Text>
                         <ChevronDown size={20} color="#64748b" />
                     </TouchableOpacity>
-                    {formData.make && (
-                        <Text style={styles.helperText}>Es. {formData.make}</Text>
-                    )}
                 </View>
 
                 {/* Modello */}
@@ -108,9 +105,6 @@ const VehicleBasicInfoStep: React.FC<Props> = ({
                             }}
                         />
                     </View>
-                    {formData.model && (
-                        <Text style={styles.helperText}>Es. {formData.model}</Text>
-                    )}
                 </View>
 
                 {/* Anno di produzione */}
@@ -133,9 +127,6 @@ const VehicleBasicInfoStep: React.FC<Props> = ({
                         </Text>
                         <ChevronDown size={20} color="#64748b" />
                     </TouchableOpacity>
-                    {formData.year && (
-                        <Text style={styles.helperText}>Es. {formData.year}</Text>
-                    )}
                 </View>
 
                 {/* Targa */}
