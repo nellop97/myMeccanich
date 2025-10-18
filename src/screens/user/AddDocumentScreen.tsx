@@ -39,7 +39,7 @@ import {
 import { UniversalDatePicker } from '../../components/UniversalDatePicker';
 import UniversalImagePicker from '../../components/UniversalImagePicker';
 import { UniversalDocumentPicker } from '../../components/UniversalDocumentPicker';
-
+import { handleStorageError } from '../../utils/handleStorageError';
 // Services
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { db, auth } from '../../services/firebase';
@@ -183,27 +183,45 @@ const AddDocumentScreen = () => {
 
             // Upload attachments if any
             let uploadedAttachments: any[] = [];
+
             if (attachments.length > 0) {
+                console.log(`📤 Upload di ${attachments.length} allegati...`);
+
                 for (let i = 0; i < attachments.length; i++) {
                     const attachment = attachments[i];
                     const progress = ((i + 1) / attachments.length) * 100;
                     setUploadProgress(progress);
 
-                    const uploadedUrl = await UploadService.uploadFile(
+                    // Crea path univoco per il file
+                    const uploadPath = `vehicles/${user.uid}/${carId}/documents/${Date.now()}_${attachment.name}`;
+
+                    // Upload con UploadService
+                    const uploadResult = await UploadService.uploadFile(
                         attachment.uri,
-                        `documents/${carId}`,
-                        attachment.type
+                        {
+                            path: uploadPath,
+                            fileType: attachment.type,
+                            onProgress: (fileProgress) => {
+                                const totalProgress = ((i + fileProgress / 100) / attachments.length) * 100;
+                                setUploadProgress(totalProgress);
+                            }
+                        }
                     );
 
                     uploadedAttachments.push({
-                        url: uploadedUrl,
+                        url: uploadResult.url,
+                        path: uploadResult.path,
                         type: attachment.type,
                         name: attachment.name,
-                        size: attachment.size,
+                        size: attachment.size || uploadResult.size,
+                        uploadedAt: new Date().toISOString(),
                     });
+
+                    console.log(`✅ Allegato ${i + 1}/${attachments.length} caricato`);
                 }
             }
 
+            // Crea documento in Firestore
             const documentData = {
                 userId: user.uid,
                 vehicleId: carId,
@@ -220,6 +238,8 @@ const AddDocumentScreen = () => {
 
             await addDoc(collection(db, 'documents'), documentData);
 
+            console.log('✅ Documento salvato in Firestore');
+
             Alert.alert(
                 'Successo',
                 'Documento aggiunto con successo!',
@@ -231,8 +251,10 @@ const AddDocumentScreen = () => {
                 ]
             );
         } catch (error) {
-            console.error('Error adding document:', error);
-            Alert.alert('Errore', 'Impossibile aggiungere il documento. Riprova.');
+            console.error('❌ Error adding document:', error);
+
+            const errorMessage = handleStorageError(error);
+            Alert.alert('Errore', errorMessage);
         } finally {
             setIsLoading(false);
             setUploadProgress(0);
