@@ -45,8 +45,11 @@ import { useUserData } from '../../hooks/useUserData';
 import { db, auth } from '../../services/firebase';
 import { collection, addDoc, deleteDoc, doc, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { DocumentPicker } from '../../components/DocumentPicker';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import {
+    UniversalImagePicker,
+    UniversalDatePicker,
+    UniversalDocumentPicker,
+} from '../../components';
 
 const storage = getStorage();
 
@@ -73,7 +76,7 @@ const DocumentsListScreen = () => {
   const { colors, isDark } = useAppThemeManager();
   const { vehicles, refreshData } = useUserData();
 
-  const carId = route.params?.carId;
+  const carId = (route.params as any)?.carId;
   const [documents, setDocuments] = useState<Document[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -207,16 +210,16 @@ const DocumentsListScreen = () => {
   };
 
   const handleUploadDocument = async (type: string) => {
-    try {
-      const result = await DocumentPicker.pick({
-        type: [DocumentPicker.types.pdf, DocumentPicker.types.images],
-      });
+    setShowUploadModal(true);
+  };
 
-      if (result && result[0]) {
+  const handleDocumentsSelected = async (documents: any[]) => {
+    try {
+      if (documents && documents[0]) {
         setIsUploading(true);
         setUploadProgress(0);
 
-        const file = result[0];
+        const file = documents[0];
         const userId = auth.currentUser?.uid;
         if (!userId) return;
 
@@ -268,88 +271,70 @@ const DocumentsListScreen = () => {
         );
       }
     } catch (err) {
-      if (DocumentPicker.isCancel(err)) {
-        // User cancelled
-      } else {
-        Alert.alert('Errore', 'Errore nella selezione del documento');
-      }
+      Alert.alert('Errore', 'Errore nella selezione del documento');
     }
   };
 
-  const handleTakePhoto = async (type: string) => {
-    const options = {
-      mediaType: 'photo' as const,
-      includeBase64: false,
-      maxHeight: 2000,
-      maxWidth: 2000,
-      quality: 0.8,
-    };
+  const handleImagesSelected = async (images: any[]) => {
+    if (!images || images.length === 0) return;
 
-    launchCamera(options, async (response) => {
-      if (response.didCancel || response.errorMessage || !response.assets) {
-        return;
-      }
+    setIsUploading(true);
+    setUploadProgress(0);
 
-      const asset = response.assets[0];
-      if (!asset.uri) return;
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) return;
 
-      setIsUploading(true);
-      setUploadProgress(0);
+      const image = images[0];
+      const fileName = `${Date.now()}_photo.jpg`;
+      const storageRef = ref(storage, `documents/${userId}/${fileName}`);
 
-      try {
-        const userId = auth.currentUser?.uid;
-        if (!userId) return;
+      const response = await fetch(image.uri);
+      const blob = await response.blob();
 
-        const fileName = `${Date.now()}_photo.jpg`;
-        const storageRef = ref(storage, `documents/${userId}/${fileName}`);
+      const uploadTask = uploadBytesResumable(storageRef, blob);
 
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
+      uploadTask.on('state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        },
+        (error) => {
+          Alert.alert('Errore', 'Errore durante il caricamento della foto');
+          setIsUploading(false);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-        const uploadTask = uploadBytesResumable(storageRef, blob);
+          const documentData = {
+            vehicleId: selectedVehicle === 'all' ?
+              (vehicles && vehicles[0] ? vehicles[0].id : selectedVehicle) :
+              selectedVehicle,
+            type: 'photo',
+            title: `Foto documento`,
+            fileName: fileName,
+            fileUrl: downloadURL,
+            fileSize: image.fileSize,
+            fileType: 'image/jpeg',
+            uploadedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            userId: userId,
+          };
 
-        uploadTask.on('state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(progress);
-          },
-          (error) => {
-            Alert.alert('Errore', 'Errore durante il caricamento della foto');
-            setIsUploading(false);
-          },
-          async () => {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const documentsRef = collection(db, 'users', userId, 'documents');
+          await addDoc(documentsRef, documentData);
 
-            const documentData = {
-              vehicleId: selectedVehicle === 'all' ?
-                (vehicles && vehicles[0] ? vehicles[0].id : selectedVehicle) :
-                selectedVehicle,
-              type: type,
-              title: `Foto ${type}`,
-              fileName: fileName,
-              fileUrl: downloadURL,
-              fileSize: asset.fileSize,
-              fileType: 'image/jpeg',
-              uploadedAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-              userId: userId,
-            };
+          setIsUploading(false);
+          setShowUploadModal(false);
+          await loadDocuments();
 
-            const documentsRef = collection(db, 'users', userId, 'documents');
-            await addDoc(documentsRef, documentData);
-
-            setIsUploading(false);
-            setShowUploadModal(false);
-            await loadDocuments();
-
-            Alert.alert('Successo', 'Foto salvata con successo');
-          }
-        );
-      } catch (error) {
-        Alert.alert('Errore', 'Errore durante il salvataggio della foto');
-        setIsUploading(false);
-      }
-    });
+          Alert.alert('Successo', 'Foto salvata con successo');
+        }
+      );
+    } catch (error) {
+      Alert.alert('Errore', 'Errore durante il salvataggio della foto');
+      setIsUploading(false);
+    }
   };
 
   const deleteDocument = async (docId: string, title: string) => {
@@ -651,6 +636,34 @@ const DocumentsListScreen = () => {
               </View>
             )}
 
+            {!isUploading && (
+              <View style={styles.universalPickersContainer}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 16 }]}>Seleziona o carica file</Text>
+                
+                <UniversalDocumentPicker
+                  onDocumentsSelected={handleDocumentsSelected}
+                  accept={['pdf', 'image', 'doc']}
+                  multiple={false}
+                  maxFiles={1}
+                  maxSize={10}
+                  label="Seleziona documento"
+                  showPreview={true}
+                />
+                
+                <View style={styles.spacer} />
+                
+                <UniversalImagePicker
+                  onImagesSelected={handleImagesSelected}
+                  multiple={false}
+                  maxImages={1}
+                  quality={0.8}
+                  showCameraOption={true}
+                  showGalleryOption={true}
+                  label="Scatta o seleziona foto"
+                />
+              </View>
+            )}
+
             <ScrollView style={styles.documentTypesList}>
               {documentTypes.map(type => (
                 <View key={type.id} style={styles.documentTypeSection}>
@@ -682,7 +695,7 @@ const DocumentsListScreen = () => {
                     
                     <TouchableOpacity
                       style={[styles.actionButton, { backgroundColor: colors.secondary + '20' }]}
-                      onPress={() => handleTakePhoto(type.id)}
+                      onPress={() => {/* Replaced with UniversalImagePicker */}}
                       disabled={isUploading}
                     >
                       <Camera size={20} color={colors.secondary} />
@@ -1081,6 +1094,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 6,
+  },
+  universalPickersContainer: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  spacer: {
+    height: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
 

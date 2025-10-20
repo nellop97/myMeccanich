@@ -1,673 +1,1139 @@
 // src/screens/mechanic/NewAppointmentScreen.tsx
+// Versione corretta: fix prop name + gestione caso "nessuna auto esistente"
+
+import React, { useState, useEffect } from 'react';
+import {
+    View,
+    Text,
+    ScrollView,
+    TouchableOpacity,
+    TextInput,
+    StyleSheet,
+    SafeAreaView,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    Dimensions,
+    ActivityIndicator,
+    FlatList,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
-  ArrowLeft,
-  Calendar,
-  Car,
-  FileText,
-  Plus,
-  Save,
-  User,
-  Wrench,
+    ArrowLeft,
+    Car,
+    User,
+    FileText,
+    Calendar,
+    Euro,
+    Save,
+    Search,
+    X,
+    Clock,
+    CheckCircle,
+    Lightbulb,
+    Info,
+    Plus,
 } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import {
-  Alert,
-  Dimensions,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 import CalendarAppointmentPicker from './CalendarAppointmentPicker';
 import UserSearchModal from '../../components/UserSearchModal';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import QuickAddCustomerModal from '../../components/QuickAddCustomerModal';
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-export type FormData = {
-  model: string;
-  vin: string;
-  licensePlate: string;
-  owner: string;
-  repairDescription: string;
-  estimatedCost: string;
-};
+interface SelectedCustomer {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+}
+
+interface ExistingCar {
+    id: string;
+    make: string;
+    model: string;
+    year: string;
+    licensePlate: string;
+    vin?: string;
+    color?: string;
+    mileage?: number;
+    lastService?: string;
+}
 
 const NewAppointmentScreen = () => {
-  const navigation = useNavigation();
-  const { darkMode } = useStore();
-  const { addAppointment } = useWorkshopStore();
+    const navigation = useNavigation();
+    const { user, darkMode } = useStore();
+    const { addCar, fetchCars } = useWorkshopStore();
 
-  // Stati per il calendario integrato
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
+    const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+    const isTablet = screenWidth >= 768 && screenWidth < 1024;
 
-  const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+    // Stati per il form veicolo
+    const [vehicleData, setVehicleData] = useState({
+        make: '',
+        model: '',
+        year: '',
+        licensePlate: '',
+        vin: '',
+        color: '',
+        mileage: '',
+    });
 
-  const { control, handleSubmit, formState: { errors }, watch, setValue } = useForm<FormData>({
-    defaultValues: {
-      estimatedCost: '0'
-    }
-  });
+    // Stati per la riparazione
+    const [repairData, setRepairData] = useState({
+        description: '',
+        estimatedCost: '',
+        laborCost: '',
+        estimatedHours: '',
+        notes: '',
+    });
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    inputBackground: darkMode ? '#374151' : '#ffffff',
-    placeholderColor: darkMode ? '#9ca3af' : '#6b7280',
-    accent: '#2563eb',
-    primary: darkMode ? '#60a5fa' : '#2563eb', // Accent color for UI elements
-  };
+    // Stati per date e cliente
+    const [startDate, setStartDate] = useState<string | null>(null);
+    const [endDate, setEndDate] = useState<string | null>(null);
+    const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
 
-  const [carData, setCarData] = useState({
-    model: '',
-    vin: '',
-    licensePlate: '',
-    owner: '',
-    color: '',
-    year: '',
-    mileage: '',
-    ownerId: '', // ID dell'utente proprietario
-    ownerPhone: '', // Telefono del proprietario
-    ownerEmail: '', // Email del proprietario
-  });
+    // ⭐ NUOVI STATI per auto-suggerimento
+    const [existingCars, setExistingCars] = useState<ExistingCar[]>([]);
+    const [loadingExistingCars, setLoadingExistingCars] = useState(false);
+    const [showCarSuggestions, setShowCarSuggestions] = useState(false);
+    const [selectedExistingCar, setSelectedExistingCar] = useState<ExistingCar | null>(null);
+    const [hasLoadedCars, setHasLoadedCars] = useState(false); // ⭐ Per mostrare messaggio "nessuna auto"
 
-  // Stati per la ricerca utenti
-  const [showUserSearch, setShowUserSearch] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
+    // Stati UI
+    const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+    const [showQuickAdd, setShowQuickAdd] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errors, setErrors] = useState<{ [key: string]: string }>({});
+    const [currentStep, setCurrentStep] = useState(1);
 
-  const onSubmit = (data: FormData) => {
-    try {
-      if (!startDate) {
-        Alert.alert('Errore', 'Seleziona almeno la data di inizio dei lavori');
-        return;
-      }
+    const theme = {
+        background: darkMode ? '#111827' : '#f3f4f6',
+        cardBackground: darkMode ? '#1f2937' : '#ffffff',
+        text: darkMode ? '#ffffff' : '#000000',
+        textSecondary: darkMode ? '#9ca3af' : '#6b7280',
+        border: darkMode ? '#374151' : '#e5e7eb',
+        inputBackground: darkMode ? '#374151' : '#ffffff',
+        placeholderColor: darkMode ? '#9ca3af' : '#6b7280',
+        accent: '#2563eb',
+        success: '#10b981',
+        warning: '#f59e0b',
+        error: '#ef4444',
+        info: '#3b82f6',
+    };
 
-      const finalEndDate = endDate || startDate; // Se non c'è data di fine, usa quella di inizio
+    // ⭐ CARICA AUTO ESISTENTI DEL CLIENTE quando viene selezionato
+    useEffect(() => {
+        if (selectedCustomer?.id && user?.id) {
+            loadCustomerExistingCars();
+        } else {
+            setExistingCars([]);
+            setSelectedExistingCar(null);
+            setHasLoadedCars(false);
+        }
+    }, [selectedCustomer]);
 
-      const newAppointmentId = addAppointment({
-        model: data.model,
-        vin: data.vin,
-        licensePlate: data.licensePlate,
-        owner: data.owner,
-        repairs: [{
-          description: data.repairDescription,
-          scheduledDate: startDate,
-          deliveryDate: finalEndDate,
-          totalCost: parseFloat(data.estimatedCost) || 0,
-        }]
-      });
+    const loadCustomerExistingCars = async () => {
+        if (!selectedCustomer?.id || !user?.id) return;
 
-      console.log('Nuovo appuntamento creato con ID:', newAppointmentId);
-      console.log('Periodo di lavorazione:', { startDate, endDate: finalEndDate });
-      navigation.goBack();
-    } catch (error) {
-      console.error('Errore durante la creazione dell\'appuntamento:', error);
-    }
-  };
+        setLoadingExistingCars(true);
+        setHasLoadedCars(false);
+        try {
+            const carsRef = collection(db, 'workshopCars');
+            const q = query(
+                carsRef,
+                where('workshopId', '==', user.id),
+                where('ownerId', '==', selectedCustomer.id)
+            );
 
-  const FormCard = ({ title, icon: Icon, children }: any) => (
-      <View style={[styles.formCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-        <View style={styles.formCardHeader}>
-          <View style={styles.formCardTitleContainer}>
-            <View style={[styles.formCardIcon, { backgroundColor: darkMode ? '#1e3a8a' : '#dbeafe' }]}>
-              <Icon size={20} color={darkMode ? '#60a5fa' : '#2563eb'} />
+            const snapshot = await getDocs(q);
+            const cars: ExistingCar[] = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    make: data.make || '',
+                    model: data.model || '',
+                    year: data.year || '',
+                    licensePlate: data.licensePlate || '',
+                    vin: data.vin,
+                    color: data.color,
+                    mileage: data.mileage,
+                    lastService: data.repairs?.[data.repairs?.length - 1]?.description,
+                };
+            });
+
+            setExistingCars(cars);
+            setHasLoadedCars(true);
+
+            // Mostra suggerimenti se ci sono auto, altrimenti mostra messaggio informativo
+            if (cars.length > 0) {
+                setShowCarSuggestions(true);
+            }
+        } catch (error) {
+            console.error('Error loading existing cars:', error);
+            setHasLoadedCars(true);
+        } finally {
+            setLoadingExistingCars(false);
+        }
+    };
+
+    // ⭐ APPLICA AUTO ESISTENTE al form
+    const applyExistingCar = (car: ExistingCar) => {
+        setVehicleData({
+            make: car.make,
+            model: car.model,
+            year: car.year,
+            licensePlate: car.licensePlate,
+            vin: car.vin || '',
+            color: car.color || '',
+            mileage: car.mileage?.toString() || '',
+        });
+        setSelectedExistingCar(car);
+        setShowCarSuggestions(false);
+        setCurrentStep(3); // Salta direttamente allo step riparazione
+    };
+
+    // Validazione step
+    const validateStep = (step: number): boolean => {
+        const newErrors: { [key: string]: string } = {};
+
+        switch (step) {
+            case 1:
+                if (!selectedCustomer) {
+                    newErrors.customer = 'Seleziona o aggiungi un cliente';
+                }
+                break;
+            case 2:
+                if (!vehicleData.make.trim()) newErrors.make = 'Marca richiesta';
+                if (!vehicleData.model.trim()) newErrors.model = 'Modello richiesto';
+                if (!vehicleData.licensePlate.trim()) newErrors.licensePlate = 'Targa richiesta';
+                break;
+            case 3:
+                if (!repairData.description.trim()) newErrors.description = 'Descrizione richiesta';
+                break;
+            case 4:
+                if (!startDate) newErrors.startDate = 'Seleziona almeno la data di inizio';
+                break;
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleNext = () => {
+        if (validateStep(currentStep)) {
+            if (currentStep < 4) {
+                setCurrentStep(currentStep + 1);
+            } else {
+                handleSubmit();
+            }
+        }
+    };
+
+    const handleBack = () => {
+        if (currentStep > 1) {
+            setCurrentStep(currentStep - 1);
+        } else {
+            navigation.goBack();
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!validateStep(4) || !user?.id || !selectedCustomer) {
+            Alert.alert('Errore', 'Completa tutti i campi obbligatori');
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            const now = new Date().toISOString();
+
+            const workshopCarData = {
+                make: vehicleData.make.trim(),
+                model: vehicleData.model.trim(),
+                year: vehicleData.year || new Date().getFullYear().toString(),
+                licensePlate: vehicleData.licensePlate.trim().toUpperCase(),
+                vin: vehicleData.vin.trim() || null,
+                color: vehicleData.color.trim() || null,
+                mileage: vehicleData.mileage ? parseInt(vehicleData.mileage) : null,
+                owner: `${selectedCustomer.firstName} ${selectedCustomer.lastName}`,
+                ownerId: selectedCustomer.id,
+                ownerEmail: selectedCustomer.email,
+                ownerPhone: selectedCustomer.phone || null,
+                workshopId: user.id,
+                entryDate: now,
+                isActive: true,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                repairs: [
+                    {
+                        id: `repair_${Date.now()}`,
+                        description: repairData.description.trim(),
+                        scheduledDate: startDate,
+                        deliveryDate: endDate || startDate,
+                        totalCost: repairData.estimatedCost ? parseFloat(repairData.estimatedCost) : 0,
+                        laborCost: repairData.laborCost ? parseFloat(repairData.laborCost) : 0,
+                        estimatedHours: repairData.estimatedHours ? parseFloat(repairData.estimatedHours) : 0,
+                        status: 'pending',
+                        parts: [],
+                        notes: repairData.notes.trim() || null,
+                        mechanicId: user.id,
+                        createdAt: now,
+                        updatedAt: now,
+                    },
+                ],
+            };
+
+            const docRef = await addDoc(collection(db, 'workshopCars'), workshopCarData);
+            console.log('✅ Veicolo aggiunto con ID:', docRef.id);
+
+            await fetchCars(user.id);
+
+            Alert.alert(
+                'Successo!',
+                `${vehicleData.make} ${vehicleData.model} aggiunto all'officina`,
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
+            );
+        } catch (error: any) {
+            console.error('❌ Errore salvataggio:', error);
+            Alert.alert('Errore', error.message || 'Impossibile salvare il veicolo');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // ✅ FIX: Usa onSelectUser invece di onSelect
+    const handleCustomerSelect = (customer: any) => {
+        setSelectedCustomer(customer);
+        setShowCustomerSearch(false);
+        setErrors((prev) => ({ ...prev, customer: '' }));
+    };
+
+    const removeCustomer = () => {
+        setSelectedCustomer(null);
+        setExistingCars([]);
+        setSelectedExistingCar(null);
+        setShowCarSuggestions(false);
+        setHasLoadedCars(false);
+    };
+
+    // ⭐ RENDER SUGGERIMENTI AUTO ESISTENTI o MESSAGGIO "NESSUNA AUTO"
+    const renderCarSuggestionsOrEmptyState = () => {
+        // Loading state
+        if (loadingExistingCars) {
+            return (
+                <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border, padding: 24, alignItems: 'center' }]}>
+                    <ActivityIndicator size="small" color={theme.accent} />
+                    <Text style={[{ color: theme.textSecondary, marginTop: 8, fontSize: 14 }]}>
+                        Caricamento auto del cliente...
+                    </Text>
+                </View>
+            );
+        }
+
+        // Ha caricato e ci sono auto esistenti
+        if (hasLoadedCars && existingCars.length > 0 && showCarSuggestions) {
+            return (
+                <View style={[styles.suggestionsCard, { backgroundColor: theme.cardBackground, borderColor: theme.accent }]}>
+                    <View style={styles.suggestionsHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Lightbulb size={20} color={theme.accent} />
+                            <Text style={[styles.suggestionsTitle, { color: theme.text }]}>
+                                Auto già in archivio
+                            </Text>
+                        </View>
+                        <TouchableOpacity onPress={() => setShowCarSuggestions(false)}>
+                            <X size={20} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text style={[styles.suggestionsSubtitle, { color: theme.textSecondary }]}>
+                        Questo cliente ha già portato {existingCars.length} {existingCars.length === 1 ? 'auto' : 'auto'}. Seleziona per compilare automaticamente.
+                    </Text>
+
+                    <FlatList
+                        data={existingCars}
+                        keyExtractor={(item) => item.id}
+                        horizontal={isDesktop}
+                        showsHorizontalScrollIndicator={false}
+                        style={{ marginTop: 12 }}
+                        contentContainerStyle={{ gap: 12 }}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity
+                                style={[
+                                    styles.carSuggestionItem,
+                                    {
+                                        backgroundColor: darkMode ? '#374151' : '#f9fafb',
+                                        borderColor: theme.border,
+                                        minWidth: isDesktop ? 280 : undefined,
+                                    },
+                                ]}
+                                onPress={() => applyExistingCar(item)}
+                            >
+                                <View style={styles.carSuggestionIcon}>
+                                    <Car size={20} color={theme.accent} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.carSuggestionTitle, { color: theme.text }]}>
+                                        {item.make} {item.model}
+                                    </Text>
+                                    <Text style={[styles.carSuggestionDetails, { color: theme.textSecondary }]}>
+                                        {item.licensePlate} • {item.year}
+                                    </Text>
+                                    {item.lastService && (
+                                        <Text style={[styles.carSuggestionLastService, { color: theme.textSecondary }]} numberOfLines={1}>
+                                            Ultimo: {item.lastService}
+                                        </Text>
+                                    )}
+                                </View>
+                                <CheckCircle size={18} color={theme.success} />
+                            </TouchableOpacity>
+                        )}
+                    />
+                </View>
+            );
+        }
+
+        // ⭐ Ha caricato ma NON ci sono auto - NUOVO MESSAGGIO
+        if (hasLoadedCars && existingCars.length === 0) {
+            return (
+                <View style={[styles.emptyStateCard, { backgroundColor: darkMode ? '#1e3a5f' : '#eff6ff', borderColor: theme.info }]}>
+                    <View style={styles.emptyStateHeader}>
+                        <Info size={20} color={theme.info} />
+                        <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
+                            Primo accesso
+                        </Text>
+                    </View>
+                    <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                        Questo cliente non ha ancora portato auto nella tua officina. Compila i dati del veicolo per iniziare.
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.emptyStateButton, { backgroundColor: theme.accent }]}
+                        onPress={() => setCurrentStep(2)}
+                    >
+                        <Plus size={18} color="#ffffff" />
+                        <Text style={styles.emptyStateButtonText}>Aggiungi Veicolo</Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
+        return null;
+    };
+
+    // Render Step Indicator
+    const renderStepIndicator = () => {
+        const steps = ['Cliente', 'Veicolo', 'Riparazione', 'Date'];
+
+        return (
+            <View style={styles.stepIndicatorContainer}>
+                {steps.map((step, index) => {
+                    const stepNumber = index + 1;
+                    const isActive = stepNumber === currentStep;
+                    const isCompleted = stepNumber < currentStep;
+
+                    return (
+                        <View key={stepNumber} style={styles.stepItem}>
+                            <View
+                                style={[
+                                    styles.stepCircle,
+                                    {
+                                        backgroundColor: isActive || isCompleted ? theme.accent : theme.border,
+                                    },
+                                ]}
+                            >
+                                <Text
+                                    style={[
+                                        styles.stepNumber,
+                                        { color: isActive || isCompleted ? '#ffffff' : theme.textSecondary },
+                                    ]}
+                                >
+                                    {stepNumber}
+                                </Text>
+                            </View>
+                            <Text
+                                style={[
+                                    styles.stepLabel,
+                                    {
+                                        color: isActive ? theme.text : theme.textSecondary,
+                                        fontWeight: isActive ? '600' : '400',
+                                    },
+                                ]}
+                            >
+                                {step}
+                            </Text>
+                            {stepNumber < steps.length && (
+                                <View
+                                    style={[
+                                        styles.stepLine,
+                                        {
+                                            backgroundColor: isCompleted ? theme.accent : theme.border,
+                                        },
+                                    ]}
+                                />
+                            )}
+                        </View>
+                    );
+                })}
             </View>
-            <Text style={[styles.formCardTitle, { color: theme.text }]}>{title}</Text>
-          </View>
+        );
+    };
+
+    // Render Step 1: Cliente
+    const renderCustomerStep = () => (
+        <View style={styles.stepContent}>
+            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                <View style={styles.cardHeader}>
+                    <User size={20} color={theme.accent} />
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>Cliente</Text>
+                </View>
+
+                {!selectedCustomer ? (
+                    <View style={styles.emptyState}>
+                        <User size={48} color={theme.textSecondary} />
+                        <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                            Nessun cliente selezionato
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.primaryButton, { backgroundColor: theme.accent }]}
+                            onPress={() => setShowCustomerSearch(true)}
+                        >
+                            <Search size={20} color="#ffffff" />
+                            <Text style={styles.primaryButtonText}>Cerca Cliente Esistente</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.secondaryButton, { borderColor: theme.accent }]}
+                            onPress={() => setShowQuickAdd(true)}
+                        >
+                            <User size={20} color={theme.accent} />
+                            <Text style={[styles.secondaryButtonText, { color: theme.accent }]}>
+                                Aggiungi Nuovo Cliente
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <View style={[styles.selectedCustomer, { backgroundColor: darkMode ? '#374151' : '#f9fafb' }]}>
+                        <View style={styles.customerInfo}>
+                            <View style={[styles.customerAvatar, { backgroundColor: theme.accent }]}>
+                                <Text style={styles.customerAvatarText}>
+                                    {selectedCustomer.firstName[0]}
+                                    {selectedCustomer.lastName[0]}
+                                </Text>
+                            </View>
+                            <View style={styles.customerDetails}>
+                                <Text style={[styles.customerName, { color: theme.text }]}>
+                                    {selectedCustomer.firstName} {selectedCustomer.lastName}
+                                </Text>
+                                <Text style={[styles.customerContact, { color: theme.textSecondary }]}>
+                                    {selectedCustomer.email}
+                                </Text>
+                                {selectedCustomer.phone && (
+                                    <Text style={[styles.customerContact, { color: theme.textSecondary }]}>
+                                        {selectedCustomer.phone}
+                                    </Text>
+                                )}
+                            </View>
+                        </View>
+                        <TouchableOpacity onPress={removeCustomer} style={styles.removeButton}>
+                            <X size={20} color={theme.error} />
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
+
+            {/* ⭐ MOSTRA SUGGERIMENTI AUTO o MESSAGGIO se non ci sono auto */}
+            {renderCarSuggestionsOrEmptyState()}
         </View>
-        <View style={styles.formCardContent}>
-          {children}
-        </View>
-      </View>
-  );
-
-  const FormInput = ({ label, placeholder, value, onChangeText, error, multiline = false, keyboardType = 'default' }: any) => (
-      <View style={styles.inputContainer}>
-        <Text style={[styles.inputLabel, { color: theme.text }]}>{label}</Text>
-        <TextInput
-            style={[
-              styles.textInput,
-              multiline && styles.textInputMultiline,
-              {
-                backgroundColor: theme.inputBackground,
-                borderColor: error ? '#ef4444' : theme.border,
-                color: theme.text
-              }
-            ]}
-            placeholder={placeholder}
-            placeholderTextColor={theme.placeholderColor}
-            value={value}
-            onChangeText={onChangeText}
-            multiline={multiline}
-            keyboardType={keyboardType}
-        />
-        {error && <Text style={styles.errorText}>Questo campo è obbligatorio</Text>}
-      </View>
-  );
-
-  const handleSelectUser = (user) => {
-    setSelectedUser(user);
-    setCarData(prev => ({
-      ...prev,
-      owner: `${user.firstName} ${user.lastName}`,
-      ownerId: user.id,
-      ownerPhone: user.phone || '',
-      ownerEmail: user.email,
-    }));
-  };
-
-  const handleSave = () => {
-    // Validazione base
-    if (!carData.model.trim() || !carData.licensePlate.trim() || !selectedUser) {
-      Alert.alert('Errore', 'Compila tutti i campi obbligatori e seleziona un proprietario');
-      return;
-    }
-
-    if (repairs.length === 0) {
-      Alert.alert('Errore', 'Aggiungi almeno una riparazione');
-      return;
-    }
-
-    const invalidRepairs = repairs.some(repair => 
-      !repair.description.trim() || !repair.estimatedCost.trim()
     );
 
-    if (invalidRepairs) {
-      Alert.alert('Errore', 'Compila tutti i campi delle riparazioni');
-      return;
-    }
-  };
-
-  return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} translucent={false}/>
-
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <ArrowLeft size={24} color={theme.text} />
-          </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Nuovo Appuntamento</Text>
-            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-              Aggiungi una nuova auto in officina
-            </Text>
-          </View>
-        </View>
-
-        <ScrollView
-            style={styles.scrollContainer}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-        >
-          {/* Informazioni Veicolo */}
-          <FormCard title="Informazioni Veicolo" icon={Car}>
-            <View style={isDesktop ? styles.rowDesktop : styles.rowMobile}>
-              <View style={isDesktop ? styles.halfWidth : styles.fullWidth}>
-                <Controller
-                    control={control}
-                    rules={{ required: true }}
-                    render={({ field: { onChange, value } }) => (
-                        <FormInput
-                            label="Modello Auto *"
-                            placeholder="es. Tesla Model 3, Fiat 500..."
-                            value={value}
-                            onChangeText={onChange}
-                            error={errors.model}
-                        />
-                    )}
-                    name="model"
-                />
-              </View>
-
-              <View style={isDesktop ? styles.halfWidth : styles.fullWidth}>
-                <Controller
-                    control={control}
-                    rules={{ required: true }}
-                    render={({ field: { onChange, value } }) => (
-                        <FormInput
-                            label="Numero VIN *"
-                            placeholder="es. 5YJ3E1EAXKF123456"
-                            value={value}
-                            onChangeText={onChange}
-                            error={errors.vin}
-                        />
-                    )}
-                    name="vin"
-                />
-              </View>
-            </View>
-
-            <View style={isDesktop ? styles.rowDesktop : styles.rowMobile}>
-              <View style={isDesktop ? styles.halfWidth : styles.fullWidth}>
-                <Controller
-                    control={control}
-                    rules={{ required: true }}
-                    render={({ field: { onChange, value } }) => (
-                        <FormInput
-                            label="Targa *"
-                            placeholder="es. AB123CD"
-                            value={value}
-                            onChangeText={onChange}
-                            error={errors.licensePlate}
-                        />
-                    )}
-                    name="licensePlate"
-                />
-              </View>
-
-              <View style={isDesktop ? styles.halfWidth : styles.fullWidth}>
-                <View style={styles.inputContainer}>
-                  <Text style={[styles.label, { color: theme.text }]}>
-                    Proprietario *
-                  </Text>
-
-                  {selectedUser ? (
-                    <View style={[styles.selectedUserContainer, { backgroundColor: theme.cardBackground, borderColor: theme.primary }]}>
-                      <View style={styles.selectedUserInfo}>
-                        <View style={[styles.userAvatar, { backgroundColor: theme.primary }]}>
-                          <Text style={styles.userAvatarText}>
-                            {selectedUser.firstName.charAt(0)}{selectedUser.lastName.charAt(0)}
-                          </Text>
-                        </View>
-                        <View style={styles.userDetails}>
-                          <Text style={[styles.selectedUserName, { color: theme.text }]}>
-                            {selectedUser.firstName} {selectedUser.lastName}
-                          </Text>
-                          <Text style={[styles.selectedUserEmail, { color: theme.textSecondary }]}>
-                            {selectedUser.email}
-                          </Text>
-                          {selectedUser.phone && (
-                            <Text style={[styles.selectedUserPhone, { color: theme.textSecondary }]}>
-                              📞 {selectedUser.phone}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                      <TouchableOpacity 
-                        onPress={() => {
-                          setSelectedUser(null);
-                          setCarData(prev => ({
-                            ...prev,
-                            owner: '',
-                            ownerId: '',
-                            ownerPhone: '',
-                            ownerEmail: '',
-                          }));
-                        }}
-                        style={styles.removeUserButton}
-                      >
-                        <MaterialCommunityIcons name="close" size={20} color={theme.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.searchUserButton, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-                      onPress={() => setShowUserSearch(true)}
-                    >
-                      <MaterialCommunityIcons name="account-search" size={20} color={theme.primary} />
-                      <Text style={[styles.searchUserText, { color: theme.primary }]}>
-                        Cerca proprietario
-                      </Text>
-                      <MaterialCommunityIcons name="chevron-right" size={20} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                  )}
-
-                  {!selectedUser && (
-                    <Text style={[styles.helperText, { color: theme.textSecondary }]}>
-                      Clicca per cercare il proprietario tra i tuoi clienti registrati
-                    </Text>
-                  )}
+    // Render Step 2: Veicolo
+    const renderVehicleStep = () => (
+        <View style={styles.stepContent}>
+            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                <View style={styles.cardHeader}>
+                    <Car size={20} color={theme.accent} />
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>Dati Veicolo</Text>
                 </View>
-              </View>
-            </View>
-          </FormCard>
 
-          {/* Dettagli Intervento */}
-          <FormCard title="Dettagli Intervento" icon={Wrench}>
-            <Controller
-                control={control}
-                rules={{ required: true }}
-                render={({ field: { onChange, value } }) => (
-                    <FormInput
-                        label="Descrizione Riparazione *"
-                        placeholder="Descrivi dettagliatamente l'intervento da effettuare..."
-                        value={value}
-                        onChangeText={onChange}
-                        error={errors.repairDescription}
-                        multiline={true}
-                    />
+                {selectedExistingCar && (
+                    <View style={[styles.infoBar, { backgroundColor: darkMode ? '#1e3a5f' : '#e0f2fe' }]}>
+                        <CheckCircle size={16} color={theme.success} />
+                        <Text style={[styles.infoBarText, { color: theme.text }]}>
+                            Auto caricata dall'archivio. Puoi modificare i dati se necessario.
+                        </Text>
+                    </View>
                 )}
-                name="repairDescription"
-            />
 
-            <Controller
-                control={control}
-                render={({ field: { onChange, value } }) => (
-                    <FormInput
-                        label="Costo Stimato (€)"
-                        placeholder="0.00"
-                        value={value}
-                        onChangeText={onChange}
-                        keyboardType="numeric"
-                    />
-                )}
-                name="estimatedCost"
-            />
-          </FormCard>
+                <View style={styles.formGrid}>
+                    <View style={styles.formGroup}>
+                        <Text style={[styles.label, { color: theme.text }]}>Marca *</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                {
+                                    backgroundColor: theme.inputBackground,
+                                    borderColor: errors.make ? theme.error : theme.border,
+                                    color: theme.text,
+                                },
+                            ]}
+                            value={vehicleData.make}
+                            onChangeText={(text) => {
+                                setVehicleData({ ...vehicleData, make: text });
+                                setErrors({ ...errors, make: '' });
+                            }}
+                            placeholder="Es. Ford"
+                            placeholderTextColor={theme.placeholderColor}
+                        />
+                        {errors.make && (
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.make}</Text>
+                        )}
+                    </View>
 
-          {/* Pianificazione con Calendario */}
-          <FormCard title="Pianificazione" icon={Calendar}>
-            <CalendarAppointmentPicker
-              startDate={startDate}
-              endDate={endDate}
-              onPeriodChange={(start, end) => {
-                setStartDate(start);
-                setEndDate(end);
-              }}
-              theme={theme}
-            />
-          </FormCard>
+                    <View style={styles.formGroup}>
+                        <Text style={[styles.label, { color: theme.text }]}>Modello *</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                {
+                                    backgroundColor: theme.inputBackground,
+                                    borderColor: errors.model ? theme.error : theme.border,
+                                    color: theme.text,
+                                },
+                            ]}
+                            value={vehicleData.model}
+                            onChangeText={(text) => {
+                                setVehicleData({ ...vehicleData, model: text });
+                                setErrors({ ...errors, model: '' });
+                            }}
+                            placeholder="Es. Fiesta"
+                            placeholderTextColor={theme.placeholderColor}
+                        />
+                        {errors.model && (
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.model}</Text>
+                        )}
+                    </View>
 
-          {/* Riepilogo */}
-          <View style={[styles.summaryCard, { backgroundColor: darkMode ? '#1e3a8a' : '#dbeafe', borderColor: darkMode ? '#1e40af' : '#93c5fd' }]}>
-            <View style={styles.summaryHeader}>
-              <FileText size={20} color={darkMode ? '#60a5fa' : '#1e40af'} />
-              <Text style={[styles.summaryTitle, { color: darkMode ? '#60a5fa' : '#1e40af' }]}>
-                Riepilogo Appuntamento
-              </Text>
+                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
+                        <Text style={[styles.label, { color: theme.text }]}>Anno</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                            ]}
+                            value={vehicleData.year}
+                            onChangeText={(text) => setVehicleData({ ...vehicleData, year: text })}
+                            placeholder="2020"
+                            placeholderTextColor={theme.placeholderColor}
+                            keyboardType="numeric"
+                        />
+                    </View>
+
+                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
+                        <Text style={[styles.label, { color: theme.text }]}>Targa *</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                {
+                                    backgroundColor: theme.inputBackground,
+                                    borderColor: errors.licensePlate ? theme.error : theme.border,
+                                    color: theme.text,
+                                },
+                            ]}
+                            value={vehicleData.licensePlate}
+                            onChangeText={(text) => {
+                                setVehicleData({ ...vehicleData, licensePlate: text.toUpperCase() });
+                                setErrors({ ...errors, licensePlate: '' });
+                            }}
+                            placeholder="XX123XX"
+                            placeholderTextColor={theme.placeholderColor}
+                            autoCapitalize="characters"
+                        />
+                        {errors.licensePlate && (
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.licensePlate}</Text>
+                        )}
+                    </View>
+
+                    <View style={styles.formGroup}>
+                        <Text style={[styles.label, { color: theme.text }]}>VIN (opzionale)</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                            ]}
+                            value={vehicleData.vin}
+                            onChangeText={(text) => setVehicleData({ ...vehicleData, vin: text })}
+                            placeholder="17 caratteri"
+                            placeholderTextColor={theme.placeholderColor}
+                        />
+                    </View>
+
+                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
+                        <Text style={[styles.label, { color: theme.text }]}>Colore</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                            ]}
+                            value={vehicleData.color}
+                            onChangeText={(text) => setVehicleData({ ...vehicleData, color: text })}
+                            placeholder="Es. Bianco"
+                            placeholderTextColor={theme.placeholderColor}
+                        />
+                    </View>
+
+                    <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
+                        <Text style={[styles.label, { color: theme.text }]}>Chilometraggio</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                            ]}
+                            value={vehicleData.mileage}
+                            onChangeText={(text) => setVehicleData({ ...vehicleData, mileage: text })}
+                            placeholder="80000"
+                            placeholderTextColor={theme.placeholderColor}
+                            keyboardType="numeric"
+                        />
+                    </View>
+                </View>
             </View>
-            <Text style={[styles.summaryText, { color: darkMode ? '#93c5fd' : '#1e40af' }]}>
-              {startDate ? (
-                endDate ? (
-                  `Lavorazione programmata dal ${new Date(startDate).toLocaleDateString('it-IT')} al ${new Date(endDate).toLocaleDateString('it-IT')} (${Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} giorni).`
-                ) : (
-                  `Lavorazione programmata per il ${new Date(startDate).toLocaleDateString('it-IT')} (1 giorno).`
-                )
-              ) : (
-                'Seleziona il periodo di lavorazione nel calendario sopra.'
-              )}
-              {' '}Verifica tutti i dati inseriti prima di salvare l'appuntamento.
-            </Text>
-          </View>
+        </View>
+    );
 
-          {/* Pulsanti Azione */}
-          <View style={[styles.actionButtons, isDesktop && styles.actionButtonsDesktop]}>
-            <TouchableOpacity
-                style={[styles.cancelButton, { borderColor: theme.border }]}
-                onPress={() => navigation.goBack()}
+    // Render Step 3: Riparazione
+    const renderRepairStep = () => (
+        <View style={styles.stepContent}>
+            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                <View style={styles.cardHeader}>
+                    <FileText size={20} color={theme.accent} />
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>Dettagli Riparazione</Text>
+                </View>
+
+                <View style={styles.formGrid}>
+                    <View style={styles.formGroup}>
+                        <Text style={[styles.label, { color: theme.text }]}>Descrizione Intervento *</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                styles.textArea,
+                                {
+                                    backgroundColor: theme.inputBackground,
+                                    borderColor: errors.description ? theme.error : theme.border,
+                                    color: theme.text,
+                                },
+                            ]}
+                            placeholder="Descrivi l'intervento da effettuare"
+                            placeholderTextColor={theme.placeholderColor}
+                            value={repairData.description}
+                            onChangeText={(text) => {
+                                setRepairData({ ...repairData, description: text });
+                                setErrors({ ...errors, description: '' });
+                            }}
+                            multiline
+                            numberOfLines={4}
+                        />
+                        {errors.description && (
+                            <Text style={[styles.errorText, { color: theme.error }]}>{errors.description}</Text>
+                        )}
+                    </View>
+
+                    <View style={[styles.formRow, { flexWrap: isDesktop ? 'nowrap' : 'wrap' }]}>
+                        <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
+                            <Text style={[styles.label, { color: theme.text }]}>Preventivo Totale (€)</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                placeholder="500"
+                                placeholderTextColor={theme.placeholderColor}
+                                value={repairData.estimatedCost}
+                                onChangeText={(text) => setRepairData({ ...repairData, estimatedCost: text })}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+
+                        <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
+                            <Text style={[styles.label, { color: theme.text }]}>Costo Manodopera (€)</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                placeholder="150"
+                                placeholderTextColor={theme.placeholderColor}
+                                value={repairData.laborCost}
+                                onChangeText={(text) => setRepairData({ ...repairData, laborCost: text })}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+
+                        <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
+                            <Text style={[styles.label, { color: theme.text }]}>Ore Stimate</Text>
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                                ]}
+                                placeholder="3"
+                                placeholderTextColor={theme.placeholderColor}
+                                value={repairData.estimatedHours}
+                                onChangeText={(text) => setRepairData({ ...repairData, estimatedHours: text })}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.formGroup}>
+                        <Text style={[styles.label, { color: theme.text }]}>Note Aggiuntive</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                styles.textArea,
+                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
+                            ]}
+                            placeholder="Note o specifiche particolari"
+                            placeholderTextColor={theme.placeholderColor}
+                            value={repairData.notes}
+                            onChangeText={(text) => setRepairData({ ...repairData, notes: text })}
+                            multiline
+                            numberOfLines={3}
+                        />
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+
+    // Render Step 4: Date
+    const renderDateStep = () => (
+        <View style={styles.stepContent}>
+            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+                <View style={styles.cardHeader}>
+                    <Calendar size={20} color={theme.accent} />
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>Periodo di Lavorazione</Text>
+                </View>
+
+                <CalendarAppointmentPicker
+                    startDate={startDate}
+                    endDate={endDate}
+                    onPeriodChange={(start, end) => {
+                        setStartDate(start);
+                        setEndDate(end);
+                        setErrors({ ...errors, startDate: '' });
+                    }}
+                    theme={theme}
+                />
+
+                {errors.startDate && (
+                    <Text style={[styles.errorText, { color: theme.error }]}>{errors.startDate}</Text>
+                )}
+            </View>
+        </View>
+    );
+
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                    <ArrowLeft size={24} color={theme.text} />
+                </TouchableOpacity>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>Nuovo Veicolo in Officina</Text>
+                <View style={{ width: 40 }} />
+            </View>
+
+            {renderStepIndicator()}
+
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
-              <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Annulla</Text>
-            </TouchableOpacity>
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollViewContent}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {currentStep === 1 && renderCustomerStep()}
+                    {currentStep === 2 && renderVehicleStep()}
+                    {currentStep === 3 && renderRepairStep()}
+                    {currentStep === 4 && renderDateStep()}
+                </ScrollView>
+            </KeyboardAvoidingView>
 
-            <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  { backgroundColor: startDate ? theme.accent : theme.textSecondary }
-                ]}
-                onPress={handleSubmit(onSubmit)}
-                disabled={!startDate}
-            >
-              <Save size={18} color="#ffffff" />
-              <Text style={styles.saveButtonText}>Salva Appuntamento</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+            <View style={[styles.footer, { backgroundColor: theme.cardBackground, borderTopColor: theme.border }]}>
+                <View style={styles.footerButtons}>
+                    {currentStep > 1 && (
+                        <TouchableOpacity
+                            style={[styles.footerButton, styles.secondaryButton, { borderColor: theme.border }]}
+                            onPress={handleBack}
+                            disabled={isSubmitting}
+                        >
+                            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Indietro</Text>
+                        </TouchableOpacity>
+                    )}
 
-      {/* User Search Modal */}
-      <UserSearchModal
-        visible={showUserSearch}
-        onClose={() => setShowUserSearch(false)}
-        onSelectUser={handleSelectUser}
-        darkMode={darkMode}
-      />
-    </SafeAreaView>
-  );
+                    <TouchableOpacity
+                        style={[
+                            styles.footerButton,
+                            styles.primaryButton,
+                            { backgroundColor: theme.accent, flex: currentStep === 1 ? 1 : undefined },
+                        ]}
+                        onPress={handleNext}
+                        disabled={isSubmitting}
+                    >
+                        {isSubmitting ? (
+                            <ActivityIndicator color="#ffffff" />
+                        ) : (
+                            <>
+                                {currentStep === 4 ? <Save size={18} color="#ffffff" /> : null}
+                                <Text style={styles.primaryButtonText}>
+                                    {currentStep === 4 ? 'Salva' : 'Avanti'}
+                                </Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            {/* ✅ FIX: Usa onSelectUser */}
+            <UserSearchModal
+                visible={showCustomerSearch}
+                onClose={() => setShowCustomerSearch(false)}
+                onSelectUser={handleCustomerSelect}
+                darkMode={darkMode}
+            />
+
+            <QuickAddCustomerModal
+                visible={showQuickAdd}
+                onClose={() => setShowQuickAdd(false)}
+                onCustomerAdded={handleCustomerSelect}
+            />
+        </SafeAreaView>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 12,
-  },
-  headerTitleContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  formCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  formCardHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  formCardTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  formCardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  formCardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  formCardContent: {
-    padding: 16,
-  },
-  rowDesktop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  rowMobile: {
-    flexDirection: 'column',
-  },
-  halfWidth: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  fullWidth: {
-    flex: 1,
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  textInputMultiline: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  summaryCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 24,
-  },
-  summaryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  summaryText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  actionButtons: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  actionButtonsDesktop: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  cancelButton: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  saveButton: {
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  // Stili per la ricerca utenti
-  selectedUserContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  selectedUserInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  userAvatarText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  userDetails: {
-    flex: 1,
-  },
-  selectedUserName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  selectedUserEmail: {
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  selectedUserPhone: {
-    fontSize: 12,
-  },
-  removeUserButton: {
-    padding: 8,
-  },
-  searchUserButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  searchUserText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  helperText: {
-    fontSize: 12,
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
+    container: { flex: 1 },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+    },
+    backButton: { padding: 8 },
+    headerTitle: { fontSize: 18, fontWeight: '600' },
+    stepIndicatorContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        justifyContent: 'space-between',
+    },
+    stepItem: { flex: 1, alignItems: 'center', position: 'relative' },
+    stepCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+        zIndex: 1,
+    },
+    stepNumber: { fontSize: 14, fontWeight: '600' },
+    stepLabel: { fontSize: 12, textAlign: 'center' },
+    stepLine: {
+        position: 'absolute',
+        top: 16,
+        left: '50%',
+        right: '-50%',
+        height: 2,
+        zIndex: 0,
+    },
+    scrollView: { flex: 1 },
+    scrollViewContent: { padding: 16 },
+    stepContent: { flex: 1 },
+    card: {
+        borderRadius: 12,
+        borderWidth: 1,
+        padding: 16,
+        marginBottom: 16,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    cardTitle: { fontSize: 16, fontWeight: '600', marginLeft: 8 },
+    formGrid: { gap: 16 },
+    formRow: { flexDirection: 'row', gap: 16 },
+    formGroup: { marginBottom: 8 },
+    formGroupHalf: { width: '48%' },
+    label: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
+    input: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        fontSize: 16,
+    },
+    textArea: { height: 100, textAlignVertical: 'top' },
+    errorText: { fontSize: 12, marginTop: 4 },
+    emptyState: {
+        alignItems: 'center',
+        paddingVertical: 32,
+        gap: 12,
+    },
+    buttonGroup: { flexDirection: 'row', gap: 12, marginTop: 16 },
+    primaryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+        gap: 8,
+    },
+    primaryButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    secondaryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+        borderWidth: 1,
+        gap: 8,
+    },
+    secondaryButtonText: { fontSize: 16, fontWeight: '600' },
+    selectedCustomer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        borderRadius: 8,
+    },
+    customerInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    customerAvatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    customerAvatarText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    customerDetails: { flex: 1 },
+    customerName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+    customerContact: { fontSize: 14, marginBottom: 2 },
+    removeButton: { padding: 8 },
+    suggestionsCard: {
+        borderRadius: 12,
+        borderWidth: 2,
+        padding: 16,
+        marginBottom: 16,
+    },
+    suggestionsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    suggestionsTitle: { fontSize: 16, fontWeight: '600', marginLeft: 8 },
+    suggestionsSubtitle: { fontSize: 14, lineHeight: 20 },
+    carSuggestionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        gap: 12,
+    },
+    carSuggestionIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#e0f2fe',
+    },
+    carSuggestionTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+    carSuggestionDetails: { fontSize: 13, marginBottom: 2 },
+    carSuggestionLastService: {
+        fontSize: 12,
+        fontStyle: 'italic',
+        marginTop: 2,
+    },
+    infoBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 16,
+        gap: 8,
+    },
+    infoBarText: { fontSize: 13, flex: 1 },
+    // ⭐ NUOVI STILI per empty state "nessuna auto"
+    emptyStateCard: {
+        borderRadius: 12,
+        borderWidth: 2,
+        padding: 16,
+        marginBottom: 16,
+    },
+    emptyStateHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    emptyStateTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 8,
+    },
+    emptyStateText: {
+        fontSize: 14,
+        lineHeight: 20,
+        marginBottom: 12,
+    },
+    emptyStateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 6,
+        alignSelf: 'flex-start',
+    },
+    emptyStateButtonText: {
+        color: '#ffffff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    footer: {
+        borderTopWidth: 1,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    footerButtons: { flexDirection: 'row', gap: 12 },
+    footerButton: { flex: 1 },
 });
 
 export default NewAppointmentScreen;

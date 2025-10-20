@@ -1,5 +1,5 @@
 // src/store/invoicingStore.ts - Store Fatturazione con integrazione Firestore
-import { create } from 'zustand';
+import create from 'zustand';
 import { 
   collection, 
   query, 

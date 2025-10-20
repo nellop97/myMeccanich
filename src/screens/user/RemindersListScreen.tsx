@@ -273,7 +273,7 @@ const RemindersListScreen = () => {
               <View style={styles.metaItem}>
                 <Car size={12} color={colors.onSurfaceVariant} />
                 <Text style={[styles.metaText, { color: colors.onSurfaceVariant }]}>
-                  {vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Veicolo'}
+                  {vehicle ? `${vehicle.make} ${vehicle.model}` : 'Veicolo'}
                 </Text>
               </View>
               <View style={styles.metaItem}>
@@ -429,7 +429,7 @@ const RemindersListScreen = () => {
       <FAB
         icon="plus"
         style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate('AddReminder')}
+        onPress={() => (navigation as any).navigate('AddReminder', { carId: vehicles[0]?.id || '' })}
       />
 
       <Modal
@@ -533,7 +533,7 @@ const RemindersListScreen = () => {
                         styles.filterChipText,
                         { color: selectedVehicle === vehicle.id ? colors.onPrimary : colors.onSurface }
                       ]}>
-                        {vehicle.brand} {vehicle.model}
+                        {vehicle.make} {vehicle.model}
                       </Text>
                     </TouchableOpacity>
                   ))}

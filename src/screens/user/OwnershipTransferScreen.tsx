@@ -42,7 +42,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react-native';
-import { SecurityService } from '../../services/SecurityService';
+import { SecurityService } from '../../security/SecurityService'
 import { useAppThemeManager } from '../../hooks/useTheme';
 
 interface TransferData {

@@ -1,54 +1,70 @@
-// metro.config.js - VERSIONE AGGIORNATA
+// metro.config.js - Configurazione CORRETTA e SEMPLIFICATA per Expo 54 + Firebase
 const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
 
-module.exports = (() => {
-  const config = getDefaultConfig(__dirname);
+/** @type {import('expo/metro-config').MetroConfig} */
+const config = getDefaultConfig(__dirname);
 
-  // Aggiungi estensioni per supportare web e mobile
-  config.resolver.sourceExts = [
-    ...config.resolver.sourceExts,
-    'web.js',
-    'web.jsx', 
-    'web.ts',
-    'web.tsx'
-  ];
+// ✅ IMPORTANTE: NON bloccare .mjs - Firebase lo richiede!
+// Aggiungi le estensioni necessarie
+if (!config.resolver.sourceExts.includes('mjs')) {
+    config.resolver.sourceExts.push('mjs');
+}
+if (!config.resolver.sourceExts.includes('cjs')) {
+    config.resolver.sourceExts.push('cjs');
+}
 
-  // Aggiungi alias per risolvere i percorsi
-  config.resolver.alias = {
-    '@': path.resolve(__dirname, './'),
-    '@components': path.resolve(__dirname, './src/components'),
-    '@screens': path.resolve(__dirname, './src/screens'),
-    '@services': path.resolve(__dirname, './src/services'),
-    '@store': path.resolve(__dirname, './src/store'),
-    '@types': path.resolve(__dirname, './src/types'),
-    '@utils': path.resolve(__dirname, './src/utils'),
-    '@assets': path.resolve(__dirname, './assets'),
-    '@navigation': path.resolve(__dirname, './src/navigation'),
-    '@hooks': path.resolve(__dirname, './src/hooks'),
-  };
+// Aggiungi estensioni per web
+config.resolver.sourceExts.push('web.js', 'web.jsx', 'web.ts', 'web.tsx');
 
-  // Configura il transformer per gestire meglio i moduli
-  config.transformer = {
-    ...config.transformer,
-    minifierConfig: {
-      // Evita errori di minificazione con alcune librerie
-      keep_fnames: true,
-      mangle: {
-        keep_fnames: true,
-      },
-    },
-  };
+// Blocca SOLO la cartella esm di zustand se causa problemi
+config.resolver.blockList = [
+    /node_modules\/zustand\/esm\/.*/,
+];
 
-  // Configurazione per Firebase e altre dipendenze problematiche
-  config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
-  
-  // Blocklist per evitare conflitti di dipendenze
-  config.resolver.blockList = [
-    // Evita conflitti con Firebase
-    /.*\/__tests__\/.*/,
-    /.*\/node_modules\/.*\/node_modules\/react-native\/.*/,
-  ];
+// Resolver personalizzato SEMPLIFICATO
+const originalResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+    // Forza react-native-web per la piattaforma web
+    if (platform === 'web' && moduleName === 'react-native') {
+        return context.resolveRequest(context, 'react-native-web', platform);
+    }
 
-  return config;
-})();
+    // Gestisci tslib esplicitamente per Firebase
+    if (moduleName === 'tslib') {
+        try {
+            return context.resolveRequest(context, moduleName, platform);
+        } catch (e) {
+            console.warn('⚠️ Tentativo di risolvere tslib con percorso alternativo...');
+            // Fallback: prova a risolvere dal node_modules
+            try {
+                const path = require('path');
+                const tslibPath = path.join(context.projectRoot, 'node_modules', 'tslib', 'tslib.js');
+                return {
+                    type: 'sourceFile',
+                    filePath: tslibPath,
+                };
+            } catch (e2) {
+                console.error('❌ Impossibile risolvere tslib:', e2.message);
+                throw e;
+            }
+        }
+    }
+
+    // Gestisci zustand per forzare CommonJS invece di ESM
+    if (moduleName === 'zustand' || moduleName.startsWith('zustand/')) {
+        const cleanModuleName = moduleName.replace(/\/esm\//, '/');
+        try {
+            return context.resolveRequest(context, cleanModuleName, platform);
+        } catch (e) {
+            // Fallback al resolver di default
+        }
+    }
+
+    // Usa il resolver di default
+    if (originalResolveRequest) {
+        return originalResolveRequest(context, moduleName, platform);
+    }
+    return context.resolveRequest(context, moduleName, platform);
+};
+
+module.exports = config;

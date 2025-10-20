@@ -12,7 +12,3 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
-
--keep class com.google.android.gms.** { *; }
--keep class com.google.firebase.** { *; }
--keep class io.invertase.firebase.** { *; }

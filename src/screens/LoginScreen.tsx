@@ -1,827 +1,507 @@
-// src/screens/LoginScreen.tsx - AGGIORNATA CON NUOVO SISTEMA TEMA
-import React, { useState, useEffect } from 'react';
+// src/screens/LoginScreen.tsx - VERSIONE COMPLETA CON TOAST POPUP
+import React, { useState } from 'react';
 import {
-  View,
-  ScrollView,
-  Platform,
-  Alert,
-  Dimensions,
-  KeyboardAvoidingView,
-  TouchableOpacity,
-  StatusBar,
-  Animated,
+    View,
+    StyleSheet,
+    TouchableOpacity,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    ActivityIndicator,
 } from 'react-native';
-import {
-  Card,
-  Text,
-  TextInput,
-  Button,
-  Checkbox,
-  Divider,
-  HelperText,
-  Surface,
-} from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import { StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 
-// Importa i servizi Firebase
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
-import { auth, getFirebaseErrorMessage, isWeb } from '../services/firebase';
+// Firebase
+import { auth, db } from '../services/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
-// Importa il nuovo sistema di temi
-import { useAppThemeManager, useThemedStyles } from '../hooks/useTheme';
+// Store
+import { useStore } from '../store';
 
-// Gestione Google Sign-In cross-platform
-let GoogleSignin: any = null;
-let AuthSession: any = null;
+// Toast Component
+import Toast from '../components/Toast';
 
-// Import condizionali per evitare errori
-if (!isWeb) {
-  try {
-    GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
-  } catch (e) {
-    console.warn('Google Sign-In non disponibile:', e);
-  }
-} else {
-  try {
-    AuthSession = require('expo-auth-session');
-  } catch (e) {
-    console.warn('Expo Auth Session non disponibile:', e);
-  }
-}
+const LoginScreen = () => {
+    const navigation = useNavigation();
+    const { setUser } = useStore();
 
-const GOOGLE_CONFIG = {
-  webClientId: "619020396283-9qv0q1q1q1q1q1q1q1q1q1q1q1q1q1q1.apps.googleusercontent.com",
-  iosClientId: "619020396283-ios.apps.googleusercontent.com",
-  androidClientId: "619020396283-android.apps.googleusercontent.com",
-  scopes: ['openid', 'profile', 'email'],
+    // Stati
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+    // 🆕 STATI PER TOAST POPUP
+    const [toastVisible, setToastVisible] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'error' | 'success'>('error');
+
+    // ============================================================
+    // VALIDAZIONE
+    // ============================================================
+    const validateForm = (): boolean => {
+        const newErrors: { email?: string; password?: string } = {};
+
+        if (!email.trim()) {
+            newErrors.email = 'Email richiesta';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            newErrors.email = 'Email non valida';
+        }
+
+        if (!password) {
+            newErrors.password = 'Password richiesta';
+        } else if (password.length < 6) {
+            newErrors.password = 'Password troppo corta';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    // 🆕 FUNZIONE PER MOSTRARE TOAST
+    const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+        setToastMessage(message);
+        setToastType(type);
+        setToastVisible(true);
+    };
+
+    // ============================================================
+    // LOGIN CON GESTIONE ERRORI VIA TOAST
+    // ============================================================
+    const handleLogin = async () => {
+        if (!validateForm()) return;
+
+        setLoading(true);
+
+        try {
+            console.log('🔐 Inizio login...');
+
+            // 1. Login Firebase Auth
+            const userCredential = await signInWithEmailAndPassword(
+                auth,
+                email.trim(),
+                password
+            );
+
+            const userId = userCredential.user.uid;
+            console.log('✅ Login Firebase Auth riuscito:', userId);
+
+            // 2. Recupera dati utente da Firestore
+            const userDocRef = doc(db, 'users', userId);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (!userDocSnap.exists()) {
+                throw new Error('Profilo utente non trovato');
+            }
+
+            const userData = userDocSnap.data();
+            console.log('📄 Dati utente letti:', {
+                userType: userData.userType,
+                role: userData.role,
+                email: userData.email,
+            });
+
+            // 3. Aggiorna ultimo accesso
+            await updateDoc(userDocRef, {
+                lastLoginAt: serverTimestamp(),
+            });
+
+            // 4. Determina tipo utente
+            const isMechanic =
+                userData.userType === 'mechanic' ||
+                userData.role === 'mechanic';
+
+            console.log('👤 Tipo utente determinato:', {
+                isMechanic,
+                userType: userData.userType,
+                role: userData.role,
+            });
+
+            // 5. AGGIORNA STORE IMMEDIATAMENTE
+            const storeData = {
+                id: userId,
+                uid: userId,
+                name: userData.name || `${userData.firstName} ${userData.lastName}`,
+                email: userData.email,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                isLoggedIn: true,
+                isMechanic,
+                userType: userData.userType,
+                role: userData.role,
+                phoneNumber: userData.phone || undefined,
+                emailVerified: userData.emailVerified || false,
+                loginProvider: userData.loginProvider || 'email',
+                profileComplete: userData.profileComplete || false,
+
+                // Dati specifici per meccanico
+                ...(isMechanic && {
+                    workshopName: userData.workshopName || undefined,
+                    workshopAddress: userData.address || undefined,
+                    vatNumber: userData.vatNumber || undefined,
+                    mechanicLicense: userData.mechanicLicense || undefined,
+                    rating: userData.rating ?? 0,
+                    reviewsCount: userData.reviewsCount ?? 0,
+                    verified: userData.verified ?? false,
+                }),
+
+                address: userData.address || undefined,
+                photoURL: userData.photoURL || undefined,
+            };
+
+            setUser(storeData);
+            console.log('✅ Login completato, redirect automatico...');
+
+            // 🆕 MOSTRA TOAST DI SUCCESSO (opzionale)
+            // showToast(`Bentornato ${userData.firstName}!`, 'success');
+
+        } catch (error: any) {
+            console.error('❌ Errore login:', error);
+
+            // 🆕 GESTIONE ERRORI CON TOAST INVECE DI ALERT
+            let errorMessage = 'Errore durante il login. Riprova.';
+
+            if (error.code === 'auth/user-not-found') {
+                errorMessage = 'Utente non trovato. Verifica l\'email o registrati.';
+            } else if (error.code === 'auth/wrong-password') {
+                errorMessage = 'Password errata. Riprova o reimposta la password.';
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Email non valida.';
+            } else if (error.code === 'auth/user-disabled') {
+                errorMessage = 'Account disabilitato. Contatta il supporto.';
+            } else if (error.code === 'auth/network-request-failed') {
+                errorMessage = 'Errore di connessione. Verifica la tua rete.';
+            } else if (error.code === 'auth/too-many-requests') {
+                errorMessage = 'Troppi tentativi. Riprova tra qualche minuto.';
+            } else if (error.code === 'auth/invalid-credential') {
+                errorMessage = 'Credenziali non valide. Verifica email e password.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
+            // 🆕 MOSTRA TOAST ERRORE
+            showToast(errorMessage, 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ============================================================
+    // RENDER
+    // ============================================================
+
+    return (
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.container}
+        >
+            {/* 🆕 TOAST POPUP (si mostra sopra tutto) */}
+            <Toast
+                visible={toastVisible}
+                message={toastMessage}
+                type={toastType}
+                onHide={() => setToastVisible(false)}
+                position="top"
+                duration={4000}
+            />
+
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <View style={styles.logoContainer}>
+                        <View style={styles.logoCircle}>
+                            <Text style={styles.logoText}>MM</Text>
+                        </View>
+                    </View>
+                    <Text style={styles.title}>Bentornato!</Text>
+                    <Text style={styles.subtitle}>
+                        Accedi per gestire le tue automobili
+                    </Text>
+                </View>
+
+                {/* Form */}
+                <View style={styles.form}>
+                    {/* Email */}
+                    <View style={styles.inputWrapper}>
+                        <Mail size={20} color="#64748b" style={styles.inputIcon} />
+                        <TextInput
+                            mode="outlined"
+                            label="Email"
+                            value={email}
+                            onChangeText={(text) => {
+                                setEmail(text);
+                                setErrors({ ...errors, email: '' });
+                            }}
+                            error={!!errors.email}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            autoComplete="email"
+                            disabled={loading}
+                            style={styles.input}
+                            theme={{
+                                colors: {
+                                    primary: '#3b82f6',
+                                    outline: errors.email ? '#ef4444' : '#e2e8f0',
+                                },
+                            }}
+                        />
+                    </View>
+                    {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+
+                    {/* Password */}
+                    <View style={styles.inputWrapper}>
+                        <Lock size={20} color="#64748b" style={styles.inputIcon} />
+                        <TextInput
+                            mode="outlined"
+                            label="Password"
+                            value={password}
+                            onChangeText={(text) => {
+                                setPassword(text);
+                                setErrors({ ...errors, password: '' });
+                            }}
+                            error={!!errors.password}
+                            secureTextEntry={!showPassword}
+                            autoCapitalize="none"
+                            disabled={loading}
+                            style={styles.input}
+                            right={
+                                <TextInput.Icon
+                                    icon={() =>
+                                        showPassword ? (
+                                            <EyeOff size={20} color="#64748b" />
+                                        ) : (
+                                            <Eye size={20} color="#64748b" />
+                                        )
+                                    }
+                                    onPress={() => setShowPassword(!showPassword)}
+                                />
+                            }
+                            theme={{
+                                colors: {
+                                    primary: '#3b82f6',
+                                    outline: errors.password ? '#ef4444' : '#e2e8f0',
+                                },
+                            }}
+                        />
+                    </View>
+                    {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+
+                    {/* Password dimenticata */}
+                    <TouchableOpacity
+                        style={styles.forgotPassword}
+                        onPress={() => {
+                            navigation.navigate('ForgotPassword' as never);
+                        }}
+                        disabled={loading}
+                    >
+                        <Text style={styles.forgotPasswordText}>
+                            Password dimenticata?
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Pulsante Login */}
+                    <TouchableOpacity
+                        style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                        onPress={handleLogin}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.loginButtonText}>Accedi</Text>
+                        )}
+                    </TouchableOpacity>
+
+                    {/* Divider */}
+                    <View style={styles.divider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.dividerText}>OPPURE</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* Registrazione */}
+                    <TouchableOpacity
+                        style={styles.registerButton}
+                        onPress={() => navigation.navigate('Register' as never)}
+                        disabled={loading}
+                    >
+                        <Text style={styles.registerButtonText}>
+                            Non hai un account?{' '}
+                            <Text style={styles.registerButtonTextBold}>Registrati</Text>
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Footer */}
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>
+                        MyMeccanich © 2025
+                    </Text>
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
+    );
 };
 
-const LoginScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
-  
-  // Nuovo sistema di temi
-  const { colors, isDark, toggleTheme } = useAppThemeManager();
-  const { dynamicStyles } = useThemedStyles();
-  
-  // Responsive hooks
-  const [screenData, setScreenData] = useState(Dimensions.get('window'));
-  
-  // Animazioni
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const slideAnim = useState(new Animated.Value(50))[0];
-  
-  useEffect(() => {
-    const onChange = (result: any) => {
-      setScreenData(result.window);
-    };
-    
-    const subscription = Dimensions.addEventListener('change', onChange);
-    
-    // Animazione di entrata
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    
-    return () => subscription?.remove();
-  }, []);
+// ============================================================
+// STYLES
+// ============================================================
 
-  // Stati del form
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  // Stati di validazione
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  // Calcolo responsive
-  const isTablet = screenData.width >= 768;
-  const isDesktop = screenData.width >= 1024;
-  
-  // Configurazione layout responsive
-  const getContentMaxWidth = () => {
-    if (isDesktop) return 1200;
-    if (isTablet) return 800;
-    return screenData.width;
-  };
-
-  const getCardMargin = () => {
-    if (isDesktop) return 40;
-    if (isTablet) return 24;
-    return 16;
-  };
-
-  const getHeaderSize = () => {
-    if (isDesktop) return 80;
-    if (isTablet) return 70;
-    return 60;
-  };
-
-  // Validazione
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const handleEmailChange = (text: string) => {
-    setEmail(text);
-    if (emailError && validateEmail(text)) {
-      setEmailError('');
-    }
-  };
-
-  const handlePasswordChange = (text: string) => {
-    setPassword(text);
-    if (passwordError && text.length >= 6) {
-      setPasswordError('');
-    }
-  };
-
-  // Gestione login email/password
-  const handleLogin = async () => {
-    // Reset errori
-    setEmailError('');
-    setPasswordError('');
-
-    // Validazione
-    let hasErrors = false;
-
-    if (!email) {
-      setEmailError('Email richiesta');
-      hasErrors = true;
-    } else if (!validateEmail(email)) {
-      setEmailError('Email non valida');
-      hasErrors = true;
-    }
-
-    if (!password) {
-      setPasswordError('Password richiesta');
-      hasErrors = true;
-    } else if (password.length < 6) {
-      setPasswordError('La password deve essere di almeno 6 caratteri');
-      hasErrors = true;
-    }
-
-    if (hasErrors) return;
-
-    setLoading(true);
-
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('✅ Login successful:', userCredential.user.email);
-      
-      // Il navigation avverrà automaticamente tramite AuthNavigator
-      
-    } catch (error: any) {
-      console.error('❌ Login error:', error);
-      const errorMessage = getFirebaseErrorMessage(error);
-      Alert.alert('Errore di accesso', errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Gestione Google Sign-In
-  const handleGoogleLogin = async () => {
-    if (isWeb) {
-      try {
-        const provider = new GoogleAuthProvider();
-        provider.addScope('profile');
-        provider.addScope('email');
-        
-        Alert.alert('Info', 'Google Sign-In per web sarà disponibile nella versione finale');
-        
-      } catch (error: any) {
-        console.error('❌ Google Sign-In error (web):', error);
-        Alert.alert('Errore', 'Errore durante l\'accesso con Google');
-      }
-    } else {
-      if (!GoogleSignin) {
-        Alert.alert('Errore', 'Google Sign-In non disponibile');
-        return;
-      }
-
-      try {
-        await GoogleSignin.hasPlayServices();
-        const { idToken } = await GoogleSignin.signIn();
-        
-        const googleCredential = GoogleAuthProvider.credential(idToken);
-        const userCredential = await signInWithCredential(auth, googleCredential);
-        
-        console.log('✅ Google Sign-In successful:', userCredential.user.email);
-        
-      } catch (error: any) {
-        console.error('❌ Google Sign-In error (mobile):', error);
-        if (error.code !== 'SIGN_IN_CANCELLED') {
-          Alert.alert('Errore', 'Errore durante l\'accesso con Google');
-        }
-      }
-    }
-  };
-
-  // Gestione Apple Sign-In (solo iOS)
-  const handleAppleLogin = () => {
-    Alert.alert('Apple Sign-In', 'Disponibile nella versione finale');
-  };
-
-  // Calcolo padding bottom responsive
-  const getBottomPadding = () => {
-    const basePadding = Math.max(insets.bottom, 16);
-    if (isDesktop) return basePadding + 40;
-    if (isTablet) return basePadding + 24;
-    return basePadding;
-  };
-
-  const styles = StyleSheet.create({
+const styles = StyleSheet.create({
     container: {
-      flex: 1,
-      backgroundColor: colors.background,
+        flex: 1,
+        backgroundColor: '#f8fafc',
     },
-    backgroundGradient: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      top: 0,
-      bottom: 0,
+    scrollContent: {
+        flexGrow: 1,
+        padding: 24,
+        justifyContent: 'center',
     },
-    contentContainer: {
-      flex: 1,
-      maxWidth: getContentMaxWidth(),
-      alignSelf: 'center',
-      width: '100%',
-    },
-    scrollContainer: {
-      flexGrow: 1,
-      justifyContent: isDesktop ? 'center' : 'flex-start',
-      paddingHorizontal: getCardMargin(),
-      paddingTop: isDesktop ? 40 : Math.max(insets.top + 20, 40),
-    },
-    
-    // Theme toggle button
-    themeToggleContainer: {
-      position: 'absolute',
-      top: insets.top + 10,
-      right: 20,
-      zIndex: 1000,
-    },
-    themeToggle: {
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 20,
-      padding: 8,
-      ...dynamicStyles.cardShadow,
-    },
-    
-    // Layout a due colonne per desktop
-    desktopLayout: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 60,
-      minHeight: '100%',
-    },
-    desktopLeftSide: {
-      flex: 1,
-      maxWidth: 500,
-      alignItems: 'center',
-    },
-    desktopRightSide: {
-      width: 400,
-    },
-
-    // Header
     header: {
-      alignItems: 'center',
-      marginBottom: isDesktop ? 0 : 40,
+        alignItems: 'center',
+        marginBottom: 48,
     },
-    headerIcon: {
-      marginBottom: 16,
-      padding: 20,
-      borderRadius: 40,
-      backgroundColor: colors.primaryContainer,
-      ...dynamicStyles.cardShadow,
+    logoContainer: {
+        marginBottom: 24,
+    },
+    logoCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#3b82f6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#3b82f6',
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    logoText: {
+        fontSize: 32,
+        fontWeight: 'bold',
+        color: '#fff',
+        letterSpacing: 1,
     },
     title: {
-      fontSize: isDesktop ? 42 : isTablet ? 36 : 32,
-      fontWeight: 'bold',
-      textAlign: 'center',
-      marginBottom: 8,
-      color: colors.onBackground,
+        fontSize: 32,
+        fontWeight: 'bold',
+        color: '#1e293b',
+        marginBottom: 8,
+        letterSpacing: -0.5,
     },
     subtitle: {
-      fontSize: isDesktop ? 18 : isTablet ? 16 : 14,
-      textAlign: 'center',
-      color: colors.onSurfaceVariant,
-      maxWidth: isDesktop ? 400 : 300,
-      lineHeight: 22,
+        fontSize: 16,
+        color: '#64748b',
+        textAlign: 'center',
+        lineHeight: 24,
     },
-
-    // Card del form
-    card: {
-      width: '100%',
-      maxWidth: isDesktop ? 400 : undefined,
-      alignSelf: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: 24,
-      ...dynamicStyles.cardShadow,
-      overflow: 'hidden',
+    form: {
+        width: '100%',
+        maxWidth: 400,
+        alignSelf: 'center',
     },
-    cardGradient: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 6,
+    inputWrapper: {
+        position: 'relative',
+        marginBottom: 16,
     },
-    cardContent: {
-      padding: isDesktop ? 32 : isTablet ? 28 : 24,
+    inputIcon: {
+        position: 'absolute',
+        left: 16,
+        top: 28,
+        zIndex: 1,
     },
-    formTitle: {
-      fontSize: isDesktop ? 24 : isTablet ? 22 : 20,
-      fontWeight: '600',
-      textAlign: 'center',
-      marginBottom: 24,
-      color: colors.onSurface,
-    },
-
-    // Input fields
     input: {
-      marginBottom: 8,
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 12,
+        backgroundColor: '#fff',
+        paddingLeft: 48,
     },
-    
-    // Options row
-    optionsRow: {
-      flexDirection: isTablet ? 'row' : 'column',
-      justifyContent: 'space-between',
-      alignItems: isTablet ? 'center' : 'flex-start',
-      marginVertical: 16,
-      gap: isTablet ? 0 : 8,
+    errorText: {
+        fontSize: 12,
+        color: '#ef4444',
+        marginTop: -12,
+        marginBottom: 8,
+        marginLeft: 16,
     },
-    checkboxRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    checkboxLabel: {
-      marginLeft: 4,
-      fontSize: 14,
-      color: colors.onSurface,
-    },
-    forgotPasswordLink: {
-      alignSelf: isTablet ? 'auto' : 'flex-end',
+    forgotPassword: {
+        alignSelf: 'flex-end',
+        marginBottom: 24,
     },
     forgotPasswordText: {
-      color: colors.primary,
-      fontSize: 14,
-      fontWeight: '500',
+        fontSize: 14,
+        color: '#3b82f6',
+        fontWeight: '600',
     },
-
-    // Buttons
     loginButton: {
-      marginTop: 8,
-      marginBottom: 24,
-      borderRadius: 12,
-      backgroundColor: colors.primary,
+        backgroundColor: '#3b82f6',
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 24,
+        shadowColor: '#3b82f6',
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    buttonContent: {
-      height: 48,
+    loginButtonDisabled: {
+        backgroundColor: '#94a3b8',
     },
-
-    // Divider
-    dividerContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 24,
+    loginButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#fff',
     },
     divider: {
-      flex: 1,
-      backgroundColor: colors.outline,
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 24,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#e2e8f0',
     },
     dividerText: {
-      marginHorizontal: 16,
-      fontSize: 12,
-      color: colors.onSurfaceVariant,
-      backgroundColor: colors.surface,
-      paddingHorizontal: 8,
-    },
-
-    // Social buttons
-    socialButtonsContainer: {
-      gap: 12,
-      marginBottom: 24,
-    },
-    socialButton: {
-      borderRadius: 12,
-      borderColor: colors.outline,
-      backgroundColor: colors.surfaceVariant,
-    },
-
-    // Register link
-    registerContainer: {
-      alignItems: 'center',
-      paddingTop: 24,
-      paddingBottom: getBottomPadding(),
-    },
-    registerContainerAndroid: {
-      paddingBottom: getBottomPadding() + 20,
-    },
-    registerTextContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexWrap: 'wrap',
-    },
-    registerText: {
-      fontSize: 14,
-      color: colors.onSurfaceVariant,
-    },
-    registerLinkContainer: {
-      paddingHorizontal: 4,
-      paddingVertical: 2,
-      borderRadius: 4,
-    },
-    registerLink: {
-      color: colors.primary,
-      fontWeight: '600',
-      fontSize: 14,
-      textDecorationLine: isWeb ? 'underline' : 'none',
+        fontSize: 12,
+        color: '#94a3b8',
+        marginHorizontal: 16,
+        fontWeight: '600',
     },
     registerButton: {
-      minWidth: 'auto',
-      marginLeft: -8, // Compensa il padding del button
+        paddingVertical: 16,
+        alignItems: 'center',
     },
-
-    // Web-specific features
-    webFeatures: {
-      marginTop: isDesktop ? 40 : 24,
-      padding: 20,
-      backgroundColor: colors.surfaceVariant,
-      borderRadius: 16,
-      alignItems: 'center',
-      ...dynamicStyles.cardShadow,
+    registerButtonText: {
+        fontSize: 14,
+        color: '#64748b',
     },
-    webFeaturesTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      marginBottom: 12,
-      textAlign: 'center',
-      color: colors.onSurfaceVariant,
+    registerButtonTextBold: {
+        color: '#3b82f6',
+        fontWeight: '600',
     },
-    webFeaturesList: {
-      gap: 8,
+    footer: {
+        marginTop: 48,
+        alignItems: 'center',
     },
-    webFeatureItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+    footerText: {
+        fontSize: 12,
+        color: '#94a3b8',
     },
-    webFeatureText: {
-      fontSize: 14,
-      color: colors.onSurfaceVariant,
-    },
-
-    // Animations
-    animatedContainer: {
-      opacity: fadeAnim,
-      transform: [{ translateY: slideAnim }],
-    },
-  });
-
-  // Theme Toggle Component
-  const ThemeToggle = () => (
-    <View style={styles.themeToggleContainer}>
-      <TouchableOpacity
-        style={styles.themeToggle}
-        onPress={toggleTheme}
-        activeOpacity={0.7}
-      >
-        <MaterialCommunityIcons
-          name={isDark ? 'weather-sunny' : 'weather-night'}
-          size={24}
-          color={colors.primary}
-        />
-      </TouchableOpacity>
-    </View>
-  );
-
-  // Render per desktop
-  const renderDesktopLayout = () => (
-    <View style={styles.desktopLayout}>
-      {/* Lato sinistro - Branding e features */}
-      <Animated.View style={[styles.desktopLeftSide, styles.animatedContainer]}>
-        <View style={styles.header}>
-          <Surface style={styles.headerIcon} elevation={0}>
-            <MaterialCommunityIcons
-              name="car-wrench"
-              size={getHeaderSize()}
-              color={colors.primary}
-            />
-          </Surface>
-          <Text style={styles.title}>
-            MyMeccanic
-          </Text>
-          <Text style={styles.subtitle}>
-            La piattaforma completa per la gestione delle automobili. 
-            Perfetta per proprietari di auto e officine meccaniche.
-          </Text>
-        </View>
-
-        {/* Features per web */}
-        <View style={styles.webFeatures}>
-          <Text style={styles.webFeaturesTitle}>
-            Cosa puoi fare con MyMeccanic
-          </Text>
-          <View style={styles.webFeaturesList}>
-            {[
-              'Gestire tutti gli interventi di manutenzione',
-              'Tenere traccia di scadenze e promemoria',
-              'Gestire anagrafica veicoli e clienti',
-              'Emettere fatture e gestire contabilità',
-              'Comunicazione digitale centralizzata'
-            ].map((feature, index) => (
-              <View key={index} style={styles.webFeatureItem}>
-                <MaterialCommunityIcons
-                  name="check-circle"
-                  size={16}
-                  color={colors.success}
-                />
-                <Text style={styles.webFeatureText}>
-                  {feature}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* Lato destro - Form di login */}
-      <Animated.View style={[styles.desktopRightSide, styles.animatedContainer]}>
-        {renderLoginForm()}
-      </Animated.View>
-    </View>
-  );
-
-  // Render del form di login
-  const renderLoginForm = () => (
-    <Card style={styles.card} elevation={0}>
-      {/* Gradient accent */}
-      <LinearGradient
-        colors={dynamicStyles.primaryGradient}
-        style={styles.cardGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-      />
-      
-      <Card.Content style={styles.cardContent}>
-        <Text style={styles.formTitle}>
-          Accedi al tuo account
-        </Text>
-
-        {/* Email Input */}
-        <TextInput
-          label="Email"
-          value={email}
-          onChangeText={handleEmailChange}
-          mode="outlined"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-          error={!!emailError}
-          style={styles.input}
-          outlineStyle={{ borderColor: colors.outline }}
-          activeOutlineColor={colors.primary}
-          left={<TextInput.Icon icon="email" iconColor={colors.primary} />}
-        />
-        <HelperText type="error" visible={!!emailError}>
-          {emailError}
-        </HelperText>
-
-        {/* Password Input */}
-        <TextInput
-          label="Password"
-          value={password}
-          onChangeText={handlePasswordChange}
-          mode="outlined"
-          secureTextEntry={!showPassword}
-          autoComplete="password"
-          error={!!passwordError}
-          style={styles.input}
-          outlineStyle={{ borderColor: colors.outline }}
-          activeOutlineColor={colors.primary}
-          left={<TextInput.Icon icon="lock" iconColor={colors.primary} />}
-          right={
-            <TextInput.Icon
-              icon={showPassword ? "eye-off" : "eye"}
-              iconColor={colors.primary}
-              onPress={() => setShowPassword(!showPassword)}
-            />
-          }
-        />
-        <HelperText type="error" visible={!!passwordError}>
-          {passwordError}
-        </HelperText>
-
-        {/* Remember Me & Forgot Password */}
-        <View style={styles.optionsRow}>
-          <View style={styles.checkboxRow}>
-            <Checkbox
-              status={rememberMe ? 'checked' : 'unchecked'}
-              onPress={() => setRememberMe(!rememberMe)}
-              color={colors.primary}
-            />
-            <Text style={styles.checkboxLabel}>
-              Ricordami
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.forgotPasswordLink}>
-            <Text style={styles.forgotPasswordText}>
-              Password dimenticata?
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Login Button */}
-        <Button
-          mode="contained"
-          onPress={handleLogin}
-          loading={loading}
-          disabled={loading}
-          style={styles.loginButton}
-          contentStyle={styles.buttonContent}
-          buttonColor={colors.primary}
-        >
-          {loading ? 'Accesso in corso...' : 'Accedi'}
-        </Button>
-
-        {/* Divider */}
-        <View style={styles.dividerContainer}>
-          <Divider style={styles.divider} />
-          <Text style={styles.dividerText}>
-            oppure
-          </Text>
-          <Divider style={styles.divider} />
-        </View>
-
-        {/* Social Login Buttons */}
-        <View style={styles.socialButtonsContainer}>
-          <Button
-            mode="outlined"
-            onPress={handleGoogleLogin}
-            disabled={loading}
-            style={styles.socialButton}
-            contentStyle={styles.buttonContent}
-            icon="google"
-            textColor={colors.onSurfaceVariant}
-          >
-            Continua con Google
-          </Button>
-
-          {(Platform.OS === 'ios' || isWeb) && (
-            <Button
-              mode="outlined"
-              onPress={handleAppleLogin}
-              disabled={loading}
-              style={styles.socialButton}
-              contentStyle={styles.buttonContent}
-              icon="apple"
-              textColor={colors.onSurfaceVariant}
-            >
-              Continua con Apple
-            </Button>
-          )}
-        </View>
-      </Card.Content>
-    </Card>
-  );
-
-  // Render del link di registrazione
-  const renderRegisterLink = () => (
-    <View style={[
-      styles.registerContainer,
-      Platform.OS === 'android' && styles.registerContainerAndroid
-    ]}>
-      <View style={styles.registerTextContainer}>
-        <Text style={styles.registerText}>
-          Non hai un account?{' '}
-        </Text>
-        {isWeb ? (
-          // Versione web con Button per migliore accessibilità
-          <Button
-            mode="text"
-            onPress={() => navigation.navigate('Register' as never)}
-            compact
-            textColor={colors.primary}
-            style={styles.registerButton}
-          >
-            Registrati
-          </Button>
-        ) : (
-          // Versione mobile con TouchableOpacity
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('Register' as never)}
-            style={styles.registerLinkContainer}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.registerLink}>
-              Registrati
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-
-  return (
-    <View style={styles.container}>
-      {/* Background Gradient */}
-      <LinearGradient
-        colors={isDark ? 
-          ['#000000', '#1C1C1E', '#2C2C2E'] : 
-          ['#FAFAFA', '#F5F5F5', '#FFFFFF']
-        }
-        style={styles.backgroundGradient}
-      />
-      
-      {/* Theme Toggle */}
-      <ThemeToggle />
-
-      {/* Status Bar */}
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
-        translucent={false}
-      />
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <View style={styles.contentContainer}>
-          {isDesktop ? (
-            // Layout desktop con due colonne
-            <ScrollView
-              contentContainerStyle={styles.scrollContainer}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {renderDesktopLayout()}
-              {renderRegisterLink()}
-            </ScrollView>
-          ) : (
-            // Layout mobile tradizionale
-            <ScrollView
-              contentContainerStyle={styles.scrollContainer}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              bounces={false}
-            >
-              {/* Header mobile */}
-              <Animated.View style={[styles.header, styles.animatedContainer]}>
-                <Surface style={styles.headerIcon} elevation={0}>
-                  <MaterialCommunityIcons
-                    name="car-wrench"
-                    size={getHeaderSize()}
-                    color={colors.primary}
-                  />
-                </Surface>
-                <Text style={styles.title}>
-                  MyMeccanic
-                </Text>
-                <Text style={styles.subtitle}>
-                  Gestisci la tua auto o la tua officina
-                </Text>
-              </Animated.View>
-
-              {/* Form */}
-              <Animated.View style={styles.animatedContainer}>
-                {renderLoginForm()}
-              </Animated.View>
-              
-              {/* Register link */}
-              {renderRegisterLink()}
-            </ScrollView>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-    </View>
-  );
-};
+});
 
 export default LoginScreen;

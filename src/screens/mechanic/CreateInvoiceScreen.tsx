@@ -1,1037 +1,1192 @@
 // src/screens/mechanic/CreateInvoiceScreen.tsx
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
-  ArrowLeft,
-  Calendar,
-  ChevronDown,
-  FileText,
-  Minus,
-  Plus,
-  Save,
-  Trash2,
-  User,
-  X,
+    ArrowLeft,
+    Calendar,
+    ChevronDown,
+    FileText,
+    Minus,
+    Plus,
+    Save,
+    Trash2,
+    User,
+    X,
+    Users,
+    DollarSign,
+    Check,
 } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
-import { Controller, useForm, useFieldArray } from 'react-hook-form';
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+    ActivityIndicator,
 } from 'react-native';
-import { useStore } from '../../store';
+import { useAppThemeManager } from '../../hooks/useTheme';
 import { useWorkshopStore } from '../../store/workshopStore';
 import {
-  useInvoicingStore,
-  InvoiceItem,
-  Customer,
-  InvoiceType,
-  PaymentMethod,
+    useInvoicingStore,
+    InvoiceItem,
+    Customer,
+    InvoiceType,
+    PaymentMethod,
 } from '../../store/invoicingStore';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get('window');
 
 interface RouteParams {
-  carId?: string;
-  repairId?: string;
-  customerId?: string;
-  type?: InvoiceType;
+    carId?: string;
+    repairId?: string;
+    customerId?: string;
+    type?: InvoiceType;
 }
 
-interface InvoiceFormData {
-  type: InvoiceType;
-  customerId: string;
-  customerName: string;
-  customerEmail: string;
-  customerAddress: string;
-  customerVatNumber: string;
-  customerFiscalCode: string;
-  issueDate: string;
-  dueDate: string;
-  paymentMethod: PaymentMethod;
-  paymentTerms: string;
-  notes: string;
-  items: InvoiceItem[];
-}
+const INVOICE_TYPES: { id: InvoiceType; label: string }[] = [
+    { id: 'customer', label: 'Fattura Cliente' },
+    { id: 'proforma', label: 'Fattura Pro-forma' },
+    { id: 'receipt', label: 'Ricevuta' },
+];
+
+const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
+    { id: 'bank_transfer', label: 'Bonifico Bancario' },
+    { id: 'cash', label: 'Contanti' },
+    { id: 'card', label: 'Carta di Credito' },
+    { id: 'check', label: 'Assegno' },
+];
 
 const CreateInvoiceScreen = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const params = route.params as RouteParams | undefined;
+    const navigation = useNavigation();
+    const route = useRoute();
+    const params = route.params as RouteParams | undefined;
 
-  const { darkMode } = useStore();
-  const { cars, getCarById, getRepairDetails } = useWorkshopStore();
-  const {
-    addInvoice,
-    customers,
-    addCustomer,
-    templates,
-    calculateInvoiceTotals
-  } = useInvoicingStore();
+    const { colors, isDark } = useAppThemeManager();
+    const { cars, getCarById, getRepairDetails } = useWorkshopStore();
+    const {
+        addInvoice,
+        customers,
+        addCustomer,
+        calculateInvoiceTotals
+    } = useInvoicingStore();
 
-  const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    // Form State
+    const [formData, setFormData] = useState({
+        type: (params?.type || 'customer') as InvoiceType,
+        customerId: params?.customerId || '',
+        customerName: '',
+        customerEmail: '',
+        customerAddress: '',
+        customerVatNumber: '',
+        customerFiscalCode: '',
+        issueDate: new Date().toISOString().split('T')[0],
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        paymentMethod: 'bank_transfer' as PaymentMethod,
+        paymentTerms: '30 giorni',
+        notes: '',
+    });
 
-  const { control, handleSubmit, formState: { errors }, watch, setValue, reset } = useForm<InvoiceFormData>({
-    defaultValues: {
-      type: params?.type || 'customer',
-      customerId: params?.customerId || '',
-      customerName: '',
-      customerEmail: '',
-      customerAddress: '',
-      customerVatNumber: '',
-      customerFiscalCode: '',
-      issueDate: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      paymentMethod: 'bank_transfer',
-      paymentTerms: '30 giorni',
-      notes: '',
-      items: [],
-    }
-  });
+    const [items, setItems] = useState<InvoiceItem[]>([]);
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    const [showCustomerModal, setShowCustomerModal] = useState(false);
+    const [showTypeModal, setShowTypeModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const { fields, append, remove, update } = useFieldArray({
-    control,
-    name: 'items',
-  });
+    // Calculate totals whenever items change
+    const totals = calculateInvoiceTotals(items);
 
-  const watchedItems = watch('items');
-  const totals = calculateInvoiceTotals(watchedItems || []);
-
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
-
-  // Carica i dati se viene da una riparazione
-  useEffect(() => {
-    if (params?.carId && params?.repairId) {
-      const car = getCarById(params.carId);
-      const repair = getRepairDetails(params.carId, params.repairId);
-
-      if (car && repair) {
-        // Trova o crea cliente basato sui dati dell'auto
-        let customer = customers.find(c => c.name === car.owner);
-        if (!customer && car.owner) {
-          const newCustomerId = addCustomer({
-            name: car.owner,
-            email: car.ownerEmail,
-            phone: car.ownerPhone,
-            isCompany: false,
-          });
-          customer = {
-            id: newCustomerId,
-            name: car.owner,
-            email: car.ownerEmail,
-            phone: car.ownerPhone,
-            isCompany: false
-          };
+    // Load data from repair if coming from repair screen
+    useEffect(() => {
+        if (params?.carId && params?.repairId) {
+            loadRepairData();
+        } else if (params?.customerId) {
+            loadCustomerData();
         }
+    }, [params]);
 
+    const loadRepairData = () => {
+        if (!params?.carId || !params?.repairId) return;
+
+        const car = getCarById(params.carId);
+        const repair = getRepairDetails(params.carId, params.repairId);
+
+        if (car && repair) {
+            // Find or create customer
+            let customer = customers.find(c => c.name === car.owner);
+
+            if (customer) {
+                setSelectedCustomer(customer);
+                setFormData(prev => ({
+                    ...prev,
+                    customerId: customer!.id,
+                    customerName: customer!.name,
+                    customerEmail: customer!.email || '',
+                    customerAddress: customer!.address || '',
+                    customerVatNumber: customer!.vatNumber || '',
+                    customerFiscalCode: customer!.fiscalCode || '',
+                }));
+            }
+
+            // Add repair items
+            const repairItems: InvoiceItem[] = [];
+
+            // Labor
+            if (repair.laborCost && repair.laborCost > 0) {
+                const hours = repair.actualHours || repair.estimatedHours || 1;
+                repairItems.push({
+                    id: Date.now().toString(),
+                    description: `Manodopera: ${repair.description}`,
+                    quantity: hours,
+                    unitPrice: repair.laborCost / hours,
+                    vatRate: 22,
+                    discount: 0,
+                    total: repair.laborCost,
+                    vatAmount: repair.laborCost * 0.22,
+                });
+            }
+
+            // Parts
+            repair.parts?.forEach((part: any) => {
+                repairItems.push({
+                    id: (Date.now() + Math.random()).toString(),
+                    description: `${part.name}${part.brand ? ` - ${part.brand}` : ''}`,
+                    quantity: part.quantity,
+                    unitPrice: part.unitCost,
+                    vatRate: 22,
+                    discount: 0,
+                    total: part.quantity * part.unitCost,
+                    vatAmount: part.quantity * part.unitCost * 0.22,
+                });
+            });
+
+            setItems(repairItems);
+            setFormData(prev => ({
+                ...prev,
+                notes: `Intervento su ${car.model} - Targa: ${car.licensePlate || 'N/A'}`,
+            }));
+        }
+    };
+
+    const loadCustomerData = () => {
+        if (!params?.customerId) return;
+
+        const customer = customers.find(c => c.id === params.customerId);
         if (customer) {
-          setSelectedCustomer(customer);
-          setValue('customerId', customer.id);
-          setValue('customerName', customer.name);
-          setValue('customerEmail', customer.email || '');
-          setValue('customerAddress', customer.address || '');
-          setValue('customerVatNumber', customer.vatNumber || '');
-          setValue('customerFiscalCode', customer.fiscalCode || '');
+            setSelectedCustomer(customer);
+            setFormData(prev => ({
+                ...prev,
+                customerId: customer.id,
+                customerName: customer.name,
+                customerEmail: customer.email || '',
+                customerAddress: customer.address || '',
+                customerVatNumber: customer.vatNumber || '',
+                customerFiscalCode: customer.fiscalCode || '',
+            }));
         }
+    };
 
-        // Aggiungi elementi dalla riparazione
-        const repairItems: InvoiceItem[] = [];
+    const updateFormData = (field: string, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        if (errors[field]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[field];
+                return newErrors;
+            });
+        }
+    };
 
-        // Manodopera
-        if (repair.laborCost && repair.laborCost > 0) {
-          repairItems.push({
+    const addNewItem = () => {
+        const newItem: InvoiceItem = {
             id: Date.now().toString(),
-            description: `Manodopera: ${repair.description}`,
-            quantity: repair.actualHours || repair.estimatedHours || 1,
-            unitPrice: repair.laborCost / (repair.actualHours || repair.estimatedHours || 1),
+            description: '',
+            quantity: 1,
+            unitPrice: 0,
             vatRate: 22,
-            total: repair.laborCost,
-            vatAmount: repair.laborCost * 0.22,
-          });
+            discount: 0,
+            total: 0,
+            vatAmount: 0,
+        };
+        setItems(prev => [...prev, newItem]);
+    };
+
+    const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
+        setItems(prev => {
+            const newItems = [...prev];
+            const item = { ...newItems[index] };
+
+            // Update field
+            item[field] = value;
+
+            // Recalculate totals
+            const quantity = parseFloat(item.quantity as any) || 0;
+            const unitPrice = parseFloat(item.unitPrice as any) || 0;
+            const discount = parseFloat(item.discount as any) || 0;
+            const vatRate = parseFloat(item.vatRate as any) || 0;
+
+            const subtotal = quantity * unitPrice;
+            const discountAmount = (subtotal * discount) / 100;
+            const totalAfterDiscount = subtotal - discountAmount;
+            const vatAmount = (totalAfterDiscount * vatRate) / 100;
+
+            item.total = totalAfterDiscount;
+            item.vatAmount = vatAmount;
+
+            newItems[index] = item;
+            return newItems;
+        });
+    };
+
+    const removeItem = (index: number) => {
+        Alert.alert(
+            'Rimuovi Elemento',
+            'Sei sicuro di voler rimuovere questo elemento?',
+            [
+                { text: 'Annulla', style: 'cancel' },
+                {
+                    text: 'Rimuovi',
+                    style: 'destructive',
+                    onPress: () => {
+                        setItems(prev => prev.filter((_, i) => i !== index));
+                    },
+                },
+            ]
+        );
+    };
+
+    const selectCustomer = (customer: Customer) => {
+        setSelectedCustomer(customer);
+        setFormData(prev => ({
+            ...prev,
+            customerId: customer.id,
+            customerName: customer.name,
+            customerEmail: customer.email || '',
+            customerAddress: customer.address || '',
+            customerVatNumber: customer.vatNumber || '',
+            customerFiscalCode: customer.fiscalCode || '',
+        }));
+        setShowCustomerModal(false);
+    };
+
+    const validateForm = (): boolean => {
+        const newErrors: Record<string, string> = {};
+
+        if (!selectedCustomer) {
+            newErrors.customer = 'Seleziona un cliente';
         }
 
-        // Parti
-        repair.parts.forEach(part => {
-          repairItems.push({
-            id: (Date.now() + Math.random()).toString(),
-            description: part.name + (part.brand ? ` - ${part.brand}` : ''),
-            quantity: part.quantity,
-            unitPrice: part.unitCost,
-            vatRate: 22,
-            total: part.quantity * part.unitCost,
-            vatAmount: part.quantity * part.unitCost * 0.22,
-          });
+        if (items.length === 0) {
+            newErrors.items = 'Aggiungi almeno un elemento alla fattura';
+        }
+
+        // Validate items
+        items.forEach((item, index) => {
+            if (!item.description.trim()) {
+                newErrors[`item_${index}_description`] = 'Descrizione obbligatoria';
+            }
+            if (item.quantity <= 0) {
+                newErrors[`item_${index}_quantity`] = 'Quantità non valida';
+            }
+            if (item.unitPrice <= 0) {
+                newErrors[`item_${index}_unitPrice`] = 'Prezzo non valido';
+            }
         });
 
-        setValue('items', repairItems);
-        setValue('notes', `Intervento su ${car.model} - Targa: ${car.licensePlate || 'N/A'}`);
-      }
-    }
-  }, [params]);
-
-  const onSubmit = (data: InvoiceFormData) => {
-    try {
-      if (!selectedCustomer) {
-        Alert.alert('Errore', 'Seleziona un cliente');
-        return;
-      }
-
-      if (data.items.length === 0) {
-        Alert.alert('Errore', 'Aggiungi almeno un elemento alla fattura');
-        return;
-      }
-
-      const invoiceId = addInvoice({
-        type: data.type,
-        status: 'draft',
-        issueDate: data.issueDate,
-        dueDate: data.dueDate,
-        customerId: selectedCustomer.id,
-        customerName: selectedCustomer.name,
-        customerEmail: selectedCustomer.email,
-        customerAddress: selectedCustomer.address,
-        customerVatNumber: selectedCustomer.vatNumber,
-        customerFiscalCode: selectedCustomer.fiscalCode,
-        items: data.items,
-        paymentMethod: data.paymentMethod,
-        paymentTerms: data.paymentTerms,
-        notes: data.notes,
-        carId: params?.carId,
-        repairId: params?.repairId,
-        subtotal: 0, // Calcolato automaticamente
-        totalVat: 0, // Calcolato automaticamente
-        totalAmount: 0, // Calcolato automaticamente
-        totalDiscount: 0, // Calcolato automaticamente
-      });
-
-      Alert.alert('Successo', 'Fattura creata con successo', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        }
-      ]);
-    } catch (error) {
-      Alert.alert('Errore', 'Errore durante la creazione della fattura');
-    }
-  };
-
-  const addNewItem = () => {
-    const newItem: InvoiceItem = {
-      id: Date.now().toString(),
-      description: '',
-      quantity: 1,
-      unitPrice: 0,
-      vatRate: 22,
-      total: 0,
-      vatAmount: 0,
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
-    append(newItem);
-  };
 
-  const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
-    const currentItem = watchedItems[index];
-    if (!currentItem) return;
+    const handleSubmit = async () => {
+        if (!validateForm()) {
+            Alert.alert('Errore', 'Controlla i campi obbligatori');
+            return;
+        }
 
-    const updatedItem = { ...currentItem, [field]: value };
+        setIsLoading(true);
 
-    // Ricalcola totali
-    if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
-      const quantity = field === 'quantity' ? parseFloat(value) || 0 : updatedItem.quantity;
-      const unitPrice = field === 'unitPrice' ? parseFloat(value) || 0 : updatedItem.unitPrice;
-      const discount = field === 'discount' ? parseFloat(value) || 0 : (updatedItem.discount || 0);
+        try {
+            const invoiceId = addInvoice({
+                type: formData.type,
+                status: 'draft',
+                issueDate: formData.issueDate,
+                dueDate: formData.dueDate,
+                customerId: selectedCustomer!.id,
+                customerName: selectedCustomer!.name,
+                customerEmail: selectedCustomer!.email,
+                customerAddress: selectedCustomer!.address,
+                customerVatNumber: selectedCustomer!.vatNumber,
+                customerFiscalCode: selectedCustomer!.fiscalCode,
+                items: items,
+                paymentMethod: formData.paymentMethod,
+                paymentTerms: formData.paymentTerms,
+                notes: formData.notes,
+                carId: params?.carId,
+                repairId: params?.repairId,
+                subtotal: totals.subtotal,
+                totalVat: totals.totalVat,
+                totalAmount: totals.totalAmount,
+                totalDiscount: totals.totalDiscount,
+            });
 
-      const subtotal = quantity * unitPrice;
-      const discountAmount = subtotal * discount / 100;
-      const total = subtotal - discountAmount;
-      const vatAmount = total * updatedItem.vatRate / 100;
+            Alert.alert('Successo', 'Fattura creata con successo', [
+                {
+                    text: 'OK',
+                    onPress: () => navigation.goBack(),
+                }
+            ]);
+        } catch (error) {
+            console.error('Error creating invoice:', error);
+            Alert.alert('Errore', 'Errore durante la creazione della fattura');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-      updatedItem.total = total;
-      updatedItem.vatAmount = vatAmount;
-    }
-
-    update(index, updatedItem);
-  };
-
-  const selectCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer);
-    setValue('customerId', customer.id);
-    setValue('customerName', customer.name);
-    setValue('customerEmail', customer.email || '');
-    setValue('customerAddress', customer.address || '');
-    setValue('customerVatNumber', customer.vatNumber || '');
-    setValue('customerFiscalCode', customer.fiscalCode || '');
-    setShowCustomerModal(false);
-  };
-
-  const applyTemplate = (templateId: string) => {
-    const template = templates.find(t => t.id === templateId);
-    if (!template) return;
-
-    const templateItems: InvoiceItem[] = template.items.map(item => ({
-      id: Date.now().toString() + Math.random().toString(),
-      ...item,
-      total: item.quantity * item.unitPrice,
-      vatAmount: item.quantity * item.unitPrice * item.vatRate / 100,
-    }));
-
-    setValue('items', templateItems);
-    setValue('paymentTerms', template.defaultPaymentTerms || '30 giorni');
-    setValue('notes', template.defaultNotes || '');
-    setShowTemplateModal(false);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('it-IT', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
-
-  const renderItemCard = (item: InvoiceItem, index: number) => (
-    <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-      <View style={styles.itemHeader}>
-        <Text style={[styles.itemNumber, { color: theme.text }]}>Elemento {index + 1}</Text>
-        <TouchableOpacity
-          style={[styles.deleteButton, { backgroundColor: theme.error + '20' }]}
-          onPress={() => remove(index)}
+    const renderCustomerModal = () => (
+        <Modal
+            visible={showCustomerModal}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowCustomerModal(false)}
         >
-          <Trash2 size={16} color={theme.error} />
-        </TouchableOpacity>
-      </View>
+            <View style={styles.modalOverlay}>
+                <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                    <View style={styles.modalHeader}>
+                        <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                            Seleziona Cliente
+                        </Text>
+                        <TouchableOpacity onPress={() => setShowCustomerModal(false)}>
+                            <X size={24} color={colors.onSurface} />
+                        </TouchableOpacity>
+                    </View>
 
-      <View style={styles.itemForm}>
-        <View style={styles.formGroup}>
-          <Text style={[styles.formLabel, { color: theme.text }]}>Descrizione *</Text>
-          <TextInput
-            style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-            value={item.description}
-            onChangeText={(value) => updateItem(index, 'description', value)}
-            placeholder="Descrizione del servizio o prodotto"
-            placeholderTextColor={theme.textSecondary}
-            multiline
-          />
-        </View>
+                    <ScrollView>
+                        {customers.map((customer) => (
+                            <TouchableOpacity
+                                key={customer.id}
+                                style={[
+                                    styles.customerOption,
+                                    {
+                                        backgroundColor: selectedCustomer?.id === customer.id
+                                            ? colors.primaryContainer
+                                            : colors.surfaceVariant,
+                                        borderColor: selectedCustomer?.id === customer.id
+                                            ? colors.primary
+                                            : colors.outline,
+                                    },
+                                ]}
+                                onPress={() => selectCustomer(customer)}
+                            >
+                                <View style={[styles.customerAvatar, { backgroundColor: colors.primary }]}>
+                                    <User size={24} color="#FFF" />
+                                </View>
+                                <View style={styles.customerInfo}>
+                                    <Text style={[styles.customerName, { color: colors.onSurface }]}>
+                                        {customer.name}
+                                    </Text>
+                                    {customer.email && (
+                                        <Text style={[styles.customerEmail, { color: colors.onSurfaceVariant }]}>
+                                            {customer.email}
+                                        </Text>
+                                    )}
+                                </View>
+                                {selectedCustomer?.id === customer.id && (
+                                    <Check size={20} color={colors.primary} />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
 
-        <View style={styles.formRow}>
-          <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-            <Text style={[styles.formLabel, { color: theme.text }]}>Quantità</Text>
-            <TextInput
-              style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-              value={item.quantity.toString()}
-              onChangeText={(value) => updateItem(index, 'quantity', value)}
-              keyboardType="numeric"
-              placeholder="1"
-              placeholderTextColor={theme.textSecondary}
-            />
-          </View>
-
-          <View style={[styles.formGroup, { flex: 1, marginHorizontal: 4 }]}>
-            <Text style={[styles.formLabel, { color: theme.text }]}>Prezzo Unit.</Text>
-            <TextInput
-              style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-              value={item.unitPrice.toString()}
-              onChangeText={(value) => updateItem(index, 'unitPrice', value)}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              placeholderTextColor={theme.textSecondary}
-            />
-          </View>
-
-          <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-            <Text style={[styles.formLabel, { color: theme.text }]}>IVA %</Text>
-            <TextInput
-              style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-              value={item.vatRate.toString()}
-              onChangeText={(value) => updateItem(index, 'vatRate', value)}
-              keyboardType="numeric"
-              placeholder="22"
-              placeholderTextColor={theme.textSecondary}
-            />
-          </View>
-        </View>
-
-        <View style={styles.itemTotals}>
-          <Text style={[styles.itemTotal, { color: theme.text }]}>
-            Totale: {formatCurrency(item.total)}
-          </Text>
-          <Text style={[styles.itemVat, { color: theme.textSecondary }]}>
-            IVA: {formatCurrency(item.vatAmount)}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-
-  const CustomerModal = () => (
-    <Modal
-      visible={showCustomerModal}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowCustomerModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContainer, { backgroundColor: theme.cardBackground }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Seleziona Cliente</Text>
-            <TouchableOpacity onPress={() => setShowCustomerModal(false)}>
-              <X size={24} color={theme.text} />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={customers}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.customerItem, { borderColor: theme.border }]}
-                onPress={() => selectCustomer(item)}
-              >
-                <View>
-                  <Text style={[styles.customerName, { color: theme.text }]}>{item.name}</Text>
-                  {item.email && (
-                    <Text style={[styles.customerEmail, { color: theme.textSecondary }]}>{item.email}</Text>
-                  )}
-                  {item.isCompany && item.vatNumber && (
-                    <Text style={[styles.customerVat, { color: theme.textSecondary }]}>P.IVA: {item.vatNumber}</Text>
-                  )}
+                    <TouchableOpacity
+                        style={[styles.addCustomerButton, { backgroundColor: colors.primary }]}
+                        onPress={() => {
+                            setShowCustomerModal(false);
+                            navigation.navigate('AddCustomer');
+                        }}
+                    >
+                        <Plus size={20} color="#FFF" />
+                        <Text style={styles.addCustomerButtonText}>Nuovo Cliente</Text>
+                    </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <User size={48} color={theme.textSecondary} />
-                <Text style={[styles.emptyStateText, { color: theme.text }]}>Nessun cliente trovato</Text>
+            </View>
+        </Modal>
+    );
+
+    const renderTypeModal = () => (
+        <Modal
+            visible={showTypeModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowTypeModal(false)}
+        >
+            <TouchableOpacity
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowTypeModal(false)}
+            >
+                <View style={[styles.pickerModal, { backgroundColor: colors.surface }]}>
+                    {INVOICE_TYPES.map((type) => (
+                        <TouchableOpacity
+                            key={type.id}
+                            style={[
+                                styles.pickerOption,
+                                {
+                                    backgroundColor: formData.type === type.id
+                                        ? colors.primaryContainer
+                                        : 'transparent',
+                                },
+                            ]}
+                            onPress={() => {
+                                updateFormData('type', type.id);
+                                setShowTypeModal(false);
+                            }}
+                        >
+                            <Text style={[styles.pickerOptionText, { color: colors.onSurface }]}>
+                                {type.label}
+                            </Text>
+                            {formData.type === type.id && (
+                                <Check size={20} color={colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </TouchableOpacity>
+        </Modal>
+    );
+
+    const renderPaymentModal = () => (
+        <Modal
+            visible={showPaymentModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowPaymentModal(false)}
+        >
+            <TouchableOpacity
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowPaymentModal(false)}
+            >
+                <View style={[styles.pickerModal, { backgroundColor: colors.surface }]}>
+                    {PAYMENT_METHODS.map((method) => (
+                        <TouchableOpacity
+                            key={method.id}
+                            style={[
+                                styles.pickerOption,
+                                {
+                                    backgroundColor: formData.paymentMethod === method.id
+                                        ? colors.primaryContainer
+                                        : 'transparent',
+                                },
+                            ]}
+                            onPress={() => {
+                                updateFormData('paymentMethod', method.id);
+                                setShowPaymentModal(false);
+                            }}
+                        >
+                            <Text style={[styles.pickerOptionText, { color: colors.onSurface }]}>
+                                {method.label}
+                            </Text>
+                            {formData.paymentMethod === method.id && (
+                                <Check size={20} color={colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </TouchableOpacity>
+        </Modal>
+    );
+
+    const renderItem = (item: InvoiceItem, index: number) => (
+        <View style={[styles.itemCard, {
+            backgroundColor: colors.surfaceVariant,
+            borderColor: colors.outline,
+        }]}>
+            <View style={styles.itemHeader}>
+                <Text style={[styles.itemNumber, { color: colors.onSurfaceVariant }]}>
+                    #{index + 1}
+                </Text>
                 <TouchableOpacity
-                  style={[styles.addCustomerButton, { backgroundColor: theme.accent }]}
-                  onPress={() => {
-                    setShowCustomerModal(false);
-                    navigation.navigate('AddCustomer');
-                  }}
+                    onPress={() => removeItem(index)}
+                    style={styles.removeItemButton}
                 >
-                  <Plus size={20} color="#ffffff" />
-                  <Text style={styles.addCustomerButtonText}>Aggiungi Cliente</Text>
+                    <Trash2 size={18} color={colors.error} />
                 </TouchableOpacity>
-              </View>
-            }
-          />
-        </View>
-      </View>
-    </Modal>
-  );
-
-  const TemplateModal = () => (
-    <Modal
-      visible={showTemplateModal}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowTemplateModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContainer, { backgroundColor: theme.cardBackground }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Seleziona Template</Text>
-            <TouchableOpacity onPress={() => setShowTemplateModal(false)}>
-              <X size={24} color={theme.text} />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={templates}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.templateItem, { borderColor: theme.border }]}
-                onPress={() => applyTemplate(item.id)}
-              >
-                <View>
-                  <Text style={[styles.templateName, { color: theme.text }]}>{item.name}</Text>
-                  <Text style={[styles.templateItems, { color: theme.textSecondary }]}>
-                    {item.items.length} elementi
-                  </Text>
-                </View>
-                <ChevronDown size={20} color={theme.textSecondary} style={{ transform: [{ rotate: '-90deg' }] }} />
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <FileText size={48} color={theme.textSecondary} />
-                <Text style={[styles.emptyStateText, { color: theme.text }]}>Nessun template trovato</Text>
-              </View>
-            }
-          />
-        </View>
-      </View>
-    </Modal>
-  );
-
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <ArrowLeft size={24} color={theme.text} />
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Nuova Fattura</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-            Crea una nuova fattura
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.templateButton, { backgroundColor: theme.warning + '20', borderColor: theme.warning }]}
-          onPress={() => setShowTemplateModal(true)}
-        >
-          <FileText size={20} color={theme.warning} />
-        </TouchableOpacity>
-      </View>
-
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Informazioni Cliente */}
-          <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-            <View style={styles.sectionHeader}>
-              <User size={20} color={theme.accent} />
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Cliente</Text>
             </View>
 
-            <TouchableOpacity
-              style={[styles.customerSelector, { borderColor: theme.border }]}
-              onPress={() => setShowCustomerModal(true)}
-            >
-              {selectedCustomer ? (
-                <View>
-                  <Text style={[styles.selectedCustomerName, { color: theme.text }]}>
-                    {selectedCustomer.name}
-                  </Text>
-                  {selectedCustomer.email && (
-                    <Text style={[styles.selectedCustomerEmail, { color: theme.textSecondary }]}>
-                      {selectedCustomer.email}
-                    </Text>
-                  )}
-                </View>
-              ) : (
-                <Text style={[styles.customerPlaceholder, { color: theme.textSecondary }]}>
-                  Seleziona un cliente
-                </Text>
-              )}
-              <ChevronDown size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Date e Termini */}
-          <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-            <View style={styles.sectionHeader}>
-              <Calendar size={20} color={theme.success} />
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Date e Termini</Text>
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={[styles.formLabel, { color: theme.text }]}>Data Emissione</Text>
-                <Controller
-                  control={control}
-                  name="issueDate"
-                  render={({ field: { onChange, value } }) => (
-                    <TextInput
-                      style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-                      value={value}
-                      onChangeText={onChange}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.textSecondary}
-                    />
-                  )}
-                />
-              </View>
-
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={[styles.formLabel, { color: theme.text }]}>Data Scadenza</Text>
-                <Controller
-                  control={control}
-                  name="dueDate"
-                  render={({ field: { onChange, value } }) => (
-                    <TextInput
-                      style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-                      value={value}
-                      onChangeText={onChange}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.textSecondary}
-                    />
-                  )}
-                />
-              </View>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: theme.text }]}>Termini di Pagamento</Text>
-              <Controller
-                control={control}
-                name="paymentTerms"
-                render={({ field: { onChange, value } }) => (
-                  <TextInput
-                    style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-                    value={value}
-                    onChangeText={onChange}
-                    placeholder="es. 30 giorni"
-                    placeholderTextColor={theme.textSecondary}
-                  />
-                )}
-              />
-            </View>
-          </View>
-
-          {/* Elementi Fattura */}
-          <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-            <View style={styles.sectionHeader}>
-              <FileText size={20} color={theme.warning} />
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                Elementi ({fields.length})
-              </Text>
-              <TouchableOpacity
-                style={[styles.addItemButton, { backgroundColor: theme.accent }]}
-                onPress={addNewItem}
-              >
-                <Plus size={20} color="#ffffff" />
-              </TouchableOpacity>
-            </View>
-
-            {fields.length === 0 ? (
-              <View style={styles.emptyItems}>
-                <FileText size={48} color={theme.textSecondary} />
-                <Text style={[styles.emptyItemsText, { color: theme.text }]}>
-                  Nessun elemento aggiunto
-                </Text>
-                <Text style={[styles.emptyItemsSubtext, { color: theme.textSecondary }]}>
-                  Tocca il pulsante + per aggiungere elementi
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.itemsList}>
-                {fields.map((field, index) => renderItemCard(watchedItems[index], index))}
-              </View>
-            )}
-          </View>
-
-          {/* Riepilogo Totali */}
-          {fields.length > 0 && (
-            <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-              <View style={styles.sectionHeader}>
-                <FileText size={20} color={theme.success} />
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>Riepilogo</Text>
-              </View>
-
-              <View style={styles.totalsContainer}>
-                <View style={styles.totalRow}>
-                  <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>Subtotale:</Text>
-                  <Text style={[styles.totalValue, { color: theme.text }]}>
-                    {formatCurrency(totals.subtotal)}
-                  </Text>
-                </View>
-
-                <View style={styles.totalRow}>
-                  <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>IVA:</Text>
-                  <Text style={[styles.totalValue, { color: theme.text }]}>
-                    {formatCurrency(totals.totalVat)}
-                  </Text>
-                </View>
-
-                <View style={[styles.totalRow, styles.grandTotalRow, { borderColor: theme.border }]}>
-                  <Text style={[styles.grandTotalLabel, { color: theme.text }]}>Totale:</Text>
-                  <Text style={[styles.grandTotalValue, { color: theme.accent }]}>
-                    {formatCurrency(totals.totalAmount)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Note */}
-          <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-            <View style={styles.sectionHeader}>
-              <FileText size={20} color={theme.textSecondary} />
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Note</Text>
-            </View>
-
-            <Controller
-              control={control}
-              name="notes"
-              render={({ field: { onChange, value } }) => (
-                <TextInput
-                  style={[styles.notesInput, { color: theme.text, borderColor: theme.border }]}
-                  value={value}
-                  onChangeText={onChange}
-                  placeholder="Note aggiuntive per la fattura..."
-                  placeholderTextColor={theme.textSecondary}
-                  multiline
-                  numberOfLines={4}
-                />
-              )}
+            {/* Description */}
+            <TextInput
+                style={[styles.itemInput, {
+                    color: colors.onSurface,
+                    backgroundColor: colors.surface,
+                    borderColor: errors[`item_${index}_description`] ? colors.error : colors.outline,
+                }]}
+                placeholder="Descrizione *"
+                placeholderTextColor={colors.onSurfaceVariant}
+                value={item.description}
+                onChangeText={(text) => updateItem(index, 'description', text)}
+                multiline
             />
-          </View>
 
-          {/* Pulsanti di Azione */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.cancelButton, { borderColor: theme.border }]}
-              onPress={() => navigation.goBack()}
+            <View style={styles.itemRow}>
+                {/* Quantity */}
+                <View style={styles.itemInputGroup}>
+                    <Text style={[styles.itemLabel, { color: colors.onSurfaceVariant }]}>
+                        Quantità
+                    </Text>
+                    <TextInput
+                        style={[styles.itemInputSmall, {
+                            color: colors.onSurface,
+                            backgroundColor: colors.surface,
+                            borderColor: errors[`item_${index}_quantity`] ? colors.error : colors.outline,
+                        }]}
+                        placeholder="1"
+                        placeholderTextColor={colors.onSurfaceVariant}
+                        value={item.quantity.toString()}
+                        onChangeText={(text) => updateItem(index, 'quantity', text)}
+                        keyboardType="numeric"
+                    />
+                </View>
+
+                {/* Unit Price */}
+                <View style={styles.itemInputGroup}>
+                    <Text style={[styles.itemLabel, { color: colors.onSurfaceVariant }]}>
+                        Prezzo Unit.
+                    </Text>
+                    <TextInput
+                        style={[styles.itemInputSmall, {
+                            color: colors.onSurface,
+                            backgroundColor: colors.surface,
+                            borderColor: errors[`item_${index}_unitPrice`] ? colors.error : colors.outline,
+                        }]}
+                        placeholder="0.00"
+                        placeholderTextColor={colors.onSurfaceVariant}
+                        value={item.unitPrice.toString()}
+                        onChangeText={(text) => updateItem(index, 'unitPrice', text)}
+                        keyboardType="decimal-pad"
+                    />
+                </View>
+
+                {/* VAT Rate */}
+                <View style={styles.itemInputGroup}>
+                    <Text style={[styles.itemLabel, { color: colors.onSurfaceVariant }]}>
+                        IVA %
+                    </Text>
+                    <TextInput
+                        style={[styles.itemInputSmall, {
+                            color: colors.onSurface,
+                            backgroundColor: colors.surface,
+                            borderColor: colors.outline,
+                        }]}
+                        placeholder="22"
+                        placeholderTextColor={colors.onSurfaceVariant}
+                        value={item.vatRate.toString()}
+                        onChangeText={(text) => updateItem(index, 'vatRate', text)}
+                        keyboardType="numeric"
+                    />
+                </View>
+            </View>
+
+            {/* Total */}
+            <View style={styles.itemTotal}>
+                <Text style={[styles.itemTotalLabel, { color: colors.onSurfaceVariant }]}>
+                    Totale:
+                </Text>
+                <Text style={[styles.itemTotalValue, { color: colors.primary }]}>
+                    €{(item.total + item.vatAmount).toFixed(2)}
+                </Text>
+            </View>
+        </View>
+    );
+
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar
+                barStyle={isDark ? 'light-content' : 'dark-content'}
+                backgroundColor={colors.surface}
+            />
+
+            {/* Header */}
+            <View style={[styles.header, { backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => navigation.goBack()}
+                >
+                    <ArrowLeft size={24} color={colors.onSurface} />
+                </TouchableOpacity>
+
+                <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
+                    Crea Fattura
+                </Text>
+
+                <TouchableOpacity
+                    style={styles.saveButton}
+                    onPress={handleSubmit}
+                    disabled={isLoading}
+                >
+                    {isLoading ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                        <Save size={24} color={colors.primary} />
+                    )}
+                </TouchableOpacity>
+            </View>
+
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-              <Text style={[styles.cancelButtonText, { color: theme.text }]}>Annulla</Text>
-            </TouchableOpacity>
+                <ScrollView
+                    style={styles.content}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Invoice Type */}
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            Tipo Documento
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.selectButton, {
+                                backgroundColor: colors.surfaceVariant,
+                                borderColor: colors.outline,
+                            }]}
+                            onPress={() => setShowTypeModal(true)}
+                        >
+                            <FileText size={20} color={colors.primary} />
+                            <Text style={[styles.selectButtonText, { color: colors.onSurface }]}>
+                                {INVOICE_TYPES.find(t => t.id === formData.type)?.label}
+                            </Text>
+                            <ChevronDown size={20} color={colors.onSurfaceVariant} />
+                        </TouchableOpacity>
+                    </View>
 
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                { backgroundColor: selectedCustomer && fields.length > 0 ? theme.accent : theme.textSecondary }
-              ]}
-              onPress={handleSubmit(onSubmit)}
-              disabled={!selectedCustomer || fields.length === 0}
-            >
-              <Save size={20} color="#ffffff" />
-              <Text style={styles.saveButtonText}>Crea Fattura</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+                    {/* Customer */}
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            Cliente *
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.selectButton, {
+                                backgroundColor: colors.surfaceVariant,
+                                borderColor: errors.customer ? colors.error : colors.outline,
+                            }]}
+                            onPress={() => setShowCustomerModal(true)}
+                        >
+                            <User size={20} color={colors.primary} />
+                            <Text style={[
+                                styles.selectButtonText,
+                                { color: selectedCustomer ? colors.onSurface : colors.onSurfaceVariant }
+                            ]}>
+                                {selectedCustomer ? selectedCustomer.name : 'Seleziona cliente'}
+                            </Text>
+                            <ChevronDown size={20} color={colors.onSurfaceVariant} />
+                        </TouchableOpacity>
+                        {errors.customer && (
+                            <Text style={[styles.errorText, { color: colors.error }]}>
+                                {errors.customer}
+                            </Text>
+                        )}
+                    </View>
 
-      <CustomerModal />
-      <TemplateModal />
-    </SafeAreaView>
-  );
+                    {/* Dates */}
+                    <View style={styles.dateRow}>
+                        <View style={[styles.dateField, { flex: 1 }]}>
+                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                                Data Emissione
+                            </Text>
+                            <View style={[styles.inputContainer, {
+                                backgroundColor: colors.surfaceVariant,
+                                borderColor: colors.outline,
+                            }]}>
+                                <Calendar size={20} color={colors.primary} />
+                                <TextInput
+                                    style={[styles.input, { color: colors.onSurface }]}
+                                    value={formData.issueDate}
+                                    onChangeText={(text) => updateFormData('issueDate', text)}
+                                    placeholder="YYYY-MM-DD"
+                                    placeholderTextColor={colors.onSurfaceVariant}
+                                />
+                            </View>
+                        </View>
+
+                        <View style={[styles.dateField, { flex: 1 }]}>
+                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                                Scadenza
+                            </Text>
+                            <View style={[styles.inputContainer, {
+                                backgroundColor: colors.surfaceVariant,
+                                borderColor: colors.outline,
+                            }]}>
+                                <Calendar size={20} color={colors.primary} />
+                                <TextInput
+                                    style={[styles.input, { color: colors.onSurface }]}
+                                    value={formData.dueDate}
+                                    onChangeText={(text) => updateFormData('dueDate', text)}
+                                    placeholder="YYYY-MM-DD"
+                                    placeholderTextColor={colors.onSurfaceVariant}
+                                />
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Items */}
+                    <View style={styles.section}>
+                        <View style={styles.itemsHeader}>
+                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                                Elementi Fattura
+                            </Text>
+                            <TouchableOpacity
+                                style={[styles.addItemButton, { backgroundColor: colors.primary }]}
+                                onPress={addNewItem}
+                            >
+                                <Plus size={18} color="#FFF" />
+                                <Text style={styles.addItemButtonText}>Aggiungi</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {items.length === 0 ? (
+                            <View style={[styles.emptyItems, { backgroundColor: colors.surfaceVariant }]}>
+                                <FileText size={48} color={colors.onSurfaceVariant} />
+                                <Text style={[styles.emptyItemsText, { color: colors.onSurfaceVariant }]}>
+                                    Nessun elemento aggiunto
+                                </Text>
+                                <Text style={[styles.emptyItemsSubtext, { color: colors.onSurfaceVariant }]}>
+                                    Tocca "Aggiungi" per inserire prodotti o servizi
+                                </Text>
+                            </View>
+                        ) : (
+                            items.map((item, index) => (
+                                <View key={item.id}>
+                                    {renderItem(item, index)}
+                                </View>
+                            ))
+                        )}
+                        {errors.items && (
+                            <Text style={[styles.errorText, { color: colors.error }]}>
+                                {errors.items}
+                            </Text>
+                        )}
+                    </View>
+
+                    {/* Totals */}
+                    {items.length > 0 && (
+                        <View style={[styles.totalsCard, {
+                            backgroundColor: colors.surfaceVariant,
+                            borderColor: colors.outline,
+                        }]}>
+                            <View style={styles.totalRow}>
+                                <Text style={[styles.totalLabel, { color: colors.onSurfaceVariant }]}>
+                                    Subtotale:
+                                </Text>
+                                <Text style={[styles.totalValue, { color: colors.onSurface }]}>
+                                    €{totals.subtotal.toFixed(2)}
+                                </Text>
+                            </View>
+                            {totals.totalDiscount > 0 && (
+                                <View style={styles.totalRow}>
+                                    <Text style={[styles.totalLabel, { color: colors.onSurfaceVariant }]}>
+                                        Sconto:
+                                    </Text>
+                                    <Text style={[styles.totalValue, { color: colors.error }]}>
+                                        -€{totals.totalDiscount.toFixed(2)}
+                                    </Text>
+                                </View>
+                            )}
+                            <View style={styles.totalRow}>
+                                <Text style={[styles.totalLabel, { color: colors.onSurfaceVariant }]}>
+                                    IVA:
+                                </Text>
+                                <Text style={[styles.totalValue, { color: colors.onSurface }]}>
+                                    €{totals.totalVat.toFixed(2)}
+                                </Text>
+                            </View>
+                            <View style={[styles.divider, { backgroundColor: colors.outline }]} />
+                            <View style={styles.totalRow}>
+                                <Text style={[styles.grandTotalLabel, { color: colors.onSurface }]}>
+                                    TOTALE:
+                                </Text>
+                                <Text style={[styles.grandTotalValue, { color: colors.primary }]}>
+                                    €{totals.totalAmount.toFixed(2)}
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Payment Method */}
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            Metodo di Pagamento
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.selectButton, {
+                                backgroundColor: colors.surfaceVariant,
+                                borderColor: colors.outline,
+                            }]}
+                            onPress={() => setShowPaymentModal(true)}
+                        >
+                            <DollarSign size={20} color={colors.primary} />
+                            <Text style={[styles.selectButtonText, { color: colors.onSurface }]}>
+                                {PAYMENT_METHODS.find(m => m.id === formData.paymentMethod)?.label}
+                            </Text>
+                            <ChevronDown size={20} color={colors.onSurfaceVariant} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Payment Terms */}
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            Termini di Pagamento
+                        </Text>
+                        <View style={[styles.inputContainer, {
+                            backgroundColor: colors.surfaceVariant,
+                            borderColor: colors.outline,
+                        }]}>
+                            <FileText size={20} color={colors.primary} />
+                            <TextInput
+                                style={[styles.input, { color: colors.onSurface }]}
+                                placeholder="es. 30 giorni"
+                                placeholderTextColor={colors.onSurfaceVariant}
+                                value={formData.paymentTerms}
+                                onChangeText={(text) => updateFormData('paymentTerms', text)}
+                            />
+                        </View>
+                    </View>
+
+                    {/* Notes */}
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            Note
+                        </Text>
+                        <View style={[styles.textAreaContainer, {
+                            backgroundColor: colors.surfaceVariant,
+                            borderColor: colors.outline,
+                        }]}>
+                            <TextInput
+                                style={[styles.textArea, { color: colors.onSurface }]}
+                                placeholder="Note aggiuntive per la fattura..."
+                                placeholderTextColor={colors.onSurfaceVariant}
+                                value={formData.notes}
+                                onChangeText={(text) => updateFormData('notes', text)}
+                                multiline
+                                numberOfLines={4}
+                                textAlignVertical="top"
+                            />
+                        </View>
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+
+            {renderCustomerModal()}
+            {renderTypeModal()}
+            {renderPaymentModal()}
+        </SafeAreaView>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    marginRight: 12,
-    padding: 4,
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  templateButton: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  content: {
-    flex: 1,
-  },
-  section: {
-    borderRadius: 12,
-    borderWidth: 1,
-    margin: 16,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-    flex: 1,
-  },
-  customerSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderWidth: 1,
-    borderRadius: 8,
-    margin: 16,
-  },
-  selectedCustomerName: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  selectedCustomerEmail: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  customerPlaceholder: {
-    fontSize: 16,
-  },
-  formRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-  },
-  formGroup: {
-    marginBottom: 16,
-    paddingHorizontal: 16,
-  },
-  formLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 6,
-  },
-  formInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  addItemButton: {
-    padding: 8,
-    borderRadius: 6,
-  },
-  emptyItems: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  emptyItemsText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 12,
-  },
-  emptyItemsSubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  itemsList: {
-    padding: 16,
-  },
-  itemCard: {
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  itemNumber: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  deleteButton: {
-    padding: 6,
-    borderRadius: 6,
-  },
-  itemForm: {
-    gap: 12,
-  },
-  itemTotals: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  itemTotal: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  itemVat: {
-    fontSize: 14,
-  },
-  totalsContainer: {
-    padding: 16,
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  totalLabel: {
-    fontSize: 16,
-  },
-  totalValue: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  grandTotalRow: {
-    borderTopWidth: 1,
-    marginTop: 8,
-    paddingTop: 16,
-  },
-  grandTotalLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  grandTotalValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  notesInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    margin: 16,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    paddingBottom: 32,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  saveButton: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: screenHeight * 0.8,
-    minHeight: screenHeight * 0.5,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  customerItem: {
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  customerName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  customerEmail: {
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  customerVat: {
-    fontSize: 12,
-  },
-  templateItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  templateName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  templateItems: {
-    fontSize: 14,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  addCustomerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  addCustomerButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
+    container: {
+        flex: 1,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.1)',
+    },
+    backButton: {
+        padding: 8,
+    },
+    headerTitle: {
+        flex: 1,
+        fontSize: 18,
+        fontWeight: '600',
+        marginLeft: 12,
+    },
+    saveButton: {
+        padding: 8,
+    },
+    content: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 20,
+    },
+    section: {
+        marginBottom: 24,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 8,
+    },
+    selectButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 12,
+    },
+    selectButtonText: {
+        flex: 1,
+        fontSize: 16,
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 12,
+    },
+    input: {
+        flex: 1,
+        fontSize: 16,
+    },
+    dateRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 24,
+    },
+    dateField: {
+        flex: 1,
+    },
+    itemsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    addItemButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 6,
+    },
+    addItemButtonText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    emptyItems: {
+        padding: 40,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    emptyItemsText: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginTop: 16,
+    },
+    emptyItemsSubtext: {
+        fontSize: 14,
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    itemCard: {
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 12,
+    },
+    itemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    itemNumber: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    removeItemButton: {
+        padding: 4,
+    },
+    itemInput: {
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        fontSize: 16,
+        marginBottom: 12,
+        minHeight: 60,
+    },
+    itemRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    itemInputGroup: {
+        flex: 1,
+    },
+    itemLabel: {
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    itemInputSmall: {
+        padding: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        fontSize: 14,
+    },
+    itemTotal: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.1)',
+    },
+    itemTotalLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    itemTotalValue: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    totalsCard: {
+        padding: 20,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 24,
+    },
+    totalRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+    },
+    totalLabel: {
+        fontSize: 14,
+    },
+    totalValue: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    grandTotalLabel: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    grandTotalValue: {
+        fontSize: 24,
+        fontWeight: '700',
+    },
+    divider: {
+        height: 1,
+        marginVertical: 12,
+    },
+    textAreaContainer: {
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    textArea: {
+        fontSize: 16,
+        minHeight: 100,
+    },
+    errorText: {
+        fontSize: 12,
+        marginTop: 4,
+        marginLeft: 4,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        width: screenWidth - 40,
+        maxHeight: '80%',
+        borderRadius: 20,
+        overflow: 'hidden',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.1)',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+    },
+    customerOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        marginHorizontal: 20,
+        marginVertical: 6,
+        borderRadius: 12,
+        borderWidth: 2,
+    },
+    customerAvatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    customerInfo: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    customerName: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    customerEmail: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    addCustomerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        margin: 20,
+        borderRadius: 12,
+        gap: 8,
+    },
+    addCustomerButtonText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    pickerModal: {
+        width: screenWidth - 80,
+        borderRadius: 20,
+        padding: 8,
+    },
+    pickerOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        borderRadius: 12,
+    },
+    pickerOptionText: {
+        fontSize: 16,
+    },
 });
 
 export default CreateInvoiceScreen;

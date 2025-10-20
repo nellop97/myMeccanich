@@ -15,8 +15,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
-import { useStore } from '../../store';
 import { useMechanicStats } from '../../hooks/useMechanicStats';
+import { useAppThemeManager } from '../../hooks/useTheme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(screenWidth * 0.85, 320);
@@ -36,19 +36,14 @@ interface MenuItem {
 }
 
 const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, onTabChange }) => {
-  const { user, logout } = useAuth();
-  const store = useStore();
-  const { darkMode } = store;
+  const { user, signOut } = useAuth();
+  const { colors, isDark, toggleTheme } = useAppThemeManager();
   
   // Funzione sicura per toggle dark mode
   const handleToggleDarkMode = () => {
     try {
-      if (store && typeof store.toggleDarkMode === 'function') {
-        store.toggleDarkMode();
-        closeDrawer();
-      } else {
-        console.warn('toggleDarkMode function not available');
-      }
+      toggleTheme();
+      closeDrawer();
     } catch (error) {
       console.error('Error toggling dark mode:', error);
     }
@@ -62,18 +57,18 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
 
   // Tema dinamico
   const theme = {
-    background: darkMode ? '#0f172a' : '#ffffff',
-    surface: darkMode ? '#1e293b' : '#f8fafc',
-    card: darkMode ? '#334155' : '#ffffff',
-    primary: '#3b82f6',
-    primaryLight: darkMode ? '#1e40af' : '#dbeafe',
-    text: darkMode ? '#f1f5f9' : '#0f172a',
-    textSecondary: darkMode ? '#94a3b8' : '#64748b',
-    border: darkMode ? '#334155' : '#e2e8f0',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    accent: darkMode ? '#7c3aed' : '#a855f7',
+    background: colors.background,
+    surface: colors.surface,
+    card: colors.surfaceContainer,
+    primary: colors.primary,
+    primaryLight: colors.primaryContainer,
+    text: colors.onSurface,
+    textSecondary: colors.onSurfaceVariant,
+    border: colors.outline,
+    success: colors.success,
+    warning: colors.warning,
+    danger: colors.error,
+    accent: colors.tertiary,
     overlay: 'rgba(0, 0, 0, 0.5)',
   };
 
@@ -193,12 +188,12 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
             try {
               console.log('🚪 Mobile Sidebar: Iniziando logout...');
               
-              // Verifica che la funzione logout esista
-              if (!logout || typeof logout !== 'function') {
+              // Verifica che la funzione signOut esista
+              if (!signOut || typeof signOut !== 'function') {
                 throw new Error('Logout function not available');
               }
               
-              await logout();
+              await signOut();
               console.log('✅ Mobile Sidebar: Logout completato con successo');
               
               // Chiudi il drawer solo dopo il logout riuscito
@@ -442,12 +437,12 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
-              name={darkMode ? 'weather-sunny' : 'weather-night'}
+              name={isDark ? 'weather-sunny' : 'weather-night'}
               size={20}
               color={theme.textSecondary}
             />
             <Text style={[styles.footerButtonText, { color: theme.textSecondary }]}>
-              {darkMode ? 'Tema Chiaro' : 'Tema Scuro'}
+              {isDark ? 'Tema Chiaro' : 'Tema Scuro'}
             </Text>
           </TouchableOpacity>
           

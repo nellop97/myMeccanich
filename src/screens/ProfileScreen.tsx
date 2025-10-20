@@ -1,492 +1,652 @@
-// src/screens/ProfileScreen.tsx - VERSIONE AGGIORNATA SICURA
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+// src/screens/ProfileScreen.tsx
+/**
+ * ProfileScreen - Pagina profilo completa e responsive
+ * Supporta sia Owner che Mechanic con UI adattiva
+ */
+
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View, Alert } from 'react-native';
 import {
-  Avatar,
-  Button,
-  Card,
-  Chip,
-  Dialog,
-  Divider,
-  FAB,
-  Portal,
-  SegmentedButtons,
-  Text,
-  TextInput,
-  useTheme,
-  ActivityIndicator,
-} from 'react-native-paper';
-import { RootStackParamList } from '../navigation/AppNavigator';
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    TouchableOpacity,
+    Image,
+    Alert,
+    ActivityIndicator,
+    Platform,
+    useWindowDimensions,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+    User,
+    Mail,
+    Phone,
+    MapPin,
+    Briefcase,
+    FileText,
+    Camera,
+    Edit3,
+    LogOut,
+    Trash2,
+    Shield,
+    Award,
+    Star,
+    CheckCircle,
+    AlertCircle,
+} from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 
-// 🔒 USA I NUOVI HOOK SICURI
-import { useAuth } from '../hooks/useAuth';
-import { useUserData, useAppTheme, useUserStats } from '../hooks/useUserData';
+import { useProfile } from '../hooks/useProfile';
+import { useStore } from '../store';
+import { signOut } from 'firebase/auth';
+import { auth } from '../services/firebase';
 
-type ProfileScreenRouteProp = RouteProp<RootStackParamList, 'Profile'>;
+const ProfileScreen = () => {
+    const navigation = useNavigation();
+    const { width } = useWindowDimensions();
+    const { user, setUser } = useStore();
+    const { profile, loading, uploadProfilePhoto, uploadingPhoto } = useProfile();
 
-export default function ProfileScreen() {
-  const route = useRoute<ProfileScreenRouteProp>();
-  const { userId } = route.params;
-  const theme = useTheme();
-  const navigation = useNavigation();
+    const [refreshing, setRefreshing] = useState(false);
 
-  // 🔒 USA I NUOVI HOOK SICURI
-  const { updateUserProfile, logout, loading } = useAuth();
-  const {
-    userName,
-    userEmail,
-    isMechanic,
-    isEmailVerified,
-    photoURL,
-    workshopName,
-    workshopAddress,
-    vatNumber,
-    profileComplete
-  } = useUserData();
-  const { darkMode, toggleDarkMode } = useAppTheme();
-  const stats = useUserStats();
+    // Breakpoints
+    const isDesktop = width >= 1024;
+    const isTablet = width >= 768 && width < 1024;
+    const isMobile = width < 768;
 
-  const [activeTab, setActiveTab] = useState('info');
-  const [editMode, setEditMode] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+    const isMechanic = profile?.userType === 'mechanic';
 
-  // Form state - inizializzato con i dati da Firebase
-  const [displayName, setDisplayName] = useState(userName || '');
-  const [email, setEmail] = useState(userEmail || '');
-  const [workshop, setWorkshop] = useState(workshopName || '');
-  const [address, setAddress] = useState(workshopAddress || '');
-  const [vat, setVat] = useState(vatNumber || '');
+    // Handler: Cambia foto profilo
+    const handleChangePhoto = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-  // 💾 Salva le modifiche al profilo
-  const saveChanges = async () => {
-    try {
-      const updates: any = {
-        displayName: displayName.trim(),
-        firstName: displayName.split(' ')[0],
-        lastName: displayName.split(' ').slice(1).join(' '),
-      };
+        if (status !== 'granted') {
+            Alert.alert('Permesso negato', 'Abbiamo bisogno del permesso per accedere alle foto');
+            return;
+        }
 
-      if (isMechanic) {
-        updates.workshopName = workshop.trim();
-        updates.address = address.trim();
-        updates.vatNumber = vat.trim();
-      }
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
 
-      const success = await updateUserProfile(updates);
+        if (!result.canceled && result.assets[0]) {
+            try {
+                await uploadProfilePhoto(result.assets[0].uri);
+                Alert.alert('Successo', 'Foto profilo aggiornata!');
+            } catch (error) {
+                Alert.alert('Errore', 'Impossibile aggiornare la foto');
+            }
+        }
+    };
 
-      if (success) {
-        setEditMode(false);
-        Alert.alert('Successo', 'Profilo aggiornato con successo!');
-      }
-    } catch (error) {
-      console.error('Errore nel salvare il profilo:', error);
-      Alert.alert('Errore', 'Impossibile salvare le modifiche');
+    // Handler: Modifica profilo
+    const handleEditProfile = () => {
+        navigation.navigate('EditProfile' as never);
+    };
+
+    // Handler: Logout
+    const handleLogout = () => {
+        Alert.alert(
+            'Disconnetti',
+            'Sei sicuro di voler uscire?',
+            [
+                { text: 'Annulla', style: 'cancel' },
+                {
+                    text: 'Disconnetti',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await signOut(auth);
+                            setUser(null);
+                        } catch (error) {
+                            Alert.alert('Errore', 'Impossibile disconnettersi');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    // Handler: Privacy
+    const handlePrivacy = () => {
+        navigation.navigate('Privacy' as never);
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Caricamento profilo...</Text>
+            </View>
+        );
     }
-  };
 
-  // 🚪 Gestisci logout
-  const handleLogout = async () => {
-    try {
-      await logout();
-      console.log('✅ Logout completato, navigazione automatica');
-      // La navigazione sarà gestita automaticamente dall'AppNavigator
-    } catch (error) {
-      console.error('Errore logout:', error);
-      Alert.alert('Errore', 'Impossibile effettuare il logout');
+    if (!profile) {
+        return (
+            <View style={styles.errorContainer}>
+                <AlertCircle size={48} color="#EF4444" />
+                <Text style={styles.errorText}>Profilo non trovato</Text>
+            </View>
+        );
     }
-  };
 
-  // 📊 Rendering del tab info
-  const renderInfoTab = () => (
-      <View>
-        <Card style={styles.infoCard}>
-          <Card.Content>
-            {editMode ? (
-                // 📝 Modalità modifica
-                <View>
-                  <Text style={styles.sectionTitle}>Informazioni Personali</Text>
-
-                  <TextInput
-                      label="Nome completo"
-                      value={displayName}
-                      onChangeText={setDisplayName}
-                      mode="outlined"
-                      style={styles.input}
-                  />
-
-                  {isMechanic && (
-                      <>
-                        <TextInput
-                            label="Nome officina"
-                            value={workshop}
-                            onChangeText={setWorkshop}
-                            mode="outlined"
-                            style={styles.input}
-                        />
-
-                        <TextInput
-                            label="Indirizzo officina"
-                            value={address}
-                            onChangeText={setAddress}
-                            mode="outlined"
-                            multiline
-                            numberOfLines={2}
-                            style={styles.input}
-                        />
-
-                        <TextInput
-                            label="Partita IVA"
-                            value={vat}
-                            onChangeText={setVat}
-                            mode="outlined"
-                            style={styles.input}
-                        />
-                      </>
-                  )}
-
-                  <View style={styles.editButtonsRow}>
-                    <Button
-                        mode="outlined"
-                        onPress={() => setEditMode(false)}
-                        style={styles.cancelButton}
-                    >
-                      Annulla
-                    </Button>
-                    <Button
-                        mode="contained"
-                        onPress={saveChanges}
-                        loading={loading}
-                        disabled={loading}
-                        style={styles.saveButton}
-                    >
-                      Salva
-                    </Button>
-                  </View>
-                </View>
-            ) : (
-                // 👁️ Modalità visualizzazione
-                <View>
-                  <Text style={styles.sectionTitle}>Informazioni Personali</Text>
-
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Nome:</Text>
-                    <Text style={styles.infoValue}>{userName || 'Non specificato'}</Text>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Email:</Text>
-                    <Text style={styles.infoValue}>{userEmail}</Text>
-                    {!isEmailVerified && (
-                        <Chip mode="outlined" textStyle={{ fontSize: 10 }} style={styles.warningChip}>
-                          Non verificata
-                        </Chip>
+    // Render Header con foto profilo
+    const renderHeader = () => (
+        <LinearGradient
+            colors={isMechanic ? ['#FF6B35', '#FF8A65'] : ['#007AFF', '#5AC8FA']}
+            style={styles.header}
+        >
+            <View style={styles.headerContent}>
+                <View style={styles.avatarContainer}>
+                    {profile.photoURL ? (
+                        <Image source={{ uri: profile.photoURL }} style={styles.avatar} />
+                    ) : (
+                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                            <Text style={styles.avatarText}>
+                                {profile.firstName?.[0]}{profile.lastName?.[0]}
+                            </Text>
+                        </View>
                     )}
-                  </View>
 
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Tipo account:</Text>
-                    <Chip mode="outlined" style={styles.accountTypeChip}>
-                      {isMechanic ? 'Meccanico' : 'Proprietario auto'}
-                    </Chip>
-                  </View>
-
-                  {isMechanic && (
-                      <>
-                        <Divider style={styles.divider} />
-                        <Text style={styles.sectionTitle}>Informazioni Officina</Text>
-
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>Nome officina:</Text>
-                          <Text style={styles.infoValue}>{workshopName || 'Non specificato'}</Text>
-                        </View>
-
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>Indirizzo:</Text>
-                          <Text style={styles.infoValue}>{workshopAddress || 'Non specificato'}</Text>
-                        </View>
-
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>Partita IVA:</Text>
-                          <Text style={styles.infoValue}>{vatNumber || 'Non specificata'}</Text>
-                        </View>
-                      </>
-                  )}
+                    <TouchableOpacity
+                        style={styles.cameraButton}
+                        onPress={handleChangePhoto}
+                        disabled={uploadingPhoto}
+                    >
+                        {uploadingPhoto ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Camera size={20} color="#FFF" />
+                        )}
+                    </TouchableOpacity>
                 </View>
-            )}
-          </Card.Content>
-        </Card>
-      </View>
-  );
 
-  // 📊 Rendering del tab statistiche
-  const renderStatsTab = () => (
-      <View>
-        <Card style={styles.statsCard}>
-          <Card.Content>
-            <Text style={styles.sectionTitle}>Le tue statistiche</Text>
-
-            {!isMechanic && (
-                <>
-                  <View style={styles.statRow}>
-                    <Text style={styles.statLabel}>Auto totali:</Text>
-                    <Text style={styles.statValue}>{stats.totalCars}</Text>
-                  </View>
-
-                  <View style={styles.statRow}>
-                    <Text style={styles.statLabel}>Manutenzioni registrate:</Text>
-                    <Text style={styles.statValue}>{stats.totalMaintenanceRecords}</Text>
-                  </View>
-
-                  <View style={styles.statRow}>
-                    <Text style={styles.statLabel}>Età media auto:</Text>
-                    <Text style={styles.statValue}>{stats.averageCarAge} anni</Text>
-                  </View>
-
-                  <View style={styles.statRow}>
-                    <Text style={styles.statLabel}>Auto che necessitano servizio:</Text>
-                    <Text style={[styles.statValue, { color: stats.carsNeedingService > 0 ? theme.colors.error : theme.colors.primary }]}>
-                      {stats.carsNeedingService}
-                    </Text>
-                  </View>
-
-                  {stats.oldestCar && (
-                      <View style={styles.statRow}>
-                        <Text style={styles.statLabel}>Auto più vecchia:</Text>
-                        <Text style={styles.statValue}>
-                          {stats.oldestCar.make} {stats.oldestCar.model} ({stats.oldestCar.year})
-                        </Text>
-                      </View>
-                  )}
-                </>
-            )}
-
-            {isMechanic && (
-                <Text style={styles.infoValue}>
-                  Le statistiche per i meccanici saranno disponibili presto.
+                <Text style={styles.userName}>
+                    {profile.firstName} {profile.lastName}
                 </Text>
-            )}
-          </Card.Content>
-        </Card>
-      </View>
-  );
 
-  // 🎛️ Rendering del tab impostazioni
-  const renderSettingsTab = () => (
-      <View>
-        <Card style={styles.settingsCard}>
-          <Card.Content>
-            <Text style={styles.sectionTitle}>Impostazioni</Text>
+                <View style={styles.badgeContainer}>
+                    <View style={[styles.badge, isMechanic && styles.badgeMechanic]}>
+                        {isMechanic ? (
+                            <Briefcase size={14} color="#FFF" />
+                        ) : (
+                            <User size={14} color="#FFF" />
+                        )}
+                        <Text style={styles.badgeText}>
+                            {isMechanic ? 'Meccanico' : 'Proprietario'}
+                        </Text>
+                    </View>
 
-            <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Tema scuro</Text>
-              <Button
-                  mode={darkMode ? "contained" : "outlined"}
-                  onPress={toggleDarkMode}
-                  compact
-              >
-                {darkMode ? "Attivo" : "Disattivo"}
-              </Button>
+                    {isMechanic && profile.verified && (
+                        <View style={[styles.badge, styles.badgeVerified]}>
+                            <Shield size={14} color="#FFF" />
+                            <Text style={styles.badgeText}>Verificato</Text>
+                        </View>
+                    )}
+                </View>
+
+                <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
+                    <Edit3 size={16} color="#FFF" />
+                    <Text style={styles.editButtonText}>Modifica Profilo</Text>
+                </TouchableOpacity>
             </View>
+        </LinearGradient>
+    );
 
-            <Divider style={styles.divider} />
+    // Render Info Cards
+    const renderInfoSection = () => (
+        <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+            <Text style={styles.sectionTitle}>Informazioni Personali</Text>
 
-            <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Profilo completo</Text>
-              <Chip mode="outlined" style={profileComplete ? styles.successChip : styles.warningChip}>
-                {profileComplete ? "Completo" : "Incompleto"}
-              </Chip>
+            <View style={styles.card}>
+                <InfoItem
+                    icon={Mail}
+                    label="Email"
+                    value={profile.email}
+                />
+                <View style={styles.divider} />
+
+                <InfoItem
+                    icon={Phone}
+                    label="Telefono"
+                    value={profile.phone || 'Non specificato'}
+                />
+
+                {isMechanic && (
+                    <>
+                        <View style={styles.divider} />
+                        <InfoItem
+                            icon={Briefcase}
+                            label="Officina"
+                            value={profile.workshopName || 'Non specificato'}
+                        />
+                        <View style={styles.divider} />
+                        <InfoItem
+                            icon={MapPin}
+                            label="Indirizzo"
+                            value={profile.address || 'Non specificato'}
+                        />
+                        <View style={styles.divider} />
+                        <InfoItem
+                            icon={FileText}
+                            label="P.IVA"
+                            value={profile.vatNumber || 'Non specificato'}
+                        />
+                    </>
+                )}
             </View>
-
-            <Divider style={styles.divider} />
-
-            <Button
-                mode="outlined"
-                onPress={() => setShowLogoutDialog(true)}
-                style={styles.logoutButton}
-                textColor={theme.colors.error}
-            >
-              Disconnetti
-            </Button>
-          </Card.Content>
-        </Card>
-      </View>
-  );
-
-  return (
-      <View style={styles.container}>
-        {/* Header con avatar */}
-        <View style={styles.header}>
-          <Avatar.Image
-              size={80}
-              source={photoURL ? { uri: photoURL } : undefined}
-          />
-          <Text style={styles.headerName}>{userName || 'Utente'}</Text>
-          <Text style={styles.headerEmail}>{userEmail}</Text>
         </View>
+    );
 
-        {/* Tabs */}
-        <SegmentedButtons
-            value={activeTab}
-            onValueChange={setActiveTab}
-            buttons={[
-              { value: 'info', label: 'Info' },
-              { value: 'stats', label: 'Statistiche' },
-              { value: 'settings', label: 'Impostazioni' },
-            ]}
-            style={styles.tabs}
-        />
+    // Render Stats (solo per meccanici)
+    const renderMechanicStats = () => {
+        if (!isMechanic) return null;
 
-        {/* Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {activeTab === 'info' && renderInfoTab()}
-          {activeTab === 'stats' && renderStatsTab()}
-          {activeTab === 'settings' && renderSettingsTab()}
-        </ScrollView>
+        return (
+            <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+                <Text style={styles.sectionTitle}>Statistiche</Text>
 
-        {/* FAB per modifica (solo nel tab info) */}
-        {activeTab === 'info' && !editMode && (
-            <FAB
-                icon="pencil"
-                style={styles.fab}
-                onPress={() => setEditMode(true)}
+                <View style={styles.statsContainer}>
+                    <StatCard
+                        icon={Star}
+                        value={profile.rating?.toFixed(1) || '0.0'}
+                        label="Valutazione"
+                        color="#FFB800"
+                    />
+                    <StatCard
+                        icon={Award}
+                        value={profile.reviewsCount?.toString() || '0'}
+                        label="Recensioni"
+                        color="#007AFF"
+                    />
+                </View>
+            </View>
+        );
+    };
+
+    // Render Actions
+    const renderActions = () => (
+        <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+            <ActionButton
+                icon={Shield}
+                label="Privacy Policy"
+                onPress={handlePrivacy}
+                color="#007AFF"
             />
-        )}
 
-        {/* Dialog di conferma logout */}
-        <Portal>
-          <Dialog visible={showLogoutDialog} onDismiss={() => setShowLogoutDialog(false)}>
-            <Dialog.Title>Conferma disconnessione</Dialog.Title>
-            <Dialog.Content>
-              <Text>Sei sicuro di voler disconnettere il tuo account?</Text>
-            </Dialog.Content>
-            <Dialog.Actions>
-              <Button onPress={() => setShowLogoutDialog(false)}>Annulla</Button>
-              <Button onPress={handleLogout} loading={loading}>Disconnetti</Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
-      </View>
-  );
-}
+            <View style={styles.divider} />
+
+            <ActionButton
+                icon={LogOut}
+                label="Disconnetti"
+                onPress={handleLogout}
+                color="#EF4444"
+                destructive
+            />
+        </View>
+    );
+
+    return (
+        <SafeAreaView style={styles.container} edges={['bottom']}>
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={[
+                    styles.scrollContent,
+                    isDesktop && styles.scrollContentDesktop,
+                ]}
+                showsVerticalScrollIndicator={false}
+            >
+                {renderHeader()}
+                {renderInfoSection()}
+                {renderMechanicStats()}
+                {renderActions()}
+
+                <Text style={styles.version}>MyMechanic v1.0.0</Text>
+            </ScrollView>
+        </SafeAreaView>
+    );
+};
+
+// Componente InfoItem
+const InfoItem = ({ icon: Icon, label, value }: any) => (
+    <View style={styles.infoItem}>
+        <View style={styles.infoIcon}>
+            <Icon size={20} color="#64748B" />
+        </View>
+        <View style={styles.infoContent}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={styles.infoValue}>{value}</Text>
+        </View>
+    </View>
+);
+
+// Componente StatCard
+const StatCard = ({ icon: Icon, value, label, color }: any) => (
+    <View style={styles.statCard}>
+        <Icon size={24} color={color} />
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
+        <Text style={styles.statLabel}>{label}</Text>
+    </View>
+);
+
+// Componente ActionButton
+const ActionButton = ({ icon: Icon, label, onPress, color, destructive }: any) => (
+    <TouchableOpacity style={styles.actionButton} onPress={onPress}>
+        <View style={[styles.actionIcon, { backgroundColor: `${color}15` }]}>
+            <Icon size={20} color={color} />
+        </View>
+        <Text style={[styles.actionLabel, destructive && { color }]}>{label}</Text>
+    </TouchableOpacity>
+);
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  headerName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 10,
-  },
-  headerEmail: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  tabs: {
-    margin: 16,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  infoCard: {
-    marginBottom: 16,
-  },
-  statsCard: {
-    marginBottom: 16,
-  },
-  settingsCard: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    flexWrap: 'wrap',
-  },
-  infoLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    minWidth: 100,
-  },
-  infoValue: {
-    fontSize: 14,
-    flex: 1,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  editButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  cancelButton: {
-    flex: 1,
-    marginRight: 8,
-  },
-  saveButton: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  divider: {
-    marginVertical: 16,
-  },
-  accountTypeChip: {
-    marginLeft: 8,
-  },
-  warningChip: {
-    marginLeft: 8,
-    backgroundColor: '#fff3cd',
-  },
-  successChip: {
-    backgroundColor: '#d1edff',
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statLabel: {
-    fontSize: 14,
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  settingLabel: {
-    fontSize: 14,
-    flex: 1,
-  },
-  logoutButton: {
-    marginTop: 16,
-  },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
-  },
+    container: {
+        flex: 1,
+        backgroundColor: '#F8FAFC',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#64748B',
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        padding: 20,
+    },
+    errorText: {
+        marginTop: 16,
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#EF4444',
+    },
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        paddingBottom: 40,
+    },
+    scrollContentDesktop: {
+        maxWidth: 900,
+        width: '100%',
+        alignSelf: 'center',
+    },
+
+    // Header
+    header: {
+        paddingTop: 40,
+        paddingBottom: 32,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 4,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            },
+        }),
+    },
+    headerContent: {
+        alignItems: 'center',
+    },
+    avatarContainer: {
+        position: 'relative',
+        marginBottom: 16,
+    },
+    avatar: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 4,
+        borderColor: '#FFF',
+    },
+    avatarPlaceholder: {
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarText: {
+        fontSize: 48,
+        fontWeight: '700',
+        color: '#FFF',
+    },
+    cameraButton: {
+        position: 'absolute',
+        right: 4,
+        bottom: 4,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#FFF',
+    },
+    userName: {
+        fontSize: 28,
+        fontWeight: '700',
+        color: '#FFF',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    badgeContainer: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 16,
+    },
+    badge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    },
+    badgeMechanic: {
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    },
+    badgeVerified: {
+        backgroundColor: 'rgba(34, 197, 94, 0.9)',
+    },
+    badgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#FFF',
+    },
+    editButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    },
+    editButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#FFF',
+    },
+
+    // Sections
+    section: {
+        marginTop: 20,
+        marginHorizontal: 16,
+    },
+    sectionDesktop: {
+        marginHorizontal: 32,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#0F172A',
+        marginBottom: 12,
+        paddingHorizontal: 4,
+    },
+
+    // Card
+    card: {
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 4,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            },
+        }),
+    },
+
+    // Info Item
+    infoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+    },
+    infoIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    infoContent: {
+        flex: 1,
+    },
+    infoLabel: {
+        fontSize: 13,
+        color: '#64748B',
+        marginBottom: 2,
+    },
+    infoValue: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#0F172A',
+    },
+
+    // Stats
+    statsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 20,
+        alignItems: 'center',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            },
+        }),
+    },
+    statValue: {
+        fontSize: 32,
+        fontWeight: '700',
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    statLabel: {
+        fontSize: 13,
+        color: '#64748B',
+    },
+
+    // Actions
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 16,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.05,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+            },
+        }),
+    },
+    actionIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    actionLabel: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#0F172A',
+        flex: 1,
+    },
+
+    // Divider
+    divider: {
+        height: 1,
+        backgroundColor: '#F1F5F9',
+    },
+
+    // Footer
+    version: {
+        fontSize: 12,
+        color: '#94A3B8',
+        textAlign: 'center',
+        marginTop: 32,
+        marginBottom: 16,
+    },
 });
+
+export default ProfileScreen;

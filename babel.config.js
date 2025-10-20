@@ -1,33 +1,33 @@
-// babel.config.js
+// babel.config.js - Configurazione Babel Semplificata
 module.exports = function(api) {
-  api.cache(true);
-  return {
-    presets: [
-      'babel-preset-expo'
-    ],
-    plugins: [
-      // Plugin per la risoluzione dei moduli
-      [
-        'module-resolver',
-        {
-          root: ['./'],
-          extensions: ['.ios.js', '.android.js', '.js', '.jsx', '.ts', '.tsx', '.json'],
-          alias: {
-            '@': './',
-            '@components': './src/components',
-            '@screens': './src/screens',
-            '@services': './src/services',
-            '@store': './src/store',
-            '@types': './src/types',
-            '@utils': './src/utils',
-            '@assets': './assets',
-            '@navigation': './src/navigation',
-            '@hooks': './src/hooks',
-          }
-        }
-      ],
-      // Plugin necessari per React Native
-      'react-native-reanimated/plugin', // DEVE essere l'ultimo plugin
-    ]
-  };
+    api.cache(true);
+
+    return {
+        presets: [
+            'babel-preset-expo'
+        ],
+        plugins: [
+            // Plugin per module resolver (alias @/)
+            [
+                'module-resolver',
+                {
+                    root: ['./'],
+                    alias: {
+                        '@': './',
+                    },
+                    extensions: [
+                        '.ios.ts',
+                        '.android.ts',
+                        '.ts',
+                        '.ios.tsx',
+                        '.android.tsx',
+                        '.tsx',
+                        '.jsx',
+                        '.js',
+                        '.json',
+                    ],
+                },
+            ],
+        ],
+    };
 };

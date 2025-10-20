@@ -97,17 +97,12 @@ const AddFuelRecordScreen = () => {
             </TouchableOpacity>
 
             {showDatePicker && (
-              <DateTimePicker
-                value={formData.date}
-                mode="date"
-                display="default"
-                onChange={(event, selectedDate) => {
-                  setShowDatePicker(false);
-                  if (selectedDate) {
-                    setFormData({ ...formData, date: selectedDate });
-                  }
-                }}
-              />
+                <UniversalDatePicker
+                    value={date}
+                    onChange={setDate}
+                    label="Seleziona data"
+                    mode="date"
+                />
             )}
 
             {/* Liters */}
@@ -299,17 +294,12 @@ const AddReminderScreen = () => {
           </TouchableOpacity>
 
           {showDatePicker && (
-            <DateTimePicker
-              value={formData.dueDate}
-              mode="date"
-              display="default"
-              onChange={(event, selectedDate) => {
-                setShowDatePicker(false);
-                if (selectedDate) {
-                  setFormData({ ...formData, dueDate: selectedDate });
-                }
-              }}
-            />
+              <UniversalDatePicker
+                  value={date}
+                  onChange={setDate}
+                  label="Seleziona data"
+                  mode="date"
+              />
           )}
 
           {/* Save Button */}
