@@ -1,20 +1,24 @@
 // src/screens/mechanic/RepairPartsManagementScreen.tsx
+// REFACTORED: Modern UI with responsive design for web and mobile
+
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   Box,
   Calendar,
+  Car,
   ChevronLeft,
   DollarSign,
   Edit3,
   Package,
   Plus,
+  Refresh,
   Save,
   Settings,
   Trash2,
   User,
   Wrench,
 } from 'lucide-react-native';
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Alert,
   Animated,
@@ -31,11 +35,14 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { useStore } from '../../store';
 import { Part, useWorkshopStore } from '../../store/workshopStore';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+const isTablet = screenWidth >= 768 && screenWidth < 1024;
 
 interface RouteParams {
   carId: string;
@@ -53,12 +60,12 @@ interface PartFormData {
 }
 
 // Componente separato per il form di aggiunta/modifica parti
-const PartFormSheet = ({ 
-  visible, 
-  onClose, 
-  onSave, 
+const PartFormSheet = ({
+  visible,
+  onClose,
+  onSave,
   editingPart,
-  theme 
+  theme
 }: {
   visible: boolean;
   onClose: () => void;
@@ -135,17 +142,18 @@ const PartFormSheet = ({
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.sheetOverlay} />
       </TouchableWithoutFeedback>
-      
-      <Animated.View 
+
+      <Animated.View
         style={[
           styles.sheetContainer,
-          { 
+          isDesktop && styles.sheetContainerDesktop,
+          {
             backgroundColor: theme.cardBackground,
             transform: [{ translateY: slideAnimation }]
           }
         ]}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.sheetContent}
         >
@@ -160,7 +168,7 @@ const PartFormSheet = ({
             <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: theme.text }]}>Nome Pezzo *</Text>
               <TextInput
-                style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
+                style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
                 value={formData.name}
                 onChangeText={(text) => setFormData({ ...formData, name: text })}
                 placeholder="Es. Olio motore 5W-30"
@@ -168,11 +176,11 @@ const PartFormSheet = ({
               />
             </View>
 
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+            <View style={isDesktop ? styles.formRowDesktop : styles.formRow}>
+              <View style={[styles.formGroup, isDesktop && { flex: 1, marginRight: 12 }]}>
                 <Text style={[styles.formLabel, { color: theme.text }]}>Quantità *</Text>
                 <TextInput
-                  style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
+                  style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
                   value={formData.quantity}
                   onChangeText={(text) => setFormData({ ...formData, quantity: text })}
                   keyboardType="numeric"
@@ -180,10 +188,10 @@ const PartFormSheet = ({
                   placeholderTextColor={theme.textSecondary}
                 />
               </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={[styles.formLabel, { color: theme.text }]}>Prezzo Unitario *</Text>
+              <View style={[styles.formGroup, isDesktop && { flex: 1, marginLeft: 12 }]}>
+                <Text style={[styles.formLabel, { color: theme.text }]}>Prezzo Unitario (€) *</Text>
                 <TextInput
-                  style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
+                  style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
                   value={formData.unitCost}
                   onChangeText={(text) => setFormData({ ...formData, unitCost: text })}
                   keyboardType="decimal-pad"
@@ -197,23 +205,30 @@ const PartFormSheet = ({
               <Text style={[styles.formLabel, { color: theme.text }]}>Categoria</Text>
               <View style={styles.categoryGrid}>
                 {[
-                  { key: 'ricambio', label: 'Ricambio' },
-                  { key: 'fluido', label: 'Fluido' },
-                  { key: 'consumabile', label: 'Consumabile' },
-                  { key: 'accessorio', label: 'Accessorio' },
+                  { key: 'ricambio', label: 'Ricambio', icon: <Settings size={14} color={theme.accent} /> },
+                  { key: 'fluido', label: 'Fluido', icon: <Box size={14} color={theme.warning} /> },
+                  { key: 'consumabile', label: 'Consumabile', icon: <Package size={14} color={theme.success} /> },
+                  { key: 'accessorio', label: 'Accessorio', icon: <Plus size={14} color={theme.textSecondary} /> },
                 ].map((category) => (
                   <TouchableOpacity
                     key={category.key}
                     style={[
                       styles.categoryChip,
                       { borderColor: theme.border },
-                      formData.category === category.key && { backgroundColor: theme.accent }
+                      formData.category === category.key && {
+                        backgroundColor: theme.accent,
+                        borderColor: theme.accent
+                      }
                     ]}
                     onPress={() => setFormData({ ...formData, category: category.key as any })}
                   >
+                    {formData.category === category.key && category.icon}
                     <Text style={[
                       styles.categoryChipText,
-                      { color: formData.category === category.key ? '#ffffff' : theme.text }
+                      {
+                        color: formData.category === category.key ? '#ffffff' : theme.text,
+                        marginLeft: formData.category === category.key ? 4 : 0
+                      }
                     ]}>
                       {category.label}
                     </Text>
@@ -225,7 +240,7 @@ const PartFormSheet = ({
             <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: theme.text }]}>Marca</Text>
               <TextInput
-                style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
+                style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
                 value={formData.brand}
                 onChangeText={(text) => setFormData({ ...formData, brand: text })}
                 placeholder="Es. Castrol, Bosch, Brembo"
@@ -236,7 +251,7 @@ const PartFormSheet = ({
             <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: theme.text }]}>Codice Pezzo</Text>
               <TextInput
-                style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
+                style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
                 value={formData.partNumber}
                 onChangeText={(text) => setFormData({ ...formData, partNumber: text })}
                 placeholder="Es. CTR-5W30-1L"
@@ -247,7 +262,7 @@ const PartFormSheet = ({
             <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: theme.text }]}>Fornitore</Text>
               <TextInput
-                style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
+                style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
                 value={formData.supplier}
                 onChangeText={(text) => setFormData({ ...formData, supplier: text })}
                 placeholder="Es. Ricambi Auto SpA"
@@ -262,7 +277,7 @@ const PartFormSheet = ({
               >
                 <Text style={[styles.cancelButtonText, { color: theme.text }]}>Annulla</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.saveButton, { backgroundColor: theme.accent }]}
                 onPress={handleSave}
@@ -284,15 +299,17 @@ const RepairPartsManagementScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { carId, repairId } = route.params as RouteParams;
-  
-  const { darkMode } = useStore();
-  const { 
-    getCarById, 
-    getRepairDetails, 
-    addPartToRepair, 
-    updatePartInRepair, 
-    removePartFromRepair,
-    updateRepair 
+
+  const { user, darkMode } = useStore();
+  const {
+    getCarById,
+    getRepairDetails,
+    addPartToRepair,
+    updateRepairPart,
+    deleteRepairPart,
+    updateRepair,
+    fetchCars,
+    isLoading
   } = useWorkshopStore();
 
   const [showAddSheet, setShowAddSheet] = useState(false);
@@ -300,11 +317,34 @@ const RepairPartsManagementScreen = () => {
   const [laborCost, setLaborCost] = useState('');
   const [estimatedHours, setEstimatedHours] = useState('');
   const [notes, setNotes] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   const car = getCarById(carId);
   const repair = getRepairDetails(carId, repairId);
 
-  React.useEffect(() => {
+  const theme = {
+    background: darkMode ? '#0f172a' : '#f8fafc',
+    cardBackground: darkMode ? '#1e293b' : '#ffffff',
+    text: darkMode ? '#f1f5f9' : '#0f172a',
+    textSecondary: darkMode ? '#94a3b8' : '#64748b',
+    border: darkMode ? '#334155' : '#e2e8f0',
+    inputBackground: darkMode ? '#334155' : '#ffffff',
+    accent: '#3b82f6',
+    success: '#10b981',
+    warning: '#f59e0b',
+    error: '#ef4444',
+  };
+
+  // Carica i dati al mount e quando cambia carId/repairId
+  useEffect(() => {
+    if (user?.id) {
+      console.log('🔧 Caricamento dati riparazione...');
+      fetchCars(user.id);
+    }
+  }, [user?.id, carId, repairId]);
+
+  // Inizializza form quando repair è caricato
+  useEffect(() => {
     if (repair && laborCost === '' && estimatedHours === '' && notes === '') {
       setLaborCost(repair.laborCost?.toString() || '0');
       setEstimatedHours(repair.estimatedHours?.toString() || '0');
@@ -312,24 +352,23 @@ const RepairPartsManagementScreen = () => {
     }
   }, [repair?.id]);
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
+  const handleRefresh = useCallback(async () => {
+    if (user?.id) {
+      setRefreshing(true);
+      await fetchCars(user.id);
+      setRefreshing(false);
+    }
+  }, [user?.id, fetchCars]);
 
   if (!car || !repair) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.error }]}>
-          Riparazione non trovata
-        </Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.accent} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+            Caricamento dati riparazione...
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -339,6 +378,8 @@ const RepairPartsManagementScreen = () => {
       name: formData.name,
       quantity: parseInt(formData.quantity) || 1,
       unitCost: parseFloat(formData.unitCost) || 0,
+      unitPrice: parseFloat(formData.unitCost) || 0,
+      totalPrice: (parseInt(formData.quantity) || 1) * (parseFloat(formData.unitCost) || 0),
       category: formData.category,
       brand: formData.brand,
       partNumber: formData.partNumber,
@@ -346,14 +387,14 @@ const RepairPartsManagementScreen = () => {
     };
 
     if (editingPart) {
-      updatePartInRepair(carId, repairId, editingPart.id, partData);
+      updateRepairPart(carId, repairId, editingPart.id, partData);
     } else {
       addPartToRepair(carId, repairId, partData);
     }
-    
+
     setEditingPart(null);
     setShowAddSheet(false);
-  }, [editingPart, carId, repairId, updatePartInRepair, addPartToRepair]);
+  }, [editingPart, carId, repairId, updateRepairPart, addPartToRepair]);
 
   const handleEditPart = useCallback((part: Part) => {
     setEditingPart(part);
@@ -366,14 +407,14 @@ const RepairPartsManagementScreen = () => {
       'Sei sicuro di voler eliminare questo pezzo?',
       [
         { text: 'Annulla', style: 'cancel' },
-        { 
-          text: 'Elimina', 
+        {
+          text: 'Elimina',
           style: 'destructive',
-          onPress: () => removePartFromRepair(carId, repairId, partId)
+          onPress: () => deleteRepairPart(carId, repairId, partId)
         }
       ]
     );
-  }, [carId, repairId, removePartFromRepair]);
+  }, [carId, repairId, deleteRepairPart]);
 
   const handleSaveRepairDetails = useCallback(() => {
     updateRepair(carId, repairId, {
@@ -404,18 +445,22 @@ const RepairPartsManagementScreen = () => {
     }
   };
 
-  const partsCost = useMemo(() => 
-    repair?.parts.reduce((sum, part) => sum + (part.quantity * part.unitCost), 0) || 0, 
+  const partsCost = useMemo(() =>
+    repair?.parts.reduce((sum, part) => sum + (part.quantity * part.unitCost), 0) || 0,
     [repair?.parts]
   );
-  
-  const totalCost = useMemo(() => 
-    (repair?.laborCost || 0) + partsCost, 
+
+  const totalCost = useMemo(() =>
+    (repair?.laborCost || 0) + partsCost,
     [repair?.laborCost, partsCost]
   );
 
   const renderPartItem = ({ item: part }: { item: Part }) => (
-    <View style={[styles.partCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+    <View style={[
+      styles.partCard,
+      { backgroundColor: theme.cardBackground, borderColor: theme.border },
+      isDesktop && styles.partCardDesktop
+    ]}>
       <View style={styles.partHeader}>
         <View style={styles.partMainInfo}>
           <View style={styles.partTitleRow}>
@@ -428,7 +473,7 @@ const RepairPartsManagementScreen = () => {
             </Text>
           )}
         </View>
-        
+
         <View style={styles.partActions}>
           <TouchableOpacity
             style={[styles.actionIconButton, { backgroundColor: theme.accent + '20' }]}
@@ -479,9 +524,13 @@ const RepairPartsManagementScreen = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-      
+
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+      <View style={[
+        styles.header,
+        { backgroundColor: theme.cardBackground, borderColor: theme.border },
+        isDesktop && styles.headerDesktop
+      ]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
@@ -491,146 +540,185 @@ const RepairPartsManagementScreen = () => {
         <View style={styles.headerInfo}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Gestione Intervento</Text>
           <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-            {car.licensePlate} • {car.model}
+            {car.make} {car.model} • {car.licensePlate}
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: theme.accent }]}
-          onPress={() => {
-            setEditingPart(null);
-            setShowAddSheet(true);
-          }}
-        >
-          <Plus size={20} color="#ffffff" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.refreshButton, { backgroundColor: theme.accent + '15' }]}
+            onPress={handleRefresh}
+          >
+            <Refresh size={18} color={theme.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: theme.accent }]}
+            onPress={() => {
+              setEditingPart(null);
+              setShowAddSheet(true);
+            }}
+          >
+            <Plus size={20} color="#ffffff" />
+            {isDesktop && <Text style={styles.addButtonText}>Aggiungi Pezzo</Text>}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Informazioni Riparazione */}
-        <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <View style={styles.sectionHeader}>
-            <Wrench size={20} color={theme.accent} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Dettagli Intervento</Text>
-          </View>
-          
-          <Text style={[styles.repairDescription, { color: theme.text }]}>{repair.description}</Text>
-          
-          <View style={styles.repairInfo}>
-            <View style={styles.infoRow}>
-              <Calendar size={16} color={theme.textSecondary} />
-              <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                Data: {new Date(repair.scheduledDate).toLocaleDateString('it-IT')}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <User size={16} color={theme.textSecondary} />
-              <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                Cliente: {car.owner}
-              </Text>
-            </View>
-          </View>
-
-          {/* Form per dettagli riparazione */}
-          <View style={styles.repairDetailsForm}>
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={[styles.formLabel, { color: theme.text }]}>Costo Manodopera (€)</Text>
-                <TextInput
-                  style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-                  value={laborCost}
-                  onChangeText={setLaborCost}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                  placeholderTextColor={theme.textSecondary}
-                />
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.contentContainer, isDesktop && styles.contentContainerDesktop]}
+        showsVerticalScrollIndicator={false}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+      >
+        {/* Layout responsive: 2 colonne su desktop, 1 su mobile */}
+        <View style={isDesktop ? styles.twoColumnLayout : styles.singleColumnLayout}>
+          {/* Colonna sinistra su desktop - Dettagli e Costi */}
+          <View style={isDesktop ? styles.leftColumn : null}>
+            {/* Informazioni Riparazione */}
+            <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+              <View style={styles.sectionHeader}>
+                <Wrench size={20} color={theme.accent} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Dettagli Intervento</Text>
               </View>
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={[styles.formLabel, { color: theme.text }]}>Ore Stimate</Text>
-                <TextInput
-                  style={[styles.formInput, { color: theme.text, borderColor: theme.border }]}
-                  value={estimatedHours}
-                  onChangeText={setEstimatedHours}
-                  keyboardType="decimal-pad"
-                  placeholder="0.0"
-                  placeholderTextColor={theme.textSecondary}
-                />
+
+              <View style={styles.sectionContent}>
+                <Text style={[styles.repairDescription, { color: theme.text }]}>{repair.description}</Text>
+
+                <View style={styles.repairInfo}>
+                  <View style={styles.infoRow}>
+                    <Calendar size={16} color={theme.textSecondary} />
+                    <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                      Data: {new Date(repair.scheduledDate).toLocaleDateString('it-IT')}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <User size={16} color={theme.textSecondary} />
+                    <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                      Cliente: {car.owner}
+                    </Text>
+                  </View>
+                  {car.ownerPhone && (
+                    <View style={styles.infoRow}>
+                      <User size={16} color={theme.textSecondary} />
+                      <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                        Telefono: {car.ownerPhone}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Form per dettagli riparazione */}
+                <View style={styles.repairDetailsForm}>
+                  <View style={isDesktop ? styles.formRowDesktop : styles.formRow}>
+                    <View style={[styles.formGroup, isDesktop && { flex: 1, marginRight: 12 }]}>
+                      <Text style={[styles.formLabel, { color: theme.text }]}>Costo Manodopera (€)</Text>
+                      <TextInput
+                        style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
+                        value={laborCost}
+                        onChangeText={setLaborCost}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={theme.textSecondary}
+                      />
+                    </View>
+                    <View style={[styles.formGroup, isDesktop && { flex: 1, marginLeft: 12 }]}>
+                      <Text style={[styles.formLabel, { color: theme.text }]}>Ore Stimate</Text>
+                      <TextInput
+                        style={[styles.formInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
+                        value={estimatedHours}
+                        onChangeText={setEstimatedHours}
+                        keyboardType="decimal-pad"
+                        placeholder="0.0"
+                        placeholderTextColor={theme.textSecondary}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.formLabel, { color: theme.text }]}>Note</Text>
+                    <TextInput
+                      style={[styles.formTextArea, { color: theme.text, borderColor: theme.border, backgroundColor: theme.inputBackground }]}
+                      value={notes}
+                      onChangeText={setNotes}
+                      multiline
+                      numberOfLines={3}
+                      placeholder="Aggiungi note sull'intervento..."
+                      placeholderTextColor={theme.textSecondary}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.saveDetailsButton, { backgroundColor: theme.success }]}
+                    onPress={handleSaveRepairDetails}
+                  >
+                    <Save size={16} color="#ffffff" />
+                    <Text style={styles.saveDetailsButtonText}>Salva Dettagli</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: theme.text }]}>Note</Text>
-              <TextInput
-                style={[styles.formTextArea, { color: theme.text, borderColor: theme.border }]}
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={3}
-                placeholder="Aggiungi note sull'intervento..."
-                placeholderTextColor={theme.textSecondary}
-              />
-            </View>
+            {/* Riepilogo Costi */}
+            <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+              <View style={styles.sectionHeader}>
+                <DollarSign size={20} color={theme.success} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Riepilogo Costi</Text>
+              </View>
 
-            <TouchableOpacity
-              style={[styles.saveDetailsButton, { backgroundColor: theme.success }]}
-              onPress={handleSaveRepairDetails}
-            >
-              <Save size={16} color="#ffffff" />
-              <Text style={styles.saveDetailsButtonText}>Salva Dettagli</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Riepilogo Costi */}
-        <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <View style={styles.sectionHeader}>
-            <DollarSign size={20} color={theme.success} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Riepilogo Costi</Text>
-          </View>
-          
-          <View style={styles.costBreakdown}>
-            <View style={styles.costRow}>
-              <Text style={[styles.costLabel, { color: theme.textSecondary }]}>Manodopera:</Text>
-              <Text style={[styles.costValue, { color: theme.text }]}>€{(repair.laborCost || 0).toFixed(2)}</Text>
-            </View>
-            <View style={styles.costRow}>
-              <Text style={[styles.costLabel, { color: theme.textSecondary }]}>Ricambi ({repair.parts.length}):</Text>
-              <Text style={[styles.costValue, { color: theme.text }]}>€{partsCost.toFixed(2)}</Text>
-            </View>
-            <View style={[styles.costRow, styles.totalCostRow, { borderColor: theme.border }]}>
-              <Text style={[styles.totalCostLabel, { color: theme.text }]}>Totale:</Text>
-              <Text style={[styles.totalCostValue, { color: theme.accent }]}>€{totalCost.toFixed(2)}</Text>
+              <View style={styles.sectionContent}>
+                <View style={styles.costBreakdown}>
+                  <View style={styles.costRow}>
+                    <Text style={[styles.costLabel, { color: theme.textSecondary }]}>Manodopera:</Text>
+                    <Text style={[styles.costValue, { color: theme.text }]}>€{(repair.laborCost || 0).toFixed(2)}</Text>
+                  </View>
+                  <View style={styles.costRow}>
+                    <Text style={[styles.costLabel, { color: theme.textSecondary }]}>Ricambi ({repair.parts.length}):</Text>
+                    <Text style={[styles.costValue, { color: theme.text }]}>€{partsCost.toFixed(2)}</Text>
+                  </View>
+                  <View style={[styles.costRow, styles.totalCostRow, { borderColor: theme.border }]}>
+                    <Text style={[styles.totalCostLabel, { color: theme.text }]}>Totale:</Text>
+                    <Text style={[styles.totalCostValue, { color: theme.accent }]}>€{totalCost.toFixed(2)}</Text>
+                  </View>
+                </View>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Lista Pezzi */}
-        <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <View style={styles.sectionHeader}>
-            <Package size={20} color={theme.warning} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Pezzi e Materiali ({repair.parts.length})
-            </Text>
-          </View>
+          {/* Colonna destra su desktop - Lista Pezzi */}
+          <View style={isDesktop ? styles.rightColumn : null}>
+            {/* Lista Pezzi */}
+            <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+              <View style={styles.sectionHeader}>
+                <Package size={20} color={theme.warning} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Pezzi e Materiali ({repair.parts.length})
+                </Text>
+              </View>
 
-          {repair.parts.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Package size={48} color={theme.textSecondary} />
-              <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-                Nessun pezzo aggiunto
-              </Text>
-              <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-                Tocca il pulsante + per aggiungere pezzi e materiali
-              </Text>
+              <View style={styles.sectionContent}>
+                {repair.parts.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Package size={48} color={theme.textSecondary} />
+                    <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
+                      Nessun pezzo aggiunto
+                    </Text>
+                    <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
+                      Tocca il pulsante + per aggiungere pezzi e materiali
+                    </Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={repair.parts}
+                    renderItem={renderPartItem}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+                    contentContainerStyle={{ paddingBottom: 12 }}
+                  />
+                )}
+              </View>
             </View>
-          ) : (
-            <FlatList
-              data={repair.parts}
-              renderItem={renderPartItem}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-            />
-          )}
+          </View>
         </View>
       </ScrollView>
 
@@ -653,12 +741,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 12,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
+  },
+  headerDesktop: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   backButton: {
     marginRight: 12,
@@ -675,13 +777,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
   },
-  addButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  refreshButton: {
     padding: 10,
     borderRadius: 8,
   },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    paddingHorizontal: isDesktop ? 16 : 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: 16,
+  },
+  contentContainerDesktop: {
+    padding: 24,
+    maxWidth: 1400,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  singleColumnLayout: {
+    width: '100%',
+  },
+  twoColumnLayout: {
+    flexDirection: 'row',
+    gap: 24,
+    width: '100%',
+  },
+  leftColumn: {
+    flex: 1,
+  },
+  rightColumn: {
+    flex: 1,
   },
   section: {
     borderRadius: 12,
@@ -694,40 +835,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
   },
+  sectionContent: {
+    padding: 16,
+  },
   repairDescription: {
     fontSize: 16,
     fontWeight: '500',
-    padding: 16,
-    paddingBottom: 8,
+    marginBottom: 12,
   },
   repairInfo: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
     gap: 8,
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   infoText: {
-    marginLeft: 8,
     fontSize: 14,
   },
   repairDetailsForm: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    gap: 12,
   },
   formRow: {
+    gap: 12,
+  },
+  formRowDesktop: {
     flexDirection: 'row',
-    marginBottom: 12,
+    gap: 12,
   },
   formGroup: {
     marginBottom: 12,
@@ -757,18 +903,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 8,
-    marginTop: 8,
+    gap: 6,
   },
   saveDetailsButtonText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 6,
+    fontWeight: '600',
   },
   costBreakdown: {
-    padding: 16,
+    gap: 8,
   },
   costRow: {
     flexDirection: 'row',
@@ -814,13 +959,17 @@ const styles = StyleSheet.create({
   partCard: {
     borderRadius: 8,
     borderWidth: 1,
-    overflow: 'hidden',
+    padding: 12,
+    position: 'relative',
+  },
+  partCardDesktop: {
+    padding: 16,
   },
   partHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: 12,
+    marginBottom: 12,
   },
   partMainInfo: {
     flex: 1,
@@ -828,12 +977,12 @@ const styles = StyleSheet.create({
   partTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     marginBottom: 4,
   },
   partName: {
     fontSize: 16,
     fontWeight: '500',
-    marginLeft: 8,
   },
   partBrand: {
     fontSize: 12,
@@ -844,13 +993,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionIconButton: {
-    padding: 6,
+    padding: 8,
     borderRadius: 6,
   },
   partDetails: {
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    gap: 4,
+    gap: 6,
   },
   partDetailRow: {
     flexDirection: 'row',
@@ -872,18 +1019,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
   categoryText: {
     fontSize: 10,
     fontWeight: 'bold',
-  },
-  errorText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 50,
+    letterSpacing: 0.5,
   },
   // Stili per il Bottom Sheet
   sheetOverlay: {
@@ -900,6 +1043,11 @@ const styles = StyleSheet.create({
     maxHeight: screenHeight * 0.9,
     minHeight: screenHeight * 0.7,
   },
+  sheetContainerDesktop: {
+    left: '20%',
+    right: '20%',
+    maxHeight: screenHeight * 0.85,
+  },
   sheetContent: {
     flex: 1,
   },
@@ -907,7 +1055,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   sheetHandle: {
     width: 40,
@@ -930,8 +1078,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
   },
@@ -963,12 +1113,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 8,
+    gap: 8,
   },
   saveButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 8,
+    fontWeight: '600',
   },
 });
 
