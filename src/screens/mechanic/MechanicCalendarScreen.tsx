@@ -12,7 +12,7 @@ import {
   User,
   Wrench,
 } from 'lucide-react-native';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -24,6 +24,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import { useStore } from '../../store';
@@ -59,13 +60,21 @@ interface DayWithRepairs {
 
 const MechanicCalendarScreen = () => {
   const navigation = useNavigation();
-  const { darkMode } = useStore();
-  const { cars } = useWorkshopStore();
-  
+  const { user, darkMode } = useStore();
+  const { cars, fetchCars, isLoading } = useWorkshopStore();
+
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  
+
   const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+
+  // Carica le auto all'avvio e quando cambia selectedDate
+  useEffect(() => {
+    if (user?.id) {
+      console.log('📅 Caricamento auto da Firebase...');
+      fetchCars(user.id);
+    }
+  }, [user?.id, selectedDate]);
 
   const theme = {
     background: darkMode ? '#111827' : '#f3f4f6',
@@ -297,7 +306,17 @@ const MechanicCalendarScreen = () => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Statistiche */}
         {renderDayStats()}
-        
+
+        {/* Loading indicator */}
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={theme.accent} />
+            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+              Aggiornamento dati...
+            </Text>
+          </View>
+        )}
+
         {/* Calendario */}
         <View style={[styles.calendarContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
           <RNCalendar
@@ -425,6 +444,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 14,
   },
   backButton: {
     padding: 8,
