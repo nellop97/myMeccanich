@@ -73,7 +73,7 @@ service cloud.firestore {
     // ============================================
     // WORKSHOP CARS COLLECTION (veicoli in officina)
     // ============================================
-    // MODIFICATO: Aggiunto supporto per mechanicId
+    // MODIFICATO: Aggiunto supporto per mechanicId e permessi owner
     match /workshop_cars/{carId} {
       // Lettura: meccanico proprietario o cliente proprietario del veicolo
       allow read: if isAuthenticated() && (
@@ -82,17 +82,60 @@ service cloud.firestore {
         resource.data.ownerId == request.auth.uid
       );
 
-      // Creazione: solo meccanici per la propria officina
-      allow create: if isMechanic() && (
-        request.resource.data.workshopId == request.auth.uid ||
-        request.resource.data.mechanicId == request.auth.uid
-      ) && hasRequiredFields(['make', 'model', 'licensePlate', 'ownerId']);
+      // Creazione: meccanici per la propria officina OPPURE owner per le proprie auto
+      allow create: if isAuthenticated() && (
+        (isMechanic() && (
+          request.resource.data.workshopId == request.auth.uid ||
+          request.resource.data.mechanicId == request.auth.uid
+        )) ||
+        request.resource.data.ownerId == request.auth.uid
+      );
 
-      // Aggiornamento: solo il meccanico proprietario
-      allow update: if isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId));
+      // Aggiornamento: meccanico proprietario o owner del veicolo
+      allow update: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
 
-      // Cancellazione: solo il meccanico proprietario
-      allow delete: if isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId));
+      // Cancellazione: meccanico proprietario o owner del veicolo
+      allow delete: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
+    }
+
+    // ============================================
+    // WORKSHOP CARS COLLECTION - VARIANTE CAMELCASE
+    // ============================================
+    // NOTA: Supporto per inconsistenza naming (workshopCars vs workshop_cars)
+    match /workshopCars/{carId} {
+      // Lettura: meccanico proprietario o cliente proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.workshopId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
+
+      // Creazione: meccanici per la propria officina OPPURE owner per le proprie auto
+      allow create: if isAuthenticated() && (
+        (isMechanic() && (
+          request.resource.data.workshopId == request.auth.uid ||
+          request.resource.data.mechanicId == request.auth.uid
+        )) ||
+        request.resource.data.ownerId == request.auth.uid
+      );
+
+      // Aggiornamento: meccanico proprietario o owner del veicolo
+      allow update: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
+
+      // Cancellazione: meccanico proprietario o owner del veicolo
+      allow delete: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
     }
 
     // ============================================
