@@ -60,10 +60,16 @@ export interface RepairPart {
     name: string;
     quantity: number;
     unitPrice: number;
+    unitCost: number; // Alias per unitPrice
     totalPrice: number;
     supplier?: string;
     partNumber?: string;
+    brand?: string;
+    category?: 'ricambio' | 'fluido' | 'consumabile' | 'accessorio';
 }
+
+// Alias per compatibilità
+export type Part = RepairPart;
 
 export interface Appointment {
     id: string;
@@ -110,6 +116,10 @@ interface WorkshopState {
     addPartToRepair: (carId: string, repairId: string, part: Omit<RepairPart, 'id'>) => Promise<void>;
     updateRepairPart: (carId: string, repairId: string, partId: string, updates: Partial<RepairPart>) => Promise<void>;
     deleteRepairPart: (carId: string, repairId: string, partId: string) => Promise<void>;
+
+    // Selectors
+    getCarById: (carId: string) => WorkshopCar | undefined;
+    getRepairDetails: (carId: string, repairId: string) => Repair | undefined;
 
     // Utilities
     clearError: () => void;
@@ -536,6 +546,17 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             set({ error: error.message, isLoading: false });
             throw error;
         }
+    },
+
+    // Selectors
+    getCarById: (carId: string) => {
+        return get().cars.find(car => car.id === carId);
+    },
+
+    getRepairDetails: (carId: string, repairId: string) => {
+        const car = get().cars.find(c => c.id === carId);
+        if (!car) return undefined;
+        return car.repairs.find(repair => repair.id === repairId);
     },
 
     // Clear Error

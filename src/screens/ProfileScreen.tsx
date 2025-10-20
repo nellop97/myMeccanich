@@ -41,16 +41,17 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { useProfile } from '../hooks/useProfile';
 import { useStore } from '../store';
-import { signOut } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { useLogout } from '../hooks/useAuthSync';
 
 const ProfileScreen = () => {
     const navigation = useNavigation();
     const { width } = useWindowDimensions();
-    const { user, setUser } = useStore();
+    const { user } = useStore();
     const { profile, loading, uploadProfilePhoto, uploadingPhoto } = useProfile();
+    const { logout } = useLogout();
 
     const [refreshing, setRefreshing] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
 
     // Breakpoints
     const isDesktop = width >= 1024;
@@ -102,10 +103,14 @@ const ProfileScreen = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await signOut(auth);
-                            setUser(null);
+                            setLoggingOut(true);
+                            await logout();
+                            // Il redirect alla login screen sarà gestito automaticamente da AppNavigator
+                            console.log('✅ Logout completato con successo');
                         } catch (error) {
-                            Alert.alert('Errore', 'Impossibile disconnettersi');
+                            console.error('❌ Errore logout:', error);
+                            Alert.alert('Errore', 'Impossibile disconnettersi. Riprova.');
+                            setLoggingOut(false);
                         }
                     },
                 },

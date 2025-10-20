@@ -231,7 +231,9 @@ const LoginScreen = () => {
                 <View style={styles.form}>
                     {/* Email */}
                     <View style={styles.inputWrapper}>
-                        <Mail size={20} color="#64748b" style={styles.inputIcon} />
+                        <View style={styles.iconContainer}>
+                            <Mail size={20} color="#64748b" />
+                        </View>
                         <TextInput
                             mode="outlined"
                             label="Email"
@@ -246,19 +248,24 @@ const LoginScreen = () => {
                             autoComplete="email"
                             disabled={loading}
                             style={styles.input}
+                            textColor="#1e293b"
                             theme={{
                                 colors: {
                                     primary: '#3b82f6',
                                     outline: errors.email ? '#ef4444' : '#e2e8f0',
+                                    onSurfaceVariant: '#64748b',
+                                    text: '#1e293b',
                                 },
                             }}
                         />
                     </View>
-                    {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+                    {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
 
                     {/* Password */}
                     <View style={styles.inputWrapper}>
-                        <Lock size={20} color="#64748b" style={styles.inputIcon} />
+                        <View style={styles.iconContainer}>
+                            <Lock size={20} color="#64748b" />
+                        </View>
                         <TextInput
                             mode="outlined"
                             label="Password"
@@ -272,6 +279,7 @@ const LoginScreen = () => {
                             autoCapitalize="none"
                             disabled={loading}
                             style={styles.input}
+                            textColor="#1e293b"
                             right={
                                 <TextInput.Icon
                                     icon={() =>
@@ -288,11 +296,13 @@ const LoginScreen = () => {
                                 colors: {
                                     primary: '#3b82f6',
                                     outline: errors.password ? '#ef4444' : '#e2e8f0',
+                                    onSurfaceVariant: '#64748b',
+                                    text: '#1e293b',
                                 },
                             }}
                         />
                     </View>
-                    {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+                    {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
 
                     {/* Password dimenticata */}
                     <TouchableOpacity
@@ -416,11 +426,12 @@ const styles = StyleSheet.create({
         position: 'relative',
         marginBottom: 16,
     },
-    inputIcon: {
+    iconContainer: {
         position: 'absolute',
         left: 16,
         top: 28,
         zIndex: 1,
+        pointerEvents: 'none',
     },
     input: {
         backgroundColor: '#fff',

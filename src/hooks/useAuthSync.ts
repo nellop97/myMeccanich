@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { useStore } from '../store';
+import { useWorkshopStore } from '../store/workshopStore';
 import { buildUserDisplayName } from '../utils/authUtils';
 
 /**
@@ -76,6 +77,41 @@ export const useAuthSync = () => {
         isAuthenticated: !!authUser && !!storeUser?.isLoggedIn,
         isInitializing: initializing
     };
+};
+
+/**
+ * Hook per gestire il logout completo
+ * Pulisce Firebase, store principale e workshopStore
+ */
+export const useLogout = () => {
+    const { signOut: firebaseSignOut } = useAuth();
+    const { logout: storeLogout } = useStore();
+    const { reset: resetWorkshopStore } = useWorkshopStore();
+
+    const logout = async () => {
+        console.log('🚪 Executing full logout...');
+        try {
+            // 1. Logout da Firebase
+            console.log('🔥 Signing out from Firebase...');
+            await firebaseSignOut();
+
+            // 2. Pulisci lo store principale
+            console.log('🗑️ Clearing main store...');
+            storeLogout();
+
+            // 3. Pulisci workshopStore
+            console.log('🗑️ Clearing workshop store...');
+            resetWorkshopStore();
+
+            console.log('✅ Logout completed successfully');
+            return true;
+        } catch (error) {
+            console.error('❌ Error during logout:', error);
+            throw error;
+        }
+    };
+
+    return { logout };
 };
 
 

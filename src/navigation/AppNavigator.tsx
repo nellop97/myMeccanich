@@ -6,9 +6,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useStore } from '../store';
+import { useAuthSync } from '../hooks/useAuthSync';
 
 // ============================================
 // AUTH SCREENS
@@ -199,24 +200,29 @@ const PlaceholderScreen = ({ route }: any) => {
 // MAIN APP NAVIGATOR
 // ============================================
 export default function AppNavigator() {
-    const { user } = useStore();
-    const [isInitialRender, setIsInitialRender] = useState(true);
+    // Usa useAuthSync per sincronizzare Firebase con lo store
+    const { user, isAuthenticated, loading, isInitializing } = useAuthSync();
 
-    useEffect(() => {
-        if (isInitialRender) {
-            setIsInitialRender(false);
-        }
-    }, [isInitialRender]);
-
-    const isAuthenticated = !isInitialRender && user?.isLoggedIn;
     const isMechanic = user?.isMechanic;
 
     console.log('📱 AppNavigator State:', {
         isAuthenticated,
+        isInitializing,
+        loading,
         isMechanic,
-        userType: user?.userType,
-        userId: user?.uid,
+        userEmail: user?.email,
+        userId: user?.id,
     });
+
+    // Mostra loading durante l'inizializzazione
+    if (isInitializing || loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text style={styles.loadingText}>Caricamento...</Text>
+            </View>
+        );
+    }
 
     return (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -667,6 +673,18 @@ export function reset(routeName: keyof RootStackParamList) {
 // STYLES
 // ============================================
 const styles = StyleSheet.create({
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#64748B',
+        fontWeight: '500',
+    },
     placeholder: {
         flex: 1,
         justifyContent: 'center',

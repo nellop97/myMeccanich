@@ -42,13 +42,15 @@ import {
   useAppState
 } from '../hooks/useUserData';
 import { useStore } from '../store';
+import { useLogout } from '../hooks/useAuthSync';
 
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const theme = useTheme();
 
   // 🔒 USA I NUOVI HOOK SICURI
-  const { logout, loading } = useAuth();
+  const { loading } = useAuth();
+  const { logout } = useLogout(); // ✅ Nuovo hook per logout completo
   const {
     userName,
     userEmail,

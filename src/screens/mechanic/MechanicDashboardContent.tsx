@@ -68,11 +68,10 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
   // Usa l'hook per le statistiche reali
   const { stats: dashboardStats, recentActivity, isLoading, error, refreshStats } = useMechanicStats();
 
-  // Funzione placeholder per la navigazione alla schermata delle auto in officina
+  // Navigazione alla schermata delle auto in officina
   const goToWorkshopCars = () => {
     console.log("Navigating to workshop cars screen...");
-    // Qui andrebbe la navigazione effettiva, es: navigation.navigate('WorkshopCarsScreen');
-    // Per ora, simuliamo solo un log.
+    navigation.navigate('AllCarsInWorkshop' as never);
   };
 
   // Statistiche principali
