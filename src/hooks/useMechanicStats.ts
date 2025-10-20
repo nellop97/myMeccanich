@@ -75,11 +75,11 @@ export const useMechanicStats = () => {
   const loadCarsInWorkshop = useCallback(async (mechanicId: string): Promise<number> => {
     try {
       const carsQuery = query(
-        collection(db, 'workshop_cars'),
-        where('mechanicId', '==', mechanicId),
-        where('status', 'in', ['in_progress', 'waiting_parts', 'ready_for_pickup'])
+        collection(db, 'workshopCars'),
+        where('workshopId', '==', mechanicId),
+        where('isActive', '==', true)
       );
-      
+
       const carsSnapshot = await getDocs(carsQuery);
       return carsSnapshot.size;
     } catch (error) {
@@ -238,10 +238,9 @@ export const useMechanicStats = () => {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const completedJobsQuery = query(
-        collection(db, 'workshop_cars'),
-        where('mechanicId', '==', mechanicId),
-        where('status', '==', 'completed'),
-        where('completedDate', '>=', Timestamp.fromDate(thirtyDaysAgo))
+        collection(db, 'workshopCars'),
+        where('workshopId', '==', mechanicId),
+        where('status', '==', 'completed')
       );
 
       const completedJobsSnapshot = await getDocs(completedJobsQuery);
@@ -296,8 +295,8 @@ export const useMechanicStats = () => {
       
       // Auto aggiunte recentemente
       const recentCarsQuery = query(
-        collection(db, 'workshop_cars'),
-        where('mechanicId', '==', mechanicId),
+        collection(db, 'workshopCars'),
+        where('workshopId', '==', mechanicId),
         orderBy('createdAt', 'desc'),
         limit(3)
       );
@@ -309,7 +308,7 @@ export const useMechanicStats = () => {
           id: `car_${doc.id}`,
           type: 'car_added',
           title: 'Nuova auto aggiunta',
-          description: `${data.brand} ${data.model} - ${data.licensePlate}`,
+          description: `${data.make} ${data.model} - ${data.licensePlate}`,
           time: formatTimeAgo(data.createdAt?.toDate() || new Date()),
           relatedId: doc.id,
           icon: 'car-plus',
