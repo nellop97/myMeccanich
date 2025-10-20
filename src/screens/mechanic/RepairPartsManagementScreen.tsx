@@ -5,13 +5,12 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   Box,
   Calendar,
-  Car,
   ChevronLeft,
   DollarSign,
   Edit3,
   Package,
   Plus,
-  Refresh,
+  RefreshCw,
   Save,
   Settings,
   Trash2,
@@ -548,7 +547,7 @@ const RepairPartsManagementScreen = () => {
             style={[styles.refreshButton, { backgroundColor: theme.accent + '15' }]}
             onPress={handleRefresh}
           >
-            <Refresh size={18} color={theme.accent} />
+            <RefreshCw size={18} color={theme.accent} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: theme.accent }]}
