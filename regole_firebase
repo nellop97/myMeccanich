@@ -36,6 +36,38 @@ service firebase.storage {
       allow delete: if isOwner(userId);
     }
 
+    // ============================================
+    // WORKSHOP CARS - Foto e documenti
+    // ============================================
+
+    // Foto workshop cars - owner e meccanico possono gestire
+    match /workshop_cars/{workshopId}/{carId}/photos/{photo} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidSize();
+      allow delete: if isAuthenticated();
+    }
+
+    // Documenti workshop cars - owner e meccanico possono gestire
+    match /workshop_cars/{workshopId}/{carId}/documents/{document} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidSize();
+      allow delete: if isAuthenticated();
+    }
+
+    // Foto workshopCars (variante camelCase) - owner e meccanico possono gestire
+    match /workshopCars/{workshopId}/{carId}/photos/{photo} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidSize();
+      allow delete: if isAuthenticated();
+    }
+
+    // Documenti workshopCars (variante camelCase) - owner e meccanico possono gestire
+    match /workshopCars/{workshopId}/{carId}/documents/{document} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidSize();
+      allow delete: if isAuthenticated();
+    }
+
     // Foto profilo utente
     match /users/{userId}/profile/{image} {
       allow read: if isAuthenticated();
