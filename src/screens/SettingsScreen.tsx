@@ -47,7 +47,7 @@ import {
 } from 'lucide-react-native';
 
 // Firebase
-import { doc, updateDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { updateProfile, updateEmail, updatePassword, deleteUser } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '../services/firebase';
@@ -116,6 +116,31 @@ const SettingsScreen = () => {
   };
 
   // ============================================
+  // HELPERS
+  // ============================================
+
+  // Serializza le preferenze per Firebase (solo dati semplici)
+  const serializePreferences = () => {
+    return {
+      theme: preferences.theme,
+      language: preferences.language,
+      currency: preferences.currency,
+      distanceUnit: preferences.distanceUnit,
+      fuelUnit: preferences.fuelUnit,
+      notifications: {
+        maintenance: preferences.notifications.maintenance,
+        expenses: preferences.notifications.expenses,
+        documents: preferences.notifications.documents,
+        reminders: preferences.notifications.reminders,
+      },
+      privacy: {
+        shareData: preferences.privacy.shareData,
+        analytics: preferences.privacy.analytics,
+      },
+    };
+  };
+
+  // ============================================
   // HANDLERS
   // ============================================
 
@@ -160,12 +185,12 @@ const SettingsScreen = () => {
     // Sync to Firebase
     if (authUser?.uid) {
       try {
+        const updatedPrefs = serializePreferences();
+        updatedPrefs.theme = value ? 'dark' : 'light';
+
         await updateDoc(doc(db, 'users', authUser.uid), {
-          preferences: {
-            ...preferences,
-            theme: value ? 'dark' : 'light',
-          },
-          updatedAt: new Date(),
+          'preferences.theme': value ? 'dark' : 'light',
+          updatedAt: serverTimestamp(),
         });
       } catch (error) {
         console.error('Errore sync dark mode a Firebase:', error);
@@ -194,11 +219,8 @@ const SettingsScreen = () => {
           if (authUser?.uid) {
             try {
               await updateDoc(doc(db, 'users', authUser.uid), {
-                preferences: {
-                  ...preferences,
-                  language: lang.value,
-                },
-                updatedAt: new Date(),
+                'preferences.language': lang.value,
+                updatedAt: serverTimestamp(),
               });
             } catch (error) {
               console.error('Errore sync lingua a Firebase:', error);
@@ -219,18 +241,12 @@ const SettingsScreen = () => {
       },
     });
 
-    // Sync to Firebase
+    // Sync to Firebase (usa dot notation per aggiornare solo il campo specifico)
     if (authUser?.uid) {
       try {
         await updateDoc(doc(db, 'users', authUser.uid), {
-          preferences: {
-            ...preferences,
-            notifications: {
-              ...preferences.notifications,
-              [type]: newValue,
-            },
-          },
-          updatedAt: new Date(),
+          [`preferences.notifications.${type}`]: newValue,
+          updatedAt: serverTimestamp(),
         });
       } catch (error) {
         console.error('Errore sync notifiche a Firebase:', error);
@@ -248,18 +264,12 @@ const SettingsScreen = () => {
       },
     });
 
-    // Sync to Firebase
+    // Sync to Firebase (usa dot notation per aggiornare solo il campo specifico)
     if (authUser?.uid) {
       try {
         await updateDoc(doc(db, 'users', authUser.uid), {
-          preferences: {
-            ...preferences,
-            privacy: {
-              ...preferences.privacy,
-              [type]: newValue,
-            },
-          },
-          updatedAt: new Date(),
+          [`preferences.privacy.${type}`]: newValue,
+          updatedAt: serverTimestamp(),
         });
       } catch (error) {
         console.error('Errore sync privacy a Firebase:', error);
