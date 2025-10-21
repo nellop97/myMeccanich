@@ -52,22 +52,30 @@ service cloud.firestore {
     // VEHICLES COLLECTION (veicoli utenti)
     // ============================================
     match /vehicles/{vehicleId} {
-      // Lettura: proprietario o veicolo condiviso
+      // Lettura: proprietario (userId o ownerId) o veicolo condiviso
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
         request.auth.uid in resource.data.get('sharedWith', [])
       );
 
       // Creazione: solo utenti autenticati
-      allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      hasRequiredFields(['make', 'model', 'year', 'licensePlate']);
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid
+      );
 
       // Aggiornamento: solo il proprietario
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
 
       // Cancellazione: solo il proprietario
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
     }
 
     // ============================================
@@ -321,6 +329,88 @@ service cloud.firestore {
 
       // Cancellazione: solo il proprietario
       allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ============================================
+    // DEADLINES COLLECTION
+    // ============================================
+    match /deadlines/{deadlineId} {
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
+
+      // Lettura: proprietario diretto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Creazione: utenti autenticati per i propri veicoli
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(request.resource.data.vehicleId)
+      );
+
+      // Aggiornamento: proprietario
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Cancellazione: proprietario
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+    }
+
+    // ============================================
+    // ACTIVITIES COLLECTION
+    // ============================================
+    match /activities/{activityId} {
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
+
+      // Lettura: proprietario diretto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Creazione: utenti autenticati per i propri veicoli
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(request.resource.data.vehicleId)
+      );
+
+      // Aggiornamento: proprietario
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Cancellazione: proprietario
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
     }
 
     // ============================================
