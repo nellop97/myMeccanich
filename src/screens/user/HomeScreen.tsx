@@ -1,5 +1,5 @@
 // src/screens/user/HomeScreen.tsx
-// HomeScreen completa per Owner con Firebase + Responsive
+// HomeScreen completa per Owner con Firebase + Responsive + Dark Mode
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -33,6 +33,7 @@ import {
 } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAppThemeManager } from '../../hooks/useTheme';
 
 // Firebase
 import {
@@ -98,6 +99,7 @@ interface MonthlyStats {
 const HomeScreen = () => {
     const navigation = useNavigation();
     const { user } = useStore();
+    const { colors, isDark } = useAppThemeManager();
     const { width } = useWindowDimensions();
 
     // Responsive
