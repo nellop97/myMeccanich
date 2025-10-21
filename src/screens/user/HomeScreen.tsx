@@ -605,11 +605,25 @@ const HomeScreen = () => {
                     </View>
                 )}
 
-                {/* Altri Veicoli */}
-                {vehicles.length > 1 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Altri Veicoli</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {/* Le Mie Auto */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Le Mie Auto</Text>
+                        <TouchableOpacity
+                            style={[styles.addVehicleButton, isDesktop && styles.addVehicleButtonDesktop]}
+                            onPress={() => navigation.navigate('AddVehicle' as never)}
+                        >
+                            <Plus size={18} color="#007AFF" strokeWidth={2.5} />
+                            <Text style={styles.addVehicleButtonText}>Aggiungi</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {vehicles.length > 1 && (
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.vehiclesScrollContent}
+                        >
                             {vehicles
                                 .filter((v) => v.id !== selectedVehicle?.id)
                                 .map((vehicle) => (
@@ -630,41 +644,34 @@ const HomeScreen = () => {
                                     </TouchableOpacity>
                                 ))}
                         </ScrollView>
-                    </View>
-                )}
+                    )}
+                </View>
 
-                {/* Spacer per FAB */}
-                <View style={{ height: 100 }} />
+                {/* Spacer finale */}
+                <View style={{ height: 40 }} />
             </ScrollView>
-
-            {/* FAB */}
-            <TouchableOpacity
-                style={[styles.fab, isDesktop && styles.fabDesktop]}
-                onPress={() => navigation.navigate('AddVehicle' as never)}
-                activeOpacity={0.8}
-            >
-                <Plus size={28} color="#fff" strokeWidth={2.5} />
-            </TouchableOpacity>
         </SafeAreaView>
     );
 };
 
 // ============================================
-// STYLES
+// STYLES - APPLE DESIGN STYLE
 // ============================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#FFFFFF',
     },
     centerContent: {
         justifyContent: 'center',
         alignItems: 'center',
     },
     loadingText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: '#64748b',
+        marginTop: 20,
+        fontSize: 17,
+        fontWeight: '400',
+        color: '#8E8E93',
+        letterSpacing: -0.4,
     },
 
     // Header
@@ -672,80 +679,80 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: '#fff',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 2,
-            },
-            android: {
-                elevation: 2,
-            },
-            web: {
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-            },
-        }),
+        paddingHorizontal: 24,
+        paddingTop: 20,
+        paddingBottom: 20,
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: Platform.OS === 'web' ? 0.5 : 0,
+        borderBottomColor: '#E5E5EA',
     },
     headerTitle: {
-        fontSize: 24,
+        fontSize: 34,
         fontWeight: '700',
-        color: '#1e293b',
-        letterSpacing: -0.5,
+        color: '#000000',
+        letterSpacing: -0.8,
     },
     headerGreeting: {
-        fontSize: 24,
+        fontSize: 34,
         fontWeight: '700',
-        color: '#1e293b',
-        letterSpacing: -0.5,
+        color: '#000000',
+        letterSpacing: -0.8,
     },
     headerSubtitle: {
-        fontSize: 14,
-        color: '#64748b',
-        marginTop: 2,
+        fontSize: 15,
+        fontWeight: '400',
+        color: '#8E8E93',
+        marginTop: 4,
+        letterSpacing: -0.3,
     },
     headerActions: {
         flexDirection: 'row',
-        gap: 12,
+        gap: 16,
     },
     headerButton: {
-        width: 40,
-        height: 40,
+        width: 44,
+        height: 44,
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
+        borderRadius: 22,
+        backgroundColor: '#F2F2F7',
     },
     badge: {
         position: 'absolute',
-        top: 4,
-        right: 4,
-        backgroundColor: '#ef4444',
-        width: 18,
-        height: 18,
-        borderRadius: 9,
+        top: 6,
+        right: 6,
+        backgroundColor: '#FF3B30',
+        minWidth: 20,
+        height: 20,
+        borderRadius: 10,
         alignItems: 'center',
         justifyContent: 'center',
+        paddingHorizontal: 6,
+        borderWidth: 2,
+        borderColor: '#FFFFFF',
     },
     badgeText: {
-        color: '#fff',
-        fontSize: 10,
-        fontWeight: '700',
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '600',
+        letterSpacing: -0.2,
     },
 
     // ScrollView
     scrollView: {
         flex: 1,
+        backgroundColor: '#F2F2F7',
     },
     scrollContent: {
-        padding: 20,
+        padding: 24,
     },
     scrollContentDesktop: {
-        maxWidth: 1200,
+        maxWidth: 1400,
         alignSelf: 'center',
         width: '100%',
+        paddingHorizontal: 80,
+        paddingVertical: 40,
     },
 
     // Empty State
@@ -754,121 +761,113 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 40,
+        backgroundColor: '#F2F2F7',
     },
     emptyIconContainer: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: '#f1f5f9',
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+        backgroundColor: '#E5E5EA',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 24,
+        marginBottom: 32,
     },
     emptyTitle: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: '700',
-        color: '#1e293b',
+        color: '#000000',
         marginBottom: 12,
         textAlign: 'center',
+        letterSpacing: -0.6,
     },
     emptyDescription: {
-        fontSize: 16,
-        color: '#64748b',
+        fontSize: 17,
+        fontWeight: '400',
+        color: '#8E8E93',
         textAlign: 'center',
         lineHeight: 24,
-        marginBottom: 32,
+        marginBottom: 40,
+        maxWidth: 400,
+        letterSpacing: -0.4,
     },
     emptyButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        backgroundColor: '#3b82f6',
-        paddingHorizontal: 32,
-        paddingVertical: 16,
-        borderRadius: 16,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#3b82f6',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 4,
-            },
-            web: {
-                boxShadow: '0 4px 8px rgba(59,130,246,0.3)',
-            },
-        }),
+        gap: 8,
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 28,
+        paddingVertical: 14,
+        borderRadius: 14,
     },
     emptyButtonText: {
-        color: '#fff',
+        color: '#FFFFFF',
         fontSize: 17,
         fontWeight: '600',
-        letterSpacing: 0.3,
+        letterSpacing: -0.4,
     },
 
-    // Vehicle Card
+    // Vehicle Card - Apple Style
     vehicleCard: {
-        borderRadius: 24,
+        borderRadius: 20,
         overflow: 'hidden',
-        marginBottom: 24,
+        marginBottom: 32,
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.1,
-                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 16,
             },
             android: {
-                elevation: 4,
+                elevation: 3,
             },
             web: {
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                boxShadow: '0 2px 16px rgba(0,0,0,0.08)',
             },
         }),
     },
     vehicleGradient: {
-        padding: 24,
+        padding: 32,
     },
     vehicleHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 24,
     },
     vehicleInfo: {
         flex: 1,
     },
     vehicleName: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: '700',
-        color: '#fff',
-        marginBottom: 6,
-        letterSpacing: -0.5,
+        color: '#FFFFFF',
+        marginBottom: 8,
+        letterSpacing: -0.7,
     },
     vehiclePlate: {
-        fontSize: 18,
+        fontSize: 19,
         fontWeight: '600',
-        color: 'rgba(255,255,255,0.9)',
-        marginBottom: 12,
-        letterSpacing: 1,
+        color: 'rgba(255,255,255,0.95)',
+        marginBottom: 16,
+        letterSpacing: 1.2,
     },
     vehicleTag: {
         alignSelf: 'flex-start',
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 10,
     },
     vehicleTagText: {
-        color: '#fff',
-        fontSize: 13,
+        color: '#FFFFFF',
+        fontSize: 14,
         fontWeight: '600',
+        letterSpacing: -0.3,
     },
     vehicleImage: {
-        width: 120,
-        height: 80,
+        width: 130,
+        height: 90,
     },
     vehicleActions: {
         flexDirection: 'row',
@@ -878,294 +877,301 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        paddingHorizontal: 24,
+        paddingVertical: 14,
         borderRadius: 12,
     },
     vehicleActionText: {
-        color: '#fff',
-        fontSize: 15,
+        color: '#FFFFFF',
+        fontSize: 16,
         fontWeight: '600',
+        letterSpacing: -0.3,
     },
 
-    // Stats
+    // Stats - Apple Style
     statsContainer: {
-        marginBottom: 24,
+        marginBottom: 32,
     },
     sectionTitle: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: '700',
-        color: '#1e293b',
-        marginBottom: 16,
-        letterSpacing: -0.3,
+        color: '#000000',
+        marginBottom: 20,
+        letterSpacing: -0.5,
     },
     statsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 16,
     },
     statsGridDesktop: {
         flexWrap: 'nowrap',
+        gap: 20,
     },
     statCard: {
         flex: 1,
-        minWidth: 150,
-        backgroundColor: '#fff',
+        minWidth: 160,
+        backgroundColor: '#FFFFFF',
         borderRadius: 16,
-        padding: 16,
+        padding: 24,
         alignItems: 'center',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.05,
-                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.06,
+                shadowRadius: 12,
             },
             android: {
                 elevation: 2,
             },
             web: {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                boxShadow: '0 1px 12px rgba(0,0,0,0.06)',
             },
         }),
     },
     statIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 12,
+        marginBottom: 16,
     },
     statValue: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: '700',
-        color: '#1e293b',
-        marginBottom: 4,
+        color: '#000000',
+        marginBottom: 6,
+        letterSpacing: -0.5,
     },
     statLabel: {
-        fontSize: 13,
-        color: '#64748b',
+        fontSize: 14,
+        fontWeight: '400',
+        color: '#8E8E93',
         textAlign: 'center',
+        letterSpacing: -0.3,
     },
 
-    // Quick Actions
+    // Quick Actions - Apple Style
     quickActionsContainer: {
-        marginBottom: 24,
+        marginBottom: 32,
     },
     quickActions: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 16,
     },
     quickActionButton: {
         flex: 1,
-        minWidth: 70,
+        minWidth: 75,
         alignItems: 'center',
-        gap: 8,
+        gap: 12,
     },
     quickActionIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 16,
+        width: 64,
+        height: 64,
+        borderRadius: 18,
         alignItems: 'center',
         justifyContent: 'center',
     },
     quickActionLabel: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#1e293b',
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#000000',
         textAlign: 'center',
+        letterSpacing: -0.3,
     },
 
-    // Section
+    // Section - Apple Style
     section: {
-        marginBottom: 24,
+        marginBottom: 32,
     },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 20,
     },
     sectionLink: {
-        fontSize: 14,
-        color: '#3b82f6',
+        fontSize: 15,
+        color: '#007AFF',
         fontWeight: '600',
+        letterSpacing: -0.3,
     },
 
-    // Deadline Card
+    // Deadline Card - Apple Style
     deadlineCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 16,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 14,
+        padding: 18,
         marginBottom: 12,
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
+                shadowOffset: { width: 0, height: 1 },
                 shadowOpacity: 0.05,
-                shadowRadius: 4,
+                shadowRadius: 8,
             },
             android: {
-                elevation: 2,
+                elevation: 1,
             },
             web: {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                boxShadow: '0 1px 8px rgba(0,0,0,0.05)',
             },
         }),
     },
     deadlineIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
+        width: 48,
+        height: 48,
+        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 12,
+        marginRight: 16,
     },
     deadlineInfo: {
         flex: 1,
     },
     deadlineTitle: {
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '600',
-        color: '#1e293b',
-        marginBottom: 4,
+        color: '#000000',
+        marginBottom: 5,
+        letterSpacing: -0.3,
     },
     deadlineDate: {
-        fontSize: 13,
-        color: '#64748b',
+        fontSize: 14,
+        fontWeight: '400',
+        color: '#8E8E93',
+        letterSpacing: -0.2,
     },
 
-    // Activity Card
+    // Activity Card - Apple Style
     activityCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 16,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 14,
+        padding: 18,
         marginBottom: 12,
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
+                shadowOffset: { width: 0, height: 1 },
                 shadowOpacity: 0.05,
-                shadowRadius: 4,
+                shadowRadius: 8,
             },
             android: {
-                elevation: 2,
+                elevation: 1,
             },
             web: {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                boxShadow: '0 1px 8px rgba(0,0,0,0.05)',
             },
         }),
     },
     activityIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
+        width: 48,
+        height: 48,
+        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 12,
+        marginRight: 16,
     },
     activityInfo: {
         flex: 1,
     },
     activityTitle: {
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '600',
-        color: '#1e293b',
-        marginBottom: 4,
+        color: '#000000',
+        marginBottom: 5,
+        letterSpacing: -0.3,
     },
     activityDate: {
-        fontSize: 13,
-        color: '#64748b',
+        fontSize: 14,
+        fontWeight: '400',
+        color: '#8E8E93',
+        letterSpacing: -0.2,
     },
     activityAmount: {
-        fontSize: 16,
+        fontSize: 17,
         fontWeight: '700',
-        color: '#1e293b',
+        color: '#000000',
+        letterSpacing: -0.4,
     },
 
-    // Other Vehicles
+    // Other Vehicles - Apple Style
+    vehiclesScrollContent: {
+        gap: 12,
+    },
     otherVehicleCard: {
-        backgroundColor: '#fff',
+        backgroundColor: '#FFFFFF',
         borderRadius: 16,
-        padding: 16,
+        padding: 20,
         marginRight: 12,
-        width: 140,
+        width: 150,
         alignItems: 'center',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
+                shadowOffset: { width: 0, height: 1 },
                 shadowOpacity: 0.05,
-                shadowRadius: 4,
+                shadowRadius: 8,
             },
             android: {
-                elevation: 2,
+                elevation: 1,
             },
             web: {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                boxShadow: '0 1px 8px rgba(0,0,0,0.05)',
             },
         }),
     },
     otherVehicleIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#f1f5f9',
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#F2F2F7',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 12,
+        marginBottom: 14,
     },
     otherVehicleName: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '600',
-        color: '#1e293b',
+        color: '#000000',
         textAlign: 'center',
-        marginBottom: 4,
+        marginBottom: 5,
+        letterSpacing: -0.3,
     },
     otherVehiclePlate: {
-        fontSize: 12,
-        color: '#64748b',
+        fontSize: 13,
+        fontWeight: '400',
+        color: '#8E8E93',
+        letterSpacing: -0.2,
     },
 
-    // FAB
-    fab: {
-        position: 'absolute',
-        bottom: 24,
-        right: 24,
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: '#3b82f6',
+    // Add Vehicle Button - Apple Style
+    addVehicleButton: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#3b82f6',
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.4,
-                shadowRadius: 12,
-            },
-            android: {
-                elevation: 6,
-            },
-            web: {
-                boxShadow: '0 6px 12px rgba(59,130,246,0.4)',
-            },
-        }),
+        gap: 6,
+        backgroundColor: '#F2F2F7',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 12,
     },
-    fabDesktop: {
-        bottom: 32,
-        right: 32,
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+    addVehicleButtonDesktop: {
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+    },
+    addVehicleButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#007AFF',
+        letterSpacing: -0.3,
     },
 });
 
