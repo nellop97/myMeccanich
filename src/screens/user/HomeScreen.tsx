@@ -121,6 +121,17 @@ const HomeScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    // Dynamic theme colors
+    const themeColors = React.useMemo(() => ({
+        background: colors.background,
+        surface: colors.surface,
+        text: colors.onSurface,
+        textSecondary: colors.onSurfaceVariant,
+        border: colors.outline,
+        primary: colors.primary,
+        error: colors.error,
+    }), [colors]);
+
     // ============================================
     // LOAD DATA
     // ============================================
@@ -320,12 +331,13 @@ const HomeScreen = () => {
     // ============================================
     if (isDesktop || Platform.OS === 'web') {
         return (
-            <View style={styles.webContainer}>
+            <View style={[styles.webContainer, { backgroundColor: themeColors.background }]}>
+                <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
                 {/* Web Header */}
-                <View style={styles.webHeader}>
+                <View style={[styles.webHeader, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
                     <View style={styles.webHeaderLeft}>
-                        <Text style={styles.webHeaderTitle}>MyMeccanich</Text>
-                        <Text style={styles.webHeaderGreeting}>
+                        <Text style={[styles.webHeaderTitle, { color: themeColors.text }]}>MyMeccanich</Text>
+                        <Text style={[styles.webHeaderGreeting, { color: themeColors.textSecondary }]}>
                             Ciao, {user?.name || 'Benvenuto'}
                         </Text>
                     </View>
@@ -653,14 +665,14 @@ const HomeScreen = () => {
     // RENDER MOBILE LAYOUT
     // ============================================
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
 
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
                 <View>
-                    <Text style={styles.headerGreeting}>Ciao, {user?.name || 'Benvenuto'}</Text>
-                    <Text style={styles.headerSubtitle}>
+                    <Text style={[styles.headerGreeting, { color: themeColors.text }]}>Ciao, {user?.name || 'Benvenuto'}</Text>
+                    <Text style={[styles.headerSubtitle, { color: themeColors.textSecondary }]}>
                         {vehicles.length} veicol{vehicles.length === 1 ? 'o' : 'i'}
                     </Text>
                 </View>
@@ -686,7 +698,7 @@ const HomeScreen = () => {
             </View>
 
             <ScrollView
-                style={styles.scrollView}
+                style={[styles.scrollView, { backgroundColor: themeColors.background }]}
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
