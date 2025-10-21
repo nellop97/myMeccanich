@@ -41,13 +41,14 @@ import {
   Database,
   Info,
   HelpCircle,
-  Download,
-  Upload,
+  ArrowLeft,
+  UserX,
+  AlertTriangle,
 } from 'lucide-react-native';
 
 // Firebase
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { updateProfile, updateEmail, updatePassword } from 'firebase/auth';
+import { doc, updateDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { updateProfile, updateEmail, updatePassword, deleteUser } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '../services/firebase';
 
@@ -152,9 +153,24 @@ const SettingsScreen = () => {
   };
 
   // Toggle dark mode
-  const handleToggleDarkMode = (value: boolean) => {
+  const handleToggleDarkMode = async (value: boolean) => {
     setDarkMode(value);
     updatePreferences({ theme: value ? 'dark' : 'light' });
+
+    // Sync to Firebase
+    if (authUser?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', authUser.uid), {
+          preferences: {
+            ...preferences,
+            theme: value ? 'dark' : 'light',
+          },
+          updatedAt: new Date(),
+        });
+      } catch (error) {
+        console.error('Errore sync dark mode a Firebase:', error);
+      }
+    }
   };
 
   // Change language
@@ -171,29 +187,84 @@ const SettingsScreen = () => {
       '',
       languages.map(lang => ({
         text: lang.label,
-        onPress: () => updatePreferences({ language: lang.value as any }),
+        onPress: async () => {
+          updatePreferences({ language: lang.value as any });
+
+          // Sync to Firebase
+          if (authUser?.uid) {
+            try {
+              await updateDoc(doc(db, 'users', authUser.uid), {
+                preferences: {
+                  ...preferences,
+                  language: lang.value,
+                },
+                updatedAt: new Date(),
+              });
+            } catch (error) {
+              console.error('Errore sync lingua a Firebase:', error);
+            }
+          }
+        },
       }))
     );
   };
 
   // Toggle notifications
-  const handleToggleNotification = (type: keyof typeof preferences.notifications) => {
+  const handleToggleNotification = async (type: keyof typeof preferences.notifications) => {
+    const newValue = !preferences.notifications[type];
     updatePreferences({
       notifications: {
         ...preferences.notifications,
-        [type]: !preferences.notifications[type],
+        [type]: newValue,
       },
     });
+
+    // Sync to Firebase
+    if (authUser?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', authUser.uid), {
+          preferences: {
+            ...preferences,
+            notifications: {
+              ...preferences.notifications,
+              [type]: newValue,
+            },
+          },
+          updatedAt: new Date(),
+        });
+      } catch (error) {
+        console.error('Errore sync notifiche a Firebase:', error);
+      }
+    }
   };
 
   // Toggle privacy
-  const handleTogglePrivacy = (type: keyof typeof preferences.privacy) => {
+  const handleTogglePrivacy = async (type: keyof typeof preferences.privacy) => {
+    const newValue = !preferences.privacy[type];
     updatePreferences({
       privacy: {
         ...preferences.privacy,
-        [type]: !preferences.privacy[type],
+        [type]: newValue,
       },
     });
+
+    // Sync to Firebase
+    if (authUser?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', authUser.uid), {
+          preferences: {
+            ...preferences,
+            privacy: {
+              ...preferences.privacy,
+              [type]: newValue,
+            },
+          },
+          updatedAt: new Date(),
+        });
+      } catch (error) {
+        console.error('Errore sync privacy a Firebase:', error);
+      }
+    }
   };
 
   // Logout
@@ -218,20 +289,82 @@ const SettingsScreen = () => {
     ]);
   };
 
-  // Reset app data
-  const handleResetAppData = () => {
+  // Delete account completely
+  const handleDeleteAccount = () => {
     Alert.alert(
-      'Cancella Dati App',
-      'Questa azione cancellerà tutte le impostazioni salvate localmente. I tuoi dati su Firebase rimarranno intatti. Vuoi continuare?',
+      'Elimina Account',
+      'ATTENZIONE: Questa azione eliminerà permanentemente il tuo account e tutti i dati associati. Questa operazione NON può essere annullata.\n\nSei assolutamente sicuro?',
       [
         { text: 'Annulla', style: 'cancel' },
         {
-          text: 'Cancella',
+          text: 'Elimina Account',
           style: 'destructive',
           onPress: () => {
-            const { resetStore } = useStore.getState();
-            resetStore();
-            Alert.alert('Completato', 'Dati app cancellati. Riavvia l\'app per applicare le modifiche.');
+            // Doppia conferma per sicurezza
+            Alert.alert(
+              'Conferma Finale',
+              'Confermi di voler eliminare definitivamente il tuo account?',
+              [
+                { text: 'Annulla', style: 'cancel' },
+                {
+                  text: 'Sì, Elimina',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setLoading(true);
+
+                      if (!authUser?.uid) {
+                        throw new Error('Utente non autenticato');
+                      }
+
+                      // 1. Elimina documento utente da Firestore
+                      await deleteDoc(doc(db, 'users', authUser.uid));
+
+                      // 2. Elimina tutti i veicoli dell'utente
+                      // (In produzione, dovresti anche eliminare manutenzioni, spese, etc.)
+
+                      // 3. Elimina account Firebase Auth
+                      const currentUser = auth.currentUser;
+                      if (currentUser) {
+                        await deleteUser(currentUser);
+                      }
+
+                      // 4. Pulisci lo store locale
+                      const { resetStore } = useStore.getState();
+                      resetStore();
+
+                      Alert.alert(
+                        'Account Eliminato',
+                        'Il tuo account è stato eliminato definitivamente.',
+                        [
+                          {
+                            text: 'OK',
+                            onPress: () => {
+                              // Il redirect alla login avverrà automaticamente
+                            },
+                          },
+                        ]
+                      );
+                    } catch (error: any) {
+                      console.error('Errore eliminazione account:', error);
+                      setLoading(false);
+
+                      if (error.code === 'auth/requires-recent-login') {
+                        Alert.alert(
+                          'Riautenticazione Richiesta',
+                          'Per motivi di sicurezza, devi effettuare nuovamente il login prima di eliminare l\'account.'
+                        );
+                      } else {
+                        Alert.alert(
+                          'Errore',
+                          'Impossibile eliminare l\'account. Riprova più tardi.'
+                        );
+                      }
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -364,36 +497,6 @@ const SettingsScreen = () => {
       ],
     },
     {
-      title: 'Gestione Dati',
-      items: [
-        {
-          id: 'export-data',
-          title: 'Esporta Dati',
-          subtitle: 'Scarica i tuoi dati',
-          icon: Download,
-          type: 'navigation',
-          onPress: () => Alert.alert('Info', 'Funzionalità in arrivo'),
-        },
-        {
-          id: 'import-data',
-          title: 'Importa Dati',
-          subtitle: 'Carica dati da backup',
-          icon: Upload,
-          type: 'navigation',
-          onPress: () => Alert.alert('Info', 'Funzionalità in arrivo'),
-        },
-        {
-          id: 'reset-data',
-          title: 'Cancella Dati App',
-          subtitle: 'Reset impostazioni locali',
-          icon: Trash2,
-          type: 'action',
-          onPress: handleResetAppData,
-          danger: true,
-        },
-      ],
-    },
-    {
       title: 'Supporto',
       items: [
         {
@@ -415,7 +518,7 @@ const SettingsScreen = () => {
       ],
     },
     {
-      title: 'Account',
+      title: 'Zona Pericolo',
       items: [
         {
           id: 'logout',
@@ -424,6 +527,15 @@ const SettingsScreen = () => {
           icon: LogOut,
           type: 'action',
           onPress: handleLogout,
+          danger: true,
+        },
+        {
+          id: 'delete-account',
+          title: 'Elimina Account',
+          subtitle: 'Cancella definitivamente il tuo account',
+          icon: UserX,
+          type: 'action',
+          onPress: handleDeleteAccount,
           danger: true,
         },
       ],
@@ -443,6 +555,16 @@ const SettingsScreen = () => {
         isDesktop && styles.headerDesktop,
       ]}
     >
+      {/* Pulsante Back */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.7}
+      >
+        <ArrowLeft size={24} color="#ffffff" />
+        <Text style={styles.backButtonText}>Indietro</Text>
+      </TouchableOpacity>
+
       <View style={styles.headerContent}>
         <View style={styles.profilePhotoContainer}>
           <TouchableOpacity onPress={handleUploadPhoto} activeOpacity={0.8}>
@@ -628,6 +750,19 @@ const styles = StyleSheet.create({
   headerDesktop: {
     paddingVertical: 32,
     paddingHorizontal: 40,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  backButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   headerContent: {
     flexDirection: 'row',
