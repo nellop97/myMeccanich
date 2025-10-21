@@ -1,532 +1,779 @@
-// src/screens/SettingsScreen.tsx - VERSIONE AGGIORNATA SICURA
-import React, { useState } from 'react';
+// src/screens/SettingsScreen.tsx
+/**
+ * SettingsScreen - Schermata Impostazioni Moderna e Responsive
+ * Design minimale e pulito con layout separato per Web e Mobile
+ * Integrazione completa con Firebase per gestione profilo e settings
+ */
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
+  Text,
   ScrollView,
+  TouchableOpacity,
   StyleSheet,
   Alert,
   Platform,
-} from 'react-native';
-import {
-  Card,
-  Text,
+  useWindowDimensions,
+  ActivityIndicator,
   Switch,
-  List,
-  Divider,
-  Button,
-  Dialog,
-  Portal,
-  RadioButton,
-  useTheme,
-} from 'react-native-paper';
+  Image,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   User,
-  Palette,
-  Globe,
+  Mail,
   Bell,
+  Moon,
+  Sun,
+  Globe,
   Shield,
-  HelpCircle,
   LogOut,
   Trash2,
+  ChevronRight,
+  Camera,
+  Settings as SettingsIcon,
+  Lock,
+  Eye,
+  Database,
+  Info,
+  HelpCircle,
   Download,
   Upload,
 } from 'lucide-react-native';
 
-// 🔒 USA I NUOVI HOOK SICURI
+// Firebase
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { updateProfile, updateEmail, updatePassword } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage, auth } from '../services/firebase';
+
+// Hooks
 import { useAuth } from '../hooks/useAuth';
-import {
-  useUserData,
-  useAppTheme,
-  useUserCars,
-  useAppState
-} from '../hooks/useUserData';
 import { useStore } from '../store';
 import { useLogout } from '../hooks/useAuthSync';
+import { useProfile } from '../hooks/useProfile';
 
-const SettingsScreen: React.FC = () => {
+// ============================================
+// INTERFACES
+// ============================================
+interface SettingItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  icon: any;
+  type: 'navigation' | 'toggle' | 'action';
+  value?: boolean;
+  onPress?: () => void;
+  onToggle?: (value: boolean) => void;
+  danger?: boolean;
+}
+
+interface SettingSection {
+  title: string;
+  items: SettingItem[];
+}
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
+const SettingsScreen = () => {
   const navigation = useNavigation();
-  const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const { user: authUser } = useAuth();
+  const { user, darkMode, preferences, setDarkMode, updatePreferences } = useStore();
+  const { logout } = useLogout();
+  const { profile, uploadProfilePhoto, uploadingPhoto } = useProfile();
 
-  // 🔒 USA I NUOVI HOOK SICURI
-  const { loading } = useAuth();
-  const { logout } = useLogout(); // ✅ Nuovo hook per logout completo
-  const {
-    userName,
-    userEmail,
-    isMechanic,
-    isAuthenticated,
-    profileComplete
-  } = useUserData();
-  const {
-    darkMode,
-    preferences,
-    setDarkMode,
-    updatePreferences
-  } = useAppTheme();
-  const { cars, carsCount } = useUserCars();
-  const { resetAppData } = useStore();
+  // Responsive breakpoints
+  const isDesktop = width >= 1024;
+  const isTablet = width >= 768 && width < 1024;
+  const isMobile = width < 768;
 
-  // Stati locali per dialoghi
+  // States
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showThemeDialog, setShowThemeDialog] = useState(false);
-  const [showLanguageDialog, setShowLanguageDialog] = useState(false);
-  const [tempTheme, setTempTheme] = useState(preferences.theme);
-  const [tempLanguage, setTempLanguage] = useState(preferences.language);
 
-  // 🚨 Controllo sicurezza
-  if (!isAuthenticated) {
-    return null; // AppNavigator gestirà il redirect
-  }
+  // Theme colors
+  const theme = {
+    background: darkMode ? '#0f172a' : '#f8fafc',
+    surface: darkMode ? '#1e293b' : '#ffffff',
+    card: darkMode ? '#334155' : '#ffffff',
+    primary: '#3b82f6',
+    primaryDark: '#1d4ed8',
+    text: darkMode ? '#f1f5f9' : '#0f172a',
+    textSecondary: darkMode ? '#94a3b8' : '#64748b',
+    border: darkMode ? '#334155' : '#e2e8f0',
+    success: '#10b981',
+    warning: '#f59e0b',
+    danger: '#ef4444',
+    accent: darkMode ? '#7c3aed' : '#a855f7',
+  };
 
-  // 🚪 Gestione logout
-  const handleLogout = async () => {
+  // ============================================
+  // HANDLERS
+  // ============================================
+
+  // Upload foto profilo
+  const handleUploadPhoto = async () => {
     try {
-      await logout();
-      setShowLogoutDialog(false);
-      console.log('✅ Logout completato');
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permesso Negato', 'Abbiamo bisogno del permesso per accedere alle foto');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploading(true);
+        try {
+          await uploadProfilePhoto(result.assets[0].uri);
+          Alert.alert('Successo', 'Foto profilo aggiornata!');
+        } catch (error) {
+          Alert.alert('Errore', 'Impossibile aggiornare la foto profilo');
+        } finally {
+          setUploading(false);
+        }
+      }
     } catch (error) {
-      console.error('❌ Errore logout:', error);
-      Alert.alert('Errore', 'Impossibile disconnettere l\'account');
+      console.error('Errore upload foto:', error);
+      Alert.alert('Errore', 'Si è verificato un errore');
     }
   };
 
-  // 🗑️ Cancellazione dati app
-  const handleDeleteAppData = () => {
+  // Toggle dark mode
+  const handleToggleDarkMode = (value: boolean) => {
+    setDarkMode(value);
+    updatePreferences({ theme: value ? 'dark' : 'light' });
+  };
+
+  // Change language
+  const handleChangeLanguage = () => {
+    const languages = [
+      { label: 'Italiano', value: 'it' },
+      { label: 'English', value: 'en' },
+      { label: 'Français', value: 'fr' },
+      { label: 'Deutsch', value: 'de' },
+    ];
+
     Alert.alert(
-        'Conferma Cancellazione',
-        'Sei sicuro di voler cancellare tutti i dati dell\'app? Questa azione non può essere annullata.',
-        [
-          { text: 'Annulla', style: 'cancel' },
-          {
-            text: 'Cancella',
-            style: 'destructive',
-            onPress: () => {
-              resetAppData();
-              setShowDeleteDialog(false);
-              Alert.alert('Completato', 'Tutti i dati dell\'app sono stati cancellati');
-            },
-          },
-        ]
+      'Seleziona Lingua',
+      '',
+      languages.map(lang => ({
+        text: lang.label,
+        onPress: () => updatePreferences({ language: lang.value as any }),
+      }))
     );
   };
 
-  // 🎨 Gestione tema
-  const handleThemeChange = () => {
-    updatePreferences({ theme: tempTheme });
-    setShowThemeDialog(false);
-  };
-
-  // 🌍 Gestione lingua
-  const handleLanguageChange = () => {
-    updatePreferences({ language: tempLanguage });
-    setShowLanguageDialog(false);
-  };
-
-  // 🔔 Toggle notifiche
-  const toggleNotification = (type: keyof typeof preferences.notifications) => {
+  // Toggle notifications
+  const handleToggleNotification = (type: keyof typeof preferences.notifications) => {
     updatePreferences({
       notifications: {
         ...preferences.notifications,
-        [type]: !preferences.notifications[type]
-      }
+        [type]: !preferences.notifications[type],
+      },
     });
   };
 
-  // 🛡️ Toggle privacy
-  const togglePrivacy = (type: keyof typeof preferences.privacy) => {
+  // Toggle privacy
+  const handleTogglePrivacy = (type: keyof typeof preferences.privacy) => {
     updatePreferences({
       privacy: {
         ...preferences.privacy,
-        [type]: !preferences.privacy[type]
-      }
+        [type]: !preferences.privacy[type],
+      },
     });
   };
 
-  // 📱 Navigazione profilo
-  const handleProfilePress = () => {
-    navigation.navigate('Profile' as any, { userId: 'current' });
+  // Logout
+  const handleLogout = () => {
+    Alert.alert('Disconnetti', 'Sei sicuro di voler uscire?', [
+      { text: 'Annulla', style: 'cancel' },
+      {
+        text: 'Disconnetti',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setLoading(true);
+            await logout();
+            console.log('✅ Logout completato');
+          } catch (error) {
+            console.error('❌ Errore logout:', error);
+            Alert.alert('Errore', 'Impossibile disconnettere');
+            setLoading(false);
+          }
+        },
+      },
+    ]);
   };
 
-  // 📊 Informazioni app
-  const renderAppInfo = () => (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Informazioni App</Text>
+  // Reset app data
+  const handleResetAppData = () => {
+    Alert.alert(
+      'Cancella Dati App',
+      'Questa azione cancellerà tutte le impostazioni salvate localmente. I tuoi dati su Firebase rimarranno intatti. Vuoi continuare?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Cancella',
+          style: 'destructive',
+          onPress: () => {
+            const { resetStore } = useStore.getState();
+            resetStore();
+            Alert.alert('Completato', 'Dati app cancellati. Riavvia l\'app per applicare le modifiche.');
+          },
+        },
+      ]
+    );
+  };
 
-          <List.Item
-              title="Versione"
-              description="1.0.0"
-              left={() => <List.Icon icon="information" />}
-          />
+  // Navigate to profile
+  const handleNavigateToProfile = () => {
+    navigation.navigate('Profile' as never);
+  };
 
-          <List.Item
-              title="Auto registrate"
-              description={`${carsCount} ${carsCount === 1 ? 'auto' : 'auto'}`}
-              left={() => <List.Icon icon="car" />}
-          />
+  // Navigate to edit profile
+  const handleNavigateToEditProfile = () => {
+    navigation.navigate('EditProfile' as never);
+  };
 
-          <List.Item
-              title="Tipo account"
-              description={isMechanic ? 'Meccanico' : 'Proprietario auto'}
-              left={() => <User size={24} color={theme.colors.onSurfaceVariant} />}
-          />
+  // Navigate to privacy
+  const handleNavigateToPrivacy = () => {
+    navigation.navigate('Privacy' as never);
+  };
 
-          <List.Item
-              title="Profilo completo"
-              description={profileComplete ? 'Completato' : 'Incompleto'}
-              left={() => <List.Icon icon="account-check" />}
-              right={() => profileComplete ?
-                  <List.Icon icon="check" color={theme.colors.primary} /> :
-                  <List.Icon icon="alert" color={theme.colors.error} />
-              }
-          />
-        </Card.Content>
-      </Card>
-  );
+  // ============================================
+  // SETTINGS SECTIONS
+  // ============================================
+  const sections: SettingSection[] = [
+    {
+      title: 'Account',
+      items: [
+        {
+          id: 'profile',
+          title: 'Profilo Utente',
+          subtitle: user?.email || 'Email non disponibile',
+          icon: User,
+          type: 'navigation',
+          onPress: handleNavigateToProfile,
+        },
+        {
+          id: 'edit-profile',
+          title: 'Modifica Profilo',
+          subtitle: 'Aggiorna le tue informazioni',
+          icon: Mail,
+          type: 'navigation',
+          onPress: handleNavigateToEditProfile,
+        },
+      ],
+    },
+    {
+      title: 'Aspetto',
+      items: [
+        {
+          id: 'dark-mode',
+          title: 'Modalità Scura',
+          subtitle: 'Attiva tema scuro',
+          icon: darkMode ? Moon : Sun,
+          type: 'toggle',
+          value: darkMode,
+          onToggle: handleToggleDarkMode,
+        },
+        {
+          id: 'language',
+          title: 'Lingua',
+          subtitle: preferences.language === 'it' ? 'Italiano' : preferences.language.toUpperCase(),
+          icon: Globe,
+          type: 'navigation',
+          onPress: handleChangeLanguage,
+        },
+      ],
+    },
+    {
+      title: 'Notifiche',
+      items: [
+        {
+          id: 'notif-maintenance',
+          title: 'Manutenzioni',
+          subtitle: 'Promemoria per manutenzioni',
+          icon: Bell,
+          type: 'toggle',
+          value: preferences.notifications.maintenance,
+          onToggle: () => handleToggleNotification('maintenance'),
+        },
+        {
+          id: 'notif-expenses',
+          title: 'Spese',
+          subtitle: 'Notifiche per nuove spese',
+          icon: Bell,
+          type: 'toggle',
+          value: preferences.notifications.expenses,
+          onToggle: () => handleToggleNotification('expenses'),
+        },
+        {
+          id: 'notif-documents',
+          title: 'Documenti',
+          subtitle: 'Scadenze documenti',
+          icon: Bell,
+          type: 'toggle',
+          value: preferences.notifications.documents,
+          onToggle: () => handleToggleNotification('documents'),
+        },
+      ],
+    },
+    {
+      title: 'Privacy e Sicurezza',
+      items: [
+        {
+          id: 'privacy-policy',
+          title: 'Privacy Policy',
+          subtitle: 'Leggi la nostra policy',
+          icon: Shield,
+          type: 'navigation',
+          onPress: handleNavigateToPrivacy,
+        },
+        {
+          id: 'share-data',
+          title: 'Condividi Dati Utilizzo',
+          subtitle: 'Aiutaci a migliorare',
+          icon: Database,
+          type: 'toggle',
+          value: preferences.privacy.shareData,
+          onToggle: () => handleTogglePrivacy('shareData'),
+        },
+        {
+          id: 'analytics',
+          title: 'Analytics',
+          subtitle: 'Statistiche anonime',
+          icon: Eye,
+          type: 'toggle',
+          value: preferences.privacy.analytics,
+          onToggle: () => handleTogglePrivacy('analytics'),
+        },
+      ],
+    },
+    {
+      title: 'Gestione Dati',
+      items: [
+        {
+          id: 'export-data',
+          title: 'Esporta Dati',
+          subtitle: 'Scarica i tuoi dati',
+          icon: Download,
+          type: 'navigation',
+          onPress: () => Alert.alert('Info', 'Funzionalità in arrivo'),
+        },
+        {
+          id: 'import-data',
+          title: 'Importa Dati',
+          subtitle: 'Carica dati da backup',
+          icon: Upload,
+          type: 'navigation',
+          onPress: () => Alert.alert('Info', 'Funzionalità in arrivo'),
+        },
+        {
+          id: 'reset-data',
+          title: 'Cancella Dati App',
+          subtitle: 'Reset impostazioni locali',
+          icon: Trash2,
+          type: 'action',
+          onPress: handleResetAppData,
+          danger: true,
+        },
+      ],
+    },
+    {
+      title: 'Supporto',
+      items: [
+        {
+          id: 'help',
+          title: 'Centro Assistenza',
+          subtitle: 'FAQ e guide',
+          icon: HelpCircle,
+          type: 'navigation',
+          onPress: () => Alert.alert('Info', 'Funzionalità in arrivo'),
+        },
+        {
+          id: 'about',
+          title: 'Informazioni App',
+          subtitle: 'Versione 1.0.0',
+          icon: Info,
+          type: 'navigation',
+          onPress: () => Alert.alert('MyMeccanich', 'Versione 1.0.0\n\nGestisci il tuo veicolo con facilità'),
+        },
+      ],
+    },
+    {
+      title: 'Account',
+      items: [
+        {
+          id: 'logout',
+          title: 'Disconnetti',
+          subtitle: 'Esci dal tuo account',
+          icon: LogOut,
+          type: 'action',
+          onPress: handleLogout,
+          danger: true,
+        },
+      ],
+    },
+  ];
 
-  // 👤 Sezione account
-  const renderAccountSection = () => (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Account</Text>
+  // ============================================
+  // RENDER COMPONENTS
+  // ============================================
 
-          <List.Item
-              title="Profilo utente"
-              description={`${userName} - ${userEmail}`}
-              left={() => <User size={24} color={theme.colors.onSurfaceVariant} />}
-              onPress={handleProfilePress}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-
-          <Divider style={styles.divider} />
-
-          <List.Item
-              title="Disconnetti"
-              description="Esci dal tuo account"
-              left={() => <LogOut size={24} color={theme.colors.error} />}
-              onPress={() => setShowLogoutDialog(true)}
-              titleStyle={{ color: theme.colors.error }}
-          />
-        </Card.Content>
-      </Card>
-  );
-
-  // 🎨 Sezione aspetto
-  const renderAppearanceSection = () => (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Aspetto</Text>
-
-          <List.Item
-              title="Tema"
-              description={
-                preferences.theme === 'dark' ? 'Scuro' :
-                    preferences.theme === 'light' ? 'Chiaro' :
-                        'Automatico'
-              }
-              left={() => <Palette size={24} color={theme.colors.onSurfaceVariant} />}
-              onPress={() => setShowThemeDialog(true)}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-
-          <List.Item
-              title="Lingua"
-              description={
-                preferences.language === 'it' ? 'Italiano' :
-                    preferences.language === 'en' ? 'English' :
-                        preferences.language === 'fr' ? 'Français' :
-                            'Deutsch'
-              }
-              left={() => <Globe size={24} color={theme.colors.onSurfaceVariant} />}
-              onPress={() => setShowLanguageDialog(true)}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-
-          <List.Item
-              title="Valuta"
-              description={preferences.currency}
-              left={() => <List.Icon icon="currency-eur" />}
-              onPress={() => {
-                // Implementa dialog per cambio valuta
-                Alert.alert('Info', 'Funzionalità in arrivo');
-              }}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-        </Card.Content>
-      </Card>
-  );
-
-  // 🔔 Sezione notifiche
-  const renderNotificationsSection = () => (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Notifiche</Text>
-
-          <List.Item
-              title="Manutenzioni"
-              description="Promemoria per le manutenzioni"
-              left={() => <Bell size={24} color={theme.colors.onSurfaceVariant} />}
-              right={() => (
-                  <Switch
-                      value={preferences.notifications.maintenance}
-                      onValueChange={() => toggleNotification('maintenance')}
-                  />
+  // Header con foto profilo
+  const renderHeader = () => (
+    <LinearGradient
+      colors={['#3b82f6', '#1d4ed8']}
+      style={[
+        styles.header,
+        isDesktop && styles.headerDesktop,
+      ]}
+    >
+      <View style={styles.headerContent}>
+        <View style={styles.profilePhotoContainer}>
+          <TouchableOpacity onPress={handleUploadPhoto} activeOpacity={0.8}>
+            {profile?.photoURL || user?.photoURL ? (
+              <Image
+                source={{ uri: profile?.photoURL || user?.photoURL }}
+                style={styles.profilePhoto}
+              />
+            ) : (
+              <View style={styles.profilePhotoPlaceholder}>
+                <User size={40} color="#ffffff" />
+              </View>
+            )}
+            <View style={styles.cameraButton}>
+              {uploading ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Camera size={16} color="#ffffff" />
               )}
-          />
+            </View>
+          </TouchableOpacity>
+        </View>
 
-          <List.Item
-              title="Spese"
-              description="Notifiche per le spese"
-              left={() => <List.Icon icon="cash" />}
-              right={() => (
-                  <Switch
-                      value={preferences.notifications.expenses}
-                      onValueChange={() => toggleNotification('expenses')}
-                  />
-              )}
-          />
-
-          <List.Item
-              title="Documenti"
-              description="Scadenze documenti e assicurazioni"
-              left={() => <List.Icon icon="file-document" />}
-              right={() => (
-                  <Switch
-                      value={preferences.notifications.documents}
-                      onValueChange={() => toggleNotification('documents')}
-                  />
-              )}
-          />
-
-          <List.Item
-              title="Promemoria"
-              description="Altri promemoria importanti"
-              left={() => <List.Icon icon="alarm" />}
-              right={() => (
-                  <Switch
-                      value={preferences.notifications.reminders}
-                      onValueChange={() => toggleNotification('reminders')}
-                  />
-              )}
-          />
-        </Card.Content>
-      </Card>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerName}>
+            {profile?.name || user?.name || 'Utente'}
+          </Text>
+          <Text style={styles.headerEmail}>
+            {profile?.email || user?.email || ''}
+          </Text>
+          {user?.isMechanic && (
+            <View style={styles.mechanicBadge}>
+              <Text style={styles.mechanicBadgeText}>Meccanico</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </LinearGradient>
   );
 
-  // 🛡️ Sezione privacy
-  const renderPrivacySection = () => (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Privacy e Sicurezza</Text>
+  // Singolo item settings
+  const renderSettingItem = (item: SettingItem) => {
+    const IconComponent = item.icon;
+    const itemStyle = [
+      styles.settingItem,
+      {
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+      },
+    ];
 
-          <List.Item
-              title="Condividi dati di utilizzo"
-              description="Aiutaci a migliorare l'app"
-              left={() => <Shield size={24} color={theme.colors.onSurfaceVariant} />}
-              right={() => (
-                  <Switch
-                      value={preferences.privacy.shareData}
-                      onValueChange={() => togglePrivacy('shareData')}
-                  />
-              )}
-          />
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={itemStyle}
+        onPress={item.type !== 'toggle' ? item.onPress : undefined}
+        activeOpacity={0.7}
+        disabled={item.type === 'toggle'}
+      >
+        <View style={styles.settingItemLeft}>
+          <View style={[
+            styles.iconContainer,
+            { backgroundColor: item.danger ? `${theme.danger}15` : `${theme.primary}15` }
+          ]}>
+            <IconComponent
+              size={20}
+              color={item.danger ? theme.danger : theme.primary}
+            />
+          </View>
+          <View style={styles.settingItemText}>
+            <Text style={[
+              styles.settingItemTitle,
+              { color: item.danger ? theme.danger : theme.text }
+            ]}>
+              {item.title}
+            </Text>
+            {item.subtitle && (
+              <Text style={[styles.settingItemSubtitle, { color: theme.textSecondary }]}>
+                {item.subtitle}
+              </Text>
+            )}
+          </View>
+        </View>
 
-          <List.Item
-              title="Analytics"
-              description="Statistiche anonime di utilizzo"
-              left={() => <List.Icon icon="chart-line" />}
-              right={() => (
-                  <Switch
-                      value={preferences.privacy.analytics}
-                      onValueChange={() => togglePrivacy('analytics')}
-                  />
-              )}
-          />
-        </Card.Content>
-      </Card>
+        <View style={styles.settingItemRight}>
+          {item.type === 'toggle' ? (
+            <Switch
+              value={item.value}
+              onValueChange={item.onToggle}
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor={item.value ? '#ffffff' : '#f4f3f4'}
+            />
+          ) : (
+            <ChevronRight size={20} color={theme.textSecondary} />
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // Sezione settings
+  const renderSection = (section: SettingSection) => (
+    <View key={section.title} style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+        {section.title.toUpperCase()}
+      </Text>
+      <View style={styles.sectionContent}>
+        {section.items.map(renderSettingItem)}
+      </View>
+    </View>
   );
 
-  // 🔧 Sezione dati
-  const renderDataSection = () => (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Gestione Dati</Text>
-
-          <List.Item
-              title="Esporta dati"
-              description="Scarica una copia dei tuoi dati"
-              left={() => <Download size={24} color={theme.colors.primary} />}
-              onPress={() => Alert.alert('Info', 'Funzionalità in arrivo')}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-
-          <List.Item
-              title="Importa dati"
-              description="Importa dati da backup"
-              left={() => <Upload size={24} color={theme.colors.primary} />}
-              onPress={() => Alert.alert('Info', 'Funzionalità in arrivo')}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-
-          <Divider style={styles.divider} />
-
-          <List.Item
-              title="Cancella dati app"
-              description="Rimuove tutte le auto e le impostazioni"
-              left={() => <Trash2 size={24} color={theme.colors.error} />}
-              onPress={() => setShowDeleteDialog(true)}
-              titleStyle={{ color: theme.colors.error }}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-        </Card.Content>
-      </Card>
+  // Layout Desktop (2 colonne)
+  const renderDesktopLayout = () => (
+    <View style={[styles.desktopContainer, { backgroundColor: theme.background }]}>
+      <View style={styles.desktopContent}>
+        <View style={styles.desktopLeft}>
+          {sections.slice(0, Math.ceil(sections.length / 2)).map(renderSection)}
+        </View>
+        <View style={styles.desktopRight}>
+          {sections.slice(Math.ceil(sections.length / 2)).map(renderSection)}
+        </View>
+      </View>
+    </View>
   );
 
-  // ❓ Sezione supporto
-  const renderSupportSection = () => (
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Supporto</Text>
-
-          <List.Item
-              title="Centro assistenza"
-              description="FAQ e guide"
-              left={() => <HelpCircle size={24} color={theme.colors.onSurfaceVariant} />}
-              onPress={() => Alert.alert('Info', 'Funzionalità in arrivo')}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-
-          <List.Item
-              title="Contattaci"
-              description="Invia feedback o segnala problemi"
-              left={() => <List.Icon icon="email" />}
-              onPress={() => Alert.alert('Info', 'Funzionalità in arrivo')}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-
-          <List.Item
-              title="Valuta l'app"
-              description="Lascia una recensione"
-              left={() => <List.Icon icon="star" />}
-              onPress={() => Alert.alert('Info', 'Funzionalità in arrivo')}
-              right={() => <List.Icon icon="chevron-right" />}
-          />
-        </Card.Content>
-      </Card>
+  // Layout Mobile (scroll verticale)
+  const renderMobileLayout = () => (
+    <ScrollView
+      style={[styles.scrollView, { backgroundColor: theme.background }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {sections.map(renderSection)}
+      <View style={styles.bottomSpacing} />
+    </ScrollView>
   );
+
+  // ============================================
+  // MAIN RENDER
+  // ============================================
+  if (loading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+          Caricamento...
+        </Text>
+      </View>
+    );
+  }
 
   return (
-      <View style={styles.container}>
-        <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-        >
-          {renderAppInfo()}
-          {renderAccountSection()}
-          {renderAppearanceSection()}
-          {renderNotificationsSection()}
-          {renderPrivacySection()}
-          {renderDataSection()}
-          {renderSupportSection()}
-        </ScrollView>
-
-        {/* Dialog Logout */}
-        <Portal>
-          <Dialog visible={showLogoutDialog} onDismiss={() => setShowLogoutDialog(false)}>
-            <Dialog.Title>Disconnetti Account</Dialog.Title>
-            <Dialog.Content>
-              <Text>Sei sicuro di voler disconnettere il tuo account?</Text>
-            </Dialog.Content>
-            <Dialog.Actions>
-              <Button onPress={() => setShowLogoutDialog(false)}>Annulla</Button>
-              <Button onPress={handleLogout} loading={loading}>Disconnetti</Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
-
-        {/* Dialog Cancella Dati */}
-        <Portal>
-          <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
-            <Dialog.Title>Cancella Dati App</Dialog.Title>
-            <Dialog.Content>
-              <Text>
-                Questa azione cancellerà tutte le auto, manutenzioni e impostazioni salvate nell'app.
-                I dati del tuo account Firebase rimarranno intatti.
-              </Text>
-            </Dialog.Content>
-            <Dialog.Actions>
-              <Button onPress={() => setShowDeleteDialog(false)}>Annulla</Button>
-              <Button onPress={handleDeleteAppData} textColor={theme.colors.error}>
-                Cancella
-              </Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
-
-        {/* Dialog Tema */}
-        <Portal>
-          <Dialog visible={showThemeDialog} onDismiss={() => setShowThemeDialog(false)}>
-            <Dialog.Title>Seleziona Tema</Dialog.Title>
-            <Dialog.Content>
-              <RadioButton.Group value={tempTheme} onValueChange={setTempTheme}>
-                <RadioButton.Item label="Chiaro" value="light" />
-                <RadioButton.Item label="Scuro" value="dark" />
-                <RadioButton.Item label="Automatico" value="auto" />
-              </RadioButton.Group>
-            </Dialog.Content>
-            <Dialog.Actions>
-              <Button onPress={() => setShowThemeDialog(false)}>Annulla</Button>
-              <Button onPress={handleThemeChange}>Applica</Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
-
-        {/* Dialog Lingua */}
-        <Portal>
-          <Dialog visible={showLanguageDialog} onDismiss={() => setShowLanguageDialog(false)}>
-            <Dialog.Title>Seleziona Lingua</Dialog.Title>
-            <Dialog.Content>
-              <RadioButton.Group value={tempLanguage} onValueChange={setTempLanguage}>
-                <RadioButton.Item label="Italiano" value="it" />
-                <RadioButton.Item label="English" value="en" />
-                <RadioButton.Item label="Français" value="fr" />
-                <RadioButton.Item label="Deutsch" value="de" />
-              </RadioButton.Group>
-            </Dialog.Content>
-            <Dialog.Actions>
-              <Button onPress={() => setShowLanguageDialog(false)}>Annulla</Button>
-              <Button onPress={handleLanguageChange}>Applica</Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
-      </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      {renderHeader()}
+      {isDesktop ? renderDesktopLayout() : renderMobileLayout()}
+    </SafeAreaView>
   );
 };
 
+// ============================================
+// STYLES
+// ============================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+
+  // Header
+  header: {
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  headerDesktop: {
+    paddingVertical: 32,
+    paddingHorizontal: 40,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profilePhotoContainer: {
+    position: 'relative',
+  },
+  profilePhoto: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+  },
+  profilePhotoPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#ffffff',
+  },
+  cameraButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#3b82f6',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  headerInfo: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  headerName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  headerEmail: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 8,
+  },
+  mechanicBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  mechanicBadgeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Scroll View
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 16,
+
+  // Desktop Layout
+  desktopContainer: {
+    flex: 1,
   },
-  card: {
-    marginBottom: 16,
+  desktopContent: {
+    flexDirection: 'row',
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+    padding: 32,
+    gap: 32,
+  },
+  desktopLeft: {
+    flex: 1,
+  },
+  desktopRight: {
+    flex: 1,
+  },
+
+  // Section
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 12,
   },
-  divider: {
-    marginVertical: 8,
+  sectionContent: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+
+  // Setting Item
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  settingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingItemText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  settingItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  settingItemSubtitle: {
+    fontSize: 13,
+  },
+  settingItemRight: {
+    marginLeft: 12,
+  },
+
+  // Bottom spacing
+  bottomSpacing: {
+    height: 32,
   },
 });
 
