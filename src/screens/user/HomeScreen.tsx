@@ -314,7 +314,341 @@ const HomeScreen = () => {
     }
 
     // ============================================
-    // RENDER MAIN CONTENT
+    // RENDER WEB LAYOUT (Desktop)
+    // ============================================
+    if (isDesktop || Platform.OS === 'web') {
+        return (
+            <View style={styles.webContainer}>
+                {/* Web Header */}
+                <View style={styles.webHeader}>
+                    <View style={styles.webHeaderLeft}>
+                        <Text style={styles.webHeaderTitle}>MyMeccanich</Text>
+                        <Text style={styles.webHeaderGreeting}>
+                            Ciao, {user?.name || 'Benvenuto'}
+                        </Text>
+                    </View>
+                    <View style={styles.webHeaderRight}>
+                        <TouchableOpacity
+                            style={styles.webHeaderButton}
+                            onPress={() => navigation.navigate('AddVehicle' as never)}
+                        >
+                            <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
+                            <Text style={styles.webHeaderButtonText}>Nuovo Veicolo</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.webIconButton}
+                            onPress={() => navigation.navigate('Reminders' as never)}
+                        >
+                            <Bell size={22} color="#1f2937" />
+                            {deadlines.length > 0 && (
+                                <View style={styles.webBadge}>
+                                    <Text style={styles.webBadgeText}>{deadlines.length}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.webIconButton}
+                            onPress={() => navigation.navigate('Settings' as never)}
+                        >
+                            <SettingsIcon size={22} color="#1f2937" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <ScrollView
+                    style={styles.webContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    }
+                >
+                    <View style={styles.webGrid}>
+                        {/* Left Column - Vehicle & Stats */}
+                        <View style={styles.webLeftColumn}>
+                            {/* Selected Vehicle Card */}
+                            {selectedVehicle && (
+                                <View style={styles.webVehicleCard}>
+                                    <LinearGradient
+                                        colors={['#3b82f6', '#2563eb']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={styles.webVehicleGradient}
+                                    >
+                                        <View style={styles.webVehicleHeader}>
+                                            <View>
+                                                <Text style={styles.webVehicleName}>
+                                                    {selectedVehicle.make} {selectedVehicle.model}
+                                                </Text>
+                                                <Text style={styles.webVehiclePlate}>
+                                                    {selectedVehicle.licensePlate}
+                                                </Text>
+                                                <View style={styles.webVehicleTag}>
+                                                    <Text style={styles.webVehicleTagText}>
+                                                        {selectedVehicle.year} • {selectedVehicle.fuel || 'Benzina'}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            {selectedVehicle.imageUrl && (
+                                                <Image
+                                                    source={{ uri: selectedVehicle.imageUrl }}
+                                                    style={styles.webVehicleImage}
+                                                    resizeMode="contain"
+                                                />
+                                            )}
+                                        </View>
+                                        <TouchableOpacity
+                                            style={styles.webVehicleButton}
+                                            onPress={() =>
+                                                navigation.navigate('CarDetail' as never, {
+                                                    carId: selectedVehicle.id,
+                                                } as never)
+                                            }
+                                        >
+                                            <Text style={styles.webVehicleButtonText}>
+                                                Vedi Dettagli
+                                            </Text>
+                                            <ChevronRight size={18} color="#fff" />
+                                        </TouchableOpacity>
+                                    </LinearGradient>
+                                </View>
+                            )}
+
+                            {/* Monthly Stats Grid */}
+                            <View style={styles.webStatsGrid}>
+                                <View style={styles.webStatCard}>
+                                    <View style={[styles.webStatIcon, { backgroundColor: '#dbeafe' }]}>
+                                        <DollarSign size={28} color="#3b82f6" strokeWidth={2} />
+                                    </View>
+                                    <Text style={styles.webStatValue}>
+                                        {formatCurrency(monthlyStats.totalExpenses)}
+                                    </Text>
+                                    <Text style={styles.webStatLabel}>Spese Totali</Text>
+                                </View>
+                                <View style={styles.webStatCard}>
+                                    <View style={[styles.webStatIcon, { backgroundColor: '#fef3c7' }]}>
+                                        <Fuel size={28} color="#f59e0b" strokeWidth={2} />
+                                    </View>
+                                    <Text style={styles.webStatValue}>
+                                        {formatCurrency(monthlyStats.totalFuel)}
+                                    </Text>
+                                    <Text style={styles.webStatLabel}>Carburante</Text>
+                                </View>
+                                <View style={styles.webStatCard}>
+                                    <View style={[styles.webStatIcon, { backgroundColor: '#dbeafe' }]}>
+                                        <Wrench size={28} color="#3b82f6" strokeWidth={2} />
+                                    </View>
+                                    <Text style={styles.webStatValue}>
+                                        {formatCurrency(monthlyStats.totalMaintenance)}
+                                    </Text>
+                                    <Text style={styles.webStatLabel}>Manutenzioni</Text>
+                                </View>
+                                <View style={styles.webStatCard}>
+                                    <View style={[styles.webStatIcon, { backgroundColor: '#dcfce7' }]}>
+                                        <TrendingUp size={28} color="#10b981" strokeWidth={2} />
+                                    </View>
+                                    <Text style={styles.webStatValue}>{monthlyStats.totalKm} km</Text>
+                                    <Text style={styles.webStatLabel}>Percorsi</Text>
+                                </View>
+                            </View>
+
+                            {/* Quick Actions */}
+                            <View style={styles.webQuickActions}>
+                                <Text style={styles.webSectionTitle}>Azioni Rapide</Text>
+                                <View style={styles.webActionGrid}>
+                                    <TouchableOpacity
+                                        style={styles.webActionCard}
+                                        onPress={() =>
+                                            navigation.navigate('AddMaintenance' as never, {
+                                                carId: selectedVehicle?.id,
+                                            } as never)
+                                        }
+                                    >
+                                        <View style={[styles.webActionIcon, { backgroundColor: '#dbeafe' }]}>
+                                            <Wrench size={24} color="#3b82f6" />
+                                        </View>
+                                        <Text style={styles.webActionLabel}>Manutenzione</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.webActionCard}
+                                        onPress={() =>
+                                            navigation.navigate('AddFuel' as never, {
+                                                carId: selectedVehicle?.id,
+                                            } as never)
+                                        }
+                                    >
+                                        <View style={[styles.webActionIcon, { backgroundColor: '#fef3c7' }]}>
+                                            <Fuel size={24} color="#f59e0b" />
+                                        </View>
+                                        <Text style={styles.webActionLabel}>Rifornimento</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.webActionCard}
+                                        onPress={() =>
+                                            navigation.navigate('AddExpense' as never, {
+                                                carId: selectedVehicle?.id,
+                                            } as never)
+                                        }
+                                    >
+                                        <View style={[styles.webActionIcon, { backgroundColor: '#dcfce7' }]}>
+                                            <DollarSign size={24} color="#10b981" />
+                                        </View>
+                                        <Text style={styles.webActionLabel}>Spesa</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.webActionCard}
+                                        onPress={() => navigation.navigate('Reminders' as never)}
+                                    >
+                                        <View style={[styles.webActionIcon, { backgroundColor: '#fce7f3' }]}>
+                                            <Calendar size={24} color="#ec4899" />
+                                        </View>
+                                        <Text style={styles.webActionLabel}>Promemoria</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Right Column - Deadlines & Activities */}
+                        <View style={styles.webRightColumn}>
+                            {/* Deadlines */}
+                            {deadlines.length > 0 && (
+                                <View style={styles.webSection}>
+                                    <View style={styles.webSectionHeader}>
+                                        <Text style={styles.webSectionTitle}>Prossime Scadenze</Text>
+                                        <TouchableOpacity
+                                            onPress={() => navigation.navigate('Reminders' as never)}
+                                        >
+                                            <Text style={styles.webSectionLink}>Vedi tutte</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    {deadlines.slice(0, 5).map((deadline) => (
+                                        <TouchableOpacity
+                                            key={deadline.id}
+                                            style={styles.webDeadlineCard}
+                                            onPress={() =>
+                                                navigation.navigate('CarDetail' as never, {
+                                                    carId: deadline.vehicleId,
+                                                } as never)
+                                            }
+                                        >
+                                            <View
+                                                style={[
+                                                    styles.webDeadlineIcon,
+                                                    { backgroundColor: getDeadlineColor(deadline) + '20' },
+                                                ]}
+                                            >
+                                                {deadline.type === 'insurance' && (
+                                                    <AlertCircle
+                                                        size={22}
+                                                        color={getDeadlineColor(deadline)}
+                                                    />
+                                                )}
+                                                {deadline.type === 'revision' && (
+                                                    <Wrench size={22} color={getDeadlineColor(deadline)} />
+                                                )}
+                                                {deadline.type === 'roadTax' && (
+                                                    <DollarSign
+                                                        size={22}
+                                                        color={getDeadlineColor(deadline)}
+                                                    />
+                                                )}
+                                            </View>
+                                            <View style={styles.webDeadlineInfo}>
+                                                <Text style={styles.webDeadlineTitle}>
+                                                    {deadline.description}
+                                                </Text>
+                                                <Text style={styles.webDeadlineDate}>
+                                                    {formatDate(deadline.dueDate)}
+                                                </Text>
+                                            </View>
+                                            <ChevronRight size={18} color="#94a3b8" />
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+
+                            {/* Recent Activities */}
+                            {recentActivities.length > 0 && (
+                                <View style={styles.webSection}>
+                                    <Text style={styles.webSectionTitle}>Attività Recenti</Text>
+                                    {recentActivities.slice(0, 5).map((activity) => (
+                                        <View key={activity.id} style={styles.webActivityCard}>
+                                            <View
+                                                style={[
+                                                    styles.webActivityIcon,
+                                                    {
+                                                        backgroundColor:
+                                                            activity.type === 'maintenance'
+                                                                ? '#dbeafe'
+                                                                : activity.type === 'fuel'
+                                                                    ? '#fef3c7'
+                                                                    : '#dcfce7',
+                                                    },
+                                                ]}
+                                            >
+                                                {activity.type === 'maintenance' && (
+                                                    <Wrench size={22} color="#3b82f6" />
+                                                )}
+                                                {activity.type === 'fuel' && (
+                                                    <Fuel size={22} color="#f59e0b" />
+                                                )}
+                                                {activity.type === 'expense' && (
+                                                    <DollarSign size={22} color="#10b981" />
+                                                )}
+                                            </View>
+                                            <View style={styles.webActivityInfo}>
+                                                <Text style={styles.webActivityTitle}>
+                                                    {activity.description}
+                                                </Text>
+                                                <Text style={styles.webActivityDate}>
+                                                    {formatDate(activity.date)}
+                                                    {activity.workshopName && ` • ${activity.workshopName}`}
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.webActivityAmount}>
+                                                {formatCurrency(activity.cost)}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+
+                            {/* Other Vehicles */}
+                            {vehicles.length > 1 && (
+                                <View style={styles.webSection}>
+                                    <Text style={styles.webSectionTitle}>Altri Veicoli</Text>
+                                    {vehicles
+                                        .filter((v) => v.id !== selectedVehicle?.id)
+                                        .map((vehicle) => (
+                                            <TouchableOpacity
+                                                key={vehicle.id}
+                                                style={styles.webOtherVehicleCard}
+                                                onPress={() => setSelectedVehicle(vehicle)}
+                                            >
+                                                <View style={styles.webOtherVehicleIcon}>
+                                                    <Car size={24} color="#64748b" />
+                                                </View>
+                                                <View style={styles.webOtherVehicleInfo}>
+                                                    <Text style={styles.webOtherVehicleName}>
+                                                        {vehicle.make} {vehicle.model}
+                                                    </Text>
+                                                    <Text style={styles.webOtherVehiclePlate}>
+                                                        {vehicle.licensePlate}
+                                                    </Text>
+                                                </View>
+                                                <ChevronRight size={18} color="#94a3b8" />
+                                            </TouchableOpacity>
+                                        ))}
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </ScrollView>
+            </View>
+        );
+    }
+
+    // ============================================
+    // RENDER MOBILE LAYOUT
     // ============================================
     return (
         <SafeAreaView style={styles.container}>
@@ -351,10 +685,7 @@ const HomeScreen = () => {
 
             <ScrollView
                 style={styles.scrollView}
-                contentContainerStyle={[
-                    styles.scrollContent,
-                    isDesktop && styles.scrollContentDesktop,
-                ]}
+                contentContainerStyle={styles.scrollContent}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
@@ -1172,6 +1503,411 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#007AFF',
         letterSpacing: -0.3,
+    },
+
+    // ============================================
+    // WEB-SPECIFIC STYLES
+    // ============================================
+    webContainer: {
+        flex: 1,
+        backgroundColor: '#f9fafb',
+    },
+    webHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#ffffff',
+        paddingHorizontal: 40,
+        paddingVertical: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+        ...(Platform.OS === 'web' && {
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        }),
+    },
+    webHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 32,
+    },
+    webHeaderTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#111827',
+        letterSpacing: -0.5,
+    },
+    webHeaderGreeting: {
+        fontSize: 16,
+        fontWeight: '400',
+        color: '#6b7280',
+    },
+    webHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    webHeaderButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#3b82f6',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 10,
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        }),
+    },
+    webHeaderButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#ffffff',
+    },
+    webIconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 10,
+        backgroundColor: '#f3f4f6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        }),
+    },
+    webBadge: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        backgroundColor: '#ef4444',
+        minWidth: 18,
+        height: 18,
+        borderRadius: 9,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 5,
+        borderWidth: 2,
+        borderColor: '#f3f4f6',
+    },
+    webBadgeText: {
+        color: '#ffffff',
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    webContent: {
+        flex: 1,
+    },
+    webGrid: {
+        flexDirection: 'row',
+        maxWidth: 1600,
+        alignSelf: 'center',
+        width: '100%',
+        paddingHorizontal: 40,
+        paddingVertical: 32,
+        gap: 32,
+    },
+    webLeftColumn: {
+        flex: 2,
+        gap: 24,
+    },
+    webRightColumn: {
+        flex: 1,
+        gap: 24,
+    },
+
+    // Web Vehicle Card
+    webVehicleCard: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        ...(Platform.OS === 'web' && {
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        }),
+    },
+    webVehicleGradient: {
+        padding: 32,
+    },
+    webVehicleHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    webVehicleName: {
+        fontSize: 32,
+        fontWeight: '700',
+        color: '#ffffff',
+        marginBottom: 8,
+        letterSpacing: -0.8,
+    },
+    webVehiclePlate: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.95)',
+        marginBottom: 16,
+        letterSpacing: 1.5,
+    },
+    webVehicleTag: {
+        alignSelf: 'flex-start',
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 10,
+    },
+    webVehicleTagText: {
+        color: '#ffffff',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    webVehicleImage: {
+        width: 200,
+        height: 130,
+    },
+    webVehicleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingVertical: 14,
+        borderRadius: 12,
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        }),
+    },
+    webVehicleButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#ffffff',
+    },
+
+    // Web Stats Grid
+    webStatsGrid: {
+        flexDirection: 'row',
+        gap: 20,
+    },
+    webStatCard: {
+        flex: 1,
+        backgroundColor: '#ffffff',
+        borderRadius: 14,
+        padding: 24,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#f3f4f6',
+        ...(Platform.OS === 'web' && {
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        }),
+    },
+    webStatIcon: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    webStatValue: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 6,
+        letterSpacing: -0.6,
+    },
+    webStatLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#6b7280',
+        textAlign: 'center',
+    },
+
+    // Web Quick Actions
+    webQuickActions: {
+        backgroundColor: '#ffffff',
+        borderRadius: 14,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: '#f3f4f6',
+        ...(Platform.OS === 'web' && {
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        }),
+    },
+    webActionGrid: {
+        flexDirection: 'row',
+        gap: 16,
+        marginTop: 16,
+    },
+    webActionCard: {
+        flex: 1,
+        alignItems: 'center',
+        gap: 12,
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+        }),
+    },
+    webActionIcon: {
+        width: 70,
+        height: 70,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...(Platform.OS === 'web' && {
+            transition: 'all 0.2s',
+        }),
+    },
+    webActionLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+        textAlign: 'center',
+    },
+
+    // Web Section
+    webSection: {
+        backgroundColor: '#ffffff',
+        borderRadius: 14,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: '#f3f4f6',
+        ...(Platform.OS === 'web' && {
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        }),
+    },
+    webSectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    webSectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827',
+        letterSpacing: -0.4,
+    },
+    webSectionLink: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#3b82f6',
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+        }),
+    },
+
+    // Web Deadline Card
+    webDeadlineCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        marginHorizontal: -16,
+        marginBottom: 4,
+        borderRadius: 10,
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        }),
+    },
+    webDeadlineIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 16,
+    },
+    webDeadlineInfo: {
+        flex: 1,
+    },
+    webDeadlineTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#111827',
+        marginBottom: 4,
+    },
+    webDeadlineDate: {
+        fontSize: 13,
+        fontWeight: '400',
+        color: '#6b7280',
+    },
+
+    // Web Activity Card
+    webActivityCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        marginHorizontal: -16,
+        marginBottom: 4,
+        borderRadius: 10,
+    },
+    webActivityIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 16,
+    },
+    webActivityInfo: {
+        flex: 1,
+    },
+    webActivityTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#111827',
+        marginBottom: 4,
+    },
+    webActivityDate: {
+        fontSize: 13,
+        fontWeight: '400',
+        color: '#6b7280',
+    },
+    webActivityAmount: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#111827',
+    },
+
+    // Web Other Vehicle Card
+    webOtherVehicleCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        marginHorizontal: -16,
+        marginBottom: 4,
+        borderRadius: 10,
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        }),
+    },
+    webOtherVehicleIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: '#f3f4f6',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 16,
+    },
+    webOtherVehicleInfo: {
+        flex: 1,
+    },
+    webOtherVehicleName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#111827',
+        marginBottom: 4,
+    },
+    webOtherVehiclePlate: {
+        fontSize: 13,
+        fontWeight: '400',
+        color: '#6b7280',
     },
 });
 
