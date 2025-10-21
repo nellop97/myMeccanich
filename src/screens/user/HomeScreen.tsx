@@ -31,7 +31,7 @@ import {
     Settings as SettingsIcon,
     Menu,
 } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // Firebase
@@ -224,9 +224,18 @@ const HomeScreen = () => {
         setRefreshing(false);
     }, [loadData]);
 
+    // Carica dati all'avvio
     useEffect(() => {
         loadData();
     }, []);
+
+    // Ricarica dati quando la schermata diventa attiva (es. dopo aggiunta veicolo)
+    useFocusEffect(
+        useCallback(() => {
+            console.log('🔄 HomeScreen focused - Reloading data...');
+            loadData();
+        }, [loadData])
+    );
 
     // ============================================
     // RENDER HELPERS
