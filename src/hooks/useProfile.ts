@@ -84,7 +84,7 @@ export const useProfile = () => {
     }, []);
 
     // Aggiorna il profilo
-    const updateProfile = useCallback(async (updates: ProfileUpdateData) => {
+    const updateProfileData = useCallback(async (updates: ProfileUpdateData) => {
         if (!auth.currentUser) {
             throw new Error('Utente non autenticato');
         }
@@ -95,38 +95,53 @@ export const useProfile = () => {
 
             const userRef = doc(db, 'users', auth.currentUser.uid);
 
-            // Prepara i dati da aggiornare
-            const updateData: any = {
-                ...updates,
-                updatedAt: serverTimestamp(),
-            };
+            // Serializza i dati (solo primitivi: string, number, boolean)
+            const serializedUpdates: Record<string, any> = {};
+
+            Object.keys(updates).forEach(key => {
+                const value = (updates as any)[key];
+                // Accetta solo valori primitivi
+                if (
+                    typeof value === 'string' ||
+                    typeof value === 'number' ||
+                    typeof value === 'boolean' ||
+                    value === null ||
+                    value === undefined
+                ) {
+                    serializedUpdates[key] = value;
+                }
+            });
 
             // Se cambiano firstName o lastName, aggiorna anche name
+            let fullName: string | undefined;
             if (updates.firstName || updates.lastName) {
                 const currentFirstName = updates.firstName || profile?.firstName || '';
                 const currentLastName = updates.lastName || profile?.lastName || '';
-                updateData.name = `${currentFirstName} ${currentLastName}`.trim();
+                fullName = `${currentFirstName} ${currentLastName}`.trim();
+                serializedUpdates.name = fullName;
             }
 
-            // Aggiorna Firestore
-            await updateDoc(userRef, updateData);
+            // Aggiorna Firestore con timestamp server-side
+            await updateDoc(userRef, {
+                ...serializedUpdates,
+                updatedAt: serverTimestamp(),
+            });
 
             // Aggiorna Firebase Auth se necessario
-            if (updateData.name) {
+            if (fullName && auth.currentUser) {
                 await updateProfile(auth.currentUser, {
-                    displayName: updateData.name,
+                    displayName: fullName,
                 });
             }
 
             // Ricarica il profilo
             await loadProfile();
 
-            // Aggiorna lo store
+            // Aggiorna lo store con dati serializzati
             if (storeUser) {
                 setUser({
                     ...storeUser,
-                    ...updates,
-                    name: updateData.name || storeUser.name,
+                    ...serializedUpdates,
                 });
             }
 
@@ -162,7 +177,7 @@ export const useProfile = () => {
             const downloadURL = await getDownloadURL(storageRef);
 
             // Aggiorna il profilo con la nuova URL
-            await updateProfile({ photoURL: downloadURL });
+            await updateProfileData({ photoURL: downloadURL });
 
             return downloadURL;
         } catch (err) {
@@ -172,7 +187,7 @@ export const useProfile = () => {
         } finally {
             setUploadingPhoto(false);
         }
-    }, [updateProfile]);
+    }, [updateProfileData]);
 
     // Verifica se il profilo è completo
     const isProfileComplete = useCallback(() => {
@@ -208,7 +223,7 @@ export const useProfile = () => {
         uploadingPhoto,
         error,
         loadProfile,
-        updateProfile,
+        updateProfile: updateProfileData,
         uploadProfilePhoto,
         isProfileComplete: isProfileComplete(),
     };
