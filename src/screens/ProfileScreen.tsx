@@ -34,6 +34,7 @@ import {
     Star,
     CheckCircle,
     AlertCircle,
+    ArrowLeft,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -147,6 +148,16 @@ const ProfileScreen = () => {
             colors={isMechanic ? ['#FF6B35', '#FF8A65'] : ['#007AFF', '#5AC8FA']}
             style={styles.header}
         >
+            {/* Pulsante Back */}
+            <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.7}
+            >
+                <ArrowLeft size={24} color="#ffffff" />
+                <Text style={styles.backButtonText}>Indietro</Text>
+            </TouchableOpacity>
+
             <View style={styles.headerContent}>
                 <View style={styles.avatarContainer}>
                     {profile.photoURL ? (
@@ -413,6 +424,20 @@ const styles = StyleSheet.create({
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             },
         }),
+    },
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        marginBottom: 16,
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+    },
+    backButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 8,
     },
     headerContent: {
         alignItems: 'center',

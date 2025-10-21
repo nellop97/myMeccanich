@@ -279,6 +279,7 @@ const SettingsScreen = () => {
 
   // Logout
   const handleLogout = () => {
+    console.log('🚪 handleLogout called');
     Alert.alert('Disconnetti', 'Sei sicuro di voler uscire?', [
       { text: 'Annulla', style: 'cancel' },
       {
@@ -286,6 +287,7 @@ const SettingsScreen = () => {
         style: 'destructive',
         onPress: async () => {
           try {
+            console.log('🔄 Starting logout...');
             setLoading(true);
             await logout();
             console.log('✅ Logout completato');
@@ -301,6 +303,7 @@ const SettingsScreen = () => {
 
   // Delete account completely
   const handleDeleteAccount = () => {
+    console.log('🗑️ handleDeleteAccount called');
     Alert.alert(
       'Elimina Account',
       'ATTENZIONE: Questa azione eliminerà permanentemente il tuo account e tutti i dati associati. Questa operazione NON può essere annullata.\n\nSei assolutamente sicuro?',
@@ -626,11 +629,19 @@ const SettingsScreen = () => {
       },
     ];
 
+    const handlePress = () => {
+      console.log('🔘 Item pressed:', item.id, 'Type:', item.type);
+      if (item.type !== 'toggle' && item.onPress) {
+        console.log('✅ Calling onPress for:', item.id);
+        item.onPress();
+      }
+    };
+
     return (
       <TouchableOpacity
         key={item.id}
         style={itemStyle}
-        onPress={item.type !== 'toggle' ? item.onPress : undefined}
+        onPress={handlePress}
         activeOpacity={0.7}
         disabled={item.type === 'toggle'}
       >
