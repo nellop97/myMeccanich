@@ -89,6 +89,7 @@ interface StoreState {
 
     // === RESET E PULIZIA ===
     resetStore: () => void;
+    resetAppData: () => void;
     logout: () => void;
 }
 
@@ -203,6 +204,17 @@ export const useStore = create<StoreState>(
                     darkMode: false,
                     preferences: defaultPreferences,
                     appSettings: { ...defaultAppSettings, firstLaunch: false },
+                    isLoading: false,
+                    error: null,
+                });
+            },
+
+            resetAppData: () => {
+                console.log('🗑️ Store: Resetting app data (keeping user logged in)');
+                // Reset solo i dati dell'app, mantiene l'utente loggato
+                set({
+                    preferences: defaultPreferences,
+                    appSettings: { ...get().appSettings, lastUpdate: new Date().toISOString() },
                     isLoading: false,
                     error: null,
                 });
