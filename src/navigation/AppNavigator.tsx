@@ -33,6 +33,9 @@ import FuelTrackingScreen from '../screens/user/FuelTrackingScreen';
 import ExpenseTrackerScreen from '../screens/user/ExpenseTrackerScreen';
 import CarExpensesScreen from '../screens/user/CarExpensesScreen';
 import OwnershipTransferScreen from '../screens/user/OwnershipTransferScreen';
+import AddFuelScreen from '../screens/user/AddFuelScreen';
+import AddExpenseScreen from '../screens/user/AddExpenseScreen';
+import RemindersListScreen from '../screens/user/RemindersListScreen';
 
 // ============================================
 // MECHANIC SCREENS
@@ -547,10 +550,10 @@ export default function AppNavigator() {
                         }}
                     />
 
-                    {/* Placeholder Screens - Future Features */}
+                    {/* Add Fuel & Expense Screens */}
                     <Stack.Screen
                         name="AddFuel"
-                        component={PlaceholderScreen}
+                        component={AddFuelScreen}
                         options={{
                             title: 'Aggiungi Rifornimento',
                             headerShown: false,
@@ -561,7 +564,7 @@ export default function AppNavigator() {
 
                     <Stack.Screen
                         name="AddExpense"
-                        component={PlaceholderScreen}
+                        component={AddExpenseScreen}
                         options={{
                             title: 'Nuova Spesa',
                             headerShown: false,
@@ -583,7 +586,7 @@ export default function AppNavigator() {
 
                     <Stack.Screen
                         name="Reminders"
-                        component={PlaceholderScreen}
+                        component={RemindersListScreen}
                         options={{
                             title: 'Promemoria',
                             headerShown: false,

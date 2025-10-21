@@ -125,6 +125,7 @@ const HomeScreen = () => {
     const themeColors = React.useMemo(() => ({
         background: colors.background,
         surface: colors.surface,
+        cardBackground: colors.surfaceVariant, // Grigio per le cards
         text: colors.onSurface,
         textSecondary: colors.onSurfaceVariant,
         border: colors.outline,
@@ -757,38 +758,38 @@ const HomeScreen = () => {
 
                 {/* Quick Stats */}
                 <View style={styles.statsContainer}>
-                    <Text style={styles.sectionTitle}>Questo Mese</Text>
+                    <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Questo Mese</Text>
                     <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
-                        <View style={styles.statCard}>
+                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
                             <View style={[styles.statIcon, { backgroundColor: '#eff6ff' }]}>
                                 <DollarSign size={24} color="#3b82f6" strokeWidth={2} />
                             </View>
-                            <Text style={styles.statValue}>{formatCurrency(monthlyStats.totalExpenses)}</Text>
-                            <Text style={styles.statLabel}>Spese Totali</Text>
+                            <Text style={[styles.statValue, { color: themeColors.text }]}>{formatCurrency(monthlyStats.totalExpenses)}</Text>
+                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Spese Totali</Text>
                         </View>
 
-                        <View style={styles.statCard}>
+                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
                             <View style={[styles.statIcon, { backgroundColor: '#fef3c7' }]}>
                                 <Fuel size={24} color="#f59e0b" strokeWidth={2} />
                             </View>
-                            <Text style={styles.statValue}>{formatCurrency(monthlyStats.totalFuel)}</Text>
-                            <Text style={styles.statLabel}>Carburante</Text>
+                            <Text style={[styles.statValue, { color: themeColors.text }]}>{formatCurrency(monthlyStats.totalFuel)}</Text>
+                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Carburante</Text>
                         </View>
 
-                        <View style={styles.statCard}>
+                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
                             <View style={[styles.statIcon, { backgroundColor: '#dbeafe' }]}>
                                 <Wrench size={24} color="#3b82f6" strokeWidth={2} />
                             </View>
-                            <Text style={styles.statValue}>{formatCurrency(monthlyStats.totalMaintenance)}</Text>
-                            <Text style={styles.statLabel}>Manutenzioni</Text>
+                            <Text style={[styles.statValue, { color: themeColors.text }]}>{formatCurrency(monthlyStats.totalMaintenance)}</Text>
+                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Manutenzioni</Text>
                         </View>
 
-                        <View style={styles.statCard}>
+                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
                             <View style={[styles.statIcon, { backgroundColor: '#dcfce7' }]}>
                                 <TrendingUp size={24} color="#10b981" strokeWidth={2} />
                             </View>
-                            <Text style={styles.statValue}>{monthlyStats.totalKm} km</Text>
-                            <Text style={styles.statLabel}>Percorsi</Text>
+                            <Text style={[styles.statValue, { color: themeColors.text }]}>{monthlyStats.totalKm} km</Text>
+                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Percorsi</Text>
                         </View>
                     </View>
                 </View>
@@ -863,7 +864,7 @@ const HomeScreen = () => {
                         {deadlines.slice(0, 3).map((deadline) => (
                             <TouchableOpacity
                                 key={deadline.id}
-                                style={styles.deadlineCard}
+                                style={[styles.deadlineCard, { backgroundColor: themeColors.cardBackground }]}
                                 onPress={() =>
                                     navigation.navigate('CarDetail' as never, {
                                         carId: deadline.vehicleId,
@@ -888,13 +889,13 @@ const HomeScreen = () => {
                                 </View>
 
                                 <View style={styles.deadlineInfo}>
-                                    <Text style={styles.deadlineTitle}>{deadline.description}</Text>
-                                    <Text style={styles.deadlineDate}>
+                                    <Text style={[styles.deadlineTitle, { color: themeColors.text }]}>{deadline.description}</Text>
+                                    <Text style={[styles.deadlineDate, { color: themeColors.textSecondary }]}>
                                         Scade il {formatDate(deadline.dueDate)}
                                     </Text>
                                 </View>
 
-                                <ChevronRight size={20} color="#94a3b8" />
+                                <ChevronRight size={20} color={themeColors.textSecondary} />
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -911,7 +912,7 @@ const HomeScreen = () => {
                         </View>
 
                         {recentActivities.slice(0, 5).map((activity) => (
-                            <View key={activity.id} style={styles.activityCard}>
+                            <View key={activity.id} style={[styles.activityCard, { backgroundColor: themeColors.cardBackground }]}>
                                 <View
                                     style={[
                                         styles.activityIcon,
@@ -935,14 +936,14 @@ const HomeScreen = () => {
                                 </View>
 
                                 <View style={styles.activityInfo}>
-                                    <Text style={styles.activityTitle}>{activity.description}</Text>
-                                    <Text style={styles.activityDate}>
+                                    <Text style={[styles.activityTitle, { color: themeColors.text }]}>{activity.description}</Text>
+                                    <Text style={[styles.activityDate, { color: themeColors.textSecondary }]}>
                                         {formatDate(activity.date)}
                                         {activity.workshopName && ` • ${activity.workshopName}`}
                                     </Text>
                                 </View>
 
-                                <Text style={styles.activityAmount}>
+                                <Text style={[styles.activityAmount, { color: themeColors.text }]}>
                                     {formatCurrency(activity.cost)}
                                 </Text>
                             </View>
@@ -974,16 +975,16 @@ const HomeScreen = () => {
                                 .map((vehicle) => (
                                     <TouchableOpacity
                                         key={vehicle.id}
-                                        style={styles.otherVehicleCard}
+                                        style={[styles.otherVehicleCard, { backgroundColor: themeColors.cardBackground }]}
                                         onPress={() => setSelectedVehicle(vehicle)}
                                     >
-                                        <View style={styles.otherVehicleIcon}>
-                                            <Car size={24} color="#64748b" />
+                                        <View style={[styles.otherVehicleIcon, { backgroundColor: isDark ? colors.surfaceContainer : '#F2F2F7' }]}>
+                                            <Car size={24} color={themeColors.textSecondary} />
                                         </View>
-                                        <Text style={styles.otherVehicleName}>
+                                        <Text style={[styles.otherVehicleName, { color: themeColors.text }]}>
                                             {vehicle.make} {vehicle.model}
                                         </Text>
-                                        <Text style={styles.otherVehiclePlate}>
+                                        <Text style={[styles.otherVehiclePlate, { color: themeColors.textSecondary }]}>
                                             {vehicle.licensePlate}
                                         </Text>
                                     </TouchableOpacity>
