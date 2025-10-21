@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useUser } from './useAuthSync';
+import { useStore } from '../store';
 
 // Interfacce TypeScript
 export interface Vehicle {
@@ -438,6 +439,9 @@ export const useUserData = () => {
     totalExpenses: recentExpenses.reduce((sum, e) => sum + (e.amount || 0), 0),
   };
 
+  // Ottieni informazioni utente dallo store
+  const { user: storeUser } = useStore();
+
   return {
     // Dati
     vehicles,
@@ -445,23 +449,30 @@ export const useUserData = () => {
     upcomingReminders,
     recentFuelRecords,
     recentExpenses,
-    
+
     // Stati
     loading,
     error,
-    
+
     // Funzioni
     refreshData,
     fetchAllUserData,
     getVehicleById,
-    
+
     // Statistiche
     stats,
-    
+
     // Flags di convenienza
     hasVehicles: vehicles.length > 0,
     hasReminders: upcomingReminders.length > 0,
     hasOverdueReminders: upcomingReminders.some(r => r.status === 'overdue'),
+
+    // Informazioni utente (per SettingsScreen)
+    userName: storeUser?.name || authUser?.displayName || authUser?.email?.split('@')[0] || 'Utente',
+    userEmail: storeUser?.email || authUser?.email || '',
+    isMechanic: storeUser?.isMechanic || false,
+    isAuthenticated: isAuthenticated && !!storeUser?.isLoggedIn,
+    profileComplete: !!storeUser?.name && !!storeUser?.email,
   };
 };
 
@@ -482,9 +493,47 @@ export const useUserVehicles = () => {
 // Hook per ottenere le statistiche dell'utente
 export const useUserStats = () => {
   const { stats, loading } = useUserData();
-  
+
   return {
     ...stats,
     loading,
+  };
+};
+
+// ====================================
+// HOOKS AGGIUNTIVI PER SETTINGS
+// ====================================
+
+// Hook per gestire il tema dell'app
+export const useAppTheme = () => {
+  const { darkMode, preferences, setDarkMode, updatePreferences } = useStore();
+
+  return {
+    darkMode,
+    preferences,
+    setDarkMode,
+    updatePreferences,
+  };
+};
+
+// Hook per gestire le auto dell'utente
+export const useUserCars = () => {
+  const { vehicles, loading } = useUserData();
+
+  return {
+    cars: vehicles,
+    carsCount: vehicles.length,
+    loading,
+  };
+};
+
+// Hook per lo stato generale dell'app
+export const useAppState = () => {
+  const { isLoading, error, clearError } = useStore();
+
+  return {
+    loading: isLoading,
+    error,
+    clearError,
   };
 };
