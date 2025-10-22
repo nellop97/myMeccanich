@@ -246,19 +246,31 @@ const HomeScreen = () => {
 
     const loadPendingViewRequests = async () => {
         try {
-            if (!user?.id) return;
+            if (!user?.id) {
+                console.log('⚠️ No user ID, skipping view requests load');
+                return;
+            }
 
+            console.log('📥 Loading pending view requests for user:', user.id);
             const viewRequestService = VehicleViewRequestService.getInstance();
             const requests = await viewRequestService.getIncomingRequests(user.id);
+            console.log('📋 Total incoming requests:', requests.length);
+            console.log('📋 Request details:', requests.map(r => ({ id: r.id, status: r.status, requester: r.requesterEmail })));
+
             const pendingCount = requests.filter(r => r.status === 'pending').length;
+            console.log('🔔 Pending requests count:', pendingCount);
             setPendingViewRequests(pendingCount);
         } catch (error: any) {
             // Ignora errori di permessi Firebase - le regole potrebbero non essere ancora configurate
             if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
                 console.warn('⚠️ Firestore rules not configured. Run: firebase deploy --only firestore:rules');
                 setPendingViewRequests(0);
-            } else {
+            } else if (error?.message?.includes('index')) {
+                console.warn('⚠️ Firestore index required. Click the link in the error or deploy indexes: firebase deploy --only firestore:indexes');
                 console.error('Error loading view requests:', error);
+                setPendingViewRequests(0);
+            } else {
+                console.error('❌ Error loading view requests:', error);
             }
         }
     };
@@ -281,6 +293,18 @@ const HomeScreen = () => {
             loadData();
         }, [loadData])
     );
+
+    // Polling automatico per richieste pendenti ogni 30 secondi
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (user?.id) {
+                console.log('🔔 Polling pending view requests...');
+                loadPendingViewRequests();
+            }
+        }, 30000); // ogni 30 secondi
+
+        return () => clearInterval(interval);
+    }, [user?.id]);
 
     // ============================================
     // RENDER HELPERS
@@ -533,9 +557,20 @@ const HomeScreen = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.webIconButton}
+                            onPress={() => navigation.navigate('ViewRequests' as never)}
+                        >
+                            <Bell size={22} color={pendingViewRequests > 0 ? "#f59e0b" : themeColors.textSecondary} />
+                            {pendingViewRequests > 0 && (
+                                <View style={styles.webBadge}>
+                                    <Text style={styles.webBadgeText}>{pendingViewRequests}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.webIconButton}
                             onPress={() => navigation.navigate('Reminders' as never)}
                         >
-                            <Bell size={22} color="#1f2937" />
+                            <Calendar size={22} color={deadlines.length > 0 ? "#f59e0b" : themeColors.textSecondary} />
                             {deadlines.length > 0 && (
                                 <View style={styles.webBadge}>
                                     <Text style={styles.webBadgeText}>{deadlines.length}</Text>
@@ -546,7 +581,7 @@ const HomeScreen = () => {
                             style={styles.webIconButton}
                             onPress={() => navigation.navigate('Settings' as never)}
                         >
-                            <SettingsIcon size={22} color="#1f2937" />
+                            <SettingsIcon size={22} color={themeColors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -864,9 +899,20 @@ const HomeScreen = () => {
                 <View style={styles.headerActions}>
                     <TouchableOpacity
                         style={styles.headerButton}
+                        onPress={() => navigation.navigate('ViewRequests' as never)}
+                    >
+                        <Bell size={24} color={pendingViewRequests > 0 ? "#f59e0b" : "#64748b"} />
+                        {pendingViewRequests > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{pendingViewRequests}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.headerButton}
                         onPress={() => navigation.navigate('Reminders' as never)}
                     >
-                        <Bell size={24} color="#64748b" />
+                        <Calendar size={24} color={deadlines.length > 0 ? "#f59e0b" : "#64748b"} />
                         {deadlines.length > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{deadlines.length}</Text>
