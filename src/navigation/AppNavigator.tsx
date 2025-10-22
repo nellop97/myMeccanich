@@ -37,6 +37,12 @@ import AddFuelScreen from '../screens/user/AddFuelScreen';
 import AddExpenseScreen from '../screens/user/AddExpenseScreen';
 import RemindersListScreen from '../screens/user/RemindersListScreen';
 
+// Vehicle View Request Screens
+import RequestVehicleViewScreen from '../screens/user/RequestVehicleViewScreen';
+import MyVehicleViewRequestsScreen from '../screens/user/MyVehicleViewRequestsScreen';
+import ViewRequestsScreen from '../screens/user/ViewRequestsScreen';
+import VehicleDataViewScreen from '../screens/user/VehicleDataViewScreen';
+
 // ============================================
 // MECHANIC SCREENS
 // ============================================
@@ -104,6 +110,12 @@ export type RootStackParamList = {
 
     // Reminders
     Reminders: undefined;
+
+    // Vehicle View Requests
+    RequestVehicleView: undefined;
+    MyVehicleViewRequests: undefined;
+    ViewRequests: undefined;
+    VehicleDataView: { requestId: string };
 
     // Mechanic
     HomeMechanic: undefined;
@@ -589,6 +601,47 @@ export default function AppNavigator() {
                         component={RemindersListScreen}
                         options={{
                             title: 'Promemoria',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    {/* Vehicle View Requests */}
+                    <Stack.Screen
+                        name="RequestVehicleView"
+                        component={RequestVehicleViewScreen}
+                        options={{
+                            title: 'Richiedi Visualizzazione',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="MyVehicleViewRequests"
+                        component={MyVehicleViewRequestsScreen}
+                        options={{
+                            title: 'Le Mie Richieste',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="ViewRequests"
+                        component={ViewRequestsScreen}
+                        options={{
+                            title: 'Richieste Ricevute',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="VehicleDataView"
+                        component={VehicleDataViewScreen}
+                        options={{
+                            title: 'Dati Veicolo',
                             headerShown: false,
                             animation: 'slide_from_right',
                         }}

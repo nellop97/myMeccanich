@@ -48,6 +48,9 @@ import {
 import { db } from '../../services/firebase';
 import { useStore } from '../../store';
 
+// Services
+import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
+
 // ============================================
 // INTERFACES
 // ============================================
@@ -120,6 +123,7 @@ const HomeScreen = () => {
     });
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [pendingViewRequests, setPendingViewRequests] = useState(0);
 
     // Dynamic theme colors
     const themeColors = React.useMemo(() => ({
@@ -168,6 +172,9 @@ const HomeScreen = () => {
                 await loadRecentActivities(vehiclesList);
                 await calculateMonthlyStats(vehiclesList);
             }
+
+            // Carica richieste di visualizzazione pendenti
+            await loadPendingViewRequests();
         } catch (error) {
             console.error('Error loading data:', error);
             Alert.alert('Errore', 'Impossibile caricare i dati');
@@ -230,6 +237,19 @@ const HomeScreen = () => {
             totalMaintenance: 270.50,
             totalKm: 1250,
         });
+    };
+
+    const loadPendingViewRequests = async () => {
+        try {
+            if (!user?.id) return;
+
+            const viewRequestService = VehicleViewRequestService.getInstance();
+            const requests = await viewRequestService.getIncomingRequests(user.id);
+            const pendingCount = requests.filter(r => r.status === 'pending').length;
+            setPendingViewRequests(pendingCount);
+        } catch (error) {
+            console.error('Error loading view requests:', error);
+        }
     };
 
     const onRefresh = useCallback(async () => {
@@ -796,6 +816,7 @@ const HomeScreen = () => {
 
                 {/* Quick Actions */}
                 <View style={styles.quickActionsContainer}>
+                    <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Azioni Rapide</Text>
                     <View style={styles.quickActions}>
                         <TouchableOpacity
                             style={styles.quickActionButton}
@@ -847,6 +868,45 @@ const HomeScreen = () => {
                                 <Calendar size={20} color="#ec4899" />
                             </View>
                             <Text style={styles.quickActionLabel}>Promemoria</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Vehicle View Requests Actions */}
+                    <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 16 }]}>Trasferimento Veicoli</Text>
+                    <View style={styles.quickActions}>
+                        <TouchableOpacity
+                            style={styles.quickActionButton}
+                            onPress={() => navigation.navigate('RequestVehicleView' as never)}
+                        >
+                            <View style={[styles.quickActionIcon, { backgroundColor: '#ede9fe' }]}>
+                                <Car size={20} color="#8b5cf6" />
+                            </View>
+                            <Text style={styles.quickActionLabel}>Cerca Auto</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.quickActionButton}
+                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                        >
+                            <View style={[styles.quickActionIcon, { backgroundColor: '#e0f2fe' }]}>
+                                <TrendingUp size={20} color="#0284c7" />
+                            </View>
+                            <Text style={styles.quickActionLabel}>Mie Richieste</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.quickActionButton}
+                            onPress={() => navigation.navigate('ViewRequests' as never)}
+                        >
+                            <View style={[styles.quickActionIcon, { backgroundColor: '#fef3c7' }]}>
+                                <Bell size={20} color="#f59e0b" />
+                                {pendingViewRequests > 0 && (
+                                    <View style={styles.quickActionBadge}>
+                                        <Text style={styles.quickActionBadgeText}>{pendingViewRequests}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <Text style={styles.quickActionLabel}>Richieste</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -1328,6 +1388,25 @@ const styles = StyleSheet.create({
         color: '#000000',
         textAlign: 'center',
         letterSpacing: -0.3,
+    },
+    quickActionBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: '#ef4444',
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 6,
+        borderWidth: 2,
+        borderColor: '#ffffff',
+    },
+    quickActionBadgeText: {
+        color: '#ffffff',
+        fontSize: 11,
+        fontWeight: '700',
     },
 
     // Section - Apple Style
