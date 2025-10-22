@@ -1,0 +1,55 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "vehicle_view_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "ownerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "vehicle_view_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "requesterEmail",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "vehicle_view_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "vehicleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requesterEmail",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

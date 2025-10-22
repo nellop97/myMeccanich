@@ -1,9 +1,15 @@
-# Configurazione Firestore Security Rules
+# Configurazione Firestore
 
-## Problema
+Questo documento descrive come configurare le regole di sicurezza e gli indici compositi per Firestore.
+
+---
+
+## 🔐 Security Rules
+
+### Problema
 Le query Firestore falliscono con errore "Missing or insufficient permissions" perché le regole di sicurezza non sono configurate.
 
-## Soluzione
+### Soluzione
 
 Il file con le regole complete si trova in: **`scripts/firebase.rules`**
 
@@ -109,3 +115,106 @@ Per maggiore sicurezza in produzione, considera di:
 - Limitare la lettura dei veicoli solo a quelli pubblici o con permessi specifici
 - Aggiungere rate limiting
 - Implementare validazione dei dati più stringente
+
+---
+
+## 📊 Composite Indexes
+
+### Problema
+Le query complesse Firestore falliscono con errore:
+```
+The query requires an index. You can create it here: https://console.firebase.google.com/...
+```
+
+Questo succede quando si usano query con più filtri `where()` e `orderBy()`.
+
+### Soluzione
+
+Il file con gli indici compositi si trova in: **`firestore.indexes.json`**
+
+### Opzione 1: Via Firebase Console (Più Veloce)
+
+Quando vedi l'errore nell'app:
+1. **Clicca sul link nell'errore** - Firebase creerà automaticamente l'indice
+2. Oppure vai manualmente:
+   - [Firebase Console](https://console.firebase.google.com/)
+   - Seleziona progetto `mymecanich`
+   - **Firestore Database** → **Indexes**
+   - Clicca **Create Index**
+   - Segui il wizard
+
+### Opzione 2: Via Firebase CLI (Deployment Completo)
+
+```bash
+# Deploy tutti gli indici definiti in firestore.indexes.json
+firebase deploy --only firestore:indexes
+```
+
+### Opzione 3: Deploy Manuale con Firebase CLI
+
+```bash
+# Se firebase.json non è configurato
+firebase deploy --only firestore:indexes --config firestore.indexes.json
+```
+
+## Indici Necessari
+
+Il file `firestore.indexes.json` definisce i seguenti indici:
+
+### 1. Vehicle View Requests - Owner Query
+```
+Collection: vehicle_view_requests
+Fields: ownerId (ASC), status (ASC), createdAt (DESC)
+```
+**Usato da**: `VehicleViewRequestService.getIncomingRequests()`
+**Scopo**: Permette al proprietario di vedere le richieste pendenti e approvate ordinate per data
+
+### 2. Vehicle View Requests - Requester Query
+```
+Collection: vehicle_view_requests
+Fields: requesterEmail (ASC), createdAt (DESC)
+```
+**Usato da**: `VehicleViewRequestService.getMyRequests()`
+**Scopo**: Permette all'acquirente di vedere le proprie richieste ordinate per data
+
+### 3. Vehicle View Requests - Duplicate Check
+```
+Collection: vehicle_view_requests
+Fields: vehicleId (ASC), requesterEmail (ASC), status (ASC)
+```
+**Usato da**: `VehicleViewRequestService.hasExistingRequest()`
+**Scopo**: Previene richieste duplicate per lo stesso veicolo
+
+## Verifica Indici
+
+Dopo aver applicato gli indici, verifica nella Firebase Console:
+1. **Firestore Database** → **Indexes**
+2. Dovresti vedere 3 indici con stato **"Enabled"** (verde)
+3. Se vedi **"Building"** (arancione), attendi qualche minuto
+
+## Troubleshooting Indici
+
+Se continui a ricevere errori:
+
+1. **Verifica lo stato degli indici**
+   - Firebase Console → Firestore → Indexes
+   - Assicurati che siano **"Enabled"** e non **"Error"**
+
+2. **Ricostruisci gli indici**
+   ```bash
+   firebase deploy --only firestore:indexes --force
+   ```
+
+3. **Usa il link nell'errore**
+   - È il modo più semplice: clicca il link e Firebase crea l'indice automaticamente
+
+4. **Controlla la console Firebase**
+   - Vai su **Usage** per vedere errori dettagliati
+
+## Tempi di Build
+
+- **Database piccolo** (<100 documenti): ~1 minuto
+- **Database medio** (100-10k documenti): ~5-10 minuti
+- **Database grande** (>10k documenti): ~30+ minuti
+
+L'app può funzionare durante la build, ma le query che usano quell'indice falliranno fino al completamento.

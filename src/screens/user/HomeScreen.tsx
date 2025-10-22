@@ -445,8 +445,8 @@ const HomeScreen = () => {
                     </View>
 
                     {/* Web Empty State */}
-                    <View style={styles.webEmptyState}>
-                        <View style={styles.emptyIconContainer}>
+                    <View style={[styles.webEmptyState, { backgroundColor: themeColors.background }]}>
+                        <View style={[styles.emptyIconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#E5E5EA' }]}>
                             <Car size={96} color={themeColors.textSecondary} strokeWidth={1.5} />
                         </View>
                         <Text style={[styles.webEmptyTitle, { color: themeColors.text }]}>Nessun Veicolo</Text>
@@ -485,8 +485,8 @@ const HomeScreen = () => {
                 </View>
 
                 {/* Empty State */}
-                <View style={styles.emptyState}>
-                    <View style={styles.emptyIconContainer}>
+                <View style={[styles.emptyState, { backgroundColor: themeColors.background }]}>
+                    <View style={[styles.emptyIconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#E5E5EA' }]}>
                         <Car size={64} color={themeColors.textSecondary} strokeWidth={1.5} />
                     </View>
                     <Text style={[styles.emptyTitle, { color: themeColors.text }]}>Nessun Veicolo</Text>
@@ -1334,13 +1334,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 40,
-        backgroundColor: '#F2F2F7',
     },
     emptyIconContainer: {
         width: 140,
         height: 140,
         borderRadius: 70,
-        backgroundColor: '#E5E5EA',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 32,
@@ -1348,7 +1346,6 @@ const styles = StyleSheet.create({
     emptyTitle: {
         fontSize: 28,
         fontWeight: '700',
-        color: '#000000',
         marginBottom: 12,
         textAlign: 'center',
         letterSpacing: -0.6,
@@ -1356,7 +1353,6 @@ const styles = StyleSheet.create({
     emptyDescription: {
         fontSize: 17,
         fontWeight: '400',
-        color: '#8E8E93',
         textAlign: 'center',
         lineHeight: 24,
         marginBottom: 40,
@@ -1367,7 +1363,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: '#007AFF',
         paddingHorizontal: 28,
         paddingVertical: 14,
         borderRadius: 14,
