@@ -34,7 +34,9 @@ import {
   Search,
   CheckCircle,
   AlertCircle,
-  Eye
+  Eye,
+  XCircle,
+  Info
 } from 'lucide-react-native';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
@@ -54,6 +56,12 @@ export default function RequestVehicleViewScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [foundVehicle, setFoundVehicle] = useState<any>(null);
 
+  // Message state for inline notifications
+  const [message, setMessage] = useState<{
+    type: 'error' | 'warning' | 'info' | 'success' | null;
+    text: string;
+  }>({ type: null, text: '' });
+
   // Form data
   const [formData, setFormData] = useState({
     name: auth.currentUser?.displayName || '',
@@ -64,8 +72,14 @@ export default function RequestVehicleViewScreen() {
 
   // Cerca veicolo per targa
   const searchVehicle = async () => {
+    // Clear previous messages
+    setMessage({ type: null, text: '' });
+
     if (!searchQuery.trim()) {
-      Alert.alert('Errore', 'Inserisci la targa del veicolo');
+      setMessage({
+        type: 'error',
+        text: 'Inserisci la targa del veicolo'
+      });
       return;
     }
 
@@ -75,19 +89,21 @@ export default function RequestVehicleViewScreen() {
       const vehicle = await viewRequestService.findVehicleByPlate(searchQuery);
 
       if (!vehicle) {
-        Alert.alert(
-          'Veicolo non trovato',
-          'Non è stato trovato nessun veicolo con questa targa. Assicurati di aver inserito la targa corretta.'
-        );
+        setMessage({
+          type: 'error',
+          text: 'Veicolo non trovato. Assicurati di aver inserito la targa corretta.'
+        });
+        setIsLoading(false);
         return;
       }
 
       // Verifica se proprietario
       if (vehicle.ownerId === auth.currentUser?.uid) {
-        Alert.alert(
-          'Sei il proprietario',
-          'Questo veicolo è già di tua proprietà. Non puoi richiedere di visualizzarlo.'
-        );
+        setMessage({
+          type: 'warning',
+          text: 'Questo veicolo è già di tua proprietà. Non puoi richiedere di visualizzarlo.'
+        });
+        setIsLoading(false);
         return;
       }
 
@@ -98,18 +114,23 @@ export default function RequestVehicleViewScreen() {
       );
 
       if (hasExisting) {
-        Alert.alert(
-          'Richiesta esistente',
-          'Hai già una richiesta in corso per questo veicolo. Controlla le tue richieste.'
-        );
+        setMessage({
+          type: 'info',
+          text: 'Hai già una richiesta in corso per questo veicolo. Controlla le tue richieste.'
+        });
+        setIsLoading(false);
         return;
       }
 
       setFoundVehicle(vehicle);
       setStep('request');
+      setMessage({ type: null, text: '' });
     } catch (error) {
       console.error('Error searching vehicle:', error);
-      Alert.alert('Errore', 'Impossibile cercare il veicolo. Riprova più tardi.');
+      setMessage({
+        type: 'error',
+        text: 'Impossibile cercare il veicolo. Riprova più tardi.'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -156,6 +177,45 @@ export default function RequestVehicleViewScreen() {
     }
   };
 
+  // Helper per renderizzare messaggi
+  const renderMessage = () => {
+    if (!message.type) return null;
+
+    const messageConfig = {
+      error: {
+        icon: <XCircle size={20} color={colors.error} />,
+        backgroundColor: colors.errorContainer,
+        textColor: colors.onErrorContainer,
+      },
+      warning: {
+        icon: <AlertCircle size={20} color="#f59e0b" />,
+        backgroundColor: '#fef3c7',
+        textColor: '#92400e',
+      },
+      info: {
+        icon: <Info size={20} color={colors.primary} />,
+        backgroundColor: colors.primaryContainer,
+        textColor: colors.onPrimaryContainer,
+      },
+      success: {
+        icon: <CheckCircle size={20} color="#34C759" />,
+        backgroundColor: '#dcfce7',
+        textColor: '#166534',
+      },
+    };
+
+    const config = messageConfig[message.type];
+
+    return (
+      <View style={[styles.messageBox, { backgroundColor: config.backgroundColor }]}>
+        {config.icon}
+        <Text style={[styles.messageText, { color: config.textColor }]}>
+          {message.text}
+        </Text>
+      </View>
+    );
+  };
+
   const renderSearchStep = () => (
     <View style={styles.stepContainer}>
       <Card style={[styles.card, { backgroundColor: colors.surface }]}>
@@ -184,11 +244,20 @@ export default function RequestVehicleViewScreen() {
                 style={[styles.input, { color: colors.onSurface }]}
                 placeholder="Es: AB123CD"
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(text) => {
+                  setSearchQuery(text);
+                  // Clear message when user starts typing again
+                  if (message.type) {
+                    setMessage({ type: null, text: '' });
+                  }
+                }}
                 autoCapitalize="characters"
                 placeholderTextColor={colors.onSurfaceVariant}
               />
             </View>
+
+            {/* Display inline message */}
+            {renderMessage()}
 
             <Button
               mode="contained"
@@ -482,6 +551,20 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
+  },
+  messageBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    gap: 10,
+    marginBottom: 16,
+  },
+  messageText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
   vehicleHeader: {
     flexDirection: 'row',
