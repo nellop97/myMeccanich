@@ -409,45 +409,107 @@ const HomeScreen = () => {
         );
     }
 
+    // ============================================
+    // RENDER EMPTY STATE
+    // ============================================
     if (vehicles.length === 0) {
+        // Web empty state
+        if (isDesktop || Platform.OS === 'web') {
+            return (
+                <View style={[styles.webContainer, { backgroundColor: themeColors.background }]}>
+                    <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
+
+                    {/* Web Header */}
+                    <View style={[styles.webHeader, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
+                        <View style={styles.webHeaderLeft}>
+                            <Text style={[styles.webHeaderTitle, { color: themeColors.text }]}>MyMeccanich</Text>
+                            <Text style={[styles.webHeaderGreeting, { color: themeColors.textSecondary }]}>
+                                Ciao, {user?.name || 'Benvenuto'}
+                            </Text>
+                        </View>
+                        <View style={styles.webHeaderRight}>
+                            <TouchableOpacity
+                                style={styles.webHeaderButton}
+                                onPress={() => setShowAddVehicleModal(true)}
+                            >
+                                <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
+                                <Text style={styles.webHeaderButtonText}>Nuovo Veicolo</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.webIconButton}
+                                onPress={() => navigation.navigate('Settings' as never)}
+                            >
+                                <SettingsIcon size={22} color={themeColors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    {/* Web Empty State */}
+                    <View style={styles.webEmptyState}>
+                        <View style={styles.emptyIconContainer}>
+                            <Car size={96} color={themeColors.textSecondary} strokeWidth={1.5} />
+                        </View>
+                        <Text style={[styles.webEmptyTitle, { color: themeColors.text }]}>Nessun Veicolo</Text>
+                        <Text style={[styles.webEmptyDescription, { color: themeColors.textSecondary }]}>
+                            Inizia aggiungendo il tuo primo veicolo per tracciare manutenzioni, scadenze e spese.
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.webEmptyButton, { backgroundColor: themeColors.primary }]}
+                            onPress={() => setShowAddVehicleModal(true)}
+                        >
+                            <Plus size={24} color="#fff" strokeWidth={2.5} />
+                            <Text style={styles.webEmptyButtonText}>Aggiungi Primo Veicolo</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Add Vehicle Modal */}
+                    {renderAddVehicleModal()}
+                </View>
+            );
+        }
+
+        // Mobile empty state
         return (
-            <SafeAreaView style={styles.container}>
-                <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+            <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+                <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
 
                 {/* Header */}
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>I Miei Veicoli</Text>
+                <View style={[styles.header, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
+                    <Text style={[styles.headerTitle, { color: themeColors.text }]}>I Miei Veicoli</Text>
                     <TouchableOpacity
                         style={styles.headerButton}
                         onPress={() => navigation.navigate('Settings' as never)}
                     >
-                        <SettingsIcon size={24} color="#64748b" />
+                        <SettingsIcon size={24} color={themeColors.textSecondary} />
                     </TouchableOpacity>
                 </View>
 
                 {/* Empty State */}
                 <View style={styles.emptyState}>
                     <View style={styles.emptyIconContainer}>
-                        <Car size={64} color="#cbd5e1" strokeWidth={1.5} />
+                        <Car size={64} color={themeColors.textSecondary} strokeWidth={1.5} />
                     </View>
-                    <Text style={styles.emptyTitle}>Nessun Veicolo</Text>
-                    <Text style={styles.emptyDescription}>
+                    <Text style={[styles.emptyTitle, { color: themeColors.text }]}>Nessun Veicolo</Text>
+                    <Text style={[styles.emptyDescription, { color: themeColors.textSecondary }]}>
                         Inizia aggiungendo il tuo primo veicolo per tracciare manutenzioni, scadenze e spese.
                     </Text>
                     <TouchableOpacity
-                        style={styles.emptyButton}
+                        style={[styles.emptyButton, { backgroundColor: themeColors.primary }]}
                         onPress={() => setShowAddVehicleModal(true)}
                     >
                         <Plus size={20} color="#fff" strokeWidth={2.5} />
                         <Text style={styles.emptyButtonText}>Aggiungi Veicolo</Text>
                     </TouchableOpacity>
                 </View>
+
+                {/* Add Vehicle Modal */}
+                {renderAddVehicleModal()}
             </SafeAreaView>
         );
     }
 
     // ============================================
-    // RENDER WEB LAYOUT (Desktop)
+    // RENDER WEB LAYOUT (Desktop with vehicles)
     // ============================================
     if (isDesktop || Platform.OS === 'web') {
         return (
@@ -1723,6 +1785,43 @@ const styles = StyleSheet.create({
         ...(Platform.OS === 'web' && {
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         }),
+    },
+    webEmptyState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+        paddingBottom: 80,
+    },
+    webEmptyTitle: {
+        fontSize: 32,
+        fontWeight: '700',
+        marginTop: 24,
+        marginBottom: 12,
+    },
+    webEmptyDescription: {
+        fontSize: 16,
+        lineHeight: 24,
+        textAlign: 'center',
+        maxWidth: 500,
+        marginBottom: 32,
+    },
+    webEmptyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 32,
+        paddingVertical: 16,
+        borderRadius: 12,
+        ...(Platform.OS === 'web' && {
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        }),
+    },
+    webEmptyButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#ffffff',
     },
     webHeaderLeft: {
         flexDirection: 'row',
