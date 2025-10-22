@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
   Switch,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,6 +45,7 @@ import {
   ArrowLeft,
   UserX,
   AlertTriangle,
+  X,
 } from 'lucide-react-native';
 
 // Firebase
@@ -98,6 +100,7 @@ const SettingsScreen = () => {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Theme colors
   const theme = {
@@ -280,108 +283,72 @@ const SettingsScreen = () => {
   // Logout
   const handleLogout = () => {
     console.log('🚪 handleLogout called');
-    Alert.alert('Disconnetti', 'Sei sicuro di voler uscire?', [
-      { text: 'Annulla', style: 'cancel' },
-      {
-        text: 'Disconnetti',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            console.log('🔄 Starting logout...');
-            setLoading(true);
-            await logout();
-            console.log('✅ Logout completato');
-          } catch (error) {
-            console.error('❌ Errore logout:', error);
-            Alert.alert('Errore', 'Impossibile disconnettere');
-            setLoading(false);
-          }
-        },
-      },
-    ]);
+    setShowLogoutDialog(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      console.log('🔄 Starting logout...');
+      setShowLogoutDialog(false);
+      setLoading(true);
+      await logout();
+      console.log('✅ Logout completato');
+    } catch (error) {
+      console.error('❌ Errore logout:', error);
+      Alert.alert('Errore', 'Impossibile disconnettere');
+      setLoading(false);
+    }
   };
 
   // Delete account completely
   const handleDeleteAccount = () => {
     console.log('🗑️ handleDeleteAccount called');
-    Alert.alert(
-      'Elimina Account',
-      'ATTENZIONE: Questa azione eliminerà permanentemente il tuo account e tutti i dati associati. Questa operazione NON può essere annullata.\n\nSei assolutamente sicuro?',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina Account',
-          style: 'destructive',
-          onPress: () => {
-            // Doppia conferma per sicurezza
-            Alert.alert(
-              'Conferma Finale',
-              'Confermi di voler eliminare definitivamente il tuo account?',
-              [
-                { text: 'Annulla', style: 'cancel' },
-                {
-                  text: 'Sì, Elimina',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      setLoading(true);
+    setShowDeleteDialog(true);
+  };
 
-                      if (!authUser?.uid) {
-                        throw new Error('Utente non autenticato');
-                      }
+  const confirmDeleteAccount = async () => {
+    try {
+      setShowDeleteDialog(false);
+      setLoading(true);
 
-                      // 1. Elimina documento utente da Firestore
-                      await deleteDoc(doc(db, 'users', authUser.uid));
+      if (!authUser?.uid) {
+        throw new Error('Utente non autenticato');
+      }
 
-                      // 2. Elimina tutti i veicoli dell'utente
-                      // (In produzione, dovresti anche eliminare manutenzioni, spese, etc.)
+      // 1. Elimina documento utente da Firestore
+      await deleteDoc(doc(db, 'users', authUser.uid));
 
-                      // 3. Elimina account Firebase Auth
-                      const currentUser = auth.currentUser;
-                      if (currentUser) {
-                        await deleteUser(currentUser);
-                      }
+      // 2. Elimina tutti i veicoli dell'utente
+      // (In produzione, dovresti anche eliminare manutenzioni, spese, etc.)
 
-                      // 4. Pulisci lo store locale
-                      const { resetStore } = useStore.getState();
-                      resetStore();
+      // 3. Elimina account Firebase Auth
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await deleteUser(currentUser);
+      }
 
-                      Alert.alert(
-                        'Account Eliminato',
-                        'Il tuo account è stato eliminato definitivamente.',
-                        [
-                          {
-                            text: 'OK',
-                            onPress: () => {
-                              // Il redirect alla login avverrà automaticamente
-                            },
-                          },
-                        ]
-                      );
-                    } catch (error: any) {
-                      console.error('Errore eliminazione account:', error);
-                      setLoading(false);
+      // 4. Pulisci lo store locale
+      const { resetStore } = useStore.getState();
+      resetStore();
 
-                      if (error.code === 'auth/requires-recent-login') {
-                        Alert.alert(
-                          'Riautenticazione Richiesta',
-                          'Per motivi di sicurezza, devi effettuare nuovamente il login prima di eliminare l\'account.'
-                        );
-                      } else {
-                        Alert.alert(
-                          'Errore',
-                          'Impossibile eliminare l\'account. Riprova più tardi.'
-                        );
-                      }
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
+      console.log('✅ Account eliminato con successo');
+      // Il redirect alla login avverrà automaticamente
+    } catch (error: any) {
+      console.error('❌ Errore eliminazione account:', error);
+      setLoading(false);
+
+      if (error.code === 'auth/requires-recent-login') {
+        Alert.alert(
+          'Riautenticazione Richiesta',
+          'Per motivi di sicurezza, devi effettuare nuovamente il login prima di eliminare l\'account.'
+        );
+      } else {
+        Alert.alert(
+          'Errore',
+          'Impossibile eliminare l\'account. Riprova più tardi.'
+        );
+      }
+    }
   };
 
   // Navigate to profile
@@ -741,6 +708,114 @@ const SettingsScreen = () => {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       {renderHeader()}
       {isDesktop ? renderDesktopLayout() : renderMobileLayout()}
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={showLogoutDialog}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLogoutDialog(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLogoutDialog(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.modalContent, { backgroundColor: theme.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Disconnetti</Text>
+              <TouchableOpacity
+                onPress={() => setShowLogoutDialog(false)}
+                style={styles.modalCloseButton}
+              >
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalDescription, { color: theme.textSecondary }]}>
+              Sei sicuro di voler uscire dal tuo account?
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.border }]}
+                onPress={() => setShowLogoutDialog(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>Annulla</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonDanger, { backgroundColor: theme.danger }]}
+                onPress={confirmLogout}
+              >
+                <LogOut size={18} color="#fff" />
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Disconnetti</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal
+        visible={showDeleteDialog}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteDialog(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDeleteDialog(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.modalContent, { backgroundColor: theme.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIconDanger, { backgroundColor: theme.danger + '20' }]}>
+                <AlertTriangle size={28} color={theme.danger} />
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowDeleteDialog(false)}
+                style={styles.modalCloseButton}
+              >
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalTitle, { color: theme.text, marginTop: 12 }]}>
+              Elimina Account
+            </Text>
+
+            <Text style={[styles.modalDescription, { color: theme.textSecondary }]}>
+              <Text style={{ fontWeight: '700' }}>ATTENZIONE:</Text> Questa azione eliminerà permanentemente il tuo account e tutti i dati associati.{'\n\n'}
+              Questa operazione <Text style={{ fontWeight: '700' }}>NON può essere annullata</Text>.{'\n\n'}
+              Sei assolutamente sicuro?
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.border }]}
+                onPress={() => setShowDeleteDialog(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>Annulla</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonDanger, { backgroundColor: theme.danger }]}
+                onPress={confirmDeleteAccount}
+              >
+                <Trash2 size={18} color="#fff" />
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Elimina Account</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -930,6 +1005,86 @@ const styles = StyleSheet.create({
   // Bottom spacing
   bottomSpacing: {
     height: 32,
+  },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 450,
+    borderRadius: 20,
+    padding: 24,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 10,
+      },
+    }),
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    flex: 1,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalIconDanger: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalDescription: {
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+      },
+    }),
+  },
+  modalButtonDanger: {
+    // Specific styling for danger buttons
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
