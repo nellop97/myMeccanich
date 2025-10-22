@@ -38,7 +38,9 @@ import {
   FileText,
   Image as ImageIcon,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  User,
+  UserCheck
 } from 'lucide-react-native';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
@@ -251,6 +253,37 @@ export default function VehicleDataViewScreen() {
                   {record.description}
                 </Text>
 
+                {/* Added by Info */}
+                {(record.addedByType || record.mechanicName) && (
+                  <View style={styles.maintenanceMetaInfo}>
+                    {record.addedByType && (
+                      <View style={[styles.addedByBadge, { backgroundColor:
+                        record.addedByType === 'mechanic' ? '#f0f9ff' : '#fef3c7'
+                      }]}>
+                        {record.addedByType === 'mechanic' ? (
+                          <UserCheck size={14} color="#0284c7" />
+                        ) : (
+                          <User size={14} color="#f59e0b" />
+                        )}
+                        <Text style={[styles.addedByText, { color:
+                          record.addedByType === 'mechanic' ? '#0284c7' : '#f59e0b'
+                        }]}>
+                          {record.addedByType === 'mechanic' ? 'Aggiunto dal meccanico' : 'Aggiunto dal proprietario'}
+                        </Text>
+                      </View>
+                    )}
+
+                    {record.mechanicName && (
+                      <View style={styles.mechanicInfo}>
+                        <Wrench size={14} color={colors.onSurfaceVariant} />
+                        <Text style={[styles.mechanicText, { color: colors.onSurfaceVariant }]}>
+                          Meccanico: {record.mechanicName}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
                 {record.cost && (
                   <Text style={[styles.maintenanceCost, { color: colors.primary }]}>
                     Costo: €{record.cost.toFixed(2)}
@@ -259,7 +292,7 @@ export default function VehicleDataViewScreen() {
 
                 {record.workshopName && (
                   <Text style={[styles.maintenanceWorkshop, { color: colors.onSurfaceVariant }]}>
-                    {record.workshopName}
+                    Officina: {record.workshopName}
                   </Text>
                 )}
 
@@ -657,6 +690,32 @@ const styles = StyleSheet.create({
   },
   maintenanceWorkshop: {
     fontSize: 13,
+  },
+  maintenanceMetaInfo: {
+    gap: 8,
+    marginTop: 8,
+  },
+  addedByBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  addedByText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mechanicInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mechanicText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   warrantyChip: {
     alignSelf: 'flex-start',

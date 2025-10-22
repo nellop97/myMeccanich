@@ -1,0 +1,148 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // Vehicles collection
+    match /vehicles/{vehicleId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // Vehicle View Requests collection
+    match /vehicle_view_requests/{requestId} {
+      // Chiunque autenticato può creare una richiesta
+      allow create: if isAuthenticated();
+
+      // Il proprietario del veicolo può leggere le richieste per i suoi veicoli
+      // Il richiedente può leggere le sue richieste
+      allow read: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.requesterEmail == request.auth.token.email
+      );
+
+      // Il proprietario può aggiornare (approvare/rifiutare/revocare)
+      allow update: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+
+      // Solo il proprietario può eliminare
+      allow delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // Vehicle View Logs collection (solo lettura per owner, scrittura per il sistema)
+    match /vehicle_view_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+
+    // Maintenance Records collection
+    match /maintenance_records/{recordId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.addedBy == request.auth.uid
+      );
+    }
+
+    // Fuel Records collection
+    match /fuel_records/{recordId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // Expenses collection
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // Documents collection
+    match /documents/{documentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // Reminders/Deadlines collection
+    match /deadlines/{deadlineId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // Activities collection
+    match /activities/{activityId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+
+    // Transfer requests collection
+    match /vehicle_transfers/{transferId} {
+      allow read: if isAuthenticated() && (
+        resource.data.sellerId == request.auth.uid ||
+        resource.data.buyerEmail == request.auth.token.email
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() &&
+        resource.data.sellerId == request.auth.uid;
+    }
+
+    match /carTransferRequests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserEmail == request.auth.token.email
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+    }
+
+    // Transfer logs
+    match /transferLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+
+    // Mechanic-specific collections
+    match /invoices/{invoiceId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /customers/{customerId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /appointments/{appointmentId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Access logs (audit)
+    match /access_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
+  }
+}

@@ -16,6 +16,7 @@ import {
     ActivityIndicator,
     useWindowDimensions,
     Alert,
+    Modal,
 } from 'react-native';
 import {
     Plus,
@@ -30,6 +31,9 @@ import {
     Bell,
     Settings as SettingsIcon,
     Menu,
+    Search,
+    Package,
+    X,
 } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -124,6 +128,7 @@ const HomeScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [pendingViewRequests, setPendingViewRequests] = useState(0);
+    const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
 
     // Dynamic theme colors
     const themeColors = React.useMemo(() => ({
@@ -247,8 +252,14 @@ const HomeScreen = () => {
             const requests = await viewRequestService.getIncomingRequests(user.id);
             const pendingCount = requests.filter(r => r.status === 'pending').length;
             setPendingViewRequests(pendingCount);
-        } catch (error) {
-            console.error('Error loading view requests:', error);
+        } catch (error: any) {
+            // Ignora errori di permessi Firebase - le regole potrebbero non essere ancora configurate
+            if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
+                console.warn('⚠️ Firestore rules not configured. Run: firebase deploy --only firestore:rules');
+                setPendingViewRequests(0);
+            } else {
+                console.error('Error loading view requests:', error);
+            }
         }
     };
 
@@ -299,6 +310,94 @@ const HomeScreen = () => {
     };
 
     // ============================================
+    // RENDER ADD VEHICLE MODAL
+    // ============================================
+    const renderAddVehicleModal = () => (
+        <Modal
+            visible={showAddVehicleModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowAddVehicleModal(false)}
+        >
+            <TouchableOpacity
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowAddVehicleModal(false)}
+            >
+                <TouchableOpacity
+                    activeOpacity={1}
+                    style={[styles.modalContent, { backgroundColor: themeColors.surface }]}
+                    onPress={(e) => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <View style={styles.modalHeader}>
+                        <Text style={[styles.modalTitle, { color: themeColors.text }]}>
+                            Cosa vuoi fare?
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => setShowAddVehicleModal(false)}
+                            style={styles.modalCloseButton}
+                        >
+                            <X size={24} color={themeColors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text style={[styles.modalDescription, { color: themeColors.textSecondary }]}>
+                        Scegli se aggiungere un veicolo già in tuo possesso o cercarne uno da acquistare
+                    </Text>
+
+                    {/* Options */}
+                    <View style={styles.modalOptions}>
+                        {/* Aggiungi mio veicolo */}
+                        <TouchableOpacity
+                            style={[styles.modalOption, { backgroundColor: themeColors.cardBackground }]}
+                            onPress={() => {
+                                setShowAddVehicleModal(false);
+                                navigation.navigate('AddVehicle' as never);
+                            }}
+                        >
+                            <View style={[styles.modalOptionIcon, { backgroundColor: '#dbeafe' }]}>
+                                <Package size={32} color="#3b82f6" />
+                            </View>
+                            <View style={styles.modalOptionContent}>
+                                <Text style={[styles.modalOptionTitle, { color: themeColors.text }]}>
+                                    Aggiungi il Mio Veicolo
+                                </Text>
+                                <Text style={[styles.modalOptionDescription, { color: themeColors.textSecondary }]}>
+                                    Registra un veicolo che possiedi già per tracciare manutenzioni e spese
+                                </Text>
+                            </View>
+                            <ChevronRight size={20} color={themeColors.textSecondary} />
+                        </TouchableOpacity>
+
+                        {/* Cerca veicolo da acquistare */}
+                        <TouchableOpacity
+                            style={[styles.modalOption, { backgroundColor: themeColors.cardBackground }]}
+                            onPress={() => {
+                                setShowAddVehicleModal(false);
+                                navigation.navigate('RequestVehicleView' as never);
+                            }}
+                        >
+                            <View style={[styles.modalOptionIcon, { backgroundColor: '#ede9fe' }]}>
+                                <Search size={32} color="#8b5cf6" />
+                            </View>
+                            <View style={styles.modalOptionContent}>
+                                <Text style={[styles.modalOptionTitle, { color: themeColors.text }]}>
+                                    Cerca Veicolo da Acquistare
+                                </Text>
+                                <Text style={[styles.modalOptionDescription, { color: themeColors.textSecondary }]}>
+                                    Richiedi di visualizzare i dati di un veicolo che vuoi comprare
+                                </Text>
+                            </View>
+                            <ChevronRight size={20} color={themeColors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </TouchableOpacity>
+        </Modal>
+    );
+
+    // ============================================
     // RENDER EMPTY STATE
     // ============================================
     if (loading) {
@@ -337,7 +436,7 @@ const HomeScreen = () => {
                     </Text>
                     <TouchableOpacity
                         style={styles.emptyButton}
-                        onPress={() => navigation.navigate('AddVehicle' as never)}
+                        onPress={() => setShowAddVehicleModal(true)}
                     >
                         <Plus size={20} color="#fff" strokeWidth={2.5} />
                         <Text style={styles.emptyButtonText}>Aggiungi Veicolo</Text>
@@ -365,7 +464,7 @@ const HomeScreen = () => {
                     <View style={styles.webHeaderRight}>
                         <TouchableOpacity
                             style={styles.webHeaderButton}
-                            onPress={() => navigation.navigate('AddVehicle' as never)}
+                            onPress={() => setShowAddVehicleModal(true)}
                         >
                             <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
                             <Text style={styles.webHeaderButtonText}>Nuovo Veicolo</Text>
@@ -678,6 +777,9 @@ const HomeScreen = () => {
                         </View>
                     </View>
                 </ScrollView>
+
+                {/* Add Vehicle Modal */}
+                {renderAddVehicleModal()}
             </View>
         );
     }
@@ -1017,7 +1119,7 @@ const HomeScreen = () => {
                         <Text style={styles.sectionTitle}>Le Mie Auto</Text>
                         <TouchableOpacity
                             style={[styles.addVehicleButton, isDesktop && styles.addVehicleButtonDesktop]}
-                            onPress={() => navigation.navigate('AddVehicle' as never)}
+                            onPress={() => setShowAddVehicleModal(true)}
                         >
                             <Plus size={18} color="#007AFF" strokeWidth={2.5} />
                             <Text style={styles.addVehicleButtonText}>Aggiungi</Text>
@@ -1056,6 +1158,9 @@ const HomeScreen = () => {
                 {/* Spacer finale */}
                 <View style={{ height: 40 }} />
             </ScrollView>
+
+            {/* Add Vehicle Modal */}
+            {renderAddVehicleModal()}
         </SafeAreaView>
     );
 };
@@ -2002,6 +2107,79 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '400',
         color: '#6b7280',
+    },
+
+    // Add Vehicle Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        width: '100%',
+        maxWidth: 500,
+        borderRadius: 20,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+    },
+    modalCloseButton: {
+        padding: 4,
+    },
+    modalDescription: {
+        fontSize: 15,
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    modalOptions: {
+        gap: 12,
+    },
+    modalOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 16,
+        gap: 16,
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+            },
+        }),
+    },
+    modalOptionIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalOptionContent: {
+        flex: 1,
+    },
+    modalOptionTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    modalOptionDescription: {
+        fontSize: 14,
+        lineHeight: 20,
     },
 });
 
