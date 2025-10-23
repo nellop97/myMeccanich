@@ -162,10 +162,55 @@ export class MaintenanceService {
       console.log('Final record to Firestore:', maintenanceRecord);
       console.log('=== END DEBUG ===');
 
-      await setDoc(docRef, maintenanceRecord);
+      console.log('Calling setDoc with docId:', docRef.id);
+
+      // TEST: Prova con dati minimali
+      const minimalRecord = {
+        vehicleId: cleanedRecord.vehicleId,
+        ownerId: cleanedRecord.ownerId,
+        type: cleanedRecord.type,
+        description: cleanedRecord.description,
+        date: cleanedRecord.date,
+        mileage: cleanedRecord.mileage,
+        cost: cleanedRecord.cost || 0,
+        warranty: cleanedRecord.warranty || false,
+        isVisible: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      console.log('MINIMAL RECORD TEST:', minimalRecord);
+
+      try {
+        await setDoc(docRef, minimalRecord);
+        console.log('✅ setDoc with minimal record completed successfully!');
+      } catch (setDocError: any) {
+        console.error('❌ setDoc failed with minimal record');
+        console.error('Error:', setDocError);
+        console.error('Error code:', setDocError?.code);
+        console.error('Error message:', setDocError?.message);
+
+        // Prova senza serverTimestamp
+        console.log('Trying without serverTimestamp...');
+        const withoutTimestamp = {
+          ...minimalRecord,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        await setDoc(docRef, withoutTimestamp);
+        console.log('✅ Worked without serverTimestamp!');
+      }
 
       // Aggiorna contatore manutenzioni del veicolo
-      await this.updateVehicleMaintenanceCount(record.vehicleId);
+      // TEMPORANEAMENTE COMMENTATO PER DEBUG
+      try {
+        console.log('Updating vehicle maintenance count...');
+        await this.updateVehicleMaintenanceCount(record.vehicleId);
+        console.log('✅ Vehicle maintenance count updated!');
+      } catch (countError) {
+        console.warn('⚠️ Failed to update maintenance count, but record was saved:', countError);
+        // Non bloccare il salvataggio se il contatore fallisce
+      }
 
       return docRef.id;
     } catch (error: any) {
