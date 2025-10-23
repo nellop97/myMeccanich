@@ -8,7 +8,9 @@
     "clean:ios": "cd ios && rm -rf Pods Podfile.lock build && pod install && cd ..",
     "clean:android": "cd android && ./gradlew clean && cd ..",
     "clean": "rm -rf .expo node_modules/.cache dist web-build $TMPDIR/metro-* $TMPDIR/haste-map-*",
-    "clean:all": "npm run clean && rm -rf node_modules && npm install"
+    "clean:all": "npm run clean && rm -rf node_modules && npm install",
+    "firebase:deploy:rules": "firebase deploy --only firestore:rules",
+    "firebase:deploy": "firebase deploy"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

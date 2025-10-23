@@ -85,8 +85,16 @@ export default function WorkshopSearchInput({
 
       setSuggestions(results);
       setShowSuggestions(results.length > 0);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error searching workshops:', error);
+
+      // Check if it's a permission error
+      if (error?.code === 'permission-denied') {
+        console.warn('Firebase permission error: Make sure Firestore rules allow list queries on users collection');
+        // Don't show error to user, just allow manual entry
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
     } finally {
       setLoading(false);
     }

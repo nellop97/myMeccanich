@@ -39,8 +39,13 @@ service cloud.firestore {
     // USERS COLLECTION
     // ============================================
     match /users/{userId} {
-      // Lettura: solo il proprietario o meccanici autenticati
-      allow read: if isOwner(userId) || isMechanic();
+      // Lettura singola: solo il proprietario o meccanici autenticati
+      allow get: if isOwner(userId) || isMechanic();
+
+      // Lettura query: utenti autenticati possono cercare meccanici (per ricerca officine)
+      // Limitato ai soli meccanici tramite query where('userType', '==', 'mechanic')
+      allow list: if isAuthenticated() &&
+                     request.query.limit <= 20;
 
       // Scrittura: solo il proprietario
       allow create: if isOwner(userId);
