@@ -128,6 +128,7 @@ const HomeScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [pendingViewRequests, setPendingViewRequests] = useState(0);
+    const [approvedViewRequests, setApprovedViewRequests] = useState(0);
     const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
 
     // Dynamic theme colors
@@ -246,29 +247,38 @@ const HomeScreen = () => {
 
     const loadPendingViewRequests = async () => {
         try {
-            if (!user?.id) {
-                console.log('⚠️ No user ID, skipping view requests load');
+            if (!user?.id || !user?.email) {
+                console.log('⚠️ No user ID or email, skipping view requests load');
                 return;
             }
 
-            console.log('📥 Loading pending view requests for user:', user.id);
+            console.log('📥 Loading view requests for user:', user.id, user.email);
             const viewRequestService = VehicleViewRequestService.getInstance();
-            const requests = await viewRequestService.getIncomingRequests(user.id);
-            console.log('📋 Total incoming requests:', requests.length);
-            console.log('📋 Request details:', requests.map(r => ({ id: r.id, status: r.status, requester: r.requesterEmail })));
 
-            const pendingCount = requests.filter(r => r.status === 'pending').length;
-            console.log('🔔 Pending requests count:', pendingCount);
+            // Carica richieste ricevute (come proprietario)
+            const incomingRequests = await viewRequestService.getIncomingRequests(user.id);
+            console.log('📋 Total incoming requests:', incomingRequests.length);
+            const pendingCount = incomingRequests.filter(r => r.status === 'pending').length;
+            console.log('🔔 Pending incoming requests:', pendingCount);
             setPendingViewRequests(pendingCount);
+
+            // Carica richieste inviate (come acquirente)
+            const myRequests = await viewRequestService.getMyRequests(user.email);
+            console.log('📤 Total my requests:', myRequests.length);
+            const approvedCount = myRequests.filter(r => r.status === 'approved').length;
+            console.log('✅ Approved my requests:', approvedCount);
+            setApprovedViewRequests(approvedCount);
         } catch (error: any) {
             // Ignora errori di permessi Firebase - le regole potrebbero non essere ancora configurate
             if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
                 console.warn('⚠️ Firestore rules not configured. Run: firebase deploy --only firestore:rules');
                 setPendingViewRequests(0);
+                setApprovedViewRequests(0);
             } else if (error?.message?.includes('index')) {
                 console.warn('⚠️ Firestore index required. Click the link in the error or deploy indexes: firebase deploy --only firestore:indexes');
                 console.error('Error loading view requests:', error);
                 setPendingViewRequests(0);
+                setApprovedViewRequests(0);
             } else {
                 console.error('❌ Error loading view requests:', error);
             }
@@ -1122,6 +1132,11 @@ const HomeScreen = () => {
                         >
                             <View style={[styles.quickActionIcon, { backgroundColor: '#e0f2fe' }]}>
                                 <TrendingUp size={20} color="#0284c7" />
+                                {approvedViewRequests > 0 && (
+                                    <View style={styles.quickActionBadge}>
+                                        <Text style={styles.quickActionBadgeText}>{approvedViewRequests}</Text>
+                                    </View>
+                                )}
                             </View>
                             <Text style={styles.quickActionLabel}>Mie Richieste</Text>
                         </TouchableOpacity>
