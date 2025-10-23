@@ -31,8 +31,7 @@ import {
   MapPin,
   Euro,
   Filter,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Lock,
   AlertCircle,
   CheckCircle,
@@ -344,7 +343,10 @@ export default function MaintenanceHistoryScreen() {
               
               {/* Card manutenzione */}
               <TouchableOpacity
-                onPress={() => toggleRecordExpansion(record.id)}
+                onPress={() => navigation.navigate('MaintenanceDetail', {
+                  maintenanceId: record.id,
+                  carId
+                })}
                 activeOpacity={0.7}
               >
                 <Card
@@ -391,19 +393,12 @@ export default function MaintenanceHistoryScreen() {
                           Garanzia
                         </Badge>
                       )}
-                      <IconButton
-                        icon={() => 
-                          expandedRecords.has(record.id) ? 
-                          <ChevronUp size={20} /> : 
-                          <ChevronDown size={20} />
-                        }
-                        size={20}
-                      />
+                      <ChevronRight size={20} color={colors.onSurfaceVariant} />
                     </View>
                   </View>
 
-                  {/* Dettagli espansi */}
-                  {expandedRecords.has(record.id) && (
+                  {/* Preview dettagli (limitato) */}
+                  {false && (
                     <View style={styles.recordDetails}>
                       <Divider style={styles.detailsDivider} />
                       

@@ -1,5 +1,5 @@
-// src/screens/user/AddMaintenanceScreen.tsx - REDESIGN COMPLETO
-import React, { useState } from 'react';
+// src/screens/user/AddMaintenanceScreen.tsx - VERSIONE COMPLETA
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -12,6 +12,7 @@ import {
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
@@ -19,45 +20,120 @@ import {
   ChevronDown,
   Euro,
   FileText,
-  Paperclip,
   Save,
+  MapPin,
+  User,
+  Phone,
+  Package,
+  Plus,
+  X,
+  Shield,
+  Clock,
+  Calendar as CalendarIcon,
+  Wrench,
 } from 'lucide-react-native';
 import { UniversalDatePicker } from '../../components';
 import { useAppThemeManager } from '../../hooks/useTheme';
-import { db, auth } from '../../services/firebase';
-import { collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { MaintenanceService } from '../../services/MaintenanceService';
+import { VehicleService } from '../../services/VehicleService';
+import { useAuth } from '../../hooks/useAuth';
+import { Timestamp } from 'firebase/firestore';
+import { Switch, Chip } from 'react-native-paper';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isWeb = Platform.OS === 'web';
+const isTablet = SCREEN_WIDTH >= 768;
 
 interface RouteParams {
-  carId: string;
+  vehicleId?: string;
+  carId?: string;
+}
+
+interface Part {
+  name: string;
+  quantity: number;
+  cost?: number;
 }
 
 const MAINTENANCE_TYPES = [
-  'Cambio olio',
-  'Tagliando',
-  'Revisione',
-  'Cambio gomme',
-  'Freni',
-  'Batteria',
-  'Filtri',
-  'Distribuzione',
-  'Altro',
+  { value: 'tagliando', label: 'Tagliando' },
+  { value: 'gomme', label: 'Pneumatici' },
+  { value: 'freni', label: 'Freni' },
+  { value: 'carrozzeria', label: 'Carrozzeria' },
+  { value: 'motore', label: 'Motore' },
+  { value: 'elettronica', label: 'Elettronica' },
+  { value: 'altro', label: 'Altro' },
 ];
 
 const AddMaintenanceScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { carId } = (route.params as RouteParams) || {};
+  const params = (route.params as RouteParams) || {};
+  const vehicleId = params.vehicleId || params.carId;
   const { colors, isDark } = useAppThemeManager();
+  const { user } = useAuth();
+  const maintenanceService = MaintenanceService.getInstance();
+  const vehicleService = VehicleService.getInstance();
 
+  // Form state
   const [date, setDate] = useState(new Date());
   const [type, setType] = useState('');
   const [description, setDescription] = useState('');
+  const [mileage, setMileage] = useState('');
+
+  // Cost fields
   const [cost, setCost] = useState('');
+  const [laborCost, setLaborCost] = useState('');
+  const [partsCost, setPartsCost] = useState('');
+
+  // Workshop fields
+  const [workshopName, setWorkshopName] = useState('');
+  const [mechanicName, setMechanicName] = useState('');
+  const [mechanicPhone, setMechanicPhone] = useState('');
+
+  // Parts
+  const [parts, setParts] = useState<Part[]>([]);
+  const [currentPart, setCurrentPart] = useState<Part>({ name: '', quantity: 1, cost: 0 });
+
+  // Warranty
+  const [warranty, setWarranty] = useState(false);
+  const [warrantyExpiry, setWarrantyExpiry] = useState<Date | null>(null);
+
+  // Next service
+  const [nextServiceDate, setNextServiceDate] = useState<Date | null>(null);
+  const [nextServiceMileage, setNextServiceMileage] = useState('');
+
+  // Notes
+  const [notes, setNotes] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+
+  // UI state
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [vehicle, setVehicle] = useState<any>(null);
+
+  useEffect(() => {
+    loadVehicle();
+  }, [vehicleId]);
+
+  const loadVehicle = async () => {
+    if (!vehicleId) return;
+
+    try {
+      const vehicleData = await vehicleService.getVehicle(vehicleId);
+      setVehicle(vehicleData);
+
+      // Pre-fill current mileage
+      if (vehicleData?.mileage) {
+        setMileage(vehicleData.mileage.toString());
+      }
+    } catch (error) {
+      console.error('Error loading vehicle:', error);
+    }
+  };
 
   const validateForm = () => {
-    if (!carId) {
+    if (!vehicleId) {
       Alert.alert('Errore', 'Veicolo non specificato');
       return false;
     }
@@ -69,7 +145,25 @@ const AddMaintenanceScreen = () => {
       Alert.alert('Errore', 'Inserisci una descrizione');
       return false;
     }
+    if (!mileage || parseInt(mileage) <= 0) {
+      Alert.alert('Errore', 'Inserisci un chilometraggio valido');
+      return false;
+    }
     return true;
+  };
+
+  const addPart = () => {
+    if (!currentPart.name.trim()) {
+      Alert.alert('Errore', 'Inserisci il nome del ricambio');
+      return;
+    }
+
+    setParts([...parts, currentPart]);
+    setCurrentPart({ name: '', quantity: 1, cost: 0 });
+  };
+
+  const removePart = (index: number) => {
+    setParts(parts.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
@@ -78,22 +172,63 @@ const AddMaintenanceScreen = () => {
     setIsLoading(true);
 
     try {
-      const user = auth.currentUser;
-      if (!user) throw new Error('Utente non autenticato');
+      if (!user?.uid) throw new Error('Utente non autenticato');
+
+      // Calculate total cost
+      const totalCost = cost ? parseFloat(cost.replace(',', '.')) :
+        (parseFloat(laborCost || '0') + parseFloat(partsCost || '0'));
 
       const maintenanceData = {
-        userId: user.uid,
-        vehicleId: carId,
-        type: type,
+        vehicleId: vehicleId!,
+        ownerId: user.uid,
+        type: type as any,
         description: description.trim(),
-        completedDate: Timestamp.fromDate(date),
-        cost: cost ? parseFloat(cost.replace(',', '.')) : 0,
-        status: 'completed',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        date: Timestamp.fromDate(date),
+        mileage: parseInt(mileage),
+
+        // Costs
+        cost: totalCost,
+        laborCost: laborCost ? parseFloat(laborCost.replace(',', '.')) : undefined,
+        partsCost: partsCost ? parseFloat(partsCost.replace(',', '.')) : undefined,
+
+        // Workshop
+        workshopName: workshopName || undefined,
+        mechanicName: mechanicName || undefined,
+        mechanicPhone: mechanicPhone || undefined,
+
+        // Parts
+        parts: parts.length > 0 ? parts.map(p => ({
+          name: p.name,
+          quantity: p.quantity,
+          cost: p.cost || undefined
+        })) : [],
+
+        // Documents (empty for now, can be added later)
+        documents: [],
+
+        // Warranty
+        warranty,
+        warrantyExpiry: warranty && warrantyExpiry ? Timestamp.fromDate(warrantyExpiry) : undefined,
+
+        // Next service
+        nextServiceDate: nextServiceDate ? Timestamp.fromDate(nextServiceDate) : undefined,
+        nextServiceMileage: nextServiceMileage ? parseInt(nextServiceMileage) : undefined,
+
+        // Notes
+        notes: notes.trim() || undefined,
+        invoiceNumber: invoiceNumber.trim() || undefined,
+
+        isVisible: true,
       };
 
-      await addDoc(collection(db, 'maintenance'), maintenanceData);
+      await maintenanceService.addMaintenanceRecord(maintenanceData);
+
+      // Update vehicle mileage if changed
+      if (vehicle && parseInt(mileage) > (vehicle.mileage || 0)) {
+        await vehicleService.updateVehicle(vehicleId!, {
+          mileage: parseInt(mileage),
+        });
+      }
 
       Alert.alert('Successo', 'Manutenzione registrata con successo!', [
         {
@@ -109,10 +244,12 @@ const AddMaintenanceScreen = () => {
     }
   };
 
+  const containerStyle = isWeb && isTablet ? styles.webContainer : styles.container;
+
   return (
     <SafeAreaView
       style={[
-        styles.container,
+        containerStyle,
         { backgroundColor: isDark ? colors.background : '#F8F9FA' },
       ]}
     >
@@ -131,7 +268,7 @@ const AddMaintenanceScreen = () => {
         </TouchableOpacity>
 
         <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
-          Nuovo Intervento
+          Nuova Manutenzione
         </Text>
 
         <View style={styles.headerButton} />
@@ -145,29 +282,33 @@ const AddMaintenanceScreen = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Form Card */}
+          {/* Main Info Card */}
           <View
             style={[
               styles.formCard,
               { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
             ]}
           >
-            {/* Data */}
+            <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Informazioni Generali
+            </Text>
+
+            {/* Date */}
             <View style={styles.formGroup}>
               <UniversalDatePicker
                 value={date}
                 onChange={setDate}
-                label="Data"
+                label="Data Intervento"
                 mode="date"
                 maximumDate={new Date()}
                 showCalendar={true}
               />
             </View>
 
-            {/* Tipo Intervento */}
+            {/* Type */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.onSurface }]}>
-                Tipo Intervento
+                Tipo Intervento *
               </Text>
               <TouchableOpacity
                 style={[
@@ -176,7 +317,7 @@ const AddMaintenanceScreen = () => {
                 ]}
                 onPress={() => setShowTypePicker(!showTypePicker)}
               >
-                <FileText
+                <Wrench
                   size={20}
                   color={colors.onSurfaceVariant}
                   strokeWidth={2}
@@ -190,7 +331,7 @@ const AddMaintenanceScreen = () => {
                     },
                   ]}
                 >
-                  {type || 'Seleziona tipo'}
+                  {type ? MAINTENANCE_TYPES.find(t => t.value === type)?.label : 'Seleziona tipo'}
                 </Text>
                 <ChevronDown
                   size={20}
@@ -199,7 +340,6 @@ const AddMaintenanceScreen = () => {
                 />
               </TouchableOpacity>
 
-              {/* Type Picker */}
               {showTypePicker && (
                 <View
                   style={[
@@ -212,18 +352,18 @@ const AddMaintenanceScreen = () => {
                 >
                   {MAINTENANCE_TYPES.map((item) => (
                     <TouchableOpacity
-                      key={item}
+                      key={item.value}
                       style={[
                         styles.pickerItem,
                         {
                           backgroundColor:
-                            type === item
+                            type === item.value
                               ? `${colors.primary}15`
                               : 'transparent',
                         },
                       ]}
                       onPress={() => {
-                        setType(item);
+                        setType(item.value);
                         setShowTypePicker(false);
                       }}
                     >
@@ -232,12 +372,12 @@ const AddMaintenanceScreen = () => {
                           styles.pickerItemText,
                           {
                             color:
-                              type === item ? colors.primary : colors.onSurface,
-                            fontWeight: type === item ? '600' : '400',
+                              type === item.value ? colors.primary : colors.onSurface,
+                            fontWeight: type === item.value ? '600' : '400',
                           },
                         ]}
                       >
-                        {item}
+                        {item.label}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -245,10 +385,10 @@ const AddMaintenanceScreen = () => {
               )}
             </View>
 
-            {/* Descrizione */}
+            {/* Description */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.onSurface }]}>
-                Descrizione
+                Descrizione *
               </Text>
               <View
                 style={[
@@ -266,16 +406,55 @@ const AddMaintenanceScreen = () => {
                   value={description}
                   onChangeText={setDescription}
                   multiline
-                  numberOfLines={4}
+                  numberOfLines={3}
                   textAlignVertical="top"
                 />
               </View>
             </View>
 
-            {/* Costo */}
+            {/* Mileage */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.onSurface }]}>
-                Costo
+                Chilometraggio *
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="Es. 50000"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={mileage}
+                  onChangeText={setMileage}
+                  keyboardType="numeric"
+                />
+                <Text style={[styles.unit, { color: colors.onSurfaceVariant }]}>
+                  km
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Costs Card */}
+          <View
+            style={[
+              styles.formCard,
+              { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Costi
+            </Text>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Costo Totale
               </Text>
               <View
                 style={[
@@ -302,29 +481,436 @@ const AddMaintenanceScreen = () => {
               </View>
             </View>
 
-            {/* Allegati */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.onSurface }]}>
-                Allegati
+                Costo Manodopera
               </Text>
-              <TouchableOpacity
+              <View
                 style={[
-                  styles.attachmentButton,
-                  {
-                    backgroundColor: `${colors.primary}10`,
-                    borderColor: `${colors.primary}30`,
-                  },
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
                 ]}
-                onPress={() => {
-                  // TODO: Implement file picker
-                  Alert.alert('Info', 'Funzione allegati in arrivo');
-                }}
               >
-                <Paperclip size={20} color={colors.primary} strokeWidth={2} />
-                <Text style={[styles.attachmentText, { color: colors.primary }]}>
-                  Aggiungi foto o documenti
+                <Euro
+                  size={20}
+                  color={colors.onSurfaceVariant}
+                  strokeWidth={2}
+                />
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="0,00"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={laborCost}
+                  onChangeText={setLaborCost}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Costo Ricambi
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <Euro
+                  size={20}
+                  color={colors.onSurfaceVariant}
+                  strokeWidth={2}
+                />
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="0,00"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={partsCost}
+                  onChangeText={setPartsCost}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Numero Fattura
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <FileText
+                  size={20}
+                  color={colors.onSurfaceVariant}
+                  strokeWidth={2}
+                />
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="Es. FAT-2024-001"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={invoiceNumber}
+                  onChangeText={setInvoiceNumber}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Workshop Card */}
+          <View
+            style={[
+              styles.formCard,
+              { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Officina e Meccanico
+            </Text>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Nome Officina
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <MapPin
+                  size={20}
+                  color={colors.onSurfaceVariant}
+                  strokeWidth={2}
+                />
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="Es. Autofficina Rossi"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={workshopName}
+                  onChangeText={setWorkshopName}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Nome Meccanico
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <User
+                  size={20}
+                  color={colors.onSurfaceVariant}
+                  strokeWidth={2}
+                />
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="Es. Mario Rossi"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={mechanicName}
+                  onChangeText={setMechanicName}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Telefono Meccanico
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <Phone
+                  size={20}
+                  color={colors.onSurfaceVariant}
+                  strokeWidth={2}
+                />
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="Es. +39 123 456 7890"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={mechanicPhone}
+                  onChangeText={setMechanicPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Parts Card */}
+          <View
+            style={[
+              styles.formCard,
+              { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Ricambi Utilizzati
+            </Text>
+
+            {/* Parts List */}
+            {parts.length > 0 && (
+              <View style={styles.partsList}>
+                {parts.map((part, index) => (
+                  <View key={index} style={[styles.partChip, { backgroundColor: `${colors.primary}15` }]}>
+                    <Package size={16} color={colors.primary} />
+                    <View style={styles.partChipText}>
+                      <Text style={[styles.partName, { color: colors.onSurface }]}>
+                        {part.name}
+                      </Text>
+                      <Text style={[styles.partDetail, { color: colors.onSurfaceVariant }]}>
+                        Qty: {part.quantity} {part.cost ? `• €${part.cost}` : ''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => removePart(index)}>
+                      <X size={18} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Add Part Form */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Nome Ricambio
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <Package
+                  size={20}
+                  color={colors.onSurfaceVariant}
+                  strokeWidth={2}
+                />
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="Es. Filtro olio"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={currentPart.name}
+                  onChangeText={(text) => setCurrentPart({ ...currentPart, name: text })}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={[styles.label, { color: colors.onSurface }]}>
+                  Quantità
                 </Text>
-              </TouchableOpacity>
+                <View
+                  style={[
+                    styles.inputContainer,
+                    { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                  ]}
+                >
+                  <TextInput
+                    style={[
+                      styles.input,
+                      { color: colors.onSurface, flex: 1 },
+                    ]}
+                    placeholder="1"
+                    placeholderTextColor={colors.onSurfaceVariant}
+                    value={currentPart.quantity.toString()}
+                    onChangeText={(text) => setCurrentPart({ ...currentPart, quantity: parseInt(text) || 1 })}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+                <Text style={[styles.label, { color: colors.onSurface }]}>
+                  Costo
+                </Text>
+                <View
+                  style={[
+                    styles.inputContainer,
+                    { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                  ]}
+                >
+                  <TextInput
+                    style={[
+                      styles.input,
+                      { color: colors.onSurface, flex: 1 },
+                    ]}
+                    placeholder="0"
+                    placeholderTextColor={colors.onSurfaceVariant}
+                    value={currentPart.cost?.toString()}
+                    onChangeText={(text) => setCurrentPart({ ...currentPart, cost: parseFloat(text) || 0 })}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.addPartButton,
+                { backgroundColor: colors.primary },
+              ]}
+              onPress={addPart}
+            >
+              <Plus size={20} color="#FFFFFF" strokeWidth={2} />
+              <Text style={styles.addPartButtonText}>Aggiungi Ricambio</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Warranty Card */}
+          <View
+            style={[
+              styles.formCard,
+              { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Garanzia
+            </Text>
+
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabel}>
+                <Shield size={20} color={colors.primary} />
+                <Text style={[styles.switchText, { color: colors.onSurface }]}>
+                  Intervento in garanzia
+                </Text>
+              </View>
+              <Switch
+                value={warranty}
+                onValueChange={setWarranty}
+                color={colors.primary}
+              />
+            </View>
+
+            {warranty && (
+              <View style={styles.formGroup}>
+                <UniversalDatePicker
+                  value={warrantyExpiry || new Date()}
+                  onChange={setWarrantyExpiry}
+                  label="Scadenza Garanzia"
+                  mode="date"
+                  minimumDate={new Date()}
+                  showCalendar={true}
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Next Service Card */}
+          <View
+            style={[
+              styles.formCard,
+              { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Prossimo Intervento
+            </Text>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Data Prossimo Intervento
+              </Text>
+              <UniversalDatePicker
+                value={nextServiceDate || new Date()}
+                onChange={setNextServiceDate}
+                label="Seleziona data"
+                mode="date"
+                minimumDate={new Date()}
+                showCalendar={true}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.onSurface }]}>
+                Chilometraggio Prossimo Intervento
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
+                ]}
+              >
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: colors.onSurface, flex: 1 },
+                  ]}
+                  placeholder="Es. 60000"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={nextServiceMileage}
+                  onChangeText={setNextServiceMileage}
+                  keyboardType="numeric"
+                />
+                <Text style={[styles.unit, { color: colors.onSurfaceVariant }]}>
+                  km
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Notes Card */}
+          <View
+            style={[
+              styles.formCard,
+              { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
+              Note Aggiuntive
+            </Text>
+
+            <View
+              style={[
+                styles.textAreaContainer,
+                { borderColor: isDark ? '#374151' : '#E5E7EB' },
+              ]}
+            >
+              <TextInput
+                style={[
+                  styles.textArea,
+                  { color: colors.onSurface },
+                ]}
+                placeholder="Aggiungi eventuali note o osservazioni..."
+                placeholderTextColor={colors.onSurfaceVariant}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
             </View>
           </View>
 
@@ -343,13 +929,14 @@ const AddMaintenanceScreen = () => {
             ) : (
               <>
                 <Save size={20} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.saveButtonText}>Salva Intervento</Text>
+                <Text style={styles.saveButtonText}>Salva Manutenzione</Text>
               </>
             )}
           </TouchableOpacity>
+
+          <View style={styles.bottomSpacing} />
         </ScrollView>
       </KeyboardAvoidingView>
-
     </SafeAreaView>
   );
 };
@@ -357,6 +944,12 @@ const AddMaintenanceScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  webContainer: {
+    flex: 1,
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
   },
   keyboardView: {
     flex: 1,
@@ -382,14 +975,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   scrollContent: {
-    padding: 20,
+    padding: 16,
   },
-
-  // Form Card
   formCard: {
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 16,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -405,19 +996,23 @@ const styles = StyleSheet.create({
       },
     }),
   },
-
-  // Form Group
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
   formGroup: {
-    marginBottom: 24,
+    marginBottom: 16,
+  },
+  formRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     marginBottom: 8,
-    letterSpacing: -0.2,
   },
-
-  // Input Container
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -434,8 +1029,10 @@ const styles = StyleSheet.create({
   inputText: {
     fontSize: 15,
   },
-
-  // Text Area
+  unit: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   textAreaContainer: {
     borderWidth: 1,
     borderRadius: 12,
@@ -443,11 +1040,9 @@ const styles = StyleSheet.create({
   },
   textArea: {
     fontSize: 15,
-    minHeight: 100,
+    minHeight: 80,
     padding: 0,
   },
-
-  // Picker
   picker: {
     marginTop: 8,
     borderWidth: 1,
@@ -462,24 +1057,56 @@ const styles = StyleSheet.create({
   pickerItemText: {
     fontSize: 15,
   },
-
-  // Attachment Button
-  attachmentButton: {
+  partsList: {
+    marginBottom: 16,
+    gap: 8,
+  },
+  partChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  partChipText: {
+    flex: 1,
+  },
+  partName: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  partDetail: {
+    fontSize: 12,
+  },
+  addPartButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 12,
     gap: 8,
   },
-  attachmentText: {
+  addPartButtonText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },
-
-  // Save Button
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  switchLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  switchText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -510,6 +1137,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: -0.2,
+  },
+  bottomSpacing: {
+    height: 20,
   },
 });
 
