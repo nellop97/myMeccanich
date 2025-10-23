@@ -202,16 +202,24 @@ const AddMaintenanceScreen = () => {
         cost: totalCost,
         warranty,
         isVisible: true,
-        parts: parts.length > 0 ? parts.map(p => {
+      };
+
+      // Add parts only if there are any
+      if (parts.length > 0) {
+        maintenanceData.parts = parts.map(p => {
           const part: any = {
             name: p.name,
             quantity: p.quantity,
           };
           if (p.cost && p.cost > 0) part.cost = p.cost;
           return part;
-        }) : [],
-        documents: [],
-      };
+        });
+      }
+
+      // Add documents only if there are any (currently always empty, so skip)
+      // if (documents.length > 0) {
+      //   maintenanceData.documents = documents;
+      // }
 
       // Add optional fields only if they have valid values
       if (laborCost && laborCostNum > 0) maintenanceData.laborCost = laborCostNum;
@@ -229,7 +237,25 @@ const AddMaintenanceScreen = () => {
       if (notes.trim()) maintenanceData.notes = notes.trim();
       if (invoiceNumber.trim()) maintenanceData.invoiceNumber = invoiceNumber.trim();
 
-      console.log('Maintenance data to send:', maintenanceData); // Debug log
+      console.log('=== ADDMAINTENANCE DEBUG ===');
+      console.log('Form values:', {
+        type,
+        description: description.trim(),
+        mileage,
+        cost,
+        laborCost,
+        partsCost,
+        workshopName,
+        mechanicName,
+        warranty,
+        partsCount: parts.length,
+      });
+      console.log('Maintenance data to send:', maintenanceData);
+      console.log('Data types:');
+      Object.entries(maintenanceData).forEach(([key, value]) => {
+        console.log(`  ${key}:`, typeof value, Array.isArray(value) ? `Array(${value.length})` : '');
+      });
+      console.log('=== END ADDMAINTENANCE DEBUG ===');
 
       await maintenanceService.addMaintenanceRecord(maintenanceData);
 

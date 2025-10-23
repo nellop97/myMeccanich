@@ -80,6 +80,9 @@ export class MaintenanceService {
       // Salta campi undefined
       if (value === undefined) continue;
 
+      // Salta campi null (opzionale, dipende dalla logica)
+      // if (value === null) continue;
+
       // Salta campi NaN
       if (typeof value === 'number' && isNaN(value)) continue;
 
@@ -88,13 +91,37 @@ export class MaintenanceService {
 
       // Gestisci array
       if (Array.isArray(value)) {
-        sanitized[key] = value.map(item =>
-          typeof item === 'object' ? this.sanitizeData(item) : item
-        );
+        // Salta array vuoti per campi opzionali (parts, documents)
+        if (value.length === 0 && (key === 'parts' || key === 'documents')) {
+          continue;
+        }
+        // Sanitizza ogni elemento dell'array
+        const cleanedArray = value
+          .map(item => typeof item === 'object' && item !== null ? this.sanitizeData(item) : item)
+          .filter(item => item !== undefined && item !== null);
+
+        if (cleanedArray.length > 0) {
+          sanitized[key] = cleanedArray;
+        }
       }
-      // Gestisci oggetti nested (ma non Timestamp)
-      else if (value && typeof value === 'object' && value.constructor?.name !== 'Timestamp') {
-        sanitized[key] = this.sanitizeData(value);
+      // Gestisci Timestamp di Firebase (lascialo com'è)
+      else if (value && typeof value === 'object' &&
+               (value.constructor?.name === 'Timestamp' ||
+                value.toDate !== undefined ||
+                value.seconds !== undefined)) {
+        sanitized[key] = value;
+      }
+      // Gestisci oggetti nested
+      else if (value && typeof value === 'object') {
+        const cleaned = this.sanitizeData(value);
+        // Solo se l'oggetto pulito ha almeno una proprietà
+        if (Object.keys(cleaned).length > 0) {
+          sanitized[key] = cleaned;
+        }
+      }
+      // Gestisci stringhe vuote (opzionale)
+      else if (typeof value === 'string' && value.trim() === '') {
+        continue; // Salta stringhe vuote
       }
       // Aggiungi valore valido
       else {
@@ -112,8 +139,13 @@ export class MaintenanceService {
     try {
       const docRef = doc(collection(db, this.maintenanceCollection));
 
+      console.log('=== MAINTENANCE RECORD DEBUG ===');
+      console.log('Original record:', JSON.stringify(record, null, 2));
+
       // Pulisci i dati prima dell'invio
       const cleanedRecord = this.sanitizeData(record);
+
+      console.log('Cleaned record:', JSON.stringify(cleanedRecord, null, 2));
 
       const maintenanceRecord = {
         ...cleanedRecord,
@@ -122,7 +154,13 @@ export class MaintenanceService {
         isVisible: true
       };
 
-      console.log('Sending to Firestore:', maintenanceRecord); // Debug
+      // Log dettagliato di ogni campo
+      Object.entries(maintenanceRecord).forEach(([key, value]) => {
+        console.log(`Field "${key}":`, typeof value, value);
+      });
+
+      console.log('Final record to Firestore:', maintenanceRecord);
+      console.log('=== END DEBUG ===');
 
       await setDoc(docRef, maintenanceRecord);
 
@@ -130,8 +168,13 @@ export class MaintenanceService {
       await this.updateVehicleMaintenanceCount(record.vehicleId);
 
       return docRef.id;
-    } catch (error) {
+    } catch (error: any) {
+      console.error('=== FIRESTORE ERROR ===');
       console.error('Error adding maintenance record:', error);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error('=== END ERROR ===');
       throw error;
     }
   }
