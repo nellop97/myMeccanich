@@ -175,18 +175,30 @@ const AddMaintenanceScreen = () => {
     try {
       if (!user?.uid) throw new Error('Utente non autenticato');
 
-      // Calculate total cost
-      const totalCost = cost ? parseFloat(cost.replace(',', '.')) :
-        (parseFloat(laborCost || '0') + parseFloat(partsCost || '0'));
+      // Helper function to safely parse numbers
+      const safeParseFloat = (value: string): number => {
+        const parsed = parseFloat(value.replace(',', '.'));
+        return isNaN(parsed) ? 0 : parsed;
+      };
 
-      // Build maintenance data object, excluding undefined fields
+      const safeParseInt = (value: string): number => {
+        const parsed = parseInt(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      // Calculate total cost safely
+      const laborCostNum = laborCost ? safeParseFloat(laborCost) : 0;
+      const partsCostNum = partsCost ? safeParseFloat(partsCost) : 0;
+      const totalCost = cost ? safeParseFloat(cost) : (laborCostNum + partsCostNum);
+
+      // Build maintenance data object, excluding undefined/invalid fields
       const maintenanceData: any = {
         vehicleId: vehicleId!,
         ownerId: user.uid,
         type: type as any,
         description: description.trim(),
         date: Timestamp.fromDate(date),
-        mileage: parseInt(mileage),
+        mileage: safeParseInt(mileage),
         cost: totalCost,
         warranty,
         isVisible: true,
@@ -195,24 +207,29 @@ const AddMaintenanceScreen = () => {
             name: p.name,
             quantity: p.quantity,
           };
-          if (p.cost) part.cost = p.cost;
+          if (p.cost && p.cost > 0) part.cost = p.cost;
           return part;
         }) : [],
         documents: [],
       };
 
-      // Add optional fields only if they have values
-      if (laborCost) maintenanceData.laborCost = parseFloat(laborCost.replace(',', '.'));
-      if (partsCost) maintenanceData.partsCost = parseFloat(partsCost.replace(',', '.'));
-      if (workshopName) maintenanceData.workshopName = workshopName;
+      // Add optional fields only if they have valid values
+      if (laborCost && laborCostNum > 0) maintenanceData.laborCost = laborCostNum;
+      if (partsCost && partsCostNum > 0) maintenanceData.partsCost = partsCostNum;
+      if (workshopName?.trim()) maintenanceData.workshopName = workshopName.trim();
       if (workshopId) maintenanceData.workshopId = workshopId;
-      if (mechanicName) maintenanceData.mechanicName = mechanicName;
-      if (mechanicPhone) maintenanceData.mechanicPhone = mechanicPhone;
+      if (mechanicName?.trim()) maintenanceData.mechanicName = mechanicName.trim();
+      if (mechanicPhone?.trim()) maintenanceData.mechanicPhone = mechanicPhone.trim();
       if (warranty && warrantyExpiry) maintenanceData.warrantyExpiry = Timestamp.fromDate(warrantyExpiry);
       if (nextServiceDate) maintenanceData.nextServiceDate = Timestamp.fromDate(nextServiceDate);
-      if (nextServiceMileage) maintenanceData.nextServiceMileage = parseInt(nextServiceMileage);
+      if (nextServiceMileage) {
+        const nextMileageNum = safeParseInt(nextServiceMileage);
+        if (nextMileageNum > 0) maintenanceData.nextServiceMileage = nextMileageNum;
+      }
       if (notes.trim()) maintenanceData.notes = notes.trim();
       if (invoiceNumber.trim()) maintenanceData.invoiceNumber = invoiceNumber.trim();
+
+      console.log('Maintenance data to send:', maintenanceData); // Debug log
 
       await maintenanceService.addMaintenanceRecord(maintenanceData);
 

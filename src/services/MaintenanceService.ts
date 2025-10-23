@@ -72,19 +72,57 @@ export class MaintenanceService {
     }
   }
 
+  // Helper per pulire i dati prima dell'invio a Firestore
+  private sanitizeData(data: any): any {
+    const sanitized: any = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      // Salta campi undefined
+      if (value === undefined) continue;
+
+      // Salta campi NaN
+      if (typeof value === 'number' && isNaN(value)) continue;
+
+      // Salta campi Infinity
+      if (value === Infinity || value === -Infinity) continue;
+
+      // Gestisci array
+      if (Array.isArray(value)) {
+        sanitized[key] = value.map(item =>
+          typeof item === 'object' ? this.sanitizeData(item) : item
+        );
+      }
+      // Gestisci oggetti nested (ma non Timestamp)
+      else if (value && typeof value === 'object' && value.constructor?.name !== 'Timestamp') {
+        sanitized[key] = this.sanitizeData(value);
+      }
+      // Aggiungi valore valido
+      else {
+        sanitized[key] = value;
+      }
+    }
+
+    return sanitized;
+  }
+
   // Aggiungi record manutenzione
   async addMaintenanceRecord(
     record: Omit<MaintenanceRecord, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<string> {
     try {
       const docRef = doc(collection(db, this.maintenanceCollection));
-      
+
+      // Pulisci i dati prima dell'invio
+      const cleanedRecord = this.sanitizeData(record);
+
       const maintenanceRecord = {
-        ...record,
+        ...cleanedRecord,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         isVisible: true
       };
+
+      console.log('Sending to Firestore:', maintenanceRecord); // Debug
 
       await setDoc(docRef, maintenanceRecord);
 
