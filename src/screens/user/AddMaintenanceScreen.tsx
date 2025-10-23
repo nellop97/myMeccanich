@@ -32,7 +32,7 @@ import {
   Calendar as CalendarIcon,
   Wrench,
 } from 'lucide-react-native';
-import { UniversalDatePicker } from '../../components';
+import { UniversalDatePicker, WorkshopSearchInput } from '../../components';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { MaintenanceService } from '../../services/MaintenanceService';
 import { VehicleService } from '../../services/VehicleService';
@@ -51,7 +51,7 @@ interface RouteParams {
 
 interface Part {
   name: string;
-  quantity: number;
+  quantity: string; // Text field for flexibility (e.g., "2", "4 pezzi", "set completo")
   cost?: number;
 }
 
@@ -88,12 +88,13 @@ const AddMaintenanceScreen = () => {
 
   // Workshop fields
   const [workshopName, setWorkshopName] = useState('');
+  const [workshopId, setWorkshopId] = useState<string | null>(null);
   const [mechanicName, setMechanicName] = useState('');
   const [mechanicPhone, setMechanicPhone] = useState('');
 
   // Parts
   const [parts, setParts] = useState<Part[]>([]);
-  const [currentPart, setCurrentPart] = useState<Part>({ name: '', quantity: 1, cost: 0 });
+  const [currentPart, setCurrentPart] = useState<Part>({ name: '', quantity: '1', cost: 0 });
 
   // Warranty
   const [warranty, setWarranty] = useState(false);
@@ -159,7 +160,7 @@ const AddMaintenanceScreen = () => {
     }
 
     setParts([...parts, currentPart]);
-    setCurrentPart({ name: '', quantity: 1, cost: 0 });
+    setCurrentPart({ name: '', quantity: '1', cost: 0 });
   };
 
   const removePart = (index: number) => {
@@ -178,48 +179,40 @@ const AddMaintenanceScreen = () => {
       const totalCost = cost ? parseFloat(cost.replace(',', '.')) :
         (parseFloat(laborCost || '0') + parseFloat(partsCost || '0'));
 
-      const maintenanceData = {
+      // Build maintenance data object, excluding undefined fields
+      const maintenanceData: any = {
         vehicleId: vehicleId!,
         ownerId: user.uid,
         type: type as any,
         description: description.trim(),
         date: Timestamp.fromDate(date),
         mileage: parseInt(mileage),
-
-        // Costs
         cost: totalCost,
-        laborCost: laborCost ? parseFloat(laborCost.replace(',', '.')) : undefined,
-        partsCost: partsCost ? parseFloat(partsCost.replace(',', '.')) : undefined,
-
-        // Workshop
-        workshopName: workshopName || undefined,
-        mechanicName: mechanicName || undefined,
-        mechanicPhone: mechanicPhone || undefined,
-
-        // Parts
-        parts: parts.length > 0 ? parts.map(p => ({
-          name: p.name,
-          quantity: p.quantity,
-          cost: p.cost || undefined
-        })) : [],
-
-        // Documents (empty for now, can be added later)
-        documents: [],
-
-        // Warranty
         warranty,
-        warrantyExpiry: warranty && warrantyExpiry ? Timestamp.fromDate(warrantyExpiry) : undefined,
-
-        // Next service
-        nextServiceDate: nextServiceDate ? Timestamp.fromDate(nextServiceDate) : undefined,
-        nextServiceMileage: nextServiceMileage ? parseInt(nextServiceMileage) : undefined,
-
-        // Notes
-        notes: notes.trim() || undefined,
-        invoiceNumber: invoiceNumber.trim() || undefined,
-
         isVisible: true,
+        parts: parts.length > 0 ? parts.map(p => {
+          const part: any = {
+            name: p.name,
+            quantity: p.quantity,
+          };
+          if (p.cost) part.cost = p.cost;
+          return part;
+        }) : [],
+        documents: [],
       };
+
+      // Add optional fields only if they have values
+      if (laborCost) maintenanceData.laborCost = parseFloat(laborCost.replace(',', '.'));
+      if (partsCost) maintenanceData.partsCost = parseFloat(partsCost.replace(',', '.'));
+      if (workshopName) maintenanceData.workshopName = workshopName;
+      if (workshopId) maintenanceData.workshopId = workshopId;
+      if (mechanicName) maintenanceData.mechanicName = mechanicName;
+      if (mechanicPhone) maintenanceData.mechanicPhone = mechanicPhone;
+      if (warranty && warrantyExpiry) maintenanceData.warrantyExpiry = Timestamp.fromDate(warrantyExpiry);
+      if (nextServiceDate) maintenanceData.nextServiceDate = Timestamp.fromDate(nextServiceDate);
+      if (nextServiceMileage) maintenanceData.nextServiceMileage = parseInt(nextServiceMileage);
+      if (notes.trim()) maintenanceData.notes = notes.trim();
+      if (invoiceNumber.trim()) maintenanceData.invoiceNumber = invoiceNumber.trim();
 
       await maintenanceService.addMaintenanceRecord(maintenanceData);
 
@@ -579,33 +572,19 @@ const AddMaintenanceScreen = () => {
               Officina e Meccanico
             </Text>
 
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.onSurface }]}>
-                Nome Officina
-              </Text>
-              <View
-                style={[
-                  styles.inputContainer,
-                  { borderColor: isDark ? '#374151' : '#E5E7EB' },
-                ]}
-              >
-                <MapPin
-                  size={20}
-                  color={colors.onSurfaceVariant}
-                  strokeWidth={2}
-                />
-                <TextInput
-                  style={[
-                    styles.input,
-                    { color: colors.onSurface, flex: 1 },
-                  ]}
-                  placeholder="Es. Autofficina Rossi"
-                  placeholderTextColor={colors.onSurfaceVariant}
-                  value={workshopName}
-                  onChangeText={setWorkshopName}
-                />
-              </View>
-            </View>
+            <WorkshopSearchInput
+              value={workshopName}
+              onChangeText={setWorkshopName}
+              onSelectWorkshop={(workshop) => {
+                setWorkshopName(workshop.name);
+                setWorkshopId(workshop.id);
+                if (workshop.phone) {
+                  setMechanicPhone(workshop.phone);
+                }
+              }}
+              label="Nome Officina"
+              placeholder="Cerca officina o inserisci manualmente"
+            />
 
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.onSurface }]}>
@@ -743,11 +722,10 @@ const AddMaintenanceScreen = () => {
                       styles.input,
                       { color: colors.onSurface, flex: 1 },
                     ]}
-                    placeholder="1"
+                    placeholder="Es. 1, 4 pezzi, set"
                     placeholderTextColor={colors.onSurfaceVariant}
-                    value={currentPart.quantity.toString()}
-                    onChangeText={(text) => setCurrentPart({ ...currentPart, quantity: parseInt(text) || 1 })}
-                    keyboardType="numeric"
+                    value={currentPart.quantity}
+                    onChangeText={(text) => setCurrentPart({ ...currentPart, quantity: text })}
                   />
                 </View>
               </View>
