@@ -484,6 +484,17 @@ const HomeScreen = () => {
                             <Plus size={24} color="#fff" strokeWidth={2.5} />
                             <Text style={styles.webEmptyButtonText}>Aggiungi Primo Veicolo</Text>
                         </TouchableOpacity>
+
+                        {/* Link to view sent requests */}
+                        <TouchableOpacity
+                            style={styles.emptySecondaryLink}
+                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                        >
+                            <TrendingUp size={18} color={themeColors.primary} />
+                            <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
+                                Visualizza le Mie Richieste Inviate
+                            </Text>
+                        </TouchableOpacity>
                     </View>
 
                     {/* Add Vehicle Modal */}
@@ -523,6 +534,17 @@ const HomeScreen = () => {
                     >
                         <Plus size={20} color="#fff" strokeWidth={2.5} />
                         <Text style={styles.emptyButtonText}>Aggiungi Veicolo</Text>
+                    </TouchableOpacity>
+
+                    {/* Link to view sent requests */}
+                    <TouchableOpacity
+                        style={styles.emptySecondaryLink}
+                        onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                    >
+                        <TrendingUp size={16} color={themeColors.primary} />
+                        <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
+                            Visualizza le Mie Richieste Inviate
+                        </Text>
                     </TouchableOpacity>
                 </View>
 
@@ -1418,6 +1440,19 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: '600',
         letterSpacing: -0.4,
+    },
+    emptySecondaryLink: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 20,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+    },
+    emptySecondaryLinkText: {
+        fontSize: 15,
+        fontWeight: '600',
+        letterSpacing: -0.3,
     },
 
     // Vehicle Card - Apple Style

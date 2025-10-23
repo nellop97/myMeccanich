@@ -115,8 +115,8 @@ export default function RequestVehicleViewScreen() {
 
       if (hasExisting) {
         setMessage({
-          type: 'info',
-          text: 'Hai già una richiesta in corso per questo veicolo. Controlla le tue richieste.'
+          type: 'warning',
+          text: 'Hai già inviato una richiesta per questo veicolo. Non puoi inviare richieste duplicate. Controlla lo stato nella sezione "Mie Richieste".'
         });
         setIsLoading(false);
         return;
