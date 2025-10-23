@@ -64,7 +64,12 @@ Dopo aver applicato le regole, le seguenti operazioni dovrebbero funzionare:
 #### Vehicle View Requests
 - **Create**: Chiunque autenticato può creare una richiesta
 - **Read**: Solo il proprietario del veicolo o il richiedente
-- **Update**: Solo il proprietario del veicolo (per approvare/rifiutare)
+- **Update**:
+  - **Proprietario**: Può approvare/rifiutare la richiesta (cambiare status, visibleData, etc.)
+  - **Richiedente**: Può SOLO incrementare viewsCount quando la richiesta è approvata (per tracciare le visualizzazioni)
+    - Può modificare solo: `viewsCount`, `lastViewedAt`, `updatedAt`
+    - Solo quando `status == 'approved'`
+    - `viewsCount` deve essere incrementato esattamente di 1
 - **Delete**: Solo il proprietario del veicolo
 
 #### Vehicle View Logs

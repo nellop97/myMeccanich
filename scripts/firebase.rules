@@ -614,8 +614,20 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
                       hasRequiredFields(['vehicleId', 'ownerId', 'requesterName', 'requesterEmail']);
 
-      // Aggiornamento: solo il proprietario del veicolo (per approvare/rifiutare)
-      allow update: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      // Aggiornamento:
+      // - Proprietario può approvare/rifiutare (cambiare status, visibleData, etc.)
+      // - Richiedente può solo incrementare viewsCount quando status è 'approved'
+      allow update: if isAuthenticated() && (
+        // Proprietario può aggiornare tutto
+        resource.data.ownerId == request.auth.uid ||
+        // Richiedente può aggiornare SOLO viewsCount, lastViewedAt, updatedAt quando approved
+        (resource.data.requesterEmail == request.auth.token.email &&
+         resource.data.status == 'approved' &&
+         // Verifica che solo questi campi vengano modificati
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount', 'lastViewedAt', 'updatedAt']) &&
+         // Verifica che viewsCount sia incrementato di 1
+         request.resource.data.viewsCount == resource.data.viewsCount + 1)
+      );
 
       // Cancellazione: solo il proprietario del veicolo
       allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
