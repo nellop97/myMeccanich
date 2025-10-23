@@ -52,14 +52,16 @@ service cloud.firestore {
     // VEHICLES COLLECTION (veicoli utenti)
     // ============================================
     match /vehicles/{vehicleId} {
-      // Lettura: proprietario (userId o ownerId) o veicolo condiviso
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        request.auth.uid in resource.data.get('sharedWith', [])
-      );
+      // Lettura: chiunque autenticato può leggere (necessario per ricerca veicoli)
+      // In alternativa, solo proprietario o condiviso:
+      // allow read: if isAuthenticated() && (
+      //   resource.data.userId == request.auth.uid ||
+      //   resource.data.ownerId == request.auth.uid ||
+      //   request.auth.uid in resource.data.get('sharedWith', [])
+      // );
+      allow read: if isAuthenticated();
 
-      // Creazione: solo utenti autenticati
+      // Creazione: solo utenti autenticati per se stessi
       allow create: if isAuthenticated() && (
         request.resource.data.userId == request.auth.uid ||
         request.resource.data.ownerId == request.auth.uid
@@ -556,6 +558,93 @@ service cloud.firestore {
 
       // Cancellazione: solo il venditore
       allow delete: if isOwner(resource.data.sellerId);
+    }
+
+    // ============================================
+    // CAR TRANSFER REQUESTS COLLECTION (legacy)
+    // ============================================
+    match /carTransferRequests/{requestId} {
+      // Lettura: mittente o destinatario
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserEmail == request.auth.token.email
+      );
+
+      // Creazione: utente autenticato
+      allow create: if isAuthenticated();
+
+      // Aggiornamento: mittente o destinatario
+      allow update: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserEmail == request.auth.token.email
+      );
+
+      // Cancellazione: solo il mittente
+      allow delete: if isAuthenticated() && resource.data.fromUserId == request.auth.uid;
+    }
+
+    // ============================================
+    // TRANSFER LOGS COLLECTION
+    // ============================================
+    match /transferLogs/{logId} {
+      // Lettura: utenti coinvolti nel trasferimento
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      );
+
+      // Creazione: utenti autenticati
+      allow create: if isAuthenticated();
+
+      // Nessun aggiornamento o cancellazione
+      allow update, delete: if false;
+    }
+
+    // ============================================
+    // VEHICLE VIEW REQUESTS COLLECTION
+    // ============================================
+    match /vehicle_view_requests/{requestId} {
+      // Lettura: proprietario del veicolo o richiedente
+      allow read: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.requesterEmail == request.auth.token.email
+      );
+
+      // Creazione: chiunque autenticato può creare una richiesta
+      allow create: if isAuthenticated() &&
+                      hasRequiredFields(['vehicleId', 'ownerId', 'requesterName', 'requesterEmail']);
+
+      // Aggiornamento:
+      // - Proprietario può approvare/rifiutare (cambiare status, visibleData, etc.)
+      // - Richiedente può solo incrementare viewsCount quando status è 'approved'
+      allow update: if isAuthenticated() && (
+        // Proprietario può aggiornare tutto
+        resource.data.ownerId == request.auth.uid ||
+        // Richiedente può aggiornare SOLO viewsCount, lastViewedAt, updatedAt quando approved
+        (resource.data.requesterEmail == request.auth.token.email &&
+         resource.data.status == 'approved' &&
+         // Verifica che solo questi campi vengano modificati
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount', 'lastViewedAt', 'updatedAt']) &&
+         // Verifica che viewsCount sia incrementato di 1
+         request.resource.data.viewsCount == resource.data.viewsCount + 1)
+      );
+
+      // Cancellazione: solo il proprietario del veicolo
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // ============================================
+    // VEHICLE VIEW LOGS COLLECTION
+    // ============================================
+    match /vehicle_view_logs/{logId} {
+      // Lettura: utente coinvolto nel log
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Creazione: utenti autenticati
+      allow create: if isAuthenticated();
+
+      // Nessun aggiornamento o cancellazione (solo audit)
+      allow update, delete: if false;
     }
 
     // ============================================
