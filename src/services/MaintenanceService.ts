@@ -42,32 +42,102 @@ export class MaintenanceService {
     userId: string
   ): Promise<MaintenanceRecord[]> {
     try {
+      console.log('🔍 Getting maintenance history for vehicleId:', vehicleId);
+      console.log('🔍 User ID:', userId);
+
       // Log accesso
       await this.security.logDataAccess(userId, vehicleId, 'view_maintenance');
 
-      const q = query(
+      // Prima prova una query semplice senza orderBy per vedere se ci sono record
+      const simpleQuery = query(
         collection(db, this.maintenanceCollection),
         where('vehicleId', '==', vehicleId),
-        where('isVisible', '==', true),
-        orderBy('date', 'desc')
+        where('isVisible', '==', true)
       );
 
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          date: data.date?.toDate(),
-          createdAt: data.createdAt?.toDate(),
-          updatedAt: data.updatedAt?.toDate(),
-          nextServiceDate: data.nextServiceDate?.toDate(),
-          warrantyExpiry: data.warrantyExpiry?.toDate()
-        } as MaintenanceRecord;
-      });
-    } catch (error) {
-      console.error('Error getting maintenance history:', error);
+      console.log('🔍 Executing simple query without orderBy...');
+      const simpleSnapshot = await getDocs(simpleQuery);
+      console.log('📊 Simple query found', simpleSnapshot.size, 'records');
+
+      if (simpleSnapshot.size === 0) {
+        console.warn('⚠️ No records found for vehicleId:', vehicleId);
+        console.log('💡 Check if records exist with vehicleId:', vehicleId);
+
+        // Query per vedere TUTTI i record senza filtri
+        const allRecordsQuery = query(
+          collection(db, this.maintenanceCollection),
+          limit(10)
+        );
+        const allSnapshot = await getDocs(allRecordsQuery);
+        console.log('📊 Total records in collection:', allSnapshot.size);
+
+        if (allSnapshot.size > 0) {
+          console.log('📋 Sample records:');
+          allSnapshot.docs.slice(0, 3).forEach(doc => {
+            const data = doc.data();
+            console.log(`  - ID: ${doc.id}, vehicleId: ${data.vehicleId}, isVisible: ${data.isVisible}`);
+          });
+        }
+
+        return [];
+      }
+
+      // Se ci sono record, prova con orderBy
+      try {
+        console.log('🔍 Executing query with orderBy...');
+        const q = query(
+          collection(db, this.maintenanceCollection),
+          where('vehicleId', '==', vehicleId),
+          where('isVisible', '==', true),
+          orderBy('date', 'desc')
+        );
+
+        const querySnapshot = await getDocs(q);
+        console.log('✅ Query with orderBy successful, found', querySnapshot.size, 'records');
+
+        return querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            date: data.date?.toDate(),
+            createdAt: data.createdAt?.toDate(),
+            updatedAt: data.updatedAt?.toDate(),
+            nextServiceDate: data.nextServiceDate?.toDate(),
+            warrantyExpiry: data.warrantyExpiry?.toDate()
+          } as MaintenanceRecord;
+        });
+      } catch (orderByError: any) {
+        console.error('❌ Query with orderBy failed:', orderByError.message);
+
+        if (orderByError.message?.includes('index')) {
+          console.error('🔴 MISSING INDEX! You need to create a composite index in Firestore.');
+          console.error('🔗 Index URL should be in the error message above.');
+          console.error('📝 Required index: vehicleId (Ascending) + isVisible (Ascending) + date (Descending)');
+        }
+
+        // Fallback: restituisci i record senza ordinamento
+        console.log('⚠️ Returning unordered records as fallback');
+        return simpleSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            date: data.date?.toDate(),
+            createdAt: data.createdAt?.toDate(),
+            updatedAt: data.updatedAt?.toDate(),
+            nextServiceDate: data.nextServiceDate?.toDate(),
+            warrantyExpiry: data.warrantyExpiry?.toDate()
+          } as MaintenanceRecord;
+        }).sort((a, b) => {
+          // Ordina localmente per data
+          return b.date.getTime() - a.date.getTime();
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Error getting maintenance history:', error);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
       throw error;
     }
   }
