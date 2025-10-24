@@ -117,6 +117,15 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
   // Quick Actions
   const quickActions: QuickAction[] = [
     {
+      id: 'booking_requests',
+      title: 'Prenotazioni',
+      subtitle: 'Gestisci richieste clienti',
+      icon: 'calendar-clock',
+      color: '#8b5cf6',
+      gradient: ['#8b5cf6', '#7c3aed'],
+      onPress: () => navigation.navigate('MechanicBookings'),
+    },
+    {
       id: 'add_car',
       title: 'Nuova Auto',
       subtitle: 'Aggiungi veicolo in officina',
