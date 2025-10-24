@@ -29,6 +29,7 @@ import VehicleListScreen from '../screens/user/VehicleListScreen';
 import CarsListScreen from '../screens/user/CarsListScreen';
 import MaintenanceHistoryScreen from '../screens/user/MaintenanceHistoryScreen';
 import AddMaintenanceScreen from '../screens/user/AddMaintenanceScreen';
+import MaintenanceDetailScreen from '../screens/user/MaintenanceDetailScreen';
 import FuelTrackingScreen from '../screens/user/FuelTrackingScreen';
 import ExpenseTrackerScreen from '../screens/user/ExpenseTrackerScreen';
 import CarExpensesScreen from '../screens/user/CarExpensesScreen';
@@ -96,7 +97,8 @@ export type RootStackParamList = {
 
     // Maintenance
     MaintenanceHistory: { carId: string };
-    AddMaintenance: { carId: string };
+    AddMaintenance: { carId: string; vehicleId?: string };
+    MaintenanceDetail: { maintenanceId: string; carId: string };
 
     // Fuel & Expenses
     FuelTracking: { carId: string };
@@ -528,6 +530,16 @@ export default function AppNavigator() {
                             headerShown: false,
                             presentation: 'modal',
                             animation: 'slide_from_bottom',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="MaintenanceDetail"
+                        component={MaintenanceDetailScreen}
+                        options={{
+                            title: 'Dettaglio Manutenzione',
+                            headerShown: false,
+                            animation: 'slide_from_right',
                         }}
                     />
 

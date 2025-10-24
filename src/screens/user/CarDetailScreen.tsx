@@ -159,17 +159,29 @@ const CarDetailScreen = () => {
             <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
               Storico Manutenzioni
             </Text>
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
-              onPress={() =>
-                (navigation as any).navigate('AddMaintenance', { carId })
-              }
-            >
-              <Plus size={20} color={colors.primary} strokeWidth={2.5} />
-              <Text style={[styles.addButtonText, { color: colors.primary }]}>
-                Aggiungi
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.sectionActions}>
+              <TouchableOpacity
+                style={[styles.viewAllButton, { marginRight: 8 }]}
+                onPress={() =>
+                  (navigation as any).navigate('MaintenanceHistory', { carId })
+                }
+              >
+                <Text style={[styles.viewAllText, { color: colors.primary }]}>
+                  Vedi tutte
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
+                onPress={() =>
+                  (navigation as any).navigate('AddMaintenance', { carId })
+                }
+              >
+                <Plus size={20} color={colors.primary} strokeWidth={2.5} />
+                <Text style={[styles.addButtonText, { color: colors.primary }]}>
+                  Aggiungi
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {loading ? (
@@ -202,7 +214,10 @@ const CarDetailScreen = () => {
                   { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
                 ]}
                 onPress={() => {
-                  // Navigate to maintenance detail
+                  (navigation as any).navigate('MaintenanceDetail', {
+                    maintenanceId: record.id,
+                    carId
+                  });
                 }}
               >
                 <View style={[styles.recordIcon, { backgroundColor: '#3B82F620' }]}>
@@ -441,6 +456,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: -0.3,
+  },
+  sectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  viewAllButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   addButton: {
     flexDirection: 'row',

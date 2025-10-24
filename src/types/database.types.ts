@@ -123,9 +123,10 @@ export interface MaintenanceRecord {
 export interface MaintenancePart {
   name: string;
   partNumber?: string;
-  quantity: number;
+  quantity: number | string; // Support both number and text (e.g., "2", "4 pezzi", "set")
   unitPrice?: number;
   brand?: string;
+  cost?: number; // Total cost for this part
 }
 
 export interface MaintenanceDocument {

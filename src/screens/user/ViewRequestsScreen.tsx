@@ -38,11 +38,14 @@ import {
   EyeOff,
   Clock,
   MessageSquare,
-  Shield
+  Shield,
+  Ban,
+  Trash2
 } from 'lucide-react-native';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { VehicleViewRequestService, VehicleViewRequest } from '../../services/VehicleViewRequestService';
 import { auth } from '../../services/firebase';
+import { ConfirmationDialog } from '../../components';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -59,6 +62,8 @@ export default function ViewRequestsScreen() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<VehicleViewRequest | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showRevokeDialog, setShowRevokeDialog] = useState(false);
 
   // Privacy settings per approvazione
   const [visibleData, setVisibleData] = useState({
@@ -131,27 +136,24 @@ export default function ViewRequestsScreen() {
   };
 
   const handleRejectRequest = (request: VehicleViewRequest) => {
-    Alert.alert(
-      'Rifiuta richiesta',
-      `Sei sicuro di voler rifiutare la richiesta di ${request.requesterName}?`,
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Rifiuta',
-          style: 'destructive',
-          onPress: () => processRejection(request)
-        }
-      ]
-    );
+    setSelectedRequest(request);
+    setShowRejectDialog(true);
   };
 
-  const processRejection = async (request: VehicleViewRequest) => {
-    setProcessingId(request.id);
+  const confirmRejection = async () => {
+    if (!selectedRequest) return;
+
+    setProcessingId(selectedRequest.id);
+    setShowRejectDialog(false);
 
     try {
-      await viewRequestService.rejectViewRequest(request.id);
+      await viewRequestService.rejectViewRequest(selectedRequest.id);
 
-      Alert.alert('Richiesta rifiutata', 'La richiesta è stata rifiutata.');
+      Alert.alert(
+        '✅ Richiesta rifiutata',
+        `La richiesta di ${selectedRequest.requesterName} è stata rifiutata.`,
+        [{ text: 'OK' }]
+      );
 
       await loadRequests();
     } catch (error) {
@@ -159,31 +161,29 @@ export default function ViewRequestsScreen() {
       Alert.alert('Errore', 'Impossibile rifiutare la richiesta');
     } finally {
       setProcessingId(null);
+      setSelectedRequest(null);
     }
   };
 
   const handleRevokeRequest = (request: VehicleViewRequest) => {
-    Alert.alert(
-      'Revoca accesso',
-      'Vuoi revocare l\'accesso ai dati del veicolo? L\'utente non potrà più visualizzarli.',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Revoca',
-          style: 'destructive',
-          onPress: () => processRevocation(request)
-        }
-      ]
-    );
+    setSelectedRequest(request);
+    setShowRevokeDialog(true);
   };
 
-  const processRevocation = async (request: VehicleViewRequest) => {
-    setProcessingId(request.id);
+  const confirmRevocation = async () => {
+    if (!selectedRequest) return;
+
+    setProcessingId(selectedRequest.id);
+    setShowRevokeDialog(false);
 
     try {
-      await viewRequestService.revokeViewRequest(request.id);
+      await viewRequestService.revokeViewRequest(selectedRequest.id);
 
-      Alert.alert('Accesso revocato', 'L\'accesso ai dati è stato revocato.');
+      Alert.alert(
+        '✅ Accesso revocato',
+        `L'accesso ai dati è stato revocato per ${selectedRequest.requesterName}. L'utente non potrà più visualizzare i dati del veicolo.`,
+        [{ text: 'OK' }]
+      );
 
       await loadRequests();
     } catch (error) {
@@ -191,6 +191,7 @@ export default function ViewRequestsScreen() {
       Alert.alert('Errore', 'Impossibile revocare l\'accesso');
     } finally {
       setProcessingId(null);
+      setSelectedRequest(null);
     }
   };
 
@@ -375,9 +376,11 @@ export default function ViewRequestsScreen() {
                 mode="outlined"
                 onPress={() => handleRejectRequest(request)}
                 disabled={isProcessing}
-                style={[styles.actionButton, { borderColor: colors.error }]}
-                textColor={colors.error}
-                icon={() => <X size={18} color={colors.error} />}
+                loading={isProcessing && processingId === request.id}
+                style={[styles.actionButton, { borderColor: '#F59E0B', borderWidth: 1.5 }]}
+                textColor="#F59E0B"
+                icon={() => <Ban size={18} color="#F59E0B" />}
+                contentStyle={styles.buttonContent}
               >
                 Rifiuta
               </Button>
@@ -385,10 +388,11 @@ export default function ViewRequestsScreen() {
                 mode="contained"
                 onPress={() => handleApproveRequest(request)}
                 disabled={isProcessing}
-                loading={isProcessing}
+                loading={isProcessing && processingId === request.id}
                 style={styles.actionButton}
-                buttonColor="#34C759"
-                icon={() => <Check size={18} color="#fff" />}
+                buttonColor="#10B981"
+                icon={() => <Check size={20} color="#fff" strokeWidth={2.5} />}
+                contentStyle={styles.buttonContent}
               >
                 Approva
               </Button>
@@ -401,9 +405,11 @@ export default function ViewRequestsScreen() {
                 mode="outlined"
                 onPress={() => handleRevokeRequest(request)}
                 disabled={isProcessing}
-                style={[styles.actionButton, { borderColor: colors.error }]}
-                textColor={colors.error}
-                icon={() => <EyeOff size={18} color={colors.error} />}
+                loading={isProcessing && processingId === request.id}
+                style={[styles.actionButton, { borderColor: '#EF4444', borderWidth: 1.5 }]}
+                textColor="#EF4444"
+                icon={() => <Trash2 size={18} color="#EF4444" />}
+                contentStyle={styles.buttonContent}
               >
                 Revoca Accesso
               </Button>
@@ -572,6 +578,40 @@ export default function ViewRequestsScreen() {
 
       {/* Approval Modal */}
       {renderApprovalModal()}
+
+      {/* Reject Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={showRejectDialog}
+        title="Rifiuta Richiesta"
+        message={`Sei sicuro di voler rifiutare la richiesta di ${selectedRequest?.requesterName}? L'utente riceverà una notifica del rifiuto.`}
+        type="warning"
+        confirmText="Rifiuta"
+        cancelText="Annulla"
+        onConfirm={confirmRejection}
+        onCancel={() => {
+          setShowRejectDialog(false);
+          setSelectedRequest(null);
+        }}
+        isLoading={processingId === selectedRequest?.id}
+        colors={colors}
+      />
+
+      {/* Revoke Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={showRevokeDialog}
+        title="Revoca Accesso"
+        message={`Vuoi revocare l'accesso ai dati del veicolo per ${selectedRequest?.requesterName}? L'utente non potrà più visualizzare i dati.`}
+        type="danger"
+        confirmText="Revoca Accesso"
+        cancelText="Annulla"
+        onConfirm={confirmRevocation}
+        onCancel={() => {
+          setShowRevokeDialog(false);
+          setSelectedRequest(null);
+        }}
+        isLoading={processingId === selectedRequest?.id}
+        colors={colors}
+      />
     </SafeAreaView>
   );
 }

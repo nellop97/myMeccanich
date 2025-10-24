@@ -5,12 +5,16 @@
 import UniversalImagePicker from './UniversalImagePicker';
 import UniversalDatePicker from './UniversalDatePicker';
 import UniversalDocumentPicker from './UniversalDocumentPicker';
+import WorkshopSearchInput from './WorkshopSearchInput';
+import ConfirmationDialog from './ConfirmationDialog';
 
 // Export principali
 export {
     UniversalImagePicker,
     UniversalDatePicker,
     UniversalDocumentPicker,
+    WorkshopSearchInput,
+    ConfirmationDialog,
 };
 
 // Alias per retrocompatibilità (se necessario durante la migrazione)
