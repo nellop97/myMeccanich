@@ -10,9 +10,11 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Star, Phone, Clock, Heart, Navigation } from 'lucide-react-native';
+import { MapPin, Star, Phone, Clock, Heart, Navigation, Loader } from 'lucide-react-native';
+import * as Location from 'expo-location';
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
 import { Workshop } from '../../types/database.types';
@@ -31,6 +33,8 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
   const [trustedWorkshops, setTrustedWorkshops] = useState<Workshop[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'trusted' | 'nearby'>('all');
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [loadingLocation, setLoadingLocation] = useState(false);
 
   const theme = {
     background: darkMode ? '#111827' : '#f3f4f6',
@@ -108,12 +112,94 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
     }
   };
 
+  const requestLocationPermission = async () => {
+    try {
+      setLoadingLocation(true);
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permesso Negato',
+          'Per trovare officine vicine, abilita i permessi di localizzazione nelle impostazioni.',
+          [{ text: 'OK' }]
+        );
+        setSelectedFilter('all');
+        return null;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+
+      setUserLocation(coords);
+      return coords;
+    } catch (error) {
+      console.error('Errore geolocalizzazione:', error);
+      Alert.alert(
+        'Errore',
+        'Impossibile ottenere la tua posizione. Assicurati che la localizzazione sia attiva.',
+        [{ text: 'OK' }]
+      );
+      setSelectedFilter('all');
+      return null;
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
+  const handleNearbyFilter = async () => {
+    setSelectedFilter('nearby');
+
+    if (!userLocation) {
+      const coords = await requestLocationPermission();
+      if (coords) {
+        // Ricarica workshops con la posizione
+        try {
+          setLoading(true);
+          const data = await WorkshopService.searchWorkshops({
+            userLocation: coords,
+            maxDistance: 50, // 50 km di distanza massima
+          });
+          setWorkshops(data);
+        } catch (error) {
+          console.error('Errore caricamento officine vicine:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    } else {
+      // Usa la posizione già salvata
+      try {
+        setLoading(true);
+        const data = await WorkshopService.searchWorkshops({
+          userLocation,
+          maxDistance: 50,
+        });
+        setWorkshops(data);
+      } catch (error) {
+        console.error('Errore caricamento officine vicine:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const getDisplayWorkshops = () => {
     switch (selectedFilter) {
       case 'trusted':
         return trustedWorkshops;
       case 'nearby':
-        // Qui si potrebbe implementare il filtraggio per distanza
+        // Filtra per distanza se userLocation è disponibile
+        if (userLocation) {
+          return workshops.filter((w: any) => w.distance !== undefined)
+            .sort((a: any, b: any) => (a.distance || 0) - (b.distance || 0));
+        }
         return workshops;
       default:
         return workshops;
@@ -181,6 +267,16 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
                 +{workshop.specializations.length - 3}
               </Text>
             )}
+          </View>
+        )}
+
+        {/* Distanza (se disponibile) */}
+        {(workshop as any).distance && (
+          <View style={[styles.distanceContainer, { backgroundColor: theme.primary + '10', borderColor: theme.primary + '30' }]}>
+            <Navigation size={14} color={theme.primary} />
+            <Text style={[styles.distanceText, { color: theme.primary }]}>
+              {((workshop as any).distance as number).toFixed(1)} km da te
+            </Text>
           </View>
         )}
 
@@ -271,9 +367,14 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
             styles.filterButton,
             { backgroundColor: selectedFilter === 'nearby' ? theme.primary : theme.cardBackground, borderColor: theme.border }
           ]}
-          onPress={() => setSelectedFilter('nearby')}
+          onPress={handleNearbyFilter}
+          disabled={loadingLocation}
         >
-          <Navigation size={16} color={selectedFilter === 'nearby' ? '#fff' : theme.text} />
+          {loadingLocation ? (
+            <ActivityIndicator size="small" color={selectedFilter === 'nearby' ? '#fff' : theme.primary} />
+          ) : (
+            <Navigation size={16} color={selectedFilter === 'nearby' ? '#fff' : theme.text} />
+          )}
           <Text style={[styles.filterText, { color: selectedFilter === 'nearby' ? '#fff' : theme.text }]}>
             Vicine
           </Text>
@@ -450,6 +551,21 @@ const styles = StyleSheet.create({
   moreText: {
     fontSize: 12,
     alignSelf: 'center',
+  },
+  distanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  distanceText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   workshopFooter: {
     flexDirection: 'row',

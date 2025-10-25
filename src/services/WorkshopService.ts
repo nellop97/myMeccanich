@@ -86,24 +86,37 @@ export class WorkshopService {
   }): Promise<Workshop[]> {
     try {
       let q = collection(db, 'workshops');
-      let queryRef = query(q, where('isActive', '==', true));
+
+      // Build query conditionally
+      let constraints: any[] = [];
 
       if (searchParams.city) {
-        queryRef = query(queryRef, where('address.city', '==', searchParams.city));
+        constraints.push(where('address.city', '==', searchParams.city));
       }
 
       if (searchParams.province) {
-        queryRef = query(queryRef, where('address.province', '==', searchParams.province));
+        constraints.push(where('address.province', '==', searchParams.province));
       }
 
       if (searchParams.minRating) {
-        queryRef = query(queryRef, where('rating', '>=', searchParams.minRating));
+        constraints.push(where('rating', '>=', searchParams.minRating));
+        constraints.push(orderBy('rating', 'desc'));
       }
 
-      queryRef = query(queryRef, orderBy('rating', 'desc'), limit(50));
+      // If no other orderBy, order by name or createdAt
+      if (!searchParams.minRating) {
+        constraints.push(orderBy('createdAt', 'desc'));
+      }
+
+      constraints.push(limit(50));
+
+      let queryRef = query(q, ...constraints);
 
       const snapshot = await getDocs(queryRef);
       let workshops = snapshot.docs.map(doc => this.convertTimestamps(doc.data()) as Workshop);
+
+      // Filter by isActive client-side (more flexible)
+      workshops = workshops.filter(w => w.isActive !== false);
 
       // Filtra per specializzazione (array contains non supportato in modo semplice)
       if (searchParams.specialization) {
