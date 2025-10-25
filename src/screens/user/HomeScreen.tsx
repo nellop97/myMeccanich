@@ -720,6 +720,32 @@ const HomeScreen = () => {
                                 <View style={styles.webActionGrid}>
                                     <TouchableOpacity
                                         style={styles.webActionCard}
+                                        onPress={() => navigation.navigate('WorkshopSearch' as never)}
+                                    >
+                                        <View style={[styles.webActionIcon, { backgroundColor: '#dbeafe' }]}>
+                                            <Wrench size={24} color="#3b82f6" />
+                                        </View>
+                                        <Text style={styles.webActionTitle}>Prenota Servizio</Text>
+                                        <Text style={styles.webActionDescription}>
+                                            Cerca officina e prenota
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.webActionCard}
+                                        onPress={() => navigation.navigate('BookingsDashboard' as never)}
+                                    >
+                                        <View style={[styles.webActionIcon, { backgroundColor: '#fef3c7' }]}>
+                                            <Calendar size={24} color="#f59e0b" />
+                                        </View>
+                                        <Text style={styles.webActionTitle}>Prenotazioni</Text>
+                                        <Text style={styles.webActionDescription}>
+                                            Gestisci appuntamenti
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.webActionCard}
                                         onPress={() =>
                                             navigation.navigate('AddMaintenance' as never, {
                                                 carId: selectedVehicle?.id,
@@ -1060,6 +1086,26 @@ const HomeScreen = () => {
                 <View style={styles.quickActionsContainer}>
                     <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Azioni Rapide</Text>
                     <View style={styles.quickActions}>
+                        <TouchableOpacity
+                            style={styles.quickActionButton}
+                            onPress={() => navigation.navigate('WorkshopSearch' as never)}
+                        >
+                            <View style={[styles.quickActionIcon, { backgroundColor: '#f0f9ff' }]}>
+                                <Search size={20} color="#3b82f6" />
+                            </View>
+                            <Text style={styles.quickActionLabel}>Prenota</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.quickActionButton}
+                            onPress={() => navigation.navigate('BookingsDashboard' as never)}
+                        >
+                            <View style={[styles.quickActionIcon, { backgroundColor: '#fff7ed' }]}>
+                                <Calendar size={20} color="#f59e0b" />
+                            </View>
+                            <Text style={styles.quickActionLabel}>Appuntamenti</Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                             style={styles.quickActionButton}
                             onPress={() =>

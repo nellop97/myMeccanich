@@ -44,6 +44,12 @@ import MyVehicleViewRequestsScreen from '../screens/user/MyVehicleViewRequestsSc
 import ViewRequestsScreen from '../screens/user/ViewRequestsScreen';
 import VehicleDataViewScreen from '../screens/user/VehicleDataViewScreen';
 
+// Booking System Screens
+import WorkshopSearchScreen from '../screens/user/WorkshopSearchScreen';
+import BookingRequestScreen from '../screens/user/BookingRequestScreen';
+import BookingsDashboardScreen from '../screens/user/BookingsDashboardScreen';
+import BookingDetailScreen from '../screens/user/BookingDetailScreen';
+
 // ============================================
 // MECHANIC SCREENS
 // ============================================
@@ -52,6 +58,7 @@ import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
 import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
+import MechanicBookingsScreen from '../screens/mechanic/MechanicBookingsScreen';
 
 // Fatturazione
 import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScreen';
@@ -119,8 +126,18 @@ export type RootStackParamList = {
     ViewRequests: undefined;
     VehicleDataView: { requestId: string };
 
+    // Booking System
+    WorkshopSearch: undefined;
+    WorkshopDetail: { workshopId: string };
+    BookingRequest: { workshopId: string };
+    BookingsDashboard: undefined;
+    BookingDetail: { bookingId: string };
+    CreateQuote: { bookingId: string };
+
     // Mechanic
     HomeMechanic: undefined;
+    MechanicBookings: undefined;
+    MechanicBookingDetail: { bookingId: string };
     AllCarsInWorkshop: undefined;
     RepairPartsManagement: { carId: string; repairId: string };
     NewAppointment: undefined;
@@ -443,6 +460,40 @@ export default function AppNavigator() {
                             }}
                         />
                     </Stack.Group>
+
+                    {/* Bookings - Prenotazioni */}
+                    <Stack.Group>
+                        <Stack.Screen
+                            name="MechanicBookings"
+                            component={MechanicBookingsScreen}
+                            options={{
+                                title: 'Richieste Prenotazione',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="MechanicBookingDetail"
+                            component={BookingDetailScreen}
+                            options={{
+                                title: 'Dettaglio Prenotazione',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="CreateQuote"
+                            component={PlaceholderScreen}
+                            options={{
+                                title: 'Crea Preventivo',
+                                headerShown: false,
+                                presentation: 'modal',
+                                animation: 'slide_from_bottom',
+                            }}
+                        />
+                    </Stack.Group>
                 </>
             ) : (
                 // ============================================
@@ -654,6 +705,57 @@ export default function AppNavigator() {
                         component={VehicleDataViewScreen}
                         options={{
                             title: 'Dati Veicolo',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    {/* Booking System */}
+                    <Stack.Screen
+                        name="WorkshopSearch"
+                        component={WorkshopSearchScreen}
+                        options={{
+                            title: 'Cerca Officina',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="WorkshopDetail"
+                        component={PlaceholderScreen}
+                        options={{
+                            title: 'Dettaglio Officina',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="BookingRequest"
+                        component={BookingRequestScreen}
+                        options={{
+                            title: 'Nuova Prenotazione',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="BookingsDashboard"
+                        component={BookingsDashboardScreen}
+                        options={{
+                            title: 'Le Mie Prenotazioni',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="BookingDetail"
+                        component={BookingDetailScreen}
+                        options={{
+                            title: 'Dettaglio Prenotazione',
                             headerShown: false,
                             animation: 'slide_from_right',
                         }}
