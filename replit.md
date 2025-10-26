@@ -6,7 +6,37 @@ MyMechanic is a comprehensive cross-platform React Native application built with
 
 ## Recent Changes (October 2025)
 
-### Complete UI Redesign
+### Modern HomeScreen Implementation (October 26, 2025)
+Complete redesign of the owner HomeScreen with modern, minimalist design and full Firebase integration:
+
+**New Features:**
+1. **Real-time Statistics** - Monthly expenses, fuel costs, maintenance, and km calculated from Firebase data
+2. **Appointments Management** - View upcoming appointments with mechanics directly from home
+3. **Vehicle Overview** - Beautiful gradient cards for all vehicles with quick access to details
+4. **Upcoming Deadlines** - Smart display of insurance, revision, and tax deadlines with priority colors
+5. **Recent Activities** - Combined view of maintenance, fuel, and expenses from all vehicles
+6. **Responsive Design** - Optimized layouts for mobile (<768px), tablet (768-1024px), and desktop (>=1024px)
+
+**Design System:**
+- Modern gradient vehicle cards with LinearGradient
+- Card-based layout with soft shadows and rounded corners (16-20px)
+- Smart color coding (red for expenses, green for fuel, blue for maintenance, orange for km)
+- Smooth animations with Animated API (fade-in and slide-up effects)
+- Full dark mode support with dynamic theme colors
+
+**Firebase Integration:**
+- Real-time data loading from multiple collections (vehicles, maintenance_records, fuel_records, expenses, appointments, deadlines)
+- Optimized queries with proper limits and ordering
+- Monthly statistics calculated from actual Firebase data
+- Pull-to-refresh functionality
+- Automatic data reload on screen focus
+
+**Theme Configuration:**
+- Created `src/config/homeTheme.ts` with customizable colors, spacing, breakpoints, and shadows
+- Helper functions for responsive design (isMobile, isTablet, isDesktop)
+- Pre-defined theme presets (Default, Professional, Eco, Sport)
+
+### Previous UI Redesign
 The app underwent a complete redesign following minimal, clean design mockups:
 
 **Navigation Architecture:**
