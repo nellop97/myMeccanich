@@ -1,0 +1,21 @@
+[
+  {
+    "origin": [
+      "http://localhost:8081",
+      "http://localhost:19006",
+      "https://your-production-domain.com",
+      "https://mymecanich.web.app",
+      "https://mymecanich.firebaseapp.com"
+    ],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "Content-Length",
+      "User-Agent",
+      "X-Requested-With",
+      "X-Firebase-Storage-Version"
+    ]
+  }
+]
