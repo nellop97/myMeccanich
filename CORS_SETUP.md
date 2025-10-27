@@ -24,21 +24,32 @@ Access to XMLHttpRequest at 'https://firebasestorage.googleapis.com/...' from or
    gcloud auth login
    ```
 
-3. **Applica regole CORS**
+3. **Trova il nome del bucket**
+   ```bash
+   # Lista tutti i bucket del progetto
+   gsutil ls
+
+   # Oppure verifica dalla Firebase Console:
+   # https://console.firebase.google.com > Storage
+   ```
+
+   Il bucket dovrebbe essere: `mymecanich.firebasestorage.app`
+
+4. **Applica regole CORS**
 
    Per sviluppo (permette tutti i domini):
    ```bash
-   gsutil cors set cors.json gs://mymecanich.appspot.com
+   gsutil cors set cors.json gs://mymecanich.firebasestorage.app
    ```
 
    Per produzione (permette solo domini specifici):
    ```bash
-   gsutil cors set cors-production.json gs://mymecanich.appspot.com
+   gsutil cors set cors-production.json gs://mymecanich.firebasestorage.app
    ```
 
-4. **Verifica**
+5. **Verifica**
    ```bash
-   gsutil cors get gs://mymecanich.appspot.com
+   gsutil cors get gs://mymecanich.firebasestorage.app
    ```
 
 ### Metodo 2: Usa Google Cloud Console
@@ -46,7 +57,7 @@ Access to XMLHttpRequest at 'https://firebasestorage.googleapis.com/...' from or
 1. Vai su [Google Cloud Console](https://console.cloud.google.com)
 2. Seleziona il progetto **mymecanich**
 3. Vai su **Cloud Storage** → **Browser**
-4. Trova il bucket `mymecanich.appspot.com`
+4. Trova il bucket `mymecanich.firebasestorage.app`
 5. Clicca sulla scheda **Configuration**
 6. Nella sezione **CORS**, clicca **Edit**
 7. Incolla il contenuto di `cors.json` o `cors-production.json`
@@ -98,15 +109,19 @@ Dopo aver applicato le regole, verifica che funzionino:
 
 3. **Verifica che le regole siano state applicate**
    ```bash
-   gsutil cors get gs://mymecanich.appspot.com
+   gsutil cors get gs://mymecanich.firebasestorage.app
    ```
 
 4. **Controlla il nome del bucket**
-   Il bucket dovrebbe essere: `mymecanich.appspot.com`
+   Il bucket dovrebbe essere: `mymecanich.firebasestorage.app`
 
    Per trovare il nome esatto:
    ```bash
-   firebase projects:list
+   # Lista tutti i bucket
+   gsutil ls
+
+   # Oppure controlla l'errore originale nell'URL:
+   # https://firebasestorage.googleapis.com/v0/b/BUCKET_NAME/o?...
    ```
 
 ### Errore "403 Forbidden"
