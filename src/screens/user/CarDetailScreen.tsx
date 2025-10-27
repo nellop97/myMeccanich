@@ -51,7 +51,6 @@ import {
 } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -112,6 +111,28 @@ const CarDetailScreen = () => {
   const isLargeScreen = width >= 768;
   const isDesktop = width >= 1024;
   const photoWidth = isDesktop ? 200 : isLargeScreen ? 150 : (SCREEN_WIDTH - 60) / 3;
+
+  // Helper function to convert URI to base64
+  const uriToBase64 = async (uri: string): Promise<string> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          // Remove the data URI prefix (e.g., "data:image/jpeg;base64,")
+          const base64 = base64data.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  };
 
   // Get vehicle data
   const vehicle = vehicles.find((v) => v.id === carId);
@@ -249,9 +270,7 @@ const CarDetailScreen = () => {
       setUploadingPhoto(true);
 
       // Converti l'immagine in base64
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const base64 = await uriToBase64(uri);
 
       // Determina il tipo MIME dall'URI
       const mimeType = uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
@@ -333,9 +352,7 @@ const CarDetailScreen = () => {
       setUploadingDocument(true);
 
       // Converti il documento in base64
-      const base64 = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const base64 = await uriToBase64(file.uri);
 
       // Verifica la dimensione (Firestore ha limite di ~1MB per documento)
       const sizeInBytes = (base64.length * 3) / 4;
