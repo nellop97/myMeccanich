@@ -106,6 +106,8 @@ const CarDetailScreen = () => {
   const [selectedPhoto, setSelectedPhoto] = useState<VehiclePhoto | null>(null);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showPhotoOptionsModal, setShowPhotoOptionsModal] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<VehicleDocument | null>(null);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
@@ -399,30 +401,67 @@ const CarDetailScreen = () => {
     }
   };
 
-  const deleteDocument = async (document: VehicleDocument) => {
-    Alert.alert(
-      'Elimina Documento',
-      `Sei sicuro di voler eliminare "${document.name}"?`,
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Elimina solo da Firestore
-              await deleteDoc(doc(db, 'documents', document.id));
+  const downloadDocument = (document: VehicleDocument) => {
+    try {
+      // Crea un data URI dal base64
+      const dataUri = `data:${document.mimeType};base64,${document.base64}`;
 
-              await loadDocuments();
-              Alert.alert('Successo', 'Documento eliminato');
-            } catch (error) {
-              console.error('Error deleting document:', error);
-              Alert.alert('Errore', 'Impossibile eliminare il documento');
-            }
+      if (Platform.OS === 'web') {
+        // Su web crea un link temporaneo e simula il click per scaricare
+        const link = window.document.createElement('a');
+        link.href = dataUri;
+        link.download = document.name;
+        window.document.body.appendChild(link);
+        link.click();
+        window.document.body.removeChild(link);
+        showToastMessage('Download avviato!', 'success');
+      } else {
+        // Su mobile mostra il toast e il documento verrà visualizzato nel modal
+        showToastMessage('Documento visualizzato', 'success');
+      }
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      showToastMessage('Errore durante il download', 'error');
+    }
+  };
+
+  const deleteDocument = async (document: VehicleDocument) => {
+    if (isWeb) {
+      // Su web usa conferma nativa
+      if (window.confirm(`Sei sicuro di voler eliminare "${document.name}"?`)) {
+        try {
+          await deleteDoc(doc(db, 'documents', document.id));
+          await loadDocuments();
+          showToastMessage('Documento eliminato', 'success');
+        } catch (error) {
+          console.error('Error deleting document:', error);
+          showToastMessage('Impossibile eliminare il documento', 'error');
+        }
+      }
+    } else {
+      // Su mobile usa Alert.alert
+      Alert.alert(
+        'Elimina Documento',
+        `Sei sicuro di voler eliminare "${document.name}"?`,
+        [
+          { text: 'Annulla', style: 'cancel' },
+          {
+            text: 'Elimina',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteDoc(doc(db, 'documents', document.id));
+                await loadDocuments();
+                showToastMessage('Documento eliminato', 'success');
+              } catch (error) {
+                console.error('Error deleting document:', error);
+                showToastMessage('Impossibile eliminare il documento', 'error');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const formatDate = (date: any) => {
@@ -567,6 +606,73 @@ const CarDetailScreen = () => {
             <X size={20} color={colors.onSurface} />
             <Text style={[styles.optionButtonText, { color: colors.onSurface }]}>Annulla</Text>
           </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Render Document Modal
+  const renderDocumentModal = () => (
+    <Modal
+      visible={showDocumentModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowDocumentModal(false)}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowDocumentModal(false)}
+      >
+        <View style={styles.documentModalContent} onStartShouldSetResponder={() => true}>
+          {selectedDocument && (
+            <>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowDocumentModal(false)}
+              >
+                <X size={24} color="#fff" />
+              </TouchableOpacity>
+
+              <View style={styles.documentPreview}>
+                <FileText size={80} color={colors.primary} />
+                <Text style={[styles.documentModalName, { color: colors.onSurface }]}>
+                  {selectedDocument.name}
+                </Text>
+                <Text style={[styles.documentModalInfo, { color: colors.onSurfaceVariant }]}>
+                  {formatFileSize(selectedDocument.size)}
+                </Text>
+                {selectedDocument.uploadedAt && (
+                  <Text style={[styles.documentModalInfo, { color: colors.onSurfaceVariant }]}>
+                    Caricato il {formatDate(selectedDocument.uploadedAt)}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.documentModalActions}>
+                <TouchableOpacity
+                  style={[styles.modalActionButton, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    downloadDocument(selectedDocument);
+                  }}
+                >
+                  <Download size={20} color="#fff" />
+                  <Text style={styles.modalActionText}>Scarica</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalActionButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => {
+                    setShowDocumentModal(false);
+                    deleteDocument(selectedDocument);
+                  }}
+                >
+                  <Trash2 size={20} color="#fff" />
+                  <Text style={styles.modalActionText}>Elimina</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       </TouchableOpacity>
     </Modal>
@@ -803,10 +909,8 @@ const CarDetailScreen = () => {
                       { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
                     ]}
                     onPress={() => {
-                      // Open document
-                      if (isWeb) {
-                        window.open(document.url, '_blank');
-                      }
+                      setSelectedDocument(document);
+                      setShowDocumentModal(true);
                     }}
                   >
                     <View style={[styles.documentIcon, { backgroundColor: '#3B82F620' }]}>
@@ -1136,6 +1240,9 @@ const CarDetailScreen = () => {
 
       {/* Photo Options Modal */}
       {renderPhotoOptionsModal()}
+
+      {/* Document Modal */}
+      {renderDocumentModal()}
 
       {/* Toast Notification */}
       {renderToast()}
@@ -1523,6 +1630,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+
+  // Document Modal
+  documentModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 32,
+    width: '90%',
+    maxWidth: 500,
+    alignSelf: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
+      },
+    }),
+  },
+  documentPreview: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  documentModalName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  documentModalInfo: {
+    fontSize: 14,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  documentModalActions: {
+    flexDirection: 'row',
+    marginTop: 20,
+    gap: 12,
   },
 
   // Toast
