@@ -37,7 +37,7 @@ import {
 } from 'lucide-react-native';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
-import { db, auth, storage } from '../../services/firebase';
+import { db, auth } from '../../services/firebase';
 import {
   collection,
   query,
@@ -49,9 +49,9 @@ import {
   serverTimestamp,
   updateDoc
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -62,8 +62,8 @@ export interface RouteParams {
 
 interface VehiclePhoto {
   id: string;
-  url: string;
-  thumbnailUrl?: string;
+  base64: string; // Immagine in formato base64
+  mimeType: string; // es: 'image/jpeg', 'image/png'
   caption?: string;
   uploadedAt: any;
   vehicleId: string;
@@ -74,7 +74,8 @@ interface VehicleDocument {
   id: string;
   name: string;
   type: string;
-  url: string;
+  base64: string; // Documento in formato base64
+  mimeType: string;
   size?: number;
   uploadedAt: any;
   vehicleId: string;
@@ -247,23 +248,27 @@ const CarDetailScreen = () => {
     try {
       setUploadingPhoto(true);
 
-      // Fetch the image
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Converti l'immagine in base64
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
-      // Create storage reference
-      const filename = `vehicles/${carId}/photos/${Date.now()}.jpg`;
-      const storageRef = ref(storage, filename);
+      // Determina il tipo MIME dall'URI
+      const mimeType = uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
-      // Upload
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
+      // Verifica la dimensione (Firestore ha limite di ~1MB per documento)
+      const sizeInBytes = (base64.length * 3) / 4; // Approssimazione della dimensione
+      if (sizeInBytes > 900000) { // 900KB per sicurezza
+        Alert.alert('Errore', 'L\'immagine è troppo grande. Riduci la qualità o le dimensioni.');
+        return;
+      }
 
-      // Save to Firestore
+      // Salva direttamente in Firestore
       await addDoc(collection(db, 'vehicle_photos'), {
         vehicleId: carId,
         userId: auth.currentUser.uid,
-        url: downloadURL,
+        base64: base64,
+        mimeType: mimeType,
         uploadedAt: serverTimestamp(),
       });
 
@@ -271,7 +276,7 @@ const CarDetailScreen = () => {
       Alert.alert('Successo', 'Foto caricata con successo');
     } catch (error) {
       console.error('Error uploading photo:', error);
-      Alert.alert('Errore', 'Impossibile caricare la foto');
+      Alert.alert('Errore', 'Impossibile caricare la foto: ' + (error as Error).message);
     } finally {
       setUploadingPhoto(false);
     }
@@ -288,11 +293,7 @@ const CarDetailScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Delete from Storage
-              const storageRef = ref(storage, photo.url);
-              await deleteObject(storageRef);
-
-              // Delete from Firestore
+              // Elimina solo da Firestore
               await deleteDoc(doc(db, 'vehicle_photos', photo.id));
 
               await loadPhotos();
@@ -331,26 +332,27 @@ const CarDetailScreen = () => {
     try {
       setUploadingDocument(true);
 
-      // Fetch the file
-      const response = await fetch(file.uri);
-      const blob = await response.blob();
+      // Converti il documento in base64
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
-      // Create storage reference
-      const filename = `vehicles/${carId}/documents/${Date.now()}_${file.name}`;
-      const storageRef = ref(storage, filename);
+      // Verifica la dimensione (Firestore ha limite di ~1MB per documento)
+      const sizeInBytes = (base64.length * 3) / 4;
+      if (sizeInBytes > 900000) { // 900KB per sicurezza
+        Alert.alert('Errore', 'Il file è troppo grande (max 900KB). Prova con un file più piccolo.');
+        return;
+      }
 
-      // Upload
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
-
-      // Save to Firestore
+      // Salva direttamente in Firestore
       await addDoc(collection(db, 'documents'), {
         vehicleId: carId,
         userId: auth.currentUser.uid,
         name: file.name,
         type: file.mimeType || 'application/octet-stream',
+        mimeType: file.mimeType || 'application/octet-stream',
         size: file.size,
-        url: downloadURL,
+        base64: base64,
         uploadedAt: serverTimestamp(),
       });
 
@@ -358,7 +360,7 @@ const CarDetailScreen = () => {
       Alert.alert('Successo', 'Documento caricato con successo');
     } catch (error) {
       console.error('Error uploading document:', error);
-      Alert.alert('Errore', 'Impossibile caricare il documento');
+      Alert.alert('Errore', 'Impossibile caricare il documento: ' + (error as Error).message);
     } finally {
       setUploadingDocument(false);
     }
@@ -375,11 +377,7 @@ const CarDetailScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Delete from Storage
-              const storageRef = ref(storage, document.url);
-              await deleteObject(storageRef);
-
-              // Delete from Firestore
+              // Elimina solo da Firestore
               await deleteDoc(doc(db, 'documents', document.id));
 
               await loadDocuments();
@@ -461,7 +459,7 @@ const CarDetailScreen = () => {
                 <X size={24} color="#fff" />
               </TouchableOpacity>
               <Image
-                source={{ uri: selectedPhoto.url }}
+                source={{ uri: `data:${selectedPhoto.mimeType};base64,${selectedPhoto.base64}` }}
                 style={styles.modalImage}
                 resizeMode="contain"
               />
@@ -622,7 +620,7 @@ const CarDetailScreen = () => {
                       }}
                     >
                       <Image
-                        source={{ uri: photo.url }}
+                        source={{ uri: `data:${photo.mimeType};base64,${photo.base64}` }}
                         style={styles.photoImage}
                         resizeMode="cover"
                       />
