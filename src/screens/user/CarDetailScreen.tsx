@@ -105,12 +105,24 @@ const CarDetailScreen = () => {
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<VehiclePhoto | null>(null);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [showPhotoOptionsModal, setShowPhotoOptionsModal] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
   // Responsive
   const isWeb = Platform.OS === 'web';
   const isLargeScreen = width >= 768;
   const isDesktop = width >= 1024;
   const photoWidth = isDesktop ? 200 : isLargeScreen ? 150 : (SCREEN_WIDTH - 60) / 3;
+
+  // Helper function to show toast notifications
+  const showToastMessage = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   // Helper function to convert URI to base64
   const uriToBase64 = async (uri: string): Promise<string> => {
@@ -216,10 +228,12 @@ const CarDetailScreen = () => {
 
   const pickImage = async () => {
     try {
+      setShowPhotoOptionsModal(false);
+
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permissionResult.granted) {
-        Alert.alert('Permesso negato', 'Hai bisogno di abilitare l\'accesso alla galleria');
+        showToastMessage('Hai bisogno di abilitare l\'accesso alla galleria', 'error');
         return;
       }
 
@@ -235,16 +249,18 @@ const CarDetailScreen = () => {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Errore', 'Impossibile selezionare l\'immagine');
+      showToastMessage('Impossibile selezionare l\'immagine', 'error');
     }
   };
 
   const takePhoto = async () => {
     try {
+      setShowPhotoOptionsModal(false);
+
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
 
       if (!permissionResult.granted) {
-        Alert.alert('Permesso negato', 'Hai bisogno di abilitare l\'accesso alla fotocamera');
+        showToastMessage('Hai bisogno di abilitare l\'accesso alla fotocamera', 'error');
         return;
       }
 
@@ -259,7 +275,7 @@ const CarDetailScreen = () => {
       }
     } catch (error) {
       console.error('Error taking photo:', error);
-      Alert.alert('Errore', 'Impossibile scattare la foto');
+      showToastMessage('Impossibile scattare la foto', 'error');
     }
   };
 
@@ -278,7 +294,7 @@ const CarDetailScreen = () => {
       // Verifica la dimensione (Firestore ha limite di ~1MB per documento)
       const sizeInBytes = (base64.length * 3) / 4; // Approssimazione della dimensione
       if (sizeInBytes > 900000) { // 900KB per sicurezza
-        Alert.alert('Errore', 'L\'immagine è troppo grande. Riduci la qualità o le dimensioni.');
+        showToastMessage('L\'immagine è troppo grande. Riduci la qualità o le dimensioni.', 'error');
         return;
       }
 
@@ -292,10 +308,10 @@ const CarDetailScreen = () => {
       });
 
       await loadPhotos();
-      Alert.alert('Successo', 'Foto caricata con successo');
+      showToastMessage('Foto caricata con successo!', 'success');
     } catch (error) {
       console.error('Error uploading photo:', error);
-      Alert.alert('Errore', 'Impossibile caricare la foto: ' + (error as Error).message);
+      showToastMessage('Impossibile caricare la foto: ' + (error as Error).message, 'error');
     } finally {
       setUploadingPhoto(false);
     }
@@ -341,7 +357,7 @@ const CarDetailScreen = () => {
       }
     } catch (error) {
       console.error('Error picking document:', error);
-      Alert.alert('Errore', 'Impossibile selezionare il documento');
+      showToastMessage('Impossibile selezionare il documento', 'error');
     }
   };
 
@@ -357,7 +373,7 @@ const CarDetailScreen = () => {
       // Verifica la dimensione (Firestore ha limite di ~1MB per documento)
       const sizeInBytes = (base64.length * 3) / 4;
       if (sizeInBytes > 900000) { // 900KB per sicurezza
-        Alert.alert('Errore', 'Il file è troppo grande (max 900KB). Prova con un file più piccolo.');
+        showToastMessage('Il file è troppo grande (max 900KB). Prova con un file più piccolo.', 'error');
         return;
       }
 
@@ -374,10 +390,10 @@ const CarDetailScreen = () => {
       });
 
       await loadDocuments();
-      Alert.alert('Successo', 'Documento caricato con successo');
+      showToastMessage('Documento caricato con successo!', 'success');
     } catch (error) {
       console.error('Error uploading document:', error);
-      Alert.alert('Errore', 'Impossibile caricare il documento: ' + (error as Error).message);
+      showToastMessage('Impossibile caricare il documento: ' + (error as Error).message, 'error');
     } finally {
       setUploadingDocument(false);
     }
@@ -433,24 +449,30 @@ const CarDetailScreen = () => {
   };
 
   const showPhotoOptions = () => {
-    Alert.alert(
-      'Aggiungi Foto',
-      'Scegli come aggiungere la foto',
-      [
-        {
-          text: 'Scatta Foto',
-          onPress: takePhoto,
-        },
-        {
-          text: 'Scegli dalla Galleria',
-          onPress: pickImage,
-        },
-        {
-          text: 'Annulla',
-          style: 'cancel',
-        },
-      ]
-    );
+    if (isWeb) {
+      // Su web usa il modale personalizzato
+      setShowPhotoOptionsModal(true);
+    } else {
+      // Su mobile usa Alert.alert()
+      Alert.alert(
+        'Aggiungi Foto',
+        'Scegli come aggiungere la foto',
+        [
+          {
+            text: 'Scatta Foto',
+            onPress: takePhoto,
+          },
+          {
+            text: 'Scegli dalla Galleria',
+            onPress: pickImage,
+          },
+          {
+            text: 'Annulla',
+            style: 'cancel',
+          },
+        ]
+      );
+    }
   };
 
   // Render Photo Modal
@@ -498,6 +520,72 @@ const CarDetailScreen = () => {
       </TouchableOpacity>
     </Modal>
   );
+
+  // Render Photo Options Modal (for web)
+  const renderPhotoOptionsModal = () => (
+    <Modal
+      visible={showPhotoOptionsModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowPhotoOptionsModal(false)}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowPhotoOptionsModal(false)}
+      >
+        <View style={styles.optionsModalContent} onStartShouldSetResponder={() => true}>
+          <Text style={[styles.optionsModalTitle, { color: colors.onSurface }]}>
+            Aggiungi Foto
+          </Text>
+          <Text style={[styles.optionsModalSubtitle, { color: colors.onSurfaceVariant }]}>
+            Scegli come aggiungere la foto
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.optionButton, { backgroundColor: colors.primary }]}
+            onPress={pickImage}
+          >
+            <Upload size={20} color="#fff" />
+            <Text style={styles.optionButtonText}>Scegli dalla Galleria</Text>
+          </TouchableOpacity>
+
+          {!isWeb && (
+            <TouchableOpacity
+              style={[styles.optionButton, { backgroundColor: colors.primary }]}
+              onPress={takePhoto}
+            >
+              <ImageIcon size={20} color="#fff" />
+              <Text style={styles.optionButtonText}>Scatta Foto</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.optionButton, styles.cancelButton, { borderColor: colors.outline }]}
+            onPress={() => setShowPhotoOptionsModal(false)}
+          >
+            <X size={20} color={colors.onSurface} />
+            <Text style={[styles.optionButtonText, { color: colors.onSurface }]}>Annulla</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Render Toast Notification
+  const renderToast = () => {
+    if (!showToast) return null;
+
+    return (
+      <View style={[
+        styles.toast,
+        toastType === 'success' ? styles.toastSuccess : styles.toastError,
+        isDesktop && styles.toastDesktop
+      ]}>
+        <Text style={styles.toastText}>{toastMessage}</Text>
+      </View>
+    );
+  };
 
   if (!vehicle) {
     return (
@@ -1045,6 +1133,12 @@ const CarDetailScreen = () => {
 
       {/* Photo Modal */}
       {renderPhotoModal()}
+
+      {/* Photo Options Modal */}
+      {renderPhotoOptionsModal()}
+
+      {/* Toast Notification */}
+      {renderToast()}
     </SafeAreaView>
   );
 };
@@ -1377,6 +1471,98 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // Options Modal (for web)
+  optionsModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
+      },
+    }),
+  },
+  optionsModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  optionsModalSubtitle: {
+    fontSize: 14,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+  },
+  optionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
+  // Toast
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+      },
+    }),
+  },
+  toastDesktop: {
+    left: 'auto',
+    right: 40,
+    maxWidth: 400,
+  },
+  toastSuccess: {
+    backgroundColor: '#10b981',
+  },
+  toastError: {
+    backgroundColor: '#EF4444',
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 
