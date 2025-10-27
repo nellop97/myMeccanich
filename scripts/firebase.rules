@@ -401,6 +401,36 @@ service cloud.firestore {
     }
 
     // ============================================
+    // VEHICLE PHOTOS COLLECTION
+    // ============================================
+    match /vehicle_photos/{photoId} {
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
+
+      // Lettura: proprietario della foto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Creazione: proprietario del veicolo
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      ownsVehicle(request.resource.data.vehicleId);
+
+      // Aggiornamento: solo il proprietario della foto
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Cancellazione: solo il proprietario della foto
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================
     // REMINDERS COLLECTION
     // ============================================
     match /reminders/{reminderId} {
