@@ -687,8 +687,13 @@ service cloud.firestore {
     // WORKSHOPS COLLECTION
     // ============================================
     match /workshops/{workshopId} {
-      // Lettura: tutti gli utenti autenticati possono cercare officine
-      allow read: if isAuthenticated();
+      // Lettura singola: tutti gli utenti autenticati possono leggere un'officina specifica
+      allow get: if isAuthenticated();
+
+      // Lettura query: utenti autenticati possono cercare officine
+      // Limitato per performance e sicurezza
+      allow list: if isAuthenticated() &&
+                     request.query.limit <= 100;
 
       // Creazione: solo meccanici per se stessi
       allow create: if isMechanic() &&
