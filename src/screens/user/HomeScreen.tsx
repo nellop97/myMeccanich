@@ -29,6 +29,7 @@ import {
     TrendingUp,
     ChevronRight,
     Bell,
+    Eye,
     Settings as SettingsIcon,
     Menu,
     Search,
@@ -600,6 +601,17 @@ const HomeScreen = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.webIconButton}
+                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                        >
+                            <Eye size={22} color={approvedViewRequests > 0 ? "#10b981" : themeColors.textSecondary} />
+                            {approvedViewRequests > 0 && (
+                                <View style={styles.webBadge}>
+                                    <Text style={styles.webBadgeText}>{approvedViewRequests}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.webIconButton}
                             onPress={() => navigation.navigate('Reminders' as never)}
                         >
                             <Calendar size={22} color={deadlines.length > 0 ? "#f59e0b" : themeColors.textSecondary} />
@@ -963,6 +975,17 @@ const HomeScreen = () => {
                         {pendingViewRequests > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{pendingViewRequests}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.headerButton}
+                        onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                    >
+                        <Eye size={24} color={approvedViewRequests > 0 ? "#10b981" : "#64748b"} />
+                        {approvedViewRequests > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{approvedViewRequests}</Text>
                             </View>
                         )}
                     </TouchableOpacity>
