@@ -38,6 +38,7 @@ import {
 } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useAppThemeManager } from '../../hooks/useTheme';
 
 // Firebase
@@ -312,7 +313,7 @@ const HomeScreen = () => {
                 console.log('🔔 Polling pending view requests...');
                 loadPendingViewRequests();
             }
-        }, 30000); // ogni 30 secondi
+        }, 180000); // <-- 3 minuti
 
         return () => clearInterval(interval);
     }, [user?.id]);
@@ -955,153 +956,271 @@ const HomeScreen = () => {
     // RENDER MOBILE LAYOUT
     // ============================================
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
+        <View style={[styles.container, { backgroundColor: isDark ? '#0a0a0a' : '#f5f5f7' }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
-                <View>
-                    <Text style={[styles.headerGreeting, { color: themeColors.text }]}>Ciao, {user?.name || 'Benvenuto'}</Text>
-                    <Text style={[styles.headerSubtitle, { color: themeColors.textSecondary }]}>
-                        {vehicles.length} veicol{vehicles.length === 1 ? 'o' : 'i'}
-                    </Text>
-                </View>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => navigation.navigate('ViewRequests' as never)}
-                    >
-                        <Bell size={24} color={pendingViewRequests > 0 ? "#f59e0b" : "#64748b"} />
-                        {pendingViewRequests > 0 && (
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>{pendingViewRequests}</Text>
+            {/* Liquid Glass Header */}
+            <BlurView
+                intensity={isDark ? 70 : 90}
+                tint={isDark ? 'dark' : 'light'}
+                style={styles.liquidHeader}
+            >
+                <SafeAreaView>
+                    <View style={styles.liquidHeaderContent}>
+                        <View style={styles.liquidHeaderTop}>
+                            <View>
+                                <Text style={[styles.liquidHeaderGreeting, { color: themeColors.text }]}>
+                                    Ciao, {user?.name || 'Benvenuto'}
+                                </Text>
+                                <Text style={[styles.liquidHeaderSubtitle, { color: themeColors.textSecondary }]}>
+                                    {vehicles.length} veicol{vehicles.length === 1 ? 'o' : 'i'}
+                                </Text>
                             </View>
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                    >
-                        <Eye size={24} color={approvedViewRequests > 0 ? "#10b981" : "#64748b"} />
-                        {approvedViewRequests > 0 && (
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>{approvedViewRequests}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => navigation.navigate('Reminders' as never)}
-                    >
-                        <Calendar size={24} color={deadlines.length > 0 ? "#f59e0b" : "#64748b"} />
-                        {deadlines.length > 0 && (
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>{deadlines.length}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => navigation.navigate('Settings' as never)}
-                    >
-                        <SettingsIcon size={24} color="#64748b" />
-                    </TouchableOpacity>
-                </View>
-            </View>
+                            <TouchableOpacity
+                                style={[styles.liquidSettingsButton, {
+                                    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                                    borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
+                                }]}
+                                onPress={() => navigation.navigate('Settings' as never)}
+                            >
+                                <SettingsIcon size={22} color={themeColors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Quick Action Pills */}
+                        <View style={styles.liquidActionPills}>
+                            <TouchableOpacity
+                                style={[styles.liquidPill, {
+                                    backgroundColor: pendingViewRequests > 0
+                                        ? isDark ? 'rgba(251,146,60,0.2)' : 'rgba(251,146,60,0.15)'
+                                        : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                                    borderColor: pendingViewRequests > 0
+                                        ? isDark ? 'rgba(251,146,60,0.3)' : 'rgba(251,146,60,0.25)'
+                                        : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
+                                }]}
+                                onPress={() => navigation.navigate('ViewRequests' as never)}
+                            >
+                                <Bell
+                                    size={20}
+                                    color={pendingViewRequests > 0 ? "#fb923c" : themeColors.text}
+                                />
+                                <Text style={[styles.liquidPillText, {
+                                    color: pendingViewRequests > 0 ? "#fb923c" : themeColors.text
+                                }]}>
+                                    Richieste
+                                </Text>
+                                {pendingViewRequests > 0 && (
+                                    <View style={styles.liquidBadge}>
+                                        <Text style={styles.liquidBadgeText}>{pendingViewRequests}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.liquidPill, {
+                                    backgroundColor: approvedViewRequests > 0
+                                        ? isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.15)'
+                                        : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                                    borderColor: approvedViewRequests > 0
+                                        ? isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.25)'
+                                        : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
+                                }]}
+                                onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                            >
+                                <Eye
+                                    size={20}
+                                    color={approvedViewRequests > 0 ? "#10b981" : themeColors.text}
+                                />
+                                <Text style={[styles.liquidPillText, {
+                                    color: approvedViewRequests > 0 ? "#10b981" : themeColors.text
+                                }]}>
+                                    Mie Richieste
+                                </Text>
+                                {approvedViewRequests > 0 && (
+                                    <View style={styles.liquidBadge}>
+                                        <Text style={styles.liquidBadgeText}>{approvedViewRequests}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.liquidPill, {
+                                    backgroundColor: deadlines.length > 0
+                                        ? isDark ? 'rgba(251,146,60,0.2)' : 'rgba(251,146,60,0.15)'
+                                        : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                                    borderColor: deadlines.length > 0
+                                        ? isDark ? 'rgba(251,146,60,0.3)' : 'rgba(251,146,60,0.25)'
+                                        : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
+                                }]}
+                                onPress={() => navigation.navigate('Reminders' as never)}
+                            >
+                                <Calendar
+                                    size={20}
+                                    color={deadlines.length > 0 ? "#fb923c" : themeColors.text}
+                                />
+                                <Text style={[styles.liquidPillText, {
+                                    color: deadlines.length > 0 ? "#fb923c" : themeColors.text
+                                }]}>
+                                    Scadenze
+                                </Text>
+                                {deadlines.length > 0 && (
+                                    <View style={styles.liquidBadge}>
+                                        <Text style={styles.liquidBadgeText}>{deadlines.length}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </SafeAreaView>
+            </BlurView>
 
             <ScrollView
-                style={[styles.scrollView, { backgroundColor: themeColors.background }]}
+                style={[styles.scrollView, { backgroundColor: 'transparent' }]}
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
                 showsVerticalScrollIndicator={false}
             >
-                {/* Veicolo Selezionato */}
+                {/* Liquid Glass Vehicle Card */}
                 {selectedVehicle && (
-                    <View style={styles.vehicleCard}>
+                    <View style={styles.liquidVehicleCardContainer}>
                         <LinearGradient
-                            colors={['#3b82f6', '#2563eb']}
+                            colors={isDark
+                                ? ['rgba(59,130,246,0.4)', 'rgba(37,99,235,0.5)']
+                                : ['rgba(59,130,246,0.9)', 'rgba(37,99,235,1)']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={styles.vehicleGradient}
+                            style={styles.liquidVehicleGradient}
                         >
-                            <View style={styles.vehicleHeader}>
-                                <View style={styles.vehicleInfo}>
-                                    <Text style={styles.vehicleName}>
-                                        {selectedVehicle.make} {selectedVehicle.model}
-                                    </Text>
-                                    <Text style={styles.vehiclePlate}>
-                                        {selectedVehicle.licensePlate}
-                                    </Text>
-                                    <View style={styles.vehicleTag}>
-                                        <Text style={styles.vehicleTagText}>
-                                            {selectedVehicle.year} • {selectedVehicle.fuel || 'Benzina'}
+                            <BlurView
+                                intensity={isDark ? 40 : 30}
+                                tint={isDark ? 'dark' : 'light'}
+                                style={styles.liquidVehicleBlur}
+                            >
+                                <View style={styles.liquidVehicleHeader}>
+                                    <View style={styles.liquidVehicleInfo}>
+                                        <Text style={styles.liquidVehicleName}>
+                                            {selectedVehicle.make} {selectedVehicle.model}
                                         </Text>
+                                        <Text style={styles.liquidVehiclePlate}>
+                                            {selectedVehicle.licensePlate}
+                                        </Text>
+                                        <View style={styles.liquidVehicleTag}>
+                                            <Text style={styles.liquidVehicleTagText}>
+                                                {selectedVehicle.year} • {selectedVehicle.fuel || 'Benzina'}
+                                            </Text>
+                                        </View>
                                     </View>
+
+                                    {selectedVehicle.imageUrl && (
+                                        <Image
+                                            source={{ uri: selectedVehicle.imageUrl }}
+                                            style={styles.liquidVehicleImage}
+                                            resizeMode="contain"
+                                        />
+                                    )}
                                 </View>
 
-                                {selectedVehicle.imageUrl && (
-                                    <Image
-                                        source={{ uri: selectedVehicle.imageUrl }}
-                                        style={styles.vehicleImage}
-                                        resizeMode="contain"
-                                    />
-                                )}
-                            </View>
-
-                            <View style={styles.vehicleActions}>
                                 <TouchableOpacity
-                                    style={styles.vehicleActionButton}
+                                    style={styles.liquidVehicleButton}
                                     onPress={() =>
                                         navigation.navigate('CarDetail' as never, {
                                             carId: selectedVehicle.id,
                                         } as never)
                                     }
                                 >
-                                    <Text style={styles.vehicleActionText}>Dettagli</Text>
-                                    <ChevronRight size={16} color="#fff" />
+                                    <Text style={styles.liquidVehicleButtonText}>Vedi Dettagli</Text>
+                                    <ChevronRight size={18} color="#fff" />
                                 </TouchableOpacity>
-                            </View>
+                            </BlurView>
                         </LinearGradient>
                     </View>
                 )}
 
-                {/* Quick Stats */}
-                <View style={styles.statsContainer}>
-                    <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Questo Mese</Text>
-                    <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
-                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
-                            <View style={[styles.statIcon, { backgroundColor: '#eff6ff' }]}>
-                                <DollarSign size={24} color="#3b82f6" strokeWidth={2} />
+                {/* Liquid Glass Stats */}
+                <View style={styles.liquidStatsContainer}>
+                    <Text style={[styles.liquidSectionTitle, { color: themeColors.text }]}>Questo Mese</Text>
+                    <View style={styles.liquidStatsGrid}>
+                        <BlurView
+                            intensity={isDark ? 60 : 80}
+                            tint={isDark ? 'dark' : 'light'}
+                            style={[styles.liquidStatCard, {
+                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
+                            }]}
+                        >
+                            <View style={[styles.liquidStatIcon, {
+                                backgroundColor: isDark ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.15)'
+                            }]}>
+                                <DollarSign size={22} color="#3b82f6" strokeWidth={2.5} />
                             </View>
-                            <Text style={[styles.statValue, { color: themeColors.text }]}>{formatCurrency(monthlyStats.totalExpenses)}</Text>
-                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Spese Totali</Text>
-                        </View>
+                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
+                                {formatCurrency(monthlyStats.totalExpenses)}
+                            </Text>
+                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
+                                Spese Totali
+                            </Text>
+                        </BlurView>
 
-                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
-                            <View style={[styles.statIcon, { backgroundColor: '#fef3c7' }]}>
-                                <Fuel size={24} color="#f59e0b" strokeWidth={2} />
+                        <BlurView
+                            intensity={isDark ? 60 : 80}
+                            tint={isDark ? 'dark' : 'light'}
+                            style={[styles.liquidStatCard, {
+                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
+                            }]}
+                        >
+                            <View style={[styles.liquidStatIcon, {
+                                backgroundColor: isDark ? 'rgba(251,146,60,0.25)' : 'rgba(251,146,60,0.15)'
+                            }]}>
+                                <Fuel size={22} color="#fb923c" strokeWidth={2.5} />
                             </View>
-                            <Text style={[styles.statValue, { color: themeColors.text }]}>{formatCurrency(monthlyStats.totalFuel)}</Text>
-                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Carburante</Text>
-                        </View>
+                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
+                                {formatCurrency(monthlyStats.totalFuel)}
+                            </Text>
+                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
+                                Carburante
+                            </Text>
+                        </BlurView>
 
-                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
-                            <View style={[styles.statIcon, { backgroundColor: '#dbeafe' }]}>
-                                <Wrench size={24} color="#3b82f6" strokeWidth={2} />
+                        <BlurView
+                            intensity={isDark ? 60 : 80}
+                            tint={isDark ? 'dark' : 'light'}
+                            style={[styles.liquidStatCard, {
+                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
+                            }]}
+                        >
+                            <View style={[styles.liquidStatIcon, {
+                                backgroundColor: isDark ? 'rgba(139,92,246,0.25)' : 'rgba(139,92,246,0.15)'
+                            }]}>
+                                <Wrench size={22} color="#8b5cf6" strokeWidth={2.5} />
                             </View>
-                            <Text style={[styles.statValue, { color: themeColors.text }]}>{formatCurrency(monthlyStats.totalMaintenance)}</Text>
-                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Manutenzioni</Text>
-                        </View>
+                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
+                                {formatCurrency(monthlyStats.totalMaintenance)}
+                            </Text>
+                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
+                                Manutenzioni
+                            </Text>
+                        </BlurView>
 
-                        <View style={[styles.statCard, { backgroundColor: themeColors.cardBackground }]}>
-                            <View style={[styles.statIcon, { backgroundColor: '#dcfce7' }]}>
-                                <TrendingUp size={24} color="#10b981" strokeWidth={2} />
+                        <BlurView
+                            intensity={isDark ? 60 : 80}
+                            tint={isDark ? 'dark' : 'light'}
+                            style={[styles.liquidStatCard, {
+                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
+                            }]}
+                        >
+                            <View style={[styles.liquidStatIcon, {
+                                backgroundColor: isDark ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.15)'
+                            }]}>
+                                <TrendingUp size={22} color="#10b981" strokeWidth={2.5} />
                             </View>
-                            <Text style={[styles.statValue, { color: themeColors.text }]}>{monthlyStats.totalKm} km</Text>
-                            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Percorsi</Text>
-                        </View>
+                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
+                                {monthlyStats.totalKm} km
+                            </Text>
+                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
+                                Percorsi
+                            </Text>
+                        </BlurView>
                     </View>
                 </View>
 
@@ -1375,17 +1494,299 @@ const HomeScreen = () => {
 
             {/* Add Vehicle Modal */}
             {renderAddVehicleModal()}
-        </SafeAreaView>
+        </View>
     );
 };
 
 // ============================================
-// STYLES - APPLE DESIGN STYLE
+// STYLES - LIQUID GLASS DESIGN
 // ============================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#f5f5f7',
+    },
+
+    // ============================================
+    // LIQUID GLASS HEADER
+    // ============================================
+    liquidHeader: {
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderTopWidth: 0,
+        borderColor: 'rgba(255,255,255,0.18)',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.15,
+                shadowRadius: 20,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+            },
+        }),
+    },
+    liquidHeaderContent: {
+        paddingHorizontal: 20,
+        paddingTop: 8,
+        paddingBottom: 24,
+    },
+    liquidHeaderTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 20,
+    },
+    liquidHeaderGreeting: {
+        fontSize: 28,
+        fontWeight: '700',
+        letterSpacing: -0.6,
+        marginBottom: 4,
+    },
+    liquidHeaderSubtitle: {
+        fontSize: 15,
+        fontWeight: '500',
+        letterSpacing: -0.2,
+        opacity: 0.7,
+    },
+    liquidSettingsButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            },
+        }),
+    },
+    liquidActionPills: {
+        gap: 10,
+    },
+    liquidPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 18,
+        paddingVertical: 14,
+        borderRadius: 16,
+        borderWidth: 1,
+        marginBottom: 4,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            },
+        }),
+    },
+    liquidPillText: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '600',
+        marginLeft: 12,
+        letterSpacing: -0.2,
+    },
+    liquidBadge: {
+        backgroundColor: '#ef4444',
+        minWidth: 22,
+        height: 22,
+        borderRadius: 11,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 6,
+        marginLeft: 8,
+    },
+    liquidBadgeText: {
+        color: '#ffffff',
+        fontSize: 12,
+        fontWeight: '700',
+        letterSpacing: -0.2,
+    },
+
+    // ============================================
+    // LIQUID GLASS VEHICLE CARD
+    // ============================================
+    liquidVehicleCardContainer: {
+        marginBottom: 24,
+        borderRadius: 28,
+        overflow: 'hidden',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#3b82f6',
+                shadowOffset: { width: 0, height: 12 },
+                shadowOpacity: 0.3,
+                shadowRadius: 24,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 12px 40px rgba(59,130,246,0.3)',
+            },
+        }),
+    },
+    liquidVehicleGradient: {
+        borderRadius: 28,
+    },
+    liquidVehicleBlur: {
+        padding: 24,
+        borderRadius: 28,
+        overflow: 'hidden',
+    },
+    liquidVehicleHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    liquidVehicleInfo: {
+        flex: 1,
+    },
+    liquidVehicleName: {
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#ffffff',
+        marginBottom: 6,
+        letterSpacing: -0.6,
+        textShadowColor: 'rgba(0,0,0,0.2)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+    },
+    liquidVehiclePlate: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.95)',
+        marginBottom: 12,
+        letterSpacing: 1.5,
+        textShadowColor: 'rgba(0,0,0,0.15)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    },
+    liquidVehicleTag: {
+        alignSelf: 'flex-start',
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
+    liquidVehicleTagText: {
+        color: '#ffffff',
+        fontSize: 13,
+        fontWeight: '600',
+        letterSpacing: -0.2,
+    },
+    liquidVehicleImage: {
+        width: 120,
+        height: 85,
+        marginLeft: 12,
+    },
+    liquidVehicleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        paddingVertical: 14,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
+    liquidVehicleButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#ffffff',
+        letterSpacing: -0.3,
+    },
+
+    // ============================================
+    // LIQUID GLASS STATS
+    // ============================================
+    liquidStatsContainer: {
+        marginBottom: 28,
+    },
+    liquidSectionTitle: {
+        fontSize: 22,
+        fontWeight: '700',
+        letterSpacing: -0.5,
+        marginBottom: 16,
+        paddingHorizontal: 4,
+    },
+    liquidStatsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+    },
+    liquidStatCard: {
+        flex: 1,
+        minWidth: 160,
+        borderRadius: 20,
+        padding: 20,
+        alignItems: 'center',
+        borderWidth: 1,
+        overflow: 'hidden',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.08,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 4,
+            },
+            web: {
+                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+            },
+        }),
+    },
+    liquidStatIcon: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    liquidStatValue: {
+        fontSize: 19,
+        fontWeight: '800',
+        marginBottom: 4,
+        letterSpacing: -0.4,
+    },
+    liquidStatLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        textAlign: 'center',
+        letterSpacing: -0.2,
+        opacity: 0.7,
     },
     centerContent: {
         justifyContent: 'center',
@@ -1397,6 +1798,14 @@ const styles = StyleSheet.create({
         fontWeight: '400',
         color: '#8E8E93',
         letterSpacing: -0.4,
+    },
+
+    // ScrollView
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 20,
     },
 
     // Header
