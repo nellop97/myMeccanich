@@ -313,7 +313,7 @@ const HomeScreen = () => {
                 console.log('🔔 Polling pending view requests...');
                 loadPendingViewRequests();
             }
-        }, 30000); // ogni 30 secondi
+        }, 180000); // <-- 3 minuti
 
         return () => clearInterval(interval);
     }, [user?.id]);
