@@ -12,6 +12,7 @@ import {
     useWindowDimensions,
     Modal,
     FlatList,
+    TextInput,
 } from 'react-native';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { VehicleFormData, POPULAR_MAKES, getValidYears } from '../../../types/addVehicle.types';
@@ -90,19 +91,13 @@ const VehicleBasicInfoStep: React.FC<Props> = ({
                     <Text style={styles.label}>Modello</Text>
                     <View style={styles.inputWrapper}>
                         <Text style={styles.inputIcon}>🚗</Text>
-                        <input
-                            type="text"
+                        <TextInput
                             placeholder="Seleziona modello"
                             value={formData.model}
-                            onChange={(e) => updateFormData({ model: e.target.value })}
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                color: '#1e293b',
-                                border: 'none',
-                                outline: 'none',
-                                backgroundColor: 'transparent',
-                            }}
+                            onChangeText={(text) => updateFormData({ model: text })}
+                            style={styles.textInput}
+                            placeholderTextColor="#94a3b8"
+                            autoCapitalize="words"
                         />
                     </View>
                 </View>
@@ -134,25 +129,19 @@ const VehicleBasicInfoStep: React.FC<Props> = ({
                     <Text style={styles.label}>Targa</Text>
                     <View style={styles.inputWrapper}>
                         <Text style={styles.inputIcon}>🔢</Text>
-                        <input
-                            type="text"
+                        <TextInput
                             placeholder="AB123CD"
                             value={formData.licensePlate}
-                            onChange={(e) =>
+                            onChangeText={(text) =>
                                 updateFormData({
-                                    licensePlate: e.target.value.toUpperCase(),
+                                    licensePlate: text.toUpperCase(),
                                 })
                             }
                             maxLength={7}
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                color: '#1e293b',
-                                border: 'none',
-                                outline: 'none',
-                                backgroundColor: 'transparent',
-                                textTransform: 'uppercase',
-                            }}
+                            style={styles.textInput}
+                            placeholderTextColor="#94a3b8"
+                            autoCapitalize="characters"
+                            autoCorrect={false}
                         />
                     </View>
                     <Text style={styles.helperText}>
@@ -353,6 +342,17 @@ const styles = StyleSheet.create({
     },
     inputIcon: {
         fontSize: 20,
+    },
+    textInput: {
+        flex: 1,
+        fontSize: 16,
+        color: '#1e293b',
+        padding: 0,
+        ...Platform.select({
+            web: {
+                outline: 'none',
+            },
+        }),
     },
 
     helperText: {
