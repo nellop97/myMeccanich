@@ -260,15 +260,15 @@ export class MaintenanceService {
         console.error('Error code:', setDocError?.code);
         console.error('Error message:', setDocError?.message);
 
-        // Prova senza serverTimestamp
-        console.log('Trying without serverTimestamp...');
-        const withoutTimestamp = {
+        // Prova con Timestamp invece di serverTimestamp
+        console.log('Trying with Timestamp.now() instead of serverTimestamp...');
+        const withTimestamp = {
           ...minimalRecord,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
         };
-        await setDoc(docRef, withoutTimestamp);
-        console.log('✅ Worked without serverTimestamp!');
+        await setDoc(docRef, withTimestamp);
+        console.log('✅ Worked with Timestamp.now()!');
       }
 
       // Aggiorna contatore manutenzioni del veicolo
@@ -459,15 +459,27 @@ export class MaintenanceService {
   private async updateVehicleMaintenanceCount(vehicleId: string): Promise<void> {
     try {
       const records = await this.getVehicleMaintenanceHistory(vehicleId, 'system');
-      
+
       const vehicleRef = doc(db, 'vehicles', vehicleId);
-      await updateDoc(vehicleRef, {
+
+      // Prepara i dati da aggiornare
+      const updateData: any = {
         maintenanceCount: records.length,
-        lastMaintenanceDate: records[0]?.date || null,
         updatedAt: serverTimestamp()
-      });
+      };
+
+      // Solo se ci sono record, aggiungi la data dell'ultima manutenzione
+      if (records.length > 0 && records[0]?.date) {
+        // Converti Date in Timestamp di Firebase
+        updateData.lastMaintenanceDate = Timestamp.fromDate(records[0].date);
+      }
+
+      console.log('Updating vehicle with data:', updateData);
+      await updateDoc(vehicleRef, updateData);
+      console.log('✅ Vehicle maintenance count updated successfully');
     } catch (error) {
-      console.error('Error updating vehicle maintenance count:', error);
+      console.error('❌ Error updating vehicle maintenance count:', error);
+      // Non bloccare il flusso, solo logga l'errore
     }
   }
 }
