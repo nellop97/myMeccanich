@@ -1,4 +1,4 @@
-// src/screens/user/MaintenanceHistoryScreen.tsx
+// src/screens/user/MaintenanceHistoryScreen.tsx - REDESIGN APPLE LIQUID GLASS
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,19 +10,13 @@ import {
   Dimensions,
   Platform,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Animated,
+  useWindowDimensions
 } from 'react-native';
 import {
   Text,
-  Card,
-  Chip,
   Searchbar,
-  FAB,
-  Menu,
-  Divider,
-  IconButton,
-  Surface,
-  Badge
 } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
@@ -32,51 +26,208 @@ import {
   Euro,
   Filter,
   ChevronRight,
-  Lock,
   AlertCircle,
-  CheckCircle,
-  Clock,
-  User,
   Package,
-  Car
+  Car,
+  Plus,
+  Shield,
+  Settings,
+  Cpu,
+  TrendingUp,
+  Clock
 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SecurityService } from '../../security/SecurityService';
 import { MaintenanceService } from '../../services/MaintenanceService';
 import { VehicleService } from '../../services/VehicleService';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
 import { MaintenanceRecord, Vehicle } from '../../types/database.types';
+import { BlurView } from 'expo-blur';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isWeb = Platform.OS === 'web';
+const isTablet = SCREEN_WIDTH >= 768;
+
+// Liquid Glass Card Component
+const GlassCard = ({ children, style, onPress }: any) => {
+  const { isDark } = useAppThemeManager();
+  const [scaleAnim] = useState(new Animated.Value(1));
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const cardContent = (
+    <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
+      {Platform.OS === 'web' || Platform.OS === 'ios' ? (
+        <BlurView
+          intensity={isWeb ? 40 : (isDark ? 30 : 60)}
+          tint={isDark ? 'dark' : 'light'}
+          style={[
+            styles.glassCard,
+            {
+              backgroundColor: isDark
+                ? 'rgba(30, 30, 30, 0.7)'
+                : 'rgba(255, 255, 255, 0.7)',
+              borderColor: isDark
+                ? 'rgba(255, 255, 255, 0.1)'
+                : 'rgba(0, 0, 0, 0.05)',
+            },
+            style
+          ]}
+        >
+          {children}
+        </BlurView>
+      ) : (
+        <View
+          style={[
+            styles.glassCard,
+            {
+              backgroundColor: isDark
+                ? 'rgba(30, 30, 30, 0.9)'
+                : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark
+                ? 'rgba(255, 255, 255, 0.1)'
+                : 'rgba(0, 0, 0, 0.05)',
+            },
+            style
+          ]}
+        >
+          {children}
+        </View>
+      )}
+    </Animated.View>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+      >
+        {cardContent}
+      </TouchableOpacity>
+    );
+  }
+
+  return cardContent;
+};
+
+// Filter Chip Component
+const FilterChip = ({ label, active, onPress, icon }: any) => {
+  const { isDark } = useAppThemeManager();
+  const [scaleAnim] = useState(new Animated.Value(1));
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      activeOpacity={1}
+    >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <LinearGradient
+          colors={active
+            ? isDark
+              ? ['#4A90E2', '#357ABD']
+              : ['#007AFF', '#0051D5']
+            : isDark
+              ? ['rgba(60, 60, 60, 0.8)', 'rgba(40, 40, 40, 0.8)']
+              : ['rgba(240, 240, 240, 0.9)', 'rgba(230, 230, 230, 0.9)']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.filterChip,
+            active && styles.filterChipActive,
+            {
+              borderColor: active
+                ? isDark ? 'rgba(74, 144, 226, 0.5)' : 'rgba(0, 122, 255, 0.3)'
+                : 'transparent',
+            }
+          ]}
+        >
+          {icon && (
+            <View style={styles.chipIcon}>
+              {icon}
+            </View>
+          )}
+          <Text style={[
+            styles.filterChipText,
+            { color: active ? '#fff' : (isDark ? '#ddd' : '#666') }
+          ]}>
+            {label}
+          </Text>
+        </LinearGradient>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
 
 export default function MaintenanceHistoryScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { colors } = useAppThemeManager();
+  const { colors, isDark } = useAppThemeManager();
   const { user } = useAuth();
+  const { width } = useWindowDimensions();
   const security = SecurityService.getInstance();
   const maintenanceService = MaintenanceService.getInstance();
   const vehicleService = VehicleService.getInstance();
-  
+
   const { carId } = route.params as { carId: string };
-  
+
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<MaintenanceRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
-  const [expandedRecords, setExpandedRecords] = useState<Set<string>>(new Set());
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState({
+    totalCount: 0,
+    totalCost: 0,
+    lastMaintenance: null as Date | null,
+  });
 
   useEffect(() => {
     // Attiva protezione dati
     security.preventScreenCapture(true);
-    
+
     // Disabilita context menu su web
     if (Platform.OS === 'web') {
       security.disableContextMenu();
     }
-    
+
     // Carica dati
     loadData();
 
@@ -84,6 +235,10 @@ export default function MaintenanceHistoryScreen() {
       security.preventScreenCapture(false);
     };
   }, [carId]);
+
+  useEffect(() => {
+    filterRecords(searchQuery, selectedFilter);
+  }, [searchQuery, selectedFilter, records]);
 
   const loadData = async () => {
     try {
@@ -99,9 +254,20 @@ export default function MaintenanceHistoryScreen() {
           carId,
           user.uid
         );
-        
+
+        console.log('📊 Loaded maintenance records:', maintenanceHistory.length);
+
         setRecords(maintenanceHistory);
-        setFilteredRecords(maintenanceHistory);
+
+        // Calcola statistiche
+        const totalCost = maintenanceHistory.reduce((sum, record) => sum + (record.cost || 0), 0);
+        const lastMaintenance = maintenanceHistory.length > 0 ? maintenanceHistory[0].date : null;
+
+        setStats({
+          totalCount: maintenanceHistory.length,
+          totalCost,
+          lastMaintenance,
+        });
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -117,83 +283,78 @@ export default function MaintenanceHistoryScreen() {
     loadData();
   };
 
-  const filterRecords = async (query: string, filter: string) => {
-    try {
-      let filtered: MaintenanceRecord[] = [];
+  const filterRecords = (query: string, filter: string) => {
+    let filtered = [...records];
 
-      if (filter === 'all') {
-        filtered = records;
-      } else {
-        // Filtra per tipo dal server
-        filtered = await maintenanceService.filterMaintenanceByType(carId, filter as any);
-      }
-
-      // Ricerca testuale locale
-      if (query) {
-        filtered = filtered.filter(r => 
-          r.description.toLowerCase().includes(query.toLowerCase()) ||
-          r.workshopName?.toLowerCase().includes(query.toLowerCase()) ||
-          r.mechanicName?.toLowerCase().includes(query.toLowerCase())
-        );
-      }
-
-      setFilteredRecords(filtered);
-    } catch (error) {
-      console.error('Error filtering records:', error);
+    // Filtra per tipo
+    if (filter !== 'all') {
+      filtered = filtered.filter(r => r.type === filter);
     }
-  };
 
-  const toggleRecordExpansion = (id: string) => {
-    const newExpanded = new Set(expandedRecords);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
+    // Ricerca testuale locale
+    if (query) {
+      const queryLower = query.toLowerCase();
+      filtered = filtered.filter(r =>
+        r.description.toLowerCase().includes(queryLower) ||
+        r.workshopName?.toLowerCase().includes(queryLower) ||
+        r.mechanicName?.toLowerCase().includes(queryLower) ||
+        r.type.toLowerCase().includes(queryLower)
+      );
     }
-    setExpandedRecords(newExpanded);
+
+    setFilteredRecords(filtered);
   };
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'tagliando': return '#4CAF50';
-      case 'gomme': return '#2196F3';
-      case 'freni': return '#FF9800';
-      case 'carrozzeria': return '#9C27B0';
-      case 'motore': return '#F44336';
-      case 'elettronica': return '#00BCD4';
-      default: return '#757575';
+      case 'tagliando': return { from: '#4CAF50', to: '#45A049' };
+      case 'gomme': return { from: '#2196F3', to: '#1976D2' };
+      case 'freni': return { from: '#FF9800', to: '#F57C00' };
+      case 'carrozzeria': return { from: '#9C27B0', to: '#7B1FA2' };
+      case 'motore': return { from: '#F44336', to: '#D32F2F' };
+      case 'elettronica': return { from: '#00BCD4', to: '#0097A7' };
+      default: return { from: '#757575', to: '#616161' };
     }
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string, size: number = 20, color: string = '#fff') => {
     switch (type) {
-      case 'tagliando': return <Wrench size={20} />;
-      case 'gomme': return <Package size={20} />;
-      case 'freni': return <AlertCircle size={20} />;
-      case 'carrozzeria': return <Car size={20} />;
-      case 'motore': return <Settings size={20} />;
-      case 'elettronica': return <Cpu size={20} />;
-      default: return <Wrench size={20} />;
+      case 'tagliando': return <Wrench size={size} color={color} />;
+      case 'gomme': return <Package size={size} color={color} />;
+      case 'freni': return <AlertCircle size={size} color={color} />;
+      case 'carrozzeria': return <Car size={size} color={color} />;
+      case 'motore': return <Settings size={size} color={color} />;
+      case 'elettronica': return <Cpu size={size} color={color} />;
+      default: return <Wrench size={size} color={color} />;
     }
   };
 
-  const preventExport = () => {
-    Alert.alert(
-      '🔒 Funzione Bloccata',
-      'Per motivi di sicurezza e privacy, lo storico manutenzione può essere consultato solo all\'interno dell\'app e non può essere esportato.',
-      [{ text: 'Ho capito', style: 'default' }]
-    );
+  const getTypeLabel = (type: string) => {
+    const types: Record<string, string> = {
+      tagliando: 'Tagliando',
+      gomme: 'Pneumatici',
+      freni: 'Freni',
+      carrozzeria: 'Carrozzeria',
+      motore: 'Motore',
+      elettronica: 'Elettronica',
+      altro: 'Altro',
+    };
+    return types[type] || type;
   };
 
   const handleAddMaintenance = () => {
-    navigation.navigate('AddMaintenance', { vehicleId: carId });
+    navigation.navigate('AddMaintenance', { carId });
   };
 
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: isDark ? '#000' : '#F5F5F7' }]}>
+        <LinearGradient
+          colors={isDark ? ['#1a1a1a', '#000'] : ['#F5F5F7', '#E8E8ED']}
+          style={StyleSheet.absoluteFill}
+        />
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 16, color: colors.onBackground }}>
+        <Text style={[styles.loadingText, { color: isDark ? '#fff' : '#000', marginTop: 16 }]}>
           Caricamento storico...
         </Text>
       </View>
@@ -202,305 +363,363 @@ export default function MaintenanceHistoryScreen() {
 
   if (!vehicle) {
     return (
-      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.errorContainer, { backgroundColor: isDark ? '#000' : '#F5F5F7' }]}>
         <AlertCircle size={48} color={colors.error} />
-        <Text style={[styles.errorText, { color: colors.onBackground }]}>
+        <Text style={[styles.errorText, { color: isDark ? '#fff' : '#000' }]}>
           Veicolo non trovato
         </Text>
       </View>
     );
   }
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header di sicurezza */}
-      <Surface style={styles.securityHeader} elevation={2}>
-        <View style={styles.securityBadge}>
-          <Lock size={16} color="#FF6B35" />
-          <Text style={styles.securityText}>
-            Dati protetti - Visualizzazione sicura
-          </Text>
-        </View>
-        <IconButton
-          icon="information"
-          onPress={() => Alert.alert(
-            'Protezione Dati',
-            'Questi dati sono protetti e non possono essere esportati, condivisi o copiati. La visualizzazione è consentita solo all\'interno dell\'app.'
-          )}
-        />
-      </Surface>
+  // Responsive layout
+  const isLargeScreen = width >= 768;
+  const numColumns = isLargeScreen ? 2 : 1;
 
-      {/* Barra di ricerca e filtri */}
-      <View style={styles.searchBar}>
-        <Searchbar
-          placeholder="Cerca manutenzione..."
-          onChangeText={(query) => {
-            setSearchQuery(query);
-            filterRecords(query, selectedFilter);
-          }}
-          value={searchQuery}
-          style={styles.searchInput}
-        />
-        
-        <Menu
-          visible={showFilterMenu}
-          onDismiss={() => setShowFilterMenu(false)}
-          anchor={
-            <IconButton
-              icon={() => <Filter size={20} />}
-              onPress={() => setShowFilterMenu(true)}
-              style={styles.filterButton}
-            />
-          }
+  return (
+    <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={isDark
+          ? ['#000000', '#1a1a1a', '#000000']
+          : ['#F5F5F7', '#FFFFFF', '#F5F5F7']
+        }
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Header Section */}
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <View style={[styles.iconButton, {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'
+            }]}>
+              <ChevronRight size={24} color={isDark ? '#fff' : '#000'} style={{ transform: [{ rotate: '180deg' }] }} />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.headerTitleContainer}>
+            <Text style={[styles.headerTitle, { color: isDark ? '#fff' : '#000' }]}>
+              Storico Manutenzioni
+            </Text>
+            {vehicle && (
+              <Text style={[styles.headerSubtitle, { color: isDark ? '#999' : '#666' }]}>
+                {vehicle.brand} {vehicle.model}
+              </Text>
+            )}
+          </View>
+
+          <TouchableOpacity
+            onPress={handleAddMaintenance}
+            style={styles.addButton}
+          >
+            <LinearGradient
+              colors={['#007AFF', '#0051D5']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.addButtonGradient}
+            >
+              <Plus size={24} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats Cards */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsContainer}
         >
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('all');
-              filterRecords(searchQuery, 'all');
-              setShowFilterMenu(false);
-            }}
-            title="Tutti"
-            leadingIcon="all-inclusive"
+          <GlassCard style={styles.statCard}>
+            <View style={[styles.statIconContainer, {
+              backgroundColor: isDark ? 'rgba(74, 144, 226, 0.2)' : 'rgba(0, 122, 255, 0.1)'
+            }]}>
+              <Wrench size={20} color="#007AFF" />
+            </View>
+            <Text style={[styles.statValue, { color: isDark ? '#fff' : '#000' }]}>
+              {stats.totalCount}
+            </Text>
+            <Text style={[styles.statLabel, { color: isDark ? '#999' : '#666' }]}>
+              Interventi
+            </Text>
+          </GlassCard>
+
+          <GlassCard style={styles.statCard}>
+            <View style={[styles.statIconContainer, {
+              backgroundColor: isDark ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)'
+            }]}>
+              <Euro size={20} color="#4CAF50" />
+            </View>
+            <Text style={[styles.statValue, { color: isDark ? '#fff' : '#000' }]}>
+              €{stats.totalCost.toLocaleString('it-IT', { maximumFractionDigits: 0 })}
+            </Text>
+            <Text style={[styles.statLabel, { color: isDark ? '#999' : '#666' }]}>
+              Spesa Totale
+            </Text>
+          </GlassCard>
+
+          {stats.lastMaintenance && (
+            <GlassCard style={styles.statCard}>
+              <View style={[styles.statIconContainer, {
+                backgroundColor: isDark ? 'rgba(255, 152, 0, 0.2)' : 'rgba(255, 152, 0, 0.1)'
+              }]}>
+                <Clock size={20} color="#FF9800" />
+              </View>
+              <Text style={[styles.statValue, { color: isDark ? '#fff' : '#000', fontSize: 16 }]}>
+                {new Date(stats.lastMaintenance).toLocaleDateString('it-IT', {
+                  day: 'numeric',
+                  month: 'short'
+                })}
+              </Text>
+              <Text style={[styles.statLabel, { color: isDark ? '#999' : '#666' }]}>
+                Ultimo Intervento
+              </Text>
+            </GlassCard>
+          )}
+        </ScrollView>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <GlassCard style={styles.searchCard}>
+            <Searchbar
+              placeholder="Cerca manutenzioni..."
+              onChangeText={setSearchQuery}
+              value={searchQuery}
+              style={[styles.searchBar, {
+                backgroundColor: 'transparent',
+              }]}
+              inputStyle={{ color: isDark ? '#fff' : '#000' }}
+              iconColor={isDark ? '#999' : '#666'}
+              placeholderTextColor={isDark ? '#666' : '#999'}
+            />
+          </GlassCard>
+        </View>
+
+        {/* Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersContainer}
+        >
+          <FilterChip
+            label="Tutti"
+            active={selectedFilter === 'all'}
+            onPress={() => setSelectedFilter('all')}
+            icon={<Filter size={16} color={selectedFilter === 'all' ? '#fff' : (isDark ? '#ddd' : '#666')} />}
           />
-          <Divider />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('tagliando');
-              filterRecords(searchQuery, 'tagliando');
-              setShowFilterMenu(false);
-            }}
-            title="Tagliandi"
-            leadingIcon="wrench"
+          <FilterChip
+            label="Tagliando"
+            active={selectedFilter === 'tagliando'}
+            onPress={() => setSelectedFilter('tagliando')}
+            icon={getTypeIcon('tagliando', 16, selectedFilter === 'tagliando' ? '#fff' : (isDark ? '#ddd' : '#666'))}
           />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('gomme');
-              filterRecords(searchQuery, 'gomme');
-              setShowFilterMenu(false);
-            }}
-            title="Pneumatici"
-            leadingIcon="circle-outline"
+          <FilterChip
+            label="Pneumatici"
+            active={selectedFilter === 'gomme'}
+            onPress={() => setSelectedFilter('gomme')}
+            icon={getTypeIcon('gomme', 16, selectedFilter === 'gomme' ? '#fff' : (isDark ? '#ddd' : '#666'))}
           />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('freni');
-              filterRecords(searchQuery, 'freni');
-              setShowFilterMenu(false);
-            }}
-            title="Freni"
-            leadingIcon="car-brake-alert"
+          <FilterChip
+            label="Freni"
+            active={selectedFilter === 'freni'}
+            onPress={() => setSelectedFilter('freni')}
+            icon={getTypeIcon('freni', 16, selectedFilter === 'freni' ? '#fff' : (isDark ? '#ddd' : '#666'))}
           />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('carrozzeria');
-              filterRecords(searchQuery, 'carrozzeria');
-              setShowFilterMenu(false);
-            }}
-            title="Carrozzeria"
-            leadingIcon="car"
+          <FilterChip
+            label="Carrozzeria"
+            active={selectedFilter === 'carrozzeria'}
+            onPress={() => setSelectedFilter('carrozzeria')}
+            icon={getTypeIcon('carrozzeria', 16, selectedFilter === 'carrozzeria' ? '#fff' : (isDark ? '#ddd' : '#666'))}
           />
-          <Menu.Item
-            onPress={() => {
-              setSelectedFilter('motore');
-              filterRecords(searchQuery, 'motore');
-              setShowFilterMenu(false);
-            }}
-            title="Motore"
-            leadingIcon="engine"
+          <FilterChip
+            label="Motore"
+            active={selectedFilter === 'motore'}
+            onPress={() => setSelectedFilter('motore')}
+            icon={getTypeIcon('motore', 16, selectedFilter === 'motore' ? '#fff' : (isDark ? '#ddd' : '#666'))}
           />
-        </Menu>
+          <FilterChip
+            label="Elettronica"
+            active={selectedFilter === 'elettronica'}
+            onPress={() => setSelectedFilter('elettronica')}
+            icon={getTypeIcon('elettronica', 16, selectedFilter === 'elettronica' ? '#fff' : (isDark ? '#ddd' : '#666'))}
+          />
+        </ScrollView>
       </View>
 
-      {/* Timeline manutenzioni */}
+      {/* Timeline/Grid */}
       <ScrollView
-        style={styles.timeline}
+        style={styles.content}
+        contentContainerStyle={[
+          styles.contentContainer,
+          isLargeScreen && styles.contentContainerGrid
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
-        // Disabilita selezione testo su web
-        {...(Platform.OS === 'web' && { style: { ...styles.timeline, userSelect: 'none' } })}
       >
         {filteredRecords.length === 0 ? (
           <View style={styles.emptyState}>
-            <Wrench size={48} color={colors.onSurfaceVariant} />
-            <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
-              Nessuna manutenzione registrata
+            <View style={[styles.emptyIconContainer, {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+            }]}>
+              <Wrench size={48} color={isDark ? '#666' : '#999'} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: isDark ? '#fff' : '#000' }]}>
+              {searchQuery || selectedFilter !== 'all'
+                ? 'Nessun risultato'
+                : 'Nessuna manutenzione registrata'}
             </Text>
-            <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>
-              {searchQuery ? 'Prova a modificare i criteri di ricerca' : 'Aggiungi la prima manutenzione'}
+            <Text style={[styles.emptyText, { color: isDark ? '#999' : '#666' }]}>
+              {searchQuery || selectedFilter !== 'all'
+                ? 'Prova a modificare i filtri di ricerca'
+                : 'Inizia ad aggiungere le tue manutenzioni'}
             </Text>
+            {!searchQuery && selectedFilter === 'all' && (
+              <TouchableOpacity
+                onPress={handleAddMaintenance}
+                style={styles.emptyButton}
+              >
+                <LinearGradient
+                  colors={['#007AFF', '#0051D5']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.emptyButtonGradient}
+                >
+                  <Plus size={20} color="#fff" />
+                  <Text style={styles.emptyButtonText}>Aggiungi Prima Manutenzione</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
-          filteredRecords.map((record, index) => (
-            <View key={record.id}>
-              {/* Linea timeline */}
-              {index > 0 && <View style={styles.timelineLine} />}
-              
-              {/* Card manutenzione */}
-              <TouchableOpacity
-                onPress={() => navigation.navigate('MaintenanceDetail', {
-                  maintenanceId: record.id,
-                  carId
-                })}
-                activeOpacity={0.7}
-              >
-                <Card
+          <View style={[
+            styles.recordsList,
+            isLargeScreen && styles.recordsGrid
+          ]}>
+            {filteredRecords.map((record, index) => {
+              const typeColors = getTypeColor(record.type);
+
+              return (
+                <View
+                  key={record.id}
                   style={[
-                    styles.recordCard,
-                    { backgroundColor: colors.surface }
+                    styles.recordWrapper,
+                    isLargeScreen && styles.recordWrapperGrid
                   ]}
-                  elevation={2}
                 >
-                  {/* Header card */}
-                  <View style={styles.recordHeader}>
-                    <View
-                      style={[
-                        styles.typeIndicator,
-                        { backgroundColor: getTypeColor(record.type) }
-                      ]}
-                    >
-                      {getTypeIcon(record.type)}
+                  <GlassCard
+                    onPress={() => navigation.navigate('MaintenanceDetail', {
+                      maintenanceId: record.id,
+                      carId
+                    })}
+                    style={styles.recordCard}
+                  >
+                    {/* Type Badge */}
+                    <View style={styles.recordHeader}>
+                      <LinearGradient
+                        colors={[typeColors.from, typeColors.to]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.typeBadge}
+                      >
+                        {getTypeIcon(record.type, 24, '#fff')}
+                      </LinearGradient>
+
+                      <View style={styles.recordHeaderInfo}>
+                        <Text style={[styles.typeLabel, {
+                          color: isDark ? '#fff' : '#000'
+                        }]}>
+                          {getTypeLabel(record.type)}
+                        </Text>
+                        {record.warranty && (
+                          <View style={styles.warrantyBadge}>
+                            <Shield size={12} color="#4CAF50" />
+                            <Text style={styles.warrantyText}>Garanzia</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <ChevronRight size={20} color={isDark ? '#666' : '#999'} />
                     </View>
-                    
-                    <View style={styles.recordInfo}>
-                      <Text style={styles.recordTitle}>
-                        {record.description}
-                      </Text>
-                      <View style={styles.recordMeta}>
-                        <View style={styles.metaItem}>
-                          <Calendar size={14} color="#666" />
-                          <Text style={styles.metaText}>
-                            {new Date(record.date).toLocaleDateString()}
-                          </Text>
-                        </View>
-                        <View style={styles.metaItem}>
-                          <Gauge size={14} color="#666" />
-                          <Text style={styles.metaText}>
-                            {record.mileage.toLocaleString()} km
-                          </Text>
-                        </View>
+
+                    {/* Description */}
+                    <Text style={[styles.recordDescription, {
+                      color: isDark ? '#fff' : '#000'
+                    }]} numberOfLines={2}>
+                      {record.description}
+                    </Text>
+
+                    {/* Info Row */}
+                    <View style={styles.recordInfoRow}>
+                      <View style={styles.infoItem}>
+                        <Calendar size={14} color={isDark ? '#999' : '#666'} />
+                        <Text style={[styles.infoText, {
+                          color: isDark ? '#999' : '#666'
+                        }]}>
+                          {new Date(record.date).toLocaleDateString('it-IT', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </Text>
+                      </View>
+
+                      <View style={styles.infoItem}>
+                        <TrendingUp size={14} color={isDark ? '#999' : '#666'} />
+                        <Text style={[styles.infoText, {
+                          color: isDark ? '#999' : '#666'
+                        }]}>
+                          {record.mileage.toLocaleString()} km
+                        </Text>
                       </View>
                     </View>
-                    
-                    <View style={styles.recordActions}>
-                      {record.warranty && (
-                        <Badge style={styles.warrantyBadge}>
-                          Garanzia
-                        </Badge>
-                      )}
-                      <ChevronRight size={20} color={colors.onSurfaceVariant} />
-                    </View>
-                  </View>
 
-                  {/* Preview dettagli (limitato) */}
-                  {false && (
-                    <View style={styles.recordDetails}>
-                      <Divider style={styles.detailsDivider} />
-                      
-                      {record.workshopName && vehicle.privacySettings.showMechanics && (
-                        <DetailRow
-                          icon={<MapPin size={16} />}
-                          label="Officina"
-                          value={record.workshopName}
-                        />
-                      )}
-                      
-                      {record.mechanicName && vehicle.privacySettings.showMechanics && (
-                        <DetailRow
-                          icon={<User size={16} />}
-                          label="Meccanico"
-                          value={record.mechanicName}
-                        />
-                      )}
-                      
-                      {record.cost && vehicle.privacySettings.showCosts && (
-                        <DetailRow
-                          icon={<Euro size={16} />}
-                          label="Costo"
-                          value={`€ ${record.cost.toFixed(2)}`}
-                          secure
-                        />
-                      )}
-                      
-                      {record.parts && record.parts.length > 0 && vehicle.privacySettings.showMaintenanceDetails && (
-                        <View style={styles.partsSection}>
-                          <Text style={styles.partsSectionTitle}>
-                            Ricambi utilizzati:
+                    {/* Bottom Info */}
+                    <View style={styles.recordBottom}>
+                      {record.workshopName && vehicle?.privacySettings?.showMechanics && (
+                        <View style={styles.workshopInfo}>
+                          <MapPin size={14} color={isDark ? '#666' : '#999'} />
+                          <Text style={[styles.workshopText, {
+                            color: isDark ? '#666' : '#999'
+                          }]} numberOfLines={1}>
+                            {record.workshopName}
                           </Text>
-                          {record.parts.map((part, idx) => (
-                            <View key={idx} style={styles.partItem}>
-                              <Text style={styles.partBullet}>•</Text>
-                              <Text style={styles.partText}>
-                                {part.name} {part.quantity > 1 ? `x${part.quantity}` : ''}
-                              </Text>
-                            </View>
-                          ))}
                         </View>
                       )}
-                      
-                      {record.notes && (
-                        <View style={styles.notesSection}>
-                          <Text style={styles.notesSectionTitle}>Note:</Text>
-                          <Text style={styles.notesText}>{record.notes}</Text>
-                        </View>
-                      )}
-                      
-                      {record.nextServiceDate && (
-                        <View style={styles.nextServiceBanner}>
-                          <Clock size={16} color="#FF6B35" />
-                          <Text style={styles.nextServiceText}>
-                            Prossimo controllo: {new Date(record.nextServiceDate).toLocaleDateString()}
+
+                      {record.cost && vehicle?.privacySettings?.showCosts && (
+                        <View style={styles.costBadge}>
+                          <Text style={[styles.costText, {
+                            color: isDark ? '#fff' : '#000'
+                          }]}>
+                            €{record.cost.toLocaleString('it-IT', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            })}
                           </Text>
                         </View>
                       )}
                     </View>
-                  )}
-                </Card>
-              </TouchableOpacity>
-            </View>
-          ))
+                  </GlassCard>
+                </View>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
-
-      {/* FAB per aggiungere e export */}
-      <View style={styles.fabContainer}>
-        <FAB
-          icon="plus"
-          style={[styles.fab, { backgroundColor: colors.primary }]}
-          onPress={handleAddMaintenance}
-        />
-        <FAB
-          icon="export"
-          style={[styles.fabDisabled, { backgroundColor: '#999' }]}
-          onPress={preventExport}
-          label="Export"
-          disabled
-          small
-        />
-      </View>
     </SafeAreaView>
   );
 }
 
-// Componente helper rimane uguale
-const DetailRow = ({ icon, label, value, secure }: any) => (
-  <View style={styles.detailRow}>
-    <View style={styles.detailIcon}>{icon}</View>
-    <Text style={styles.detailLabel}>{label}:</Text>
-    <Text style={[styles.detailValue, secure && styles.secureValue]}>
-      {value}
-    </Text>
-    {secure && <Lock size={12} color="#999" style={{ marginLeft: 4 }} />}
-  </View>
-);
-
 const styles = StyleSheet.create({
-  // Stili comuni
   container: {
     flex: 1,
   },
@@ -509,782 +728,318 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scrollView: {
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  errorContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
-  
-  // CarProfileScreen styles
-  headerGradient: {
-    paddingTop: 20,
-    paddingBottom: 30,
+  errorText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
   },
+
+  // Glass Card
+  glassCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+      web: {
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+      },
+    }),
+  },
+
+  // Header
   header: {
+    paddingTop: Platform.OS === 'android' ? 16 : 8,
+    paddingBottom: 16,
+  },
+  headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  headerContent: {
+  backButton: {
+    marginRight: 12,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleContainer: {
     flex: 1,
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#rgba(255,255,255,0.9)',
-    marginTop: 4,
-  },
-  headerActions: {
-    flexDirection: 'row',
-  },
-  privacyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginHorizontal: 20,
-    marginTop: 10,
-    alignSelf: 'flex-start',
-  },
-  privacyBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    marginLeft: 6,
-    fontWeight: '600',
-  },
-  
-  section: {
-    margin: 16,
-    borderRadius: 12,
-  },
-  imageGallery: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  imageContainer: {
-    marginRight: 12,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  carImage: {
-    width: 120,
-    height: 90,
-    backgroundColor: '#f0f0f0',
-  },
-  addImageButton: {
-    width: 120,
-    height: 90,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    borderStyle: 'dashed',
-  },
-  
-  // Info Grid
-  infoGrid: {
-    marginBottom: 16,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  infoIcon: {
-    marginRight: 12,
-  },
-  infoLabel: {
-    flex: 1,
-    fontSize: 14,
-    color: '#666',
-  },
-  infoValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secureText: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  
-  divider: {
-    marginVertical: 16,
-  },
-  
-  specs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  specChip: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  specLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  specValue: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     marginTop: 2,
   },
-  
-  optionalGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  addButton: {
+    marginLeft: 12,
   },
-  optionalChip: {
-    backgroundColor: '#e3f2fd',
+  addButtonGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  optionalChipText: {
-    fontSize: 12,
-  },
-  
-  statsGrid: {
-    flexDirection: 'row',
+
+  // Stats
+  statsContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     gap: 12,
   },
   statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: 'column',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     alignItems: 'center',
+    minWidth: 120,
   },
-  statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  statIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
-  statTitle: {
-    fontSize: 12,
-    color: '#666',
+  statLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 4,
   },
-  
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#e8f5e9',
-    borderRadius: 12,
+
+  // Search
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 12,
   },
-  verifiedText: {
-    fontSize: 12,
-    color: '#4CAF50',
-    marginLeft: 4,
-    fontWeight: '600',
+  searchCard: {
+    padding: 0,
   },
-  
-  quickActions: {
-    padding: 16,
-    gap: 12,
-  },
-  actionButton: {
-    borderRadius: 8,
-  },
-  
-  // Modal styles
-  modal: {
-    margin: 20,
-    padding: 20,
-    borderRadius: 12,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
-  },
-  privacyOptions: {
-    gap: 16,
-  },
-  privacyOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  privacyOptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  privacyOptionLabel: {
-    marginLeft: 12,
-    fontSize: 16,
-  },
-  privacyToggle: {
-    width: 50,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#e0e0e0',
-    padding: 2,
-  },
-  privacyToggleActive: {
-    backgroundColor: '#4CAF50',
-  },
-  privacyToggleThumb: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#fff',
-  },
-  privacyToggleThumbActive: {
-    transform: [{ translateX: 20 }],
-  },
-  
-  // MaintenanceHistoryScreen styles
-  securityHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
-  },
-  securityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  securityText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FF6B35',
-  },
-  
   searchBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    elevation: 0,
+    shadowOpacity: 0,
   },
-  searchInput: {
-    flex: 1,
+
+  // Filters
+  filtersContainer: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
     marginRight: 8,
   },
-  filterButton: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
+  filterChipActive: {
+    borderWidth: 2,
   },
-  
-  timeline: {
-    paddingHorizontal: 16,
+  chipIcon: {
+    marginRight: 6,
   },
-  timelineLine: {
-    position: 'absolute',
-    left: 35,
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: '#e0e0e0',
+  filterChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
-  
+
+  // Content
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  contentContainerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+
+  // Records
+  recordsList: {
+    gap: 16,
+  },
+  recordsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  recordWrapper: {
+    width: '100%',
+  },
+  recordWrapperGrid: {
+    width: '48%',
+  },
   recordCard: {
-    marginBottom: 16,
-    borderRadius: 12,
+    padding: 20,
   },
   recordHeader: {
     flexDirection: 'row',
-    padding: 16,
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  typeIndicator: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  typeBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  recordInfo: {
+  recordHeaderInfo: {
     flex: 1,
     marginLeft: 12,
   },
-  recordTitle: {
-    fontSize: 16,
+  typeLabel: {
+    fontSize: 17,
     fontWeight: '600',
-    marginBottom: 4,
-  },
-  recordMeta: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
-  },
-  recordActions: {
-    alignItems: 'center',
+    letterSpacing: -0.3,
   },
   warrantyBadge: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    fontSize: 10,
-  },
-  
-  recordDetails: {
-    padding: 16,
-    paddingTop: 0,
-  },
-  detailsDivider: {
-    marginBottom: 16,
-  },
-  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  warrantyText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4CAF50',
+  },
+  recordDescription: {
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  recordInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
     marginBottom: 12,
   },
-  detailIcon: {
-    marginRight: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginRight: 8,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  secureValue: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  
-  partsSection: {
-    marginTop: 12,
-  },
-  partsSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  partItem: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  partBullet: {
-    marginRight: 8,
-    color: '#666',
-  },
-  partText: {
-    fontSize: 14,
-    flex: 1,
-  },
-  
-  notesSection: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-  },
-  notesSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  notesText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-  
-  nextServiceBanner: {
+  infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#fff3e0',
-    borderRadius: 8,
-  },
-  nextServiceText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#FF6B35',
-  },
-  
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
-  },
-  
-  // PrivacySettingsScreen styles
-  infoHeader: {
-    alignItems: 'center',
-    padding: 20,
-    margin: 16,
-    borderRadius: 12,
-  },
-  infoTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  infoDescription: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  
-  sectionDivider: {
-    marginVertical: 16,
-  },
-  
-  privacyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  privacyItemDisabled: {
-    opacity: 0.5,
-  },
-  privacyItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  privacyItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  privacyItemIconWarning: {
-    backgroundColor: '#fff3e0',
-  },
-  privacyItemText: {
-    flex: 1,
-  },
-  privacyItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  privacyItemTitleDisabled: {
-    color: '#999',
-  },
-  privacyItemDescription: {
-    fontSize: 13,
-    color: '#666',
-  },
-  privacyItemDescriptionDisabled: {
-    color: '#ccc',
-  },
-  
-  warningBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    margin: 16,
-    borderRadius: 8,
-    backgroundColor: '#fff3e0',
-  },
-  warningText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 13,
-    color: '#FF6B35',
-    lineHeight: 18,
-  },
-  
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-  },
-  
-  // OwnershipTransferScreen styles
-  keyboardAvoid: {
-    flex: 1,
-  },
-  stepperContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    padding: 20,
-    alignItems: 'center',
-  },
-  stepItem: {
-    alignItems: 'center',
-    flex: 1,
-    position: 'relative',
-  },
-  stepCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepCircleActive: {
-    borderColor: '#2196F3',
-    backgroundColor: '#2196F3',
-  },
-  stepCircleCompleted: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
-  },
-  stepLabel: {
-    fontSize: 10,
-    marginTop: 4,
-    color: '#666',
-    textAlign: 'center',
-  },
-  stepLabelActive: {
-    color: '#2196F3',
-    fontWeight: '600',
-  },
-  stepLine: {
-    position: 'absolute',
-    top: 20,
-    left: '50%',
-    right: '-50%',
-    height: 2,
-    backgroundColor: '#e0e0e0',
-    zIndex: -1,
-  },
-  stepLineCompleted: {
-    backgroundColor: '#4CAF50',
-  },
-  
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  stepCard: {
-    marginBottom: 16,
-    borderRadius: 12,
-  },
-  
-  inputGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    height: 48,
-    fontSize: 16,
-  },
-  
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#e3f2fd',
+    gap: 6,
   },
   infoText: {
-    flex: 1,
-    marginLeft: 8,
     fontSize: 13,
-    color: '#1976D2',
-    lineHeight: 18,
+    fontWeight: '500',
   },
-  
-  sectionDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  
-  dataOption: {
+  recordBottom: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  dataOptionInfo: {
-    flex: 1,
-  },
-  dataOptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  dataOptionDescription: {
-    fontSize: 13,
-    color: '#666',
-  },
-  dataOptionRequired: {
-    fontSize: 11,
-    color: '#2196F3',
-    marginTop: 2,
-  },
-  
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#fff3e0',
-    marginTop: 16,
-  },
-  
-  pinInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-  },
-  pinInput: {
-    flex: 1,
-    height: 48,
-    paddingHorizontal: 12,
-    fontSize: 18,
-    letterSpacing: 2,
-  },
-  
-  pinStrength: {
-    marginTop: 16,
-  },
-  pinStrengthLabel: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-  },
-  pinStrengthBar: {
-    height: 4,
-    borderRadius: 2,
-  },
-  
-  securityTips: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
-    marginTop: 20,
-  },
-  securityTipsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  securityTip: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-  },
-  
-  summarySection: {
-    marginBottom: 16,
-  },
-  summaryTitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  summarySubvalue: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  summaryDivider: {
-    marginVertical: 16,
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  summaryItemText: {
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  
-  termsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  termsText: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 18,
-  },
-  
-  finalWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#ffebee',
-  },
-  finalWarningText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 13,
-    color: '#c62828',
-    lineHeight: 18,
-  },
-  
-  navigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
   },
-  navButton: {
-    flex: 0.48,
+  workshopInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  workshopText: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+  costBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+  },
+  costText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+
+  // Empty State
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+  },
+  emptyIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 32,
+    paddingHorizontal: 32,
+  },
+  emptyButton: {
+    marginTop: 8,
+  },
+  emptyButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+  },
+  emptyButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
