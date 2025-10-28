@@ -234,13 +234,39 @@ export class MaintenanceService {
 
       console.log('Calling setDoc with docId:', docRef.id);
 
-      // TEST: Prova con dati minimali
-      const minimalRecord = {
+      // Helper per convertire Date in Timestamp
+      const convertDateToTimestamp = (dateValue: any) => {
+        if (!dateValue) return null;
+
+        // Se è già un Timestamp di Firebase, restituiscilo
+        if (dateValue && typeof dateValue === 'object' &&
+            (dateValue.constructor?.name === 'Timestamp' || dateValue.seconds !== undefined)) {
+          return dateValue;
+        }
+
+        // Se è un Date JavaScript, convertilo
+        if (dateValue instanceof Date) {
+          return Timestamp.fromDate(dateValue);
+        }
+
+        // Se è una stringa, prova a parsarla
+        if (typeof dateValue === 'string') {
+          const parsed = new Date(dateValue);
+          if (!isNaN(parsed.getTime())) {
+            return Timestamp.fromDate(parsed);
+          }
+        }
+
+        return null;
+      };
+
+      // TEST: Prova con dati minimali, convertendo tutte le date
+      const minimalRecord: any = {
         vehicleId: cleanedRecord.vehicleId,
         ownerId: cleanedRecord.ownerId,
         type: cleanedRecord.type,
         description: cleanedRecord.description,
-        date: cleanedRecord.date,
+        date: convertDateToTimestamp(cleanedRecord.date),
         mileage: cleanedRecord.mileage,
         cost: cleanedRecord.cost || 0,
         warranty: cleanedRecord.warranty || false,
@@ -249,7 +275,37 @@ export class MaintenanceService {
         updatedAt: serverTimestamp(),
       };
 
+      // Aggiungi campi opzionali se presenti, convertendo le date
+      if (cleanedRecord.workshopName) minimalRecord.workshopName = cleanedRecord.workshopName;
+      if (cleanedRecord.workshopId) minimalRecord.workshopId = cleanedRecord.workshopId;
+      if (cleanedRecord.mechanicName) minimalRecord.mechanicName = cleanedRecord.mechanicName;
+      if (cleanedRecord.notes) minimalRecord.notes = cleanedRecord.notes;
+      if (cleanedRecord.laborCost) minimalRecord.laborCost = cleanedRecord.laborCost;
+      if (cleanedRecord.partsCost) minimalRecord.partsCost = cleanedRecord.partsCost;
+
+      // Converti date opzionali
+      if (cleanedRecord.warrantyExpiry) {
+        minimalRecord.warrantyExpiry = convertDateToTimestamp(cleanedRecord.warrantyExpiry);
+      }
+      if (cleanedRecord.nextServiceDate) {
+        minimalRecord.nextServiceDate = convertDateToTimestamp(cleanedRecord.nextServiceDate);
+      }
+
+      // Aggiungi array di parts se presente
+      if (cleanedRecord.parts && Array.isArray(cleanedRecord.parts) && cleanedRecord.parts.length > 0) {
+        minimalRecord.parts = cleanedRecord.parts;
+      } else {
+        minimalRecord.parts = [];
+      }
+
       console.log('MINIMAL RECORD TEST:', minimalRecord);
+      console.log('Date type:', minimalRecord.date?.constructor?.name);
+      if (minimalRecord.warrantyExpiry) {
+        console.log('WarrantyExpiry type:', minimalRecord.warrantyExpiry?.constructor?.name);
+      }
+      if (minimalRecord.nextServiceDate) {
+        console.log('NextServiceDate type:', minimalRecord.nextServiceDate?.constructor?.name);
+      }
 
       try {
         await setDoc(docRef, minimalRecord);
@@ -301,13 +357,48 @@ export class MaintenanceService {
   ): Promise<void> {
     try {
       const docRef = doc(db, this.maintenanceCollection, recordId);
-      
+
+      // Converti Date in Timestamp per tutti i campi data
+      const sanitizedUpdates: any = { ...updates };
+
+      // Helper per convertire Date in Timestamp
+      const convertDateToTimestamp = (dateValue: any) => {
+        if (!dateValue) return null;
+        if (dateValue && typeof dateValue === 'object' &&
+            (dateValue.constructor?.name === 'Timestamp' || dateValue.seconds !== undefined)) {
+          return dateValue;
+        }
+        if (dateValue instanceof Date) {
+          return Timestamp.fromDate(dateValue);
+        }
+        if (typeof dateValue === 'string') {
+          const parsed = new Date(dateValue);
+          if (!isNaN(parsed.getTime())) {
+            return Timestamp.fromDate(parsed);
+          }
+        }
+        return null;
+      };
+
+      // Converti campi data se presenti
+      if (sanitizedUpdates.date) {
+        sanitizedUpdates.date = convertDateToTimestamp(sanitizedUpdates.date);
+      }
+      if (sanitizedUpdates.warrantyExpiry) {
+        sanitizedUpdates.warrantyExpiry = convertDateToTimestamp(sanitizedUpdates.warrantyExpiry);
+      }
+      if (sanitizedUpdates.nextServiceDate) {
+        sanitizedUpdates.nextServiceDate = convertDateToTimestamp(sanitizedUpdates.nextServiceDate);
+      }
+
       await updateDoc(docRef, {
-        ...updates,
+        ...sanitizedUpdates,
         updatedAt: serverTimestamp()
       });
+
+      console.log('✅ Maintenance record updated successfully');
     } catch (error) {
-      console.error('Error updating maintenance record:', error);
+      console.error('❌ Error updating maintenance record:', error);
       throw error;
     }
   }
