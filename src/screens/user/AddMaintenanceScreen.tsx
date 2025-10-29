@@ -171,8 +171,8 @@ const AddMaintenanceScreen = () => {
     console.log('🚀 ========== SUBMIT MAINTENANCE STARTED ==========');
     console.log('👤 Current user:', user);
     console.log('👤 User UID:', user?.uid);
-    console.log('🚗 Vehicle ID (from params - carId):', carId);
-    console.log('🚗 Vehicle ID (state - vehicleId):', vehicleId);
+    console.log('🚗 Route params:', params);
+    console.log('🚗 Vehicle ID (vehicleId):', vehicleId);
 
     if (!validateForm()) {
       console.log('❌ Form validation failed');

@@ -210,22 +210,30 @@ const CarDetailScreen = () => {
   };
 
   useEffect(() => {
-    if (carId) {
+    if (carId && user?.uid) {
+      console.log('✅ User authenticated in CarDetail, loading all data...');
       loadPhotos();
       loadDocuments();
       loadMaintenanceRecords();
+    } else {
+      console.log('⏳ Waiting for user authentication or carId...', { carId, userUid: user?.uid });
     }
-  }, [carId]);
+  }, [carId, user?.uid]); // ✅ Aggiungi user?.uid come dependency
 
   // Ricarica dati quando la schermata torna in focus (dopo salvataggio manutenzione)
   useFocusEffect(
     React.useCallback(() => {
       console.log('🔄 CarDetail screen focused, refreshing data...');
-      refreshData();
-      loadPhotos();
-      loadDocuments();
-      loadMaintenanceRecords();
-    }, [carId])
+      if (user?.uid) {
+        console.log('✅ User authenticated, refreshing...');
+        refreshData();
+        loadPhotos();
+        loadDocuments();
+        loadMaintenanceRecords();
+      } else {
+        console.log('⏳ User not ready, skipping refresh');
+      }
+    }, [carId, user?.uid]) // ✅ Aggiungi user?.uid come dependency
   );
 
   const loadPhotos = async () => {

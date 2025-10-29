@@ -228,13 +228,18 @@ export default function MaintenanceHistoryScreen() {
       security.disableContextMenu();
     }
 
-    // Carica dati
-    loadData();
+    // Carica dati SOLO se user è disponibile
+    if (user?.uid) {
+      console.log('✅ User available in useEffect, loading data...');
+      loadData();
+    } else {
+      console.log('⏳ Waiting for user authentication...');
+    }
 
     return () => {
       security.preventScreenCapture(false);
     };
-  }, [carId]);
+  }, [carId, user?.uid]); // ✅ Aggiungi user?.uid come dependency
 
   useEffect(() => {
     filterRecords(searchQuery, selectedFilter);
@@ -244,8 +249,13 @@ export default function MaintenanceHistoryScreen() {
   useFocusEffect(
     React.useCallback(() => {
       console.log('🔄 Screen focused, reloading maintenance data...');
-      loadData();
-    }, [carId])
+      if (user?.uid) {
+        console.log('✅ User authenticated, loading data...');
+        loadData();
+      } else {
+        console.log('⏳ User not ready yet, skipping focus reload');
+      }
+    }, [carId, user?.uid]) // ✅ Aggiungi user?.uid come dependency
   );
 
   const loadData = async () => {
@@ -255,6 +265,14 @@ export default function MaintenanceHistoryScreen() {
       console.log('👤 user:', user);
       console.log('👤 user?.uid:', user?.uid);
 
+      // ⚠️ CRITICAL: Wait for authentication
+      if (!user?.uid) {
+        console.warn('⚠️⚠️ USER NOT AUTHENTICATED YET - Skipping load ⚠️⚠️');
+        console.warn('  This is normal on first render. Will retry when user is available.');
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
 
       // Carica veicolo per privacy settings
@@ -263,7 +281,7 @@ export default function MaintenanceHistoryScreen() {
       console.log('🚗 Vehicle loaded:', vehicleData);
       setVehicle(vehicleData);
 
-      if (vehicleData && user?.uid) {
+      if (vehicleData) {
         // Carica storico manutenzione
         console.log('🔍 Loading maintenance history...');
         console.log('  - vehicleId (carId):', carId);
