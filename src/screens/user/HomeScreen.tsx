@@ -106,6 +106,100 @@ interface MonthlyStats {
 }
 
 // ============================================
+// GLASS CARD COMPONENT
+// ============================================
+const GlassCard = ({ children, style, onPress }: any) => {
+    const { isDark } = useAppThemeManager();
+    const [scaleAnim] = useState(new Animated.Value(1));
+
+    const handlePressIn = () => {
+        if (onPress) {
+            Animated.spring(scaleAnim, {
+                toValue: 0.98,
+                useNativeDriver: true,
+            }).start();
+        }
+    };
+
+    const handlePressOut = () => {
+        if (onPress) {
+            Animated.spring(scaleAnim, {
+                toValue: 1,
+                friction: 3,
+                tension: 40,
+                useNativeDriver: true,
+            }).start();
+        }
+    };
+
+    const cardContent = (
+        <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
+            {Platform.OS === 'web' || Platform.OS === 'ios' ? (
+                <BlurView
+                    intensity={Platform.OS === 'web' ? 40 : (isDark ? 30 : 60)}
+                    tint={isDark ? 'dark' : 'light'}
+                    style={[
+                        {
+                            backgroundColor: isDark
+                                ? 'rgba(30, 30, 30, 0.7)'
+                                : 'rgba(255, 255, 255, 0.7)',
+                            borderColor: isDark
+                                ? 'rgba(255, 255, 255, 0.1)'
+                                : 'rgba(0, 0, 0, 0.05)',
+                            borderWidth: 1,
+                            borderRadius: 16,
+                            overflow: 'hidden',
+                            ...(Platform.OS === 'web' && {
+                                boxShadow: isDark
+                                    ? '0 8px 32px rgba(0, 0, 0, 0.4)'
+                                    : '0 8px 32px rgba(0, 0, 0, 0.08)',
+                            }),
+                        },
+                        style
+                    ]}
+                >
+                    {children}
+                </BlurView>
+            ) : (
+                <View
+                    style={[
+                        {
+                            backgroundColor: isDark ? '#1a1a1a' : '#fff',
+                            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                            borderWidth: 1,
+                            borderRadius: 16,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 12,
+                            elevation: 5,
+                        },
+                        style
+                    ]}
+                >
+                    {children}
+                </View>
+            )}
+        </Animated.View>
+    );
+
+    if (onPress) {
+        return (
+            <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={onPress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+            >
+                {cardContent}
+            </TouchableOpacity>
+        );
+    }
+
+    return cardContent;
+};
+
+// ============================================
 // HOMESCREEN COMPONENT
 // ============================================
 const HomeScreen = () => {
@@ -660,7 +754,7 @@ const HomeScreen = () => {
                         <View style={styles.webLeftColumn}>
                             {/* Selected Vehicle Card */}
                             {selectedVehicle && (
-                                <View style={styles.webVehicleCard}>
+                                <GlassCard style={styles.webVehicleCard}>
                                     <LinearGradient
                                         colors={['#3b82f6', '#2563eb']}
                                         start={{ x: 0, y: 0 }}
@@ -703,78 +797,78 @@ const HomeScreen = () => {
                                             <ChevronRight size={18} color="#fff" />
                                         </TouchableOpacity>
                                     </LinearGradient>
-                                </View>
+                                </GlassCard>
                             )}
 
                             {/* Monthly Stats Grid */}
                             <View style={styles.webStatsGrid}>
-                                <View style={styles.webStatCard}>
+                                <GlassCard style={styles.webStatCard}>
                                     <View style={[styles.webStatIcon, { backgroundColor: '#dbeafe' }]}>
                                         <DollarSign size={28} color="#3b82f6" strokeWidth={2} />
                                     </View>
-                                    <Text style={styles.webStatValue}>
+                                    <Text style={[styles.webStatValue, { color: themeColors.text }]}>
                                         {formatCurrency(monthlyStats.totalExpenses)}
                                     </Text>
-                                    <Text style={styles.webStatLabel}>Spese Totali</Text>
-                                </View>
-                                <View style={styles.webStatCard}>
+                                    <Text style={[styles.webStatLabel, { color: themeColors.textSecondary }]}>Spese Totali</Text>
+                                </GlassCard>
+                                <GlassCard style={styles.webStatCard}>
                                     <View style={[styles.webStatIcon, { backgroundColor: '#fef3c7' }]}>
                                         <Fuel size={28} color="#f59e0b" strokeWidth={2} />
                                     </View>
-                                    <Text style={styles.webStatValue}>
+                                    <Text style={[styles.webStatValue, { color: themeColors.text }]}>
                                         {formatCurrency(monthlyStats.totalFuel)}
                                     </Text>
-                                    <Text style={styles.webStatLabel}>Carburante</Text>
-                                </View>
-                                <View style={styles.webStatCard}>
+                                    <Text style={[styles.webStatLabel, { color: themeColors.textSecondary }]}>Carburante</Text>
+                                </GlassCard>
+                                <GlassCard style={styles.webStatCard}>
                                     <View style={[styles.webStatIcon, { backgroundColor: '#dbeafe' }]}>
                                         <Wrench size={28} color="#3b82f6" strokeWidth={2} />
                                     </View>
-                                    <Text style={styles.webStatValue}>
+                                    <Text style={[styles.webStatValue, { color: themeColors.text }]}>
                                         {formatCurrency(monthlyStats.totalMaintenance)}
                                     </Text>
-                                    <Text style={styles.webStatLabel}>Manutenzioni</Text>
-                                </View>
-                                <View style={styles.webStatCard}>
+                                    <Text style={[styles.webStatLabel, { color: themeColors.textSecondary }]}>Manutenzioni</Text>
+                                </GlassCard>
+                                <GlassCard style={styles.webStatCard}>
                                     <View style={[styles.webStatIcon, { backgroundColor: '#dcfce7' }]}>
                                         <TrendingUp size={28} color="#10b981" strokeWidth={2} />
                                     </View>
-                                    <Text style={styles.webStatValue}>{monthlyStats.totalKm} km</Text>
-                                    <Text style={styles.webStatLabel}>Percorsi</Text>
-                                </View>
+                                    <Text style={[styles.webStatValue, { color: themeColors.text }]}>{monthlyStats.totalKm} km</Text>
+                                    <Text style={[styles.webStatLabel, { color: themeColors.textSecondary }]}>Percorsi</Text>
+                                </GlassCard>
                             </View>
 
                             {/* Quick Actions */}
-                            <View style={styles.webQuickActions}>
-                                <Text style={styles.webSectionTitle}>Azioni Rapide</Text>
+                            <GlassCard style={styles.webQuickActions}>
+                                <Text style={[styles.webSectionTitle, { color: themeColors.text }]}>Azioni Rapide</Text>
                                 <View style={styles.webActionGrid}>
-                                    <TouchableOpacity
+                                    <GlassCard
                                         style={styles.webActionCard}
                                         onPress={() => navigation.navigate('WorkshopSearch' as never)}
                                     >
                                         <View style={[styles.webActionIcon, { backgroundColor: '#dbeafe' }]}>
                                             <Wrench size={24} color="#3b82f6" />
                                         </View>
-                                        <Text style={styles.webActionTitle}>Prenota Servizio</Text>
-                                        <Text style={styles.webActionDescription}>
+                                        <Text style={[styles.webActionTitle, { color: themeColors.text }]}>Prenota Servizio</Text>
+                                        <Text style={[styles.webActionDescription, { color: themeColors.textSecondary }]}>
                                             Cerca officina e prenota
                                         </Text>
-                                    </TouchableOpacity>
+                                    </GlassCard>
 
-                                    <TouchableOpacity
+                                    <GlassCard
                                         style={styles.webActionCard}
                                         onPress={() => navigation.navigate('BookingsDashboard' as never)}
                                     >
                                         <View style={[styles.webActionIcon, { backgroundColor: '#fef3c7' }]}>
                                             <Calendar size={24} color="#f59e0b" />
                                         </View>
-                                        <Text style={styles.webActionTitle}>Prenotazioni</Text>
-                                        <Text style={styles.webActionDescription}>
+                                        <Text style={[styles.webActionTitle, { color: themeColors.text }]}>Prenotazioni</Text>
+                                        <Text style={[styles.webActionDescription, { color: themeColors.textSecondary }]}>
                                             Gestisci appuntamenti
                                         </Text>
-                                    </TouchableOpacity>
+                                    </GlassCard>
 
-                                    <TouchableOpacity
+                                    <GlassCard
                                         style={styles.webActionCard}
                                         onPress={() =>
                                             navigation.navigate('AddMaintenance' as never, {
@@ -785,9 +879,9 @@ const HomeScreen = () => {
                                         <View style={[styles.webActionIcon, { backgroundColor: '#dbeafe' }]}>
                                             <Wrench size={24} color="#3b82f6" />
                                         </View>
-                                        <Text style={styles.webActionLabel}>Manutenzione</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
+                                        <Text style={[styles.webActionLabel, { color: themeColors.text }]}>Manutenzione</Text>
+                                    </GlassCard>
+                                    <GlassCard
                                         style={styles.webActionCard}
                                         onPress={() =>
                                             navigation.navigate('AddFuel' as never, {
@@ -798,9 +892,9 @@ const HomeScreen = () => {
                                         <View style={[styles.webActionIcon, { backgroundColor: '#fef3c7' }]}>
                                             <Fuel size={24} color="#f59e0b" />
                                         </View>
-                                        <Text style={styles.webActionLabel}>Rifornimento</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
+                                        <Text style={[styles.webActionLabel, { color: themeColors.text }]}>Rifornimento</Text>
+                                    </GlassCard>
+                                    <GlassCard
                                         style={styles.webActionCard}
                                         onPress={() =>
                                             navigation.navigate('AddExpense' as never, {
@@ -811,36 +905,36 @@ const HomeScreen = () => {
                                         <View style={[styles.webActionIcon, { backgroundColor: '#dcfce7' }]}>
                                             <DollarSign size={24} color="#10b981" />
                                         </View>
-                                        <Text style={styles.webActionLabel}>Spesa</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
+                                        <Text style={[styles.webActionLabel, { color: themeColors.text }]}>Spesa</Text>
+                                    </GlassCard>
+                                    <GlassCard
                                         style={styles.webActionCard}
                                         onPress={() => navigation.navigate('Reminders' as never)}
                                     >
                                         <View style={[styles.webActionIcon, { backgroundColor: '#fce7f3' }]}>
                                             <Calendar size={24} color="#ec4899" />
                                         </View>
-                                        <Text style={styles.webActionLabel}>Promemoria</Text>
-                                    </TouchableOpacity>
+                                        <Text style={[styles.webActionLabel, { color: themeColors.text }]}>Promemoria</Text>
+                                    </GlassCard>
                                 </View>
-                            </View>
+                            </GlassCard>
                         </View>
 
                         {/* Right Column - Deadlines & Activities */}
                         <View style={styles.webRightColumn}>
                             {/* Deadlines */}
                             {deadlines.length > 0 && (
-                                <View style={styles.webSection}>
+                                <GlassCard style={styles.webSection}>
                                     <View style={styles.webSectionHeader}>
-                                        <Text style={styles.webSectionTitle}>Prossime Scadenze</Text>
+                                        <Text style={[styles.webSectionTitle, { color: themeColors.text }]}>Prossime Scadenze</Text>
                                         <TouchableOpacity
                                             onPress={() => navigation.navigate('Reminders' as never)}
                                         >
-                                            <Text style={styles.webSectionLink}>Vedi tutte</Text>
+                                            <Text style={[styles.webSectionLink, { color: colors.primary }]}>Vedi tutte</Text>
                                         </TouchableOpacity>
                                     </View>
                                     {deadlines.slice(0, 5).map((deadline) => (
-                                        <TouchableOpacity
+                                        <GlassCard
                                             key={deadline.id}
                                             style={styles.webDeadlineCard}
                                             onPress={() =>
@@ -872,25 +966,25 @@ const HomeScreen = () => {
                                                 )}
                                             </View>
                                             <View style={styles.webDeadlineInfo}>
-                                                <Text style={styles.webDeadlineTitle}>
+                                                <Text style={[styles.webDeadlineTitle, { color: themeColors.text }]}>
                                                     {deadline.description}
                                                 </Text>
-                                                <Text style={styles.webDeadlineDate}>
+                                                <Text style={[styles.webDeadlineDate, { color: themeColors.textSecondary }]}>
                                                     {formatDate(deadline.dueDate)}
                                                 </Text>
                                             </View>
-                                            <ChevronRight size={18} color="#94a3b8" />
-                                        </TouchableOpacity>
+                                            <ChevronRight size={18} color={themeColors.textSecondary} />
+                                        </GlassCard>
                                     ))}
-                                </View>
+                                </GlassCard>
                             )}
 
                             {/* Recent Activities */}
                             {recentActivities.length > 0 && (
-                                <View style={styles.webSection}>
-                                    <Text style={styles.webSectionTitle}>Attività Recenti</Text>
+                                <GlassCard style={styles.webSection}>
+                                    <Text style={[styles.webSectionTitle, { color: themeColors.text }]}>Attività Recenti</Text>
                                     {recentActivities.slice(0, 5).map((activity) => (
-                                        <View key={activity.id} style={styles.webActivityCard}>
+                                        <GlassCard key={activity.id} style={styles.webActivityCard}>
                                             <View
                                                 style={[
                                                     styles.webActivityIcon,
@@ -915,49 +1009,49 @@ const HomeScreen = () => {
                                                 )}
                                             </View>
                                             <View style={styles.webActivityInfo}>
-                                                <Text style={styles.webActivityTitle}>
+                                                <Text style={[styles.webActivityTitle, { color: themeColors.text }]}>
                                                     {activity.description}
                                                 </Text>
-                                                <Text style={styles.webActivityDate}>
+                                                <Text style={[styles.webActivityDate, { color: themeColors.textSecondary }]}>
                                                     {formatDate(activity.date)}
                                                     {activity.workshopName && ` • ${activity.workshopName}`}
                                                 </Text>
                                             </View>
-                                            <Text style={styles.webActivityAmount}>
+                                            <Text style={[styles.webActivityAmount, { color: themeColors.text }]}>
                                                 {formatCurrency(activity.cost)}
                                             </Text>
-                                        </View>
+                                        </GlassCard>
                                     ))}
-                                </View>
+                                </GlassCard>
                             )}
 
                             {/* Other Vehicles */}
                             {vehicles.length > 1 && (
-                                <View style={styles.webSection}>
-                                    <Text style={styles.webSectionTitle}>Altri Veicoli</Text>
+                                <GlassCard style={styles.webSection}>
+                                    <Text style={[styles.webSectionTitle, { color: themeColors.text }]}>Altri Veicoli</Text>
                                     {vehicles
                                         .filter((v) => v.id !== selectedVehicle?.id)
                                         .map((vehicle) => (
-                                            <TouchableOpacity
+                                            <GlassCard
                                                 key={vehicle.id}
                                                 style={styles.webOtherVehicleCard}
                                                 onPress={() => setSelectedVehicle(vehicle)}
                                             >
-                                                <View style={styles.webOtherVehicleIcon}>
-                                                    <Car size={24} color="#64748b" />
+                                                <View style={[styles.webOtherVehicleIcon, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#D1D1D6' }]}>
+                                                    <Car size={24} color={themeColors.text} />
                                                 </View>
                                                 <View style={styles.webOtherVehicleInfo}>
-                                                    <Text style={styles.webOtherVehicleName}>
+                                                    <Text style={[styles.webOtherVehicleName, { color: themeColors.text }]}>
                                                         {vehicle.make} {vehicle.model}
                                                     </Text>
-                                                    <Text style={styles.webOtherVehiclePlate}>
+                                                    <Text style={[styles.webOtherVehiclePlate, { color: themeColors.textSecondary }]}>
                                                         {vehicle.licensePlate}
                                                     </Text>
                                                 </View>
-                                                <ChevronRight size={18} color="#94a3b8" />
-                                            </TouchableOpacity>
+                                                <ChevronRight size={18} color={themeColors.textSecondary} />
+                                            </GlassCard>
                                         ))}
-                                </View>
+                                </GlassCard>
                             )}
                         </View>
                     </View>
@@ -1866,14 +1960,6 @@ const styles = StyleSheet.create({
         letterSpacing: -0.4,
     },
 
-    // ScrollView
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 20,
-    },
-
     // Header
     header: {
         flexDirection: 'row',
@@ -2552,11 +2638,7 @@ const styles = StyleSheet.create({
 
     // Web Vehicle Card
     webVehicleCard: {
-        borderRadius: 16,
         overflow: 'hidden',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-        }),
     },
     webVehicleGradient: {
         padding: 32,
@@ -2623,17 +2705,8 @@ const styles = StyleSheet.create({
     },
     webStatCard: {
         flex: 1,
-        backgroundColor: '#ffffff',
-        borderRadius: 14,
         padding: 24,
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
     },
     webStatIcon: {
         width: 60,
@@ -2659,14 +2732,7 @@ const styles = StyleSheet.create({
 
     // Web Quick Actions
     webQuickActions: {
-        backgroundColor: '#ffffff',
-        borderRadius: 14,
         padding: 24,
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        }),
     },
     webActionGrid: {
         flexDirection: 'row',
@@ -2677,9 +2743,7 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         gap: 12,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-        }),
+        padding: 16,
     },
     webActionIcon: {
         width: 70,
@@ -2700,14 +2764,8 @@ const styles = StyleSheet.create({
 
     // Web Section
     webSection: {
-        backgroundColor: '#ffffff',
-        borderRadius: 14,
         padding: 24,
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        }),
+        marginBottom: 24,
     },
     webSectionHeader: {
         flexDirection: 'row',
@@ -2734,15 +2792,8 @@ const styles = StyleSheet.create({
     webDeadlineCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        marginHorizontal: -16,
-        marginBottom: 4,
-        borderRadius: 10,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
+        padding: 16,
+        marginBottom: 8,
     },
     webDeadlineIcon: {
         width: 44,
@@ -2771,11 +2822,8 @@ const styles = StyleSheet.create({
     webActivityCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        marginHorizontal: -16,
-        marginBottom: 4,
-        borderRadius: 10,
+        padding: 16,
+        marginBottom: 8,
     },
     webActivityIcon: {
         width: 44,
@@ -2809,15 +2857,8 @@ const styles = StyleSheet.create({
     webOtherVehicleCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        marginHorizontal: -16,
-        marginBottom: 4,
-        borderRadius: 10,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
+        padding: 16,
+        marginBottom: 8,
     },
     webOtherVehicleIcon: {
         width: 44,
