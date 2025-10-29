@@ -17,6 +17,7 @@ import {
     useWindowDimensions,
     Alert,
     Modal,
+    Animated,
 } from 'react-native';
 import {
     Plus,
@@ -28,6 +29,8 @@ import {
     AlertCircle,
     TrendingUp,
     ChevronRight,
+    ChevronDown,
+    ChevronUp,
     Bell,
     Eye,
     Settings as SettingsIcon,
@@ -132,6 +135,8 @@ const HomeScreen = () => {
     const [pendingViewRequests, setPendingViewRequests] = useState(0);
     const [approvedViewRequests, setApprovedViewRequests] = useState(0);
     const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
+    const [isTabSectionExpanded, setIsTabSectionExpanded] = useState(true);
+    const [tabSectionHeight] = useState(new Animated.Value(1));
 
     // Dynamic theme colors
     const themeColors = React.useMemo(() => ({
@@ -285,6 +290,18 @@ const HomeScreen = () => {
                 console.error('❌ Error loading view requests:', error);
             }
         }
+    };
+
+    // Toggle espansione sezione tab
+    const toggleTabSection = () => {
+        const toValue = isTabSectionExpanded ? 0 : 1;
+        Animated.spring(tabSectionHeight, {
+            toValue,
+            friction: 8,
+            tension: 40,
+            useNativeDriver: false,
+        }).start();
+        setIsTabSectionExpanded(!isTabSectionExpanded);
     };
 
     const onRefresh = useCallback(async () => {
@@ -987,8 +1004,38 @@ const HomeScreen = () => {
                             </TouchableOpacity>
                         </View>
 
+                        {/* Tab Section Header with Expand/Collapse */}
+                        <TouchableOpacity
+                            style={styles.tabSectionHeader}
+                            onPress={toggleTabSection}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={[styles.tabSectionTitle, { color: themeColors.text }]}>
+                                Attività
+                            </Text>
+                            <View style={[styles.expandButton, {
+                                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                            }]}>
+                                {isTabSectionExpanded ? (
+                                    <ChevronUp size={18} color={themeColors.text} />
+                                ) : (
+                                    <ChevronDown size={18} color={themeColors.text} />
+                                )}
+                            </View>
+                        </TouchableOpacity>
+
                         {/* Quick Action Pills */}
-                        <View style={styles.liquidActionPills}>
+                        <Animated.View style={[
+                            styles.liquidActionPills,
+                            {
+                                maxHeight: tabSectionHeight.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0, 200],
+                                }),
+                                opacity: tabSectionHeight,
+                                overflow: 'hidden',
+                            }
+                        ]}>
                             <TouchableOpacity
                                 style={[styles.liquidPill, {
                                     backgroundColor: pendingViewRequests > 0
@@ -1473,7 +1520,7 @@ const HomeScreen = () => {
                                         style={[styles.otherVehicleCard, { backgroundColor: themeColors.cardBackground }]}
                                         onPress={() => setSelectedVehicle(vehicle)}
                                     >
-                                        <View style={[styles.otherVehicleIcon, { backgroundColor: isDark ? colors.surfaceContainer : '#F2F2F7' }]}>
+                                        <View style={[styles.otherVehicleIcon, { backgroundColor: isDark ? colors.surfaceContainer : '#D1D1D6' }]}>
                                             <Car size={24} color={themeColors.textSecondary} />
                                         </View>
                                         <Text style={[styles.otherVehicleName, { color: themeColors.text }]}>
@@ -1576,6 +1623,25 @@ const styles = StyleSheet.create({
                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
             },
         }),
+    },
+    tabSectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 16,
+        marginBottom: 12,
+    },
+    tabSectionTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+        letterSpacing: -0.3,
+    },
+    expandButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     liquidActionPills: {
         gap: 10,
