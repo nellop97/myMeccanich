@@ -202,6 +202,8 @@ const AddMaintenanceScreen = () => {
         cost: totalCost,
         warranty,
         isVisible: true,
+        parts: [], // Required field - initialize as empty array
+        documents: [], // Required field - initialize as empty array
       };
 
       // Add parts only if there are any
@@ -215,11 +217,6 @@ const AddMaintenanceScreen = () => {
           return part;
         });
       }
-
-      // Add documents only if there are any (currently always empty, so skip)
-      // if (documents.length > 0) {
-      //   maintenanceData.documents = documents;
-      // }
 
       // Add optional fields only if they have valid values
       if (laborCost && laborCostNum > 0) maintenanceData.laborCost = laborCostNum;
@@ -238,7 +235,8 @@ const AddMaintenanceScreen = () => {
       if (invoiceNumber.trim()) maintenanceData.invoiceNumber = invoiceNumber.trim();
 
       console.log('=== ADDMAINTENANCE DEBUG ===');
-      console.log('Form values:', {
+      console.log('📝 vehicleId parameter:', vehicleId);
+      console.log('📝 Form values:', {
         type,
         description: description.trim(),
         mileage,
@@ -250,28 +248,48 @@ const AddMaintenanceScreen = () => {
         warranty,
         partsCount: parts.length,
       });
-      console.log('Maintenance data to send:', maintenanceData);
-      console.log('Data types:');
+      console.log('📝 Maintenance data to send:', maintenanceData);
+      console.log('📝 Critical fields:');
+      console.log('   - vehicleId:', maintenanceData.vehicleId);
+      console.log('   - ownerId:', maintenanceData.ownerId);
+      console.log('   - isVisible:', maintenanceData.isVisible);
+      console.log('   - parts:', maintenanceData.parts);
+      console.log('   - documents:', maintenanceData.documents);
+      console.log('📝 Data types:');
       Object.entries(maintenanceData).forEach(([key, value]) => {
         console.log(`  ${key}:`, typeof value, Array.isArray(value) ? `Array(${value.length})` : '');
       });
       console.log('=== END ADDMAINTENANCE DEBUG ===');
 
-      await maintenanceService.addMaintenanceRecord(maintenanceData);
+      const savedRecordId = await maintenanceService.addMaintenanceRecord(maintenanceData);
+      console.log('✅ Maintenance saved successfully with ID:', savedRecordId);
+      console.log('✅ vehicleId in saved record:', maintenanceData.vehicleId);
 
       // Update vehicle mileage if changed
       if (vehicle && parseInt(mileage) > (vehicle.mileage || 0)) {
         await vehicleService.updateVehicle(vehicleId!, {
           mileage: parseInt(mileage),
         });
+        console.log('✅ Vehicle mileage updated to:', parseInt(mileage));
       }
 
-      Alert.alert('Successo', 'Manutenzione registrata con successo!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
+      // Cross-platform success handling
+      if (Platform.OS === 'web') {
+        // Web: Show alert and navigate back immediately
+        Alert.alert('Successo', 'Manutenzione registrata con successo!');
+        // Small delay to let user see the alert, then navigate
+        setTimeout(() => {
+          navigation.goBack();
+        }, 1500);
+      } else {
+        // Mobile: Native alert with callback
+        Alert.alert('Successo', 'Manutenzione registrata con successo!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      }
     } catch (error) {
       console.error('Error saving maintenance:', error);
       Alert.alert('Errore', 'Impossibile salvare la manutenzione. Riprova.');

@@ -250,12 +250,23 @@ export default function MaintenanceHistoryScreen() {
 
       if (vehicleData && user?.uid) {
         // Carica storico manutenzione
+        console.log('🔍 Loading maintenance for carId:', carId, 'userId:', user.uid);
         const maintenanceHistory = await maintenanceService.getVehicleMaintenanceHistory(
           carId,
           user.uid
         );
 
         console.log('📊 Loaded maintenance records:', maintenanceHistory.length);
+        if (maintenanceHistory.length > 0) {
+          console.log('📋 Sample record:', {
+            id: maintenanceHistory[0].id,
+            vehicleId: maintenanceHistory[0].vehicleId,
+            description: maintenanceHistory[0].description,
+            date: maintenanceHistory[0].date,
+          });
+        } else {
+          console.warn('⚠️ No maintenance records found for this vehicle');
+        }
 
         setRecords(maintenanceHistory);
 
