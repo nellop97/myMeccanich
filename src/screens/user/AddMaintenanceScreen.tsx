@@ -168,12 +168,26 @@ const AddMaintenanceScreen = () => {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    console.log('🚀 ========== SUBMIT MAINTENANCE STARTED ==========');
+    console.log('👤 Current user:', user);
+    console.log('👤 User UID:', user?.uid);
+    console.log('🚗 Vehicle ID (from params - carId):', carId);
+    console.log('🚗 Vehicle ID (state - vehicleId):', vehicleId);
+
+    if (!validateForm()) {
+      console.log('❌ Form validation failed');
+      return;
+    }
 
     setIsLoading(true);
 
     try {
-      if (!user?.uid) throw new Error('Utente non autenticato');
+      if (!user?.uid) {
+        console.error('❌ CRITICAL: User not authenticated! user:', user);
+        throw new Error('Utente non autenticato');
+      }
+
+      console.log('✅ User authenticated, UID:', user.uid);
 
       // Helper function to safely parse numbers
       const safeParseFloat = (value: string): number => {
@@ -261,9 +275,14 @@ const AddMaintenanceScreen = () => {
       });
       console.log('=== END ADDMAINTENANCE DEBUG ===');
 
+      console.log('📤 Sending to Firestore...');
       const savedRecordId = await maintenanceService.addMaintenanceRecord(maintenanceData);
-      console.log('✅ Maintenance saved successfully with ID:', savedRecordId);
-      console.log('✅ vehicleId in saved record:', maintenanceData.vehicleId);
+      console.log('✅✅✅ MAINTENANCE SAVED SUCCESSFULLY! ✅✅✅');
+      console.log('📋 Record ID:', savedRecordId);
+      console.log('🚗 vehicleId in saved record:', maintenanceData.vehicleId);
+      console.log('👤 ownerId in saved record:', maintenanceData.ownerId);
+      console.log('👁️ isVisible:', maintenanceData.isVisible);
+      console.log('📅 date:', maintenanceData.date);
 
       // Update vehicle mileage if changed
       if (vehicle && parseInt(mileage) > (vehicle.mileage || 0)) {

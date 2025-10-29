@@ -250,33 +250,56 @@ export default function MaintenanceHistoryScreen() {
 
   const loadData = async () => {
     try {
+      console.log('🔄 ========== LOADING MAINTENANCE HISTORY ==========');
+      console.log('🚗 carId (from route params):', carId);
+      console.log('👤 user:', user);
+      console.log('👤 user?.uid:', user?.uid);
+
       setLoading(true);
 
       // Carica veicolo per privacy settings
+      console.log('📥 Loading vehicle data...');
       const vehicleData = await vehicleService.getVehicle(carId);
+      console.log('🚗 Vehicle loaded:', vehicleData);
       setVehicle(vehicleData);
 
       if (vehicleData && user?.uid) {
         // Carica storico manutenzione
-        console.log('🔍 Loading maintenance for carId:', carId, 'userId:', user.uid);
+        console.log('🔍 Loading maintenance history...');
+        console.log('  - vehicleId (carId):', carId);
+        console.log('  - userId:', user.uid);
+        console.log('  - Calling MaintenanceService.getVehicleMaintenanceHistory()...');
+
         const maintenanceHistory = await maintenanceService.getVehicleMaintenanceHistory(
           carId,
           user.uid
         );
 
-        console.log('📊 Loaded maintenance records:', maintenanceHistory.length);
+        console.log('📊✅ MaintenanceService returned:', maintenanceHistory.length, 'records');
+
         if (maintenanceHistory.length > 0) {
-          console.log('📋 Sample record:', {
-            id: maintenanceHistory[0].id,
-            vehicleId: maintenanceHistory[0].vehicleId,
-            description: maintenanceHistory[0].description,
-            date: maintenanceHistory[0].date,
-          });
+          console.log('📋 First record details:');
+          console.log('  - ID:', maintenanceHistory[0].id);
+          console.log('  - vehicleId:', maintenanceHistory[0].vehicleId);
+          console.log('  - ownerId:', maintenanceHistory[0].ownerId);
+          console.log('  - description:', maintenanceHistory[0].description);
+          console.log('  - date:', maintenanceHistory[0].date);
+          console.log('  - isVisible:', maintenanceHistory[0].isVisible);
+          console.log('  - type:', maintenanceHistory[0].type);
         } else {
-          console.warn('⚠️ No maintenance records found for this vehicle');
+          console.warn('⚠️⚠️⚠️ NO MAINTENANCE RECORDS FOUND! ⚠️⚠️⚠️');
+          console.warn('  - Checked vehicleId:', carId);
+          console.warn('  - Checked userId:', user.uid);
+          console.warn('  - This could mean:');
+          console.warn('    1. No records in database for this vehicle');
+          console.warn('    2. vehicleId mismatch');
+          console.warn('    3. isVisible = false on all records');
+          console.warn('    4. Firestore permissions blocking read');
         }
 
+        console.log('📝 Setting records state with', maintenanceHistory.length, 'records...');
         setRecords(maintenanceHistory);
+        console.log('✅ Records state updated!');
 
         // Calcola statistiche
         const totalCost = maintenanceHistory.reduce((sum, record) => sum + (record.cost || 0), 0);

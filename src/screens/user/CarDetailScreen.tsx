@@ -165,20 +165,43 @@ const CarDetailScreen = () => {
 
   // Load maintenance records
   const loadMaintenanceRecords = async () => {
-    if (!user?.uid || !carId) return;
+    console.log('🔄 ========== CAR DETAIL: LOADING MAINTENANCE ==========');
+    console.log('👤 user:', user);
+    console.log('👤 user?.uid:', user?.uid);
+    console.log('🚗 carId:', carId);
+
+    if (!user?.uid || !carId) {
+      console.warn('⚠️ Cannot load maintenance: missing user.uid or carId');
+      console.log('  - user?.uid:', user?.uid);
+      console.log('  - carId:', carId);
+      return;
+    }
 
     try {
       setLoadingMaintenance(true);
-      console.log('🔧 Loading maintenance records for vehicle:', carId);
+      console.log('🔧 Calling MaintenanceService.getVehicleMaintenanceHistory()...');
+      console.log('  - vehicleId:', carId);
+      console.log('  - userId:', user.uid);
 
       const records = await maintenanceService.getVehicleMaintenanceHistory(carId, user.uid);
-      console.log('📊 Loaded maintenance records:', records.length);
+      console.log('📊✅ MaintenanceService returned:', records.length, 'records');
+
+      if (records.length > 0) {
+        console.log('📋 First record:');
+        console.log('  - ID:', records[0].id);
+        console.log('  - vehicleId:', records[0].vehicleId);
+        console.log('  - type:', records[0].type);
+        console.log('  - date:', records[0].date);
+      } else {
+        console.warn('⚠️ NO RECORDS RETURNED from MaintenanceService!');
+      }
 
       // Take only the 10 most recent
       const recentRecords = records.slice(0, 10);
+      console.log('📝 Setting state with top', recentRecords.length, 'records...');
       setMaintenanceRecords(recentRecords);
 
-      console.log('✅ Maintenance records state updated with', recentRecords.length, 'records');
+      console.log('✅ Maintenance records state updated!');
     } catch (error) {
       console.error('❌ Error loading maintenance records:', error);
     } finally {
