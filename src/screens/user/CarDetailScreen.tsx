@@ -16,7 +16,7 @@ import {
   Modal,
   useWindowDimensions,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft,
   Edit,
@@ -167,6 +167,16 @@ const CarDetailScreen = () => {
       loadDocuments();
     }
   }, [carId]);
+
+  // Ricarica dati quando la schermata torna in focus (dopo salvataggio manutenzione)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 CarDetail screen focused, refreshing data...');
+      refreshData();
+      loadPhotos();
+      loadDocuments();
+    }, [carId])
+  );
 
   const loadPhotos = async () => {
     if (!auth.currentUser) return;

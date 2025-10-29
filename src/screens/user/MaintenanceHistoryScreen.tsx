@@ -18,7 +18,7 @@ import {
   Text,
   Searchbar,
 } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import {
   Wrench,
   Calendar,
@@ -239,6 +239,14 @@ export default function MaintenanceHistoryScreen() {
   useEffect(() => {
     filterRecords(searchQuery, selectedFilter);
   }, [searchQuery, selectedFilter, records]);
+
+  // Ricarica dati quando la schermata torna in focus (dopo salvataggio)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 Screen focused, reloading maintenance data...');
+      loadData();
+    }, [carId])
+  );
 
   const loadData = async () => {
     try {

@@ -1116,7 +1116,7 @@ const HomeScreen = () => {
                                     </View>
                                 )}
                             </TouchableOpacity>
-                        </View>
+                        </Animated.View>
                     </View>
                 </SafeAreaView>
             </BlurView>

@@ -78,6 +78,12 @@ export default function MaintenanceDetailScreen() {
     try {
       setLoading(true);
 
+      console.log('🔍 Loading maintenance detail:', {
+        maintenanceId,
+        carId,
+        userId: user?.uid
+      });
+
       // Load vehicle
       const vehicleData = await vehicleService.getVehicle(carId);
       setVehicle(vehicleData);
@@ -85,18 +91,34 @@ export default function MaintenanceDetailScreen() {
       // Load maintenance records to find the specific one
       if (user?.uid) {
         const records = await maintenanceService.getVehicleMaintenanceHistory(carId, user.uid);
+        console.log('📊 Total records loaded:', records.length);
+        console.log('🔎 Looking for maintenance ID:', maintenanceId);
+
+        // Debug: Log all record IDs
+        if (records.length > 0) {
+          console.log('📋 Available record IDs:', records.map(r => r.id));
+        }
+
         const record = records.find(r => r.id === maintenanceId);
 
         if (record) {
+          console.log('✅ Maintenance found:', {
+            id: record.id,
+            description: record.description,
+            date: record.date
+          });
           setMaintenance(record);
           setEditData(record);
         } else {
+          console.error('❌ Maintenance not found in records');
+          console.error('Available IDs:', records.map(r => r.id));
+          console.error('Searched ID:', maintenanceId);
           Alert.alert('Errore', 'Manutenzione non trovata');
           navigation.goBack();
         }
       }
     } catch (error) {
-      console.error('Error loading maintenance:', error);
+      console.error('❌ Error loading maintenance:', error);
       Alert.alert('Errore', 'Impossibile caricare i dettagli della manutenzione');
     } finally {
       setLoading(false);
