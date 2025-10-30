@@ -135,20 +135,26 @@ const AddReminderScreen = () => {
       const reminderData: any = {
         vehicleId,
         title: title.trim(),
-        description: description.trim() || undefined,
         type,
         dueDate,
-        dueMileage: dueMileage ? parseInt(dueMileage) : undefined,
-        cost: cost ? parseFloat(cost) : undefined,
-        notes: notes.trim() || undefined,
         isActive,
         isCompleted: false,
         isRecurring,
-        recurringInterval: isRecurring ? recurringInterval : undefined,
-        recurringUnit: isRecurring ? recurringUnit : undefined,
         notifyDaysBefore,
         notificationSent: false,
       };
+
+      // Aggiungi campi opzionali solo se presenti
+      if (description.trim()) reminderData.description = description.trim();
+      if (dueMileage) reminderData.dueMileage = parseInt(dueMileage);
+      if (cost) reminderData.cost = parseFloat(cost);
+      if (notes.trim()) reminderData.notes = notes.trim();
+
+      // Campi ricorrenza
+      if (isRecurring) {
+        reminderData.recurringInterval = recurringInterval;
+        reminderData.recurringUnit = recurringUnit;
+      }
 
       await ReminderService.createReminder(reminderData);
 

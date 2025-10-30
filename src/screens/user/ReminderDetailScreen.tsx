@@ -169,18 +169,32 @@ const ReminderDetailScreen = () => {
       const updates: Partial<Reminder> = {
         vehicleId,
         title: title.trim(),
-        description: description.trim() || undefined,
         type,
         dueDate,
-        dueMileage: dueMileage ? parseInt(dueMileage) : undefined,
-        cost: cost ? parseFloat(cost) : undefined,
-        notes: notes.trim() || undefined,
         isActive,
         isRecurring,
-        recurringInterval: isRecurring ? recurringInterval : undefined,
-        recurringUnit: isRecurring ? recurringUnit : undefined,
         notifyDaysBefore,
       };
+
+      // Aggiungi campi opzionali solo se presenti
+      if (description.trim()) {
+        updates.description = description.trim();
+      }
+      if (dueMileage) {
+        updates.dueMileage = parseInt(dueMileage);
+      }
+      if (cost) {
+        updates.cost = parseFloat(cost);
+      }
+      if (notes.trim()) {
+        updates.notes = notes.trim();
+      }
+
+      // Campi ricorrenza
+      if (isRecurring) {
+        updates.recurringInterval = recurringInterval;
+        updates.recurringUnit = recurringUnit;
+      }
 
       await ReminderService.updateReminder(reminderId, updates);
 

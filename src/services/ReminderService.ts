@@ -185,18 +185,35 @@ export class ReminderService {
         );
       }
 
-      const newReminder = {
-        ...reminderData,
+      const newReminder: any = {
         userId: uid,
-        isCompleted: false,
-        completedAt: null,
-        notificationSent: false,
-        lastNotified: null,
-        nextDueDate: nextDueDate ? Timestamp.fromDate(nextDueDate) : null,
+        vehicleId: reminderData.vehicleId,
+        title: reminderData.title,
+        type: reminderData.type,
         dueDate: Timestamp.fromDate(reminderData.dueDate),
+        isActive: reminderData.isActive,
+        isCompleted: false,
+        isRecurring: reminderData.isRecurring,
+        notifyDaysBefore: reminderData.notifyDaysBefore,
+        notificationSent: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+
+      // Aggiungi campi opzionali solo se presenti
+      if (reminderData.description) newReminder.description = reminderData.description;
+      if (reminderData.dueMileage) newReminder.dueMileage = reminderData.dueMileage;
+      if (reminderData.cost) newReminder.cost = reminderData.cost;
+      if (reminderData.notes) newReminder.notes = reminderData.notes;
+      if (reminderData.relatedMaintenanceId) newReminder.relatedMaintenanceId = reminderData.relatedMaintenanceId;
+      if (reminderData.relatedDocumentId) newReminder.relatedDocumentId = reminderData.relatedDocumentId;
+
+      // Campi ricorrenza
+      if (reminderData.isRecurring) {
+        if (reminderData.recurringInterval) newReminder.recurringInterval = reminderData.recurringInterval;
+        if (reminderData.recurringUnit) newReminder.recurringUnit = reminderData.recurringUnit;
+        if (nextDueDate) newReminder.nextDueDate = Timestamp.fromDate(nextDueDate);
+      }
 
       const docRef = await addDoc(remindersRef, newReminder);
       return docRef.id;
@@ -220,32 +237,54 @@ export class ReminderService {
 
       const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
 
-      // Converti le date in Timestamp
-      const updateData: any = { ...updates };
-      if (updateData.dueDate) {
-        updateData.dueDate = Timestamp.fromDate(updateData.dueDate);
+      const updateData: any = {
+        updatedAt: serverTimestamp(),
+      };
+
+      // Aggiungi solo i campi che sono effettivamente presenti nell'update
+      if (updates.vehicleId !== undefined) updateData.vehicleId = updates.vehicleId;
+      if (updates.title !== undefined) updateData.title = updates.title;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.type !== undefined) updateData.type = updates.type;
+      if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
+      if (updates.isCompleted !== undefined) updateData.isCompleted = updates.isCompleted;
+      if (updates.isRecurring !== undefined) updateData.isRecurring = updates.isRecurring;
+      if (updates.notifyDaysBefore !== undefined) updateData.notifyDaysBefore = updates.notifyDaysBefore;
+      if (updates.notificationSent !== undefined) updateData.notificationSent = updates.notificationSent;
+      if (updates.dueMileage !== undefined) updateData.dueMileage = updates.dueMileage;
+      if (updates.cost !== undefined) updateData.cost = updates.cost;
+      if (updates.notes !== undefined) updateData.notes = updates.notes;
+      if (updates.recurringInterval !== undefined) updateData.recurringInterval = updates.recurringInterval;
+      if (updates.recurringUnit !== undefined) updateData.recurringUnit = updates.recurringUnit;
+      if (updates.relatedMaintenanceId !== undefined) updateData.relatedMaintenanceId = updates.relatedMaintenanceId;
+      if (updates.relatedDocumentId !== undefined) updateData.relatedDocumentId = updates.relatedDocumentId;
+
+      // Converti le date in Timestamp se presenti
+      if (updates.dueDate) {
+        updateData.dueDate = Timestamp.fromDate(updates.dueDate);
       }
-      if (updateData.completedAt) {
-        updateData.completedAt = Timestamp.fromDate(updateData.completedAt);
+      if (updates.completedAt) {
+        updateData.completedAt = Timestamp.fromDate(updates.completedAt);
       }
-      if (updateData.lastNotified) {
-        updateData.lastNotified = Timestamp.fromDate(updateData.lastNotified);
+      if (updates.lastNotified) {
+        updateData.lastNotified = Timestamp.fromDate(updates.lastNotified);
       }
-      if (updateData.lastCompletedDate) {
-        updateData.lastCompletedDate = Timestamp.fromDate(updateData.lastCompletedDate);
+      if (updates.lastCompletedDate) {
+        updateData.lastCompletedDate = Timestamp.fromDate(updates.lastCompletedDate);
+      }
+      if (updates.nextDueDate) {
+        updateData.nextDueDate = Timestamp.fromDate(updates.nextDueDate);
       }
 
       // Ricalcola nextDueDate se necessario
-      if (updates.isRecurring && updateData.dueDate && updateData.recurringInterval && updateData.recurringUnit) {
+      if (updates.isRecurring && updates.dueDate && updates.recurringInterval && updates.recurringUnit) {
         const nextDueDate = this.calculateNextDueDate(
-          updateData.dueDate.toDate(),
-          updateData.recurringInterval,
-          updateData.recurringUnit
+          updates.dueDate,
+          updates.recurringInterval,
+          updates.recurringUnit
         );
         updateData.nextDueDate = Timestamp.fromDate(nextDueDate);
       }
-
-      updateData.updatedAt = serverTimestamp();
 
       await updateDoc(reminderRef, updateData);
     } catch (error) {
