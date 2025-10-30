@@ -298,6 +298,13 @@ export class MaintenanceService {
         minimalRecord.parts = [];
       }
 
+      // Aggiungi array di documents se presente
+      if (cleanedRecord.documents && Array.isArray(cleanedRecord.documents) && cleanedRecord.documents.length > 0) {
+        minimalRecord.documents = cleanedRecord.documents;
+      } else {
+        minimalRecord.documents = [];
+      }
+
       console.log('MINIMAL RECORD TEST:', minimalRecord);
       console.log('Date type:', minimalRecord.date?.constructor?.name);
       if (minimalRecord.warrantyExpiry) {

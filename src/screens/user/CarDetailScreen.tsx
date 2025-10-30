@@ -16,7 +16,7 @@ import {
   Modal,
   useWindowDimensions,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft,
   Edit,
@@ -52,6 +52,9 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaintenanceService } from '../../services/MaintenanceService';
+import { MaintenanceRecord } from '../../types/database.types';
+import { useAuth } from '../../hooks/useAuth';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -88,15 +91,19 @@ const CarDetailScreen = () => {
   const { carId } = route.params as RouteParams;
   const { colors, isDark } = useAppThemeManager();
   const { width } = useWindowDimensions();
+  const { user } = useAuth();
+  const maintenanceService = MaintenanceService.getInstance();
+
   const {
     vehicles,
-    recentMaintenance,
     upcomingReminders,
     refreshData,
     loading,
   } = useUserData();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
+  const [loadingMaintenance, setLoadingMaintenance] = useState(false);
   const [photos, setPhotos] = useState<VehiclePhoto[]>([]);
   const [documents, setDocuments] = useState<VehicleDocument[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
@@ -151,22 +158,83 @@ const CarDetailScreen = () => {
   // Get vehicle data
   const vehicle = vehicles.find((v) => v.id === carId);
 
-  // Filter maintenance records for this vehicle
-  const maintenanceRecords = recentMaintenance
-    .filter((record) => record.vehicleId === carId)
-    .slice(0, 10);
-
   // Filter reminders for this vehicle
   const reminders = upcomingReminders
     .filter((reminder) => reminder.vehicleId === carId)
     .slice(0, 10);
 
+  // Load maintenance records
+  const loadMaintenanceRecords = async () => {
+    console.log('🔄 ========== CAR DETAIL: LOADING MAINTENANCE ==========');
+    console.log('👤 user:', user);
+    console.log('👤 user?.uid:', user?.uid);
+    console.log('🚗 carId:', carId);
+
+    if (!user?.uid || !carId) {
+      console.warn('⚠️ Cannot load maintenance: missing user.uid or carId');
+      console.log('  - user?.uid:', user?.uid);
+      console.log('  - carId:', carId);
+      return;
+    }
+
+    try {
+      setLoadingMaintenance(true);
+      console.log('🔧 Calling MaintenanceService.getVehicleMaintenanceHistory()...');
+      console.log('  - vehicleId:', carId);
+      console.log('  - userId:', user.uid);
+
+      const records = await maintenanceService.getVehicleMaintenanceHistory(carId, user.uid);
+      console.log('📊✅ MaintenanceService returned:', records.length, 'records');
+
+      if (records.length > 0) {
+        console.log('📋 First record:');
+        console.log('  - ID:', records[0].id);
+        console.log('  - vehicleId:', records[0].vehicleId);
+        console.log('  - type:', records[0].type);
+        console.log('  - date:', records[0].date);
+      } else {
+        console.warn('⚠️ NO RECORDS RETURNED from MaintenanceService!');
+      }
+
+      // Take only the 10 most recent
+      const recentRecords = records.slice(0, 10);
+      console.log('📝 Setting state with top', recentRecords.length, 'records...');
+      setMaintenanceRecords(recentRecords);
+
+      console.log('✅ Maintenance records state updated!');
+    } catch (error) {
+      console.error('❌ Error loading maintenance records:', error);
+    } finally {
+      setLoadingMaintenance(false);
+    }
+  };
+
   useEffect(() => {
-    if (carId) {
+    if (carId && user?.uid) {
+      console.log('✅ User authenticated in CarDetail, loading all data...');
       loadPhotos();
       loadDocuments();
+      loadMaintenanceRecords();
+    } else {
+      console.log('⏳ Waiting for user authentication or carId...', { carId, userUid: user?.uid });
     }
-  }, [carId]);
+  }, [carId, user?.uid]); // ✅ Aggiungi user?.uid come dependency
+
+  // Ricarica dati quando la schermata torna in focus (dopo salvataggio manutenzione)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 CarDetail screen focused, refreshing data...');
+      if (user?.uid) {
+        console.log('✅ User authenticated, refreshing...');
+        refreshData();
+        loadPhotos();
+        loadDocuments();
+        loadMaintenanceRecords();
+      } else {
+        console.log('⏳ User not ready, skipping refresh');
+      }
+    }, [carId, user?.uid]) // ✅ Aggiungi user?.uid come dependency
+  );
 
   const loadPhotos = async () => {
     if (!auth.currentUser) return;
@@ -976,7 +1044,7 @@ const CarDetailScreen = () => {
                 </View>
               </View>
 
-              {loading ? (
+              {loadingMaintenance ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="small" color={colors.primary} />
                 </View>
@@ -1026,7 +1094,7 @@ const CarDetailScreen = () => {
                           { color: colors.onSurfaceVariant },
                         ]}
                       >
-                        {formatDate(record.completedDate)}
+                        {formatDate(record.date)}
                       </Text>
                     </View>
 
