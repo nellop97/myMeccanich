@@ -70,6 +70,7 @@ interface VehiclePhoto {
   uploadedAt: any;
   vehicleId: string;
   userId: string;
+  isMain?: boolean; // Se è l'immagine principale del veicolo
 }
 
 interface VehicleDocument {
@@ -369,13 +370,22 @@ const CarDetailScreen = () => {
       }
 
       // Salva direttamente in Firestore
+      const isFirstPhoto = photos.length === 0;
       await addDoc(collection(db, 'vehicle_photos'), {
         vehicleId: carId,
         userId: auth.currentUser.uid,
         base64: base64,
         mimeType: mimeType,
         uploadedAt: serverTimestamp(),
+        isMain: isFirstPhoto, // La prima foto diventa automaticamente principale
       });
+
+      // Se è la prima foto, aggiorna anche il veicolo con mainImageUrl
+      if (isFirstPhoto) {
+        await updateDoc(doc(db, 'vehicles', carId), {
+          mainImageUrl: `data:${mimeType};base64,${base64}`,
+        });
+      }
 
       await loadPhotos();
       showToastMessage('Foto caricata con successo!', 'success');
@@ -384,6 +394,29 @@ const CarDetailScreen = () => {
       showToastMessage('Impossibile caricare la foto: ' + (error as Error).message, 'error');
     } finally {
       setUploadingPhoto(false);
+    }
+  };
+
+  const setAsMainPhoto = async (photo: VehiclePhoto) => {
+    try {
+      // Rimuovi isMain da tutte le altre foto
+      const updatePromises = photos.map(p => 
+        updateDoc(doc(db, 'vehicle_photos', p.id), { isMain: false })
+      );
+      await Promise.all(updatePromises);
+
+      // Imposta questa come principale
+      await updateDoc(doc(db, 'vehicle_photos', photo.id), { isMain: true });
+
+      // Aggiorna anche il veicolo con mainImageUrl
+      const mainImageUrl = `data:${photo.mimeType};base64,${photo.base64}`;
+      await updateDoc(doc(db, 'vehicles', carId), { mainImageUrl });
+
+      await loadPhotos();
+      showToastMessage('Immagine principale aggiornata!', 'success');
+    } catch (error) {
+      console.error('Error setting main photo:', error);
+      showToastMessage('Errore nell\'impostare l\'immagine principale', 'error');
     }
   };
 
@@ -400,6 +433,16 @@ const CarDetailScreen = () => {
             try {
               // Elimina solo da Firestore
               await deleteDoc(doc(db, 'vehicle_photos', photo.id));
+
+              // Se era l'immagine principale, imposta la prima disponibile come principale
+              if (photo.isMain && photos.length > 1) {
+                const remainingPhotos = photos.filter(p => p.id !== photo.id);
+                if (remainingPhotos.length > 0) {
+                  await setAsMainPhoto(remainingPhotos[0]);
+                } else {
+                  await updateDoc(doc(db, 'vehicles', carId), { mainImageUrl: null });
+                }
+              }
 
               await loadPhotos();
               Alert.alert('Successo', 'Foto eliminata');
