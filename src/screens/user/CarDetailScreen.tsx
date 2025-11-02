@@ -34,6 +34,7 @@ import {
   X,
   Upload,
   Eye,
+  UserPlus,
 } from 'lucide-react-native';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
@@ -55,6 +56,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaintenanceService } from '../../services/MaintenanceService';
 import { MaintenanceRecord } from '../../types/database.types';
 import { useAuth } from '../../hooks/useAuth';
+import VehicleTransferModal from '../../components/VehicleTransferModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -119,6 +121,7 @@ const CarDetailScreen = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [showTransferModal, setShowTransferModal] = useState(false);
 
   // Responsive
   const isWeb = Platform.OS === 'web';
@@ -197,8 +200,8 @@ const CarDetailScreen = () => {
         console.warn('⚠️ NO RECORDS RETURNED from MaintenanceService!');
       }
 
-      // Take only the 10 most recent
-      const recentRecords = records.slice(0, 10);
+      // Take only the 3 most recent
+      const recentRecords = records.slice(0, 3);
       console.log('📝 Setting state with top', recentRecords.length, 'records...');
       setMaintenanceRecords(recentRecords);
 
@@ -874,12 +877,25 @@ const CarDetailScreen = () => {
                 { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
               ]}
             >
-              <Text style={[styles.vehicleName, { color: colors.onSurface }]}>
-                {vehicle.make} {vehicle.model} {vehicle.year}
-              </Text>
-              <Text style={[styles.vehicleVIN, { color: colors.onSurfaceVariant }]}>
-                VIN: {vehicle.vin || '1HGCV2F69JL000000'}
-              </Text>
+              <View style={styles.vehicleCardHeader}>
+                <View style={styles.vehicleCardInfo}>
+                  <Text style={[styles.vehicleName, { color: colors.onSurface }]}>
+                    {vehicle.make} {vehicle.model} {vehicle.year}
+                  </Text>
+                  <Text style={[styles.vehicleVIN, { color: colors.onSurfaceVariant }]}>
+                    VIN: {vehicle.vin || '1HGCV2F69JL000000'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.transferButton, { backgroundColor: `${colors.primary}15` }]}
+                  onPress={() => setShowTransferModal(true)}
+                >
+                  <UserPlus size={20} color={colors.primary} strokeWidth={2.5} />
+                  <Text style={[styles.transferButtonText, { color: colors.primary }]}>
+                    Trasferisci
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Photos Section */}
@@ -1220,7 +1236,7 @@ const CarDetailScreen = () => {
                           },
                         ]}
                         onPress={() => {
-                          // Navigate to reminder detail
+                          (navigation as any).navigate('ReminderDetail', { reminderId: reminder.id });
                         }}
                       >
                         <View style={[styles.recordIcon, { backgroundColor: `${iconColor}20` }]}>
@@ -1303,7 +1319,7 @@ const CarDetailScreen = () => {
                       },
                     ]}
                     onPress={() => {
-                      // Navigate to reminder detail
+                      (navigation as any).navigate('ReminderDetail', { reminderId: reminder.id });
                     }}
                   >
                     <View style={[styles.recordIcon, { backgroundColor: `${iconColor}20` }]}>
@@ -1357,6 +1373,17 @@ const CarDetailScreen = () => {
 
       {/* Toast Notification */}
       {renderToast()}
+
+      {/* Vehicle Transfer Modal */}
+      <VehicleTransferModal
+        visible={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        vehicleId={carId}
+        vehicleName={`${vehicle.make} ${vehicle.model} ${vehicle.year}`}
+        sellerId={user?.uid || ''}
+        sellerName={user?.displayName || user?.email || 'Utente'}
+        sellerEmail={user?.email || ''}
+      />
     </SafeAreaView>
   );
 };
@@ -1449,6 +1476,15 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  vehicleCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  vehicleCardInfo: {
+    flex: 1,
+  },
   vehicleName: {
     fontSize: 20,
     fontWeight: '700',
@@ -1458,6 +1494,18 @@ const styles = StyleSheet.create({
   vehicleVIN: {
     fontSize: 14,
     letterSpacing: 0.2,
+  },
+  transferButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+  },
+  transferButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // Section
