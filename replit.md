@@ -6,6 +6,33 @@ MyMechanic is a comprehensive cross-platform React Native application built with
 
 ## Recent Changes (October 2025)
 
+### HomeScreen Apple/Liquid Glass Redesign (October 31, 2025)
+Complete redesign of the owner's home screen with modern Apple-inspired aesthetic:
+
+**Visual Design:**
+- Liquid glass aesthetic with BlurView components (tint: systemChromeMaterial, intensity: 80)
+- Gradient overlays using LinearGradient for depth and visual hierarchy
+- Fully responsive layout with breakpoints for mobile/tablet/desktop (640px, 1024px)
+- Reusable GlassCard component wrapping BlurView with theme-aware styling
+- Smooth animations and transitions throughout the interface
+
+**Vehicle Image Management:**
+- Main image selection system in VehicleImagesStep with visual star badge indicator
+- Images stored as both `mainImageUrl` and `imageUrl` in Firestore for backward compatibility
+- CarDetailScreen updated to support main image selection from photo gallery
+- HomeScreen displays vehicle hero image using `mainImageUrl || imageUrl` fallback
+- TypeScript types updated (VehicleFormData) to include mainImage and photos fields
+
+**Quick Actions:**
+- Six primary actions: Aggiungi Veicolo, Manutenzione, Carburante, Spese, Promemoria, Richieste
+- Color-coded icons with theme-aware backgrounds
+- Verified navigation to existing routes (AddVehicle, MaintenanceHistory, FuelTracking, ExpenseTracker, Reminders, ViewRequests)
+
+**Responsive Features:**
+- Grid layout: 3 columns mobile, 4 tablet, 6 desktop
+- Adaptive spacing and card dimensions based on screen width
+- Optimized for both web and mobile platforms with platform-specific handling
+
 ### Complete UI Redesign
 The app underwent a complete redesign following minimal, clean design mockups:
 

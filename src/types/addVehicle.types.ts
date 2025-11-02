@@ -48,7 +48,12 @@ export interface VehicleFormData {
     purchaseDate?: Date;
     purchasePrice?: number;
     notes?: string;
+    
+    // Immagini
     images?: string[];
+    mainImage?: string; // URL dell'immagine principale
+    photos?: string[]; // Alias per compatibilità
+    optionals?: string[]; // Dotazioni opzionali
 }
 
 export interface AddVehicleStep {

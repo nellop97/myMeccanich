@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -10,7 +10,7 @@ import {
     Image,
     ActivityIndicator,
 } from 'react-native';
-import { Camera, Upload, X, Check } from 'lucide-react-native';
+import { Camera, Upload, X, Check, Star } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../../services/firebase';
@@ -40,6 +40,15 @@ const VehicleImagesStep: React.FC<VehicleImagesStepProps> = ({
                                                              }) => {
     const [uploadingImages, setUploadingImages] = useState<UploadingImage[]>([]);
     const [isUploading, setIsUploading] = useState(false);
+    const [mainImageUrl, setMainImageUrl] = useState<string | null>(formData.mainImage || null);
+
+    useEffect(() => {
+        if (formData.images && formData.images.length > 0 && !mainImageUrl) {
+            const firstImage = formData.images[0];
+            setMainImageUrl(firstImage);
+            updateFormData({ mainImage: firstImage });
+        }
+    }, [formData.images]);
 
     // Richiedi permessi fotocamera/galleria
     const requestPermissions = async () => {
@@ -126,9 +135,17 @@ const VehicleImagesStep: React.FC<VehicleImagesStepProps> = ({
             const uploadedUrls = await Promise.all(uploadPromises);
 
             // Aggiorna formData con i nuovi URL
-            updateFormData({
-                images: [...(formData.images || []), ...uploadedUrls.filter(Boolean)],
-            });
+            const newImages = [...(formData.images || []), ...uploadedUrls.filter(Boolean)];
+            const updates: any = { images: newImages };
+            
+            // Se è la prima immagine, imposta come principale
+            if (!mainImageUrl && newImages.length > 0) {
+                const firstImage = newImages[0];
+                setMainImageUrl(firstImage);
+                updates.mainImage = firstImage;
+            }
+            
+            updateFormData(updates);
 
             Alert.alert('Successo', `${uploadedUrls.length} foto caricate!`);
         } catch (error) {
@@ -210,9 +227,25 @@ const VehicleImagesStep: React.FC<VehicleImagesStepProps> = ({
         setUploadingImages((prev) => prev.filter((_, i) => i !== index));
 
         const images = formData.images || [];
-        updateFormData({
-            images: images.filter((_: any, i: number) => i !== index),
-        });
+        const imageToRemove = images[index];
+        const newImages = images.filter((_: any, i: number) => i !== index);
+        
+        const updates: any = { images: newImages };
+        
+        // Se l'immagine rimossa era quella principale, seleziona la prima disponibile
+        if (imageToRemove === mainImageUrl) {
+            const newMainImage = newImages.length > 0 ? newImages[0] : null;
+            setMainImageUrl(newMainImage);
+            updates.mainImage = newMainImage;
+        }
+        
+        updateFormData(updates);
+    };
+
+    // Imposta come immagine principale
+    const setAsMainImage = (imageUrl: string) => {
+        setMainImageUrl(imageUrl);
+        updateFormData({ mainImage: imageUrl });
     };
 
     return (
@@ -251,64 +284,86 @@ const VehicleImagesStep: React.FC<VehicleImagesStepProps> = ({
             {/* Immagini in Upload / Caricate */}
             {uploadingImages.length > 0 && (
                 <View style={styles.imagesContainer}>
-                    {uploadingImages.map((image, index) => (
-                        <View key={index} style={styles.imageCard}>
-                            <Image
-                                source={{ uri: image.uri }}
-                                style={styles.imagePreview}
-                                resizeMode="cover"
-                            />
-
-                            {/* Progress Overlay */}
-                            {image.status === 'uploading' && (
-                                <View style={styles.progressOverlay}>
-                                    <ActivityIndicator size="small" color="#fff" />
-                                    <Text style={styles.progressText}>
-                                        {image.progress}%
-                                    </Text>
-                                    {/* Progress Bar */}
-                                    <View style={styles.progressBarContainer}>
-                                        <View
-                                            style={[
-                                                styles.progressBar,
-                                                { width: `${image.progress}%` },
-                                            ]}
-                                        />
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* Success */}
-                            {image.status === 'success' && (
-                                <View style={styles.successOverlay}>
-                                    <Check size={24} color="#fff" />
-                                </View>
-                            )}
-
-                            {/* Error */}
-                            {image.status === 'error' && (
-                                <View style={styles.errorOverlay}>
-                                    <Text style={styles.errorText}>❌ Errore</Text>
-                                </View>
-                            )}
-
-                            {/* Rimuovi */}
+                    {uploadingImages.map((image, index) => {
+                        const isMainImage = image.url === mainImageUrl;
+                        return (
                             <TouchableOpacity
-                                style={styles.removeButton}
-                                onPress={() => removeImage(index)}
+                                key={index}
+                                style={[
+                                    styles.imageCard,
+                                    isMainImage && styles.mainImageCard
+                                ]}
+                                onPress={() => {
+                                    if (image.status === 'success' && image.url) {
+                                        setAsMainImage(image.url);
+                                    }
+                                }}
+                                disabled={image.status !== 'success'}
                             >
-                                <X size={16} color="#fff" />
+                                <Image
+                                    source={{ uri: image.uri }}
+                                    style={styles.imagePreview}
+                                    resizeMode="cover"
+                                />
+
+                                {/* Badge Immagine Principale */}
+                                {isMainImage && image.status === 'success' && (
+                                    <View style={styles.mainImageBadge}>
+                                        <Star size={16} color="#fff" fill="#fff" />
+                                        <Text style={styles.mainImageText}>Principale</Text>
+                                    </View>
+                                )}
+
+                                {/* Progress Overlay */}
+                                {image.status === 'uploading' && (
+                                    <View style={styles.progressOverlay}>
+                                        <ActivityIndicator size="small" color="#fff" />
+                                        <Text style={styles.progressText}>
+                                            {image.progress}%
+                                        </Text>
+                                        {/* Progress Bar */}
+                                        <View style={styles.progressBarContainer}>
+                                            <View
+                                                style={[
+                                                    styles.progressBar,
+                                                    { width: `${image.progress}%` },
+                                                ]}
+                                            />
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Success */}
+                                {image.status === 'success' && !isMainImage && (
+                                    <View style={styles.successOverlay}>
+                                        <Check size={24} color="#fff" />
+                                    </View>
+                                )}
+
+                                {/* Error */}
+                                {image.status === 'error' && (
+                                    <View style={styles.errorOverlay}>
+                                        <Text style={styles.errorText}>❌ Errore</Text>
+                                    </View>
+                                )}
+
+                                {/* Rimuovi */}
+                                <TouchableOpacity
+                                    style={styles.removeButton}
+                                    onPress={() => removeImage(index)}
+                                >
+                                    <X size={16} color="#fff" />
+                                </TouchableOpacity>
                             </TouchableOpacity>
-                        </View>
-                    ))}
+                        );
+                    })}
                 </View>
             )}
 
             {/* Info */}
             <View style={styles.infoBox}>
                 <Text style={styles.infoText}>
-                    💡 Le foto aiutano a identificare meglio il veicolo e possono essere
-                    utili per la manutenzione
+                    💡 Le foto aiutano a identificare meglio il veicolo. Tocca un'immagine per impostarla come principale.
                 </Text>
             </View>
 
@@ -391,6 +446,12 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         overflow: 'hidden',
         position: 'relative',
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    mainImageCard: {
+        borderColor: '#f59e0b',
+        borderWidth: 3,
     },
     imagePreview: {
         width: '100%',
@@ -448,6 +509,27 @@ const styles = StyleSheet.create({
         height: 32,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    mainImageBadge: {
+        position: 'absolute',
+        bottom: 8,
+        left: 8,
+        right: 8,
+        backgroundColor: '#f59e0b',
+        borderRadius: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    mainImageText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     infoBox: {
         backgroundColor: '#eff6ff',
