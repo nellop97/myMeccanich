@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Star, Phone, Clock, Heart, Navigation } from 'lucide-react-native';
+import { MapPin, Star, Phone, Clock, Heart, Navigation, Search, X } from 'lucide-react-native';
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
 import { Workshop } from '../../types/database.types';
@@ -28,6 +28,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
   const { darkMode, user } = useStore();
   const [loading, setLoading] = useState(false);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [allWorkshops, setAllWorkshops] = useState<Workshop[]>([]);
   const [trustedWorkshops, setTrustedWorkshops] = useState<Workshop[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'trusted' | 'nearby'>('all');
@@ -53,8 +54,9 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
     try {
       setLoading(true);
       const data = await WorkshopService.searchWorkshops({
-        minRating: 3,
+        minRating: 0,
       });
+      setAllWorkshops(data);
       setWorkshops(data);
     } catch (error) {
       console.error('Errore caricamento officine:', error);
@@ -73,23 +75,42 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
     }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      loadWorkshops();
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+
+    if (!query.trim()) {
+      setWorkshops(allWorkshops);
       return;
     }
 
-    try {
-      setLoading(true);
-      const data = await WorkshopService.searchWorkshops({
-        city: searchQuery,
-      });
-      setWorkshops(data);
-    } catch (error) {
-      console.error('Errore ricerca:', error);
-    } finally {
-      setLoading(false);
-    }
+    // Filtra per ricerca case-insensitive su città, provincia, nome e indirizzo
+    const searchLower = query.toLowerCase().trim();
+    const filtered = allWorkshops.filter(workshop => {
+      // Controlli di sicurezza per evitare errori su campi undefined
+      const name = workshop.name?.toLowerCase() || '';
+      const city = workshop.address?.city?.toLowerCase() || '';
+      const province = workshop.address?.province?.toLowerCase() || '';
+      const street = workshop.address?.street?.toLowerCase() || '';
+
+      // Verifica che specializations sia un array prima di usare .some()
+      const hasSpecMatch = Array.isArray(workshop.specializations) &&
+        workshop.specializations.some(spec =>
+          spec?.toLowerCase().includes(searchLower)
+        );
+
+      return name.includes(searchLower) ||
+             city.includes(searchLower) ||
+             province.includes(searchLower) ||
+             street.includes(searchLower) ||
+             hasSpecMatch;
+    });
+
+    setWorkshops(filtered);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setWorkshops(allWorkshops);
   };
 
   const toggleTrusted = async (workshopId: string, isTrusted: boolean) => {
@@ -123,6 +144,10 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
   const renderWorkshopCard = (workshop: Workshop) => {
     const isTrusted = trustedWorkshops.some(w => w.id === workshop.id);
 
+    // Gestisci rating e reviewCount con valori di default sicuri
+    const rating = typeof workshop.rating === 'number' ? workshop.rating : 0;
+    const reviewCount = typeof workshop.reviewCount === 'number' ? workshop.reviewCount : 0;
+
     return (
       <TouchableOpacity
         key={workshop.id}
@@ -133,15 +158,15 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
         <View style={styles.workshopHeader}>
           <View style={styles.workshopInfo}>
             <Text style={[styles.workshopName, { color: theme.text }]} numberOfLines={1}>
-              {workshop.name}
+              {workshop.name || 'Officina'}
             </Text>
             <View style={styles.ratingContainer}>
-              <Star size={16} color="#fbbf24" fill="#fbbf24" />
+              <Star size={16} color="#fbbf24" fill={rating > 0 ? "#fbbf24" : "none"} />
               <Text style={[styles.rating, { color: theme.text }]}>
-                {workshop.rating.toFixed(1)}
+                {rating.toFixed(1)}
               </Text>
               <Text style={[styles.reviewCount, { color: theme.textSecondary }]}>
-                ({workshop.reviewCount} recensioni)
+                ({reviewCount} {reviewCount === 1 ? 'recensione' : 'recensioni'})
               </Text>
             </View>
           </View>
@@ -159,15 +184,17 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
         </View>
 
         {/* Indirizzo */}
-        <View style={styles.addressContainer}>
-          <MapPin size={16} color={theme.textSecondary} />
-          <Text style={[styles.address, { color: theme.textSecondary }]} numberOfLines={1}>
-            {workshop.address.street}, {workshop.address.city}
-          </Text>
-        </View>
+        {workshop.address && (
+          <View style={styles.addressContainer}>
+            <MapPin size={16} color={theme.textSecondary} />
+            <Text style={[styles.address, { color: theme.textSecondary }]} numberOfLines={1}>
+              {workshop.address.street || ''}{workshop.address.street && workshop.address.city ? ', ' : ''}{workshop.address.city || 'Indirizzo non disponibile'}
+            </Text>
+          </View>
+        )}
 
         {/* Specializzazioni */}
-        {workshop.specializations.length > 0 && (
+        {workshop.specializations && workshop.specializations.length > 0 && (
           <View style={styles.specializationsContainer}>
             {workshop.specializations.slice(0, 3).map((spec, index) => (
               <View key={index} style={[styles.specializationBadge, { backgroundColor: theme.primary + '20' }]}>
@@ -195,7 +222,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
 
           <View style={styles.footerItem}>
             <Text style={[styles.bookingsCount, { color: theme.success }]}>
-              {workshop.totalBookings} prenotazioni
+              {typeof workshop.totalBookings === 'number' ? workshop.totalBookings : 0} {typeof workshop.totalBookings === 'number' && workshop.totalBookings === 1 ? 'prenotazione' : 'prenotazioni'}
             </Text>
           </View>
         </View>
@@ -227,16 +254,28 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
       {/* Barra di ricerca */}
       <View style={styles.searchContainer}>
         <View style={[styles.searchBar, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <MapPin size={20} color={theme.textSecondary} />
+          <Search size={20} color={theme.textSecondary} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Cerca per città o provincia..."
+            placeholder="Cerca per nome, città, provincia..."
             placeholderTextColor={theme.textSecondary}
             value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
+            onChangeText={handleSearch}
+            returnKeyType="search"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <X size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* Risultati ricerca */}
+        {searchQuery.length > 0 && (
+          <Text style={[styles.searchResults, { color: theme.textSecondary }]}>
+            {workshops.length} {workshops.length === 1 ? 'risultato' : 'risultati'} trovati
+          </Text>
+        )}
       </View>
 
       {/* Filtri */}
@@ -346,6 +385,14 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  searchResults: {
+    fontSize: 14,
+    marginTop: 8,
+    paddingHorizontal: 4,
   },
   filtersContainer: {
     flexDirection: 'row',

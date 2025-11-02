@@ -12,11 +12,11 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Car, FileText, Clock, AlertCircle, Check } from 'lucide-react-native';
+import { Calendar, Car, FileText, Clock, AlertCircle, Check, ArrowLeft } from 'lucide-react-native';
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
 import BookingService from '../../services/BookingService';
-import VehicleService from '../../services/VehicleService';
+import { VehicleService } from '../../services/VehicleService';
 import { Workshop, Vehicle, WorkshopService as WorkshopServiceType } from '../../types/database.types';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -59,15 +59,22 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user?.uid) {
+      loadData();
+    }
+  }, [user]);
 
   const loadData = async () => {
+    if (!user?.uid) {
+      console.warn('User not authenticated');
+      return;
+    }
+
     try {
       setLoading(true);
       const [workshopData, vehiclesData] = await Promise.all([
         WorkshopService.getWorkshop(workshopId),
-        VehicleService.getInstance().getVehiclesByOwner(user!.uid),
+        VehicleService.getInstance().getUserVehicles(user.uid),
       ]);
 
       setWorkshop(workshopData);
@@ -243,12 +250,9 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
             Nessun veicolo trovato
           </Text>
-          <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: theme.primary }]}
-            onPress={() => navigation.navigate('AddVehicle')}
-          >
-            <Text style={styles.addButtonText}>Aggiungi Veicolo</Text>
-          </TouchableOpacity>
+          <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+            Aggiungi un veicolo dal tuo profilo per poter prenotare servizi
+          </Text>
         </View>
       )}
     </View>
@@ -525,10 +529,20 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
         style={styles.header}
       >
-        <Text style={styles.headerTitle}>Nuova Prenotazione</Text>
-        {workshop && (
-          <Text style={styles.headerSubtitle}>{workshop.name}</Text>
-        )}
+        <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <ArrowLeft size={24} color="#fff" strokeWidth={2} />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Nuova Prenotazione</Text>
+            {workshop && (
+              <Text style={styles.headerSubtitle}>{workshop.name}</Text>
+            )}
+          </View>
+        </View>
       </LinearGradient>
 
       {renderStepIndicator()}
@@ -598,6 +612,20 @@ const styles = StyleSheet.create({
   header: {
     padding: 24,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
@@ -692,16 +720,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
   },
-  addButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   typeButtons: {
     flexDirection: 'row',
