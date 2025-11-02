@@ -16,7 +16,7 @@ import { Calendar, Car, FileText, Clock, AlertCircle, Check, ArrowLeft } from 'l
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
 import BookingService from '../../services/BookingService';
-import VehicleService from '../../services/VehicleService';
+import { VehicleService } from '../../services/VehicleService';
 import { Workshop, Vehicle, WorkshopService as WorkshopServiceType } from '../../types/database.types';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
