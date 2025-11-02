@@ -67,7 +67,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
       setLoading(true);
       const [workshopData, vehiclesData] = await Promise.all([
         WorkshopService.getWorkshop(workshopId),
-        VehicleService.getInstance().getVehiclesByOwner(user!.uid),
+        VehicleService.getInstance().getUserVehicles(user!.uid),
       ]);
 
       setWorkshop(workshopData);
@@ -243,12 +243,9 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
             Nessun veicolo trovato
           </Text>
-          <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: theme.primary }]}
-            onPress={() => navigation.navigate('AddVehicle')}
-          >
-            <Text style={styles.addButtonText}>Aggiungi Veicolo</Text>
-          </TouchableOpacity>
+          <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+            Aggiungi un veicolo dal tuo profilo per poter prenotare servizi
+          </Text>
         </View>
       )}
     </View>
@@ -716,16 +713,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
   },
-  addButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   typeButtons: {
     flexDirection: 'row',
