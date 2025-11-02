@@ -7,6 +7,7 @@ import {
   Text,
   Modal,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   TextInput,
   ScrollView,
@@ -531,16 +532,14 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
       >
-        <TouchableOpacity
-          style={styles.overlayTouchable}
-          activeOpacity={1}
-          onPress={handleClose}
-        >
-          <View style={styles.modalContainer} onStartShouldSetResponder={() => true}>
-            <LinearGradient
-              colors={isDark ? ['#1a1a1a', '#0a0a0a'] : ['#f8f9fa', '#e9ecef']}
-              style={styles.modalContent}
-            >
+        <TouchableWithoutFeedback onPress={handleClose}>
+          <View style={styles.overlayTouchable}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.modalContainer}>
+                <LinearGradient
+                  colors={isDark ? ['#1a1a1a', '#0a0a0a'] : ['#f8f9fa', '#e9ecef']}
+                  style={styles.modalContent}
+                >
               {/* Header */}
               <View style={styles.header}>
                 <View>
@@ -620,8 +619,10 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
                 {step === 'confirm' && renderConfirmStep()}
               </ScrollView>
             </LinearGradient>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </TouchableOpacity>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -630,13 +631,13 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   overlayTouchable: {
     flex: 1,
     width: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
