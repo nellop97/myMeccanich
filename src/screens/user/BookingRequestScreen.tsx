@@ -59,15 +59,22 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user?.uid) {
+      loadData();
+    }
+  }, [user]);
 
   const loadData = async () => {
+    if (!user?.uid) {
+      console.warn('User not authenticated');
+      return;
+    }
+
     try {
       setLoading(true);
       const [workshopData, vehiclesData] = await Promise.all([
         WorkshopService.getWorkshop(workshopId),
-        VehicleService.getInstance().getUserVehicles(user!.uid),
+        VehicleService.getInstance().getUserVehicles(user.uid),
       ]);
 
       setWorkshop(workshopData);
