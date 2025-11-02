@@ -504,3 +504,72 @@ export interface TrustedWorkshop {
   addedAt: Date;
   notes?: string;
 }
+
+// =====================================================
+// 3. SISTEMA PROMEMORIA
+// =====================================================
+
+export interface Reminder {
+  id: string;
+  userId: string;
+  vehicleId: string;
+
+  // Informazioni base
+  title: string;
+  description?: string;
+  type: ReminderType;
+
+  // Scadenze
+  dueDate: Date;
+  dueMileage?: number; // chilometraggio a cui scade
+
+  // Stato
+  isActive: boolean;
+  isCompleted: boolean;
+  completedAt?: Date;
+
+  // Ricorrenza
+  isRecurring: boolean;
+  recurringInterval?: number; // giorni tra una ricorrenza e l'altra
+  recurringUnit?: 'days' | 'weeks' | 'months' | 'years';
+  nextDueDate?: Date;
+  lastCompletedDate?: Date;
+
+  // Notifiche
+  notifyDaysBefore: number; // quanti giorni prima notificare
+  lastNotified?: Date;
+  notificationSent: boolean;
+
+  // Metadata
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Informazioni aggiuntive per specifici tipi
+  relatedMaintenanceId?: string; // per manutenzioni programmate
+  relatedDocumentId?: string; // per documenti con scadenza
+  cost?: number; // costo previsto
+  notes?: string; // note aggiuntive
+}
+
+export type ReminderType =
+  | 'maintenance'     // Manutenzione programmata
+  | 'insurance'       // Scadenza assicurazione
+  | 'tax'            // Bollo auto
+  | 'inspection'     // Revisione
+  | 'tire_change'    // Cambio gomme stagionale
+  | 'oil_change'     // Cambio olio
+  | 'document'       // Scadenza documento
+  | 'custom'         // Promemoria personalizzato
+  | 'other';         // Altro
+
+export interface ReminderTemplate {
+  id: string;
+  type: ReminderType;
+  title: string;
+  description?: string;
+  defaultNotifyDaysBefore: number;
+  defaultRecurringInterval?: number;
+  defaultRecurringUnit?: 'days' | 'weeks' | 'months' | 'years';
+  icon: string;
+  color: string;
+}

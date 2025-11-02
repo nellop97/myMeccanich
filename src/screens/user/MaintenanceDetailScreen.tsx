@@ -13,7 +13,6 @@ import {
   Animated,
   useWindowDimensions,
   RefreshControl,
-  TextInput,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
@@ -29,6 +28,7 @@ import {
   Shield,
   Clock,
   Edit,
+  Trash2,
   Phone,
   TrendingUp,
   Car,
@@ -36,8 +36,6 @@ import {
   AlertCircle,
   CheckCircle,
   ChevronRight,
-  Save,
-  X,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -149,8 +147,6 @@ export default function MaintenanceDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [editedDescription, setEditedDescription] = useState('');
 
   // Responsive
   const isLargeScreen = width >= 768;
@@ -227,41 +223,38 @@ export default function MaintenanceDetailScreen() {
     loadData();
   };
 
-  const handleEditDescription = () => {
-    setEditedDescription(maintenance?.description || '');
-    setIsEditingDescription(true);
-  };
+  const handleDelete = () => {
+    Alert.alert(
+      'Elimina Manutenzione',
+      'Sei sicuro di voler eliminare questa manutenzione? Questa azione non può essere annullata.',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Elimina',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await maintenanceService.updateMaintenanceRecord(maintenanceId, { isVisible: false });
 
-  const handleSaveDescription = async () => {
-    try {
-      setLoading(true);
-      await maintenanceService.updateMaintenanceRecord(maintenanceId, {
-        description: editedDescription
-      });
-
-      // Update local state
-      if (maintenance) {
-        setMaintenance({ ...maintenance, description: editedDescription });
-      }
-
-      setIsEditingDescription(false);
-
-      if (Platform.OS === 'web') {
-        Alert.alert('Successo', 'Descrizione aggiornata con successo');
-      } else {
-        Alert.alert('Successo', 'Descrizione aggiornata con successo');
-      }
-    } catch (error) {
-      console.error('Error updating description:', error);
-      Alert.alert('Errore', 'Impossibile aggiornare la descrizione');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditingDescription(false);
-    setEditedDescription('');
+              if (Platform.OS === 'web') {
+                Alert.alert('Successo', 'Manutenzione eliminata con successo');
+                setTimeout(() => navigation.goBack(), 1000);
+              } else {
+                Alert.alert('Successo', 'Manutenzione eliminata con successo', [
+                  { text: 'OK', onPress: () => navigation.goBack() }
+                ]);
+              }
+            } catch (error) {
+              console.error('Error deleting maintenance:', error);
+              Alert.alert('Errore', 'Impossibile eliminare la manutenzione');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const getTypeColor = (type: string) => {
@@ -388,38 +381,28 @@ export default function MaintenanceDetailScreen() {
           </Text>
         </View>
 
-        {canEdit && !isEditingDescription && (
+        {canEdit && (
           <View style={styles.headerActions}>
             <TouchableOpacity
-              onPress={handleEditDescription}
+              onPress={() => navigation.navigate('EditMaintenance' as never, {
+                maintenanceId,
+                carId
+              } as never)}
               style={[styles.headerButton, {
                 backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                marginRight: 8
               }]}
             >
               <Edit size={20} color={isDark ? '#fff' : '#000'} />
             </TouchableOpacity>
-          </View>
-        )}
-
-        {canEdit && isEditingDescription && (
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              onPress={handleSaveDescription}
-              style={[styles.headerButton, {
-                backgroundColor: 'rgba(76, 175, 80, 0.15)',
-                marginRight: 8
-              }]}
-            >
-              <Save size={20} color="#4CAF50" />
-            </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleCancelEdit}
+              onPress={handleDelete}
               style={[styles.headerButton, {
                 backgroundColor: 'rgba(244, 67, 54, 0.15)'
               }]}
             >
-              <X size={20} color="#F44336" />
+              <Trash2 size={20} color="#F44336" />
             </TouchableOpacity>
           </View>
         )}
@@ -503,35 +486,16 @@ export default function MaintenanceDetailScreen() {
             </View>
           </View>
 
-          {(maintenance.description || isEditingDescription) && (
+          {maintenance.description && (
             <>
               <View style={styles.infoDivider} />
               <View style={styles.descriptionContainer}>
                 <Text style={[styles.infoLabel, { color: isDark ? '#999' : '#666', marginBottom: 8 }]}>
                   Descrizione
                 </Text>
-                {isEditingDescription ? (
-                  <TextInput
-                    value={editedDescription}
-                    onChangeText={setEditedDescription}
-                    multiline
-                    numberOfLines={4}
-                    style={[
-                      styles.descriptionInput,
-                      {
-                        color: isDark ? '#fff' : '#000',
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-                        borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
-                      }
-                    ]}
-                    placeholder="Inserisci una descrizione..."
-                    placeholderTextColor={isDark ? '#666' : '#999'}
-                  />
-                ) : (
-                  <Text style={[styles.descriptionText, { color: isDark ? '#fff' : '#000' }]}>
-                    {maintenance.description}
-                  </Text>
-                )}
+                <Text style={[styles.descriptionText, { color: isDark ? '#fff' : '#000' }]}>
+                  {maintenance.description}
+                </Text>
               </View>
             </>
           )}
@@ -1038,16 +1002,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '500',
-  },
-  descriptionInput: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 100,
-    textAlignVertical: 'top',
   },
 
   // Costs

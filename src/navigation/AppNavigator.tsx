@@ -37,6 +37,8 @@ import OwnershipTransferScreen from '../screens/user/OwnershipTransferScreen';
 import AddFuelScreen from '../screens/user/AddFuelScreen';
 import AddExpenseScreen from '../screens/user/AddExpenseScreen';
 import RemindersListScreen from '../screens/user/RemindersListScreen';
+import AddReminderScreen from '../screens/user/AddReminderScreen';
+import ReminderDetailScreen from '../screens/user/ReminderDetailScreen';
 
 // Vehicle View Request Screens
 import RequestVehicleViewScreen from '../screens/user/RequestVehicleViewScreen';
@@ -664,6 +666,26 @@ export default function AppNavigator() {
                         component={RemindersListScreen}
                         options={{
                             title: 'Promemoria',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="AddReminder"
+                        component={AddReminderScreen}
+                        options={{
+                            title: 'Nuovo Promemoria',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    <Stack.Screen
+                        name="ReminderDetail"
+                        component={ReminderDetailScreen}
+                        options={{
+                            title: 'Dettaglio Promemoria',
                             headerShown: false,
                             animation: 'slide_from_right',
                         }}
