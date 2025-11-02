@@ -85,13 +85,22 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
 
     // Filtra per ricerca case-insensitive su città, provincia, nome e indirizzo
     const searchLower = query.toLowerCase().trim();
-    const filtered = allWorkshops.filter(workshop =>
-      workshop.name?.toLowerCase().includes(searchLower) ||
-      workshop.address?.city?.toLowerCase().includes(searchLower) ||
-      workshop.address?.province?.toLowerCase().includes(searchLower) ||
-      workshop.address?.street?.toLowerCase().includes(searchLower) ||
-      workshop.specializations?.some(spec => spec.toLowerCase().includes(searchLower))
-    );
+    const filtered = allWorkshops.filter(workshop => {
+      // Controlli di sicurezza per evitare errori su campi undefined
+      const name = workshop.name?.toLowerCase() || '';
+      const city = workshop.address?.city?.toLowerCase() || '';
+      const province = workshop.address?.province?.toLowerCase() || '';
+      const street = workshop.address?.street?.toLowerCase() || '';
+      const hasSpecMatch = workshop.specializations?.some(spec =>
+        spec?.toLowerCase().includes(searchLower)
+      ) || false;
+
+      return name.includes(searchLower) ||
+             city.includes(searchLower) ||
+             province.includes(searchLower) ||
+             street.includes(searchLower) ||
+             hasSpecMatch;
+    });
 
     setWorkshops(filtered);
   };
@@ -132,6 +141,10 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
   const renderWorkshopCard = (workshop: Workshop) => {
     const isTrusted = trustedWorkshops.some(w => w.id === workshop.id);
 
+    // Gestisci rating e reviewCount con valori di default sicuri
+    const rating = typeof workshop.rating === 'number' ? workshop.rating : 0;
+    const reviewCount = typeof workshop.reviewCount === 'number' ? workshop.reviewCount : 0;
+
     return (
       <TouchableOpacity
         key={workshop.id}
@@ -142,15 +155,15 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
         <View style={styles.workshopHeader}>
           <View style={styles.workshopInfo}>
             <Text style={[styles.workshopName, { color: theme.text }]} numberOfLines={1}>
-              {workshop.name}
+              {workshop.name || 'Officina'}
             </Text>
             <View style={styles.ratingContainer}>
-              <Star size={16} color="#fbbf24" fill="#fbbf24" />
+              <Star size={16} color="#fbbf24" fill={rating > 0 ? "#fbbf24" : "none"} />
               <Text style={[styles.rating, { color: theme.text }]}>
-                {workshop.rating.toFixed(1)}
+                {rating.toFixed(1)}
               </Text>
               <Text style={[styles.reviewCount, { color: theme.textSecondary }]}>
-                ({workshop.reviewCount} recensioni)
+                ({reviewCount} {reviewCount === 1 ? 'recensione' : 'recensioni'})
               </Text>
             </View>
           </View>
@@ -168,15 +181,17 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
         </View>
 
         {/* Indirizzo */}
-        <View style={styles.addressContainer}>
-          <MapPin size={16} color={theme.textSecondary} />
-          <Text style={[styles.address, { color: theme.textSecondary }]} numberOfLines={1}>
-            {workshop.address.street}, {workshop.address.city}
-          </Text>
-        </View>
+        {workshop.address && (
+          <View style={styles.addressContainer}>
+            <MapPin size={16} color={theme.textSecondary} />
+            <Text style={[styles.address, { color: theme.textSecondary }]} numberOfLines={1}>
+              {workshop.address.street || ''}{workshop.address.street && workshop.address.city ? ', ' : ''}{workshop.address.city || 'Indirizzo non disponibile'}
+            </Text>
+          </View>
+        )}
 
         {/* Specializzazioni */}
-        {workshop.specializations.length > 0 && (
+        {workshop.specializations && workshop.specializations.length > 0 && (
           <View style={styles.specializationsContainer}>
             {workshop.specializations.slice(0, 3).map((spec, index) => (
               <View key={index} style={[styles.specializationBadge, { backgroundColor: theme.primary + '20' }]}>
@@ -204,7 +219,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
 
           <View style={styles.footerItem}>
             <Text style={[styles.bookingsCount, { color: theme.success }]}>
-              {workshop.totalBookings} prenotazioni
+              {typeof workshop.totalBookings === 'number' ? workshop.totalBookings : 0} {typeof workshop.totalBookings === 'number' && workshop.totalBookings === 1 ? 'prenotazione' : 'prenotazioni'}
             </Text>
           </View>
         </View>
