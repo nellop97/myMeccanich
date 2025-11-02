@@ -227,6 +227,8 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
             placeholderTextColor={colors.onSurfaceVariant}
             value={buyerName}
             onChangeText={setBuyerName}
+            autoComplete="name"
+            textContentType="name"
           />
         </View>
 
@@ -240,6 +242,8 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
             onChangeText={setBuyerEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoComplete="email"
+            textContentType="emailAddress"
           />
         </View>
 
@@ -252,6 +256,8 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
             value={buyerPhone}
             onChangeText={setBuyerPhone}
             keyboardType="phone-pad"
+            autoComplete="tel"
+            textContentType="telephoneNumber"
           />
         </View>
       </View>
@@ -465,6 +471,8 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
               keyboardType="numeric"
               secureTextEntry
               maxLength={6}
+              autoComplete="off"
+              textContentType="none"
             />
           </View>
           <Text style={[styles.pinHint, { color: colors.onSurfaceVariant }]}>
