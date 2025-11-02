@@ -1558,24 +1558,24 @@ const styles = StyleSheet.create({
     // LIQUID GLASS HEADER
     // ============================================
     liquidHeader: {
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
+        borderBottomLeftRadius: 36,
+        borderBottomRightRadius: 36,
         overflow: 'hidden',
         borderWidth: 1,
         borderTopWidth: 0,
-        borderColor: 'rgba(255,255,255,0.18)',
+        borderColor: 'rgba(255,255,255,0.2)',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.15,
-                shadowRadius: 20,
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.12,
+                shadowRadius: 24,
             },
             android: {
-                elevation: 8,
+                elevation: 10,
             },
             web: {
-                boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                boxShadow: '0 10px 40px rgba(0,0,0,0.12)',
             },
         }),
     },
@@ -1591,16 +1591,16 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     liquidHeaderGreeting: {
-        fontSize: 28,
-        fontWeight: '700',
-        letterSpacing: -0.6,
-        marginBottom: 4,
+        fontSize: 30,
+        fontWeight: '800',
+        letterSpacing: -0.7,
+        marginBottom: 6,
     },
     liquidHeaderSubtitle: {
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '500',
-        letterSpacing: -0.2,
-        opacity: 0.7,
+        letterSpacing: -0.3,
+        opacity: 0.75,
     },
     liquidSettingsButton: {
         width: 44,
@@ -1697,21 +1697,21 @@ const styles = StyleSheet.create({
     // LIQUID GLASS VEHICLE CARD
     // ============================================
     liquidVehicleCardContainer: {
-        marginBottom: 24,
-        borderRadius: 28,
+        marginBottom: 28,
+        borderRadius: 32,
         overflow: 'hidden',
         ...Platform.select({
             ios: {
                 shadowColor: '#3b82f6',
-                shadowOffset: { width: 0, height: 12 },
-                shadowOpacity: 0.3,
-                shadowRadius: 24,
+                shadowOffset: { width: 0, height: 16 },
+                shadowOpacity: 0.25,
+                shadowRadius: 32,
             },
             android: {
-                elevation: 8,
+                elevation: 12,
             },
             web: {
-                boxShadow: '0 12px 40px rgba(59,130,246,0.3)',
+                boxShadow: '0 16px 48px rgba(59,130,246,0.25)',
             },
         }),
     },
@@ -1798,15 +1798,16 @@ const styles = StyleSheet.create({
     },
     liquidSectionTitle: {
         fontSize: 22,
-        fontWeight: '700',
+        fontWeight: '800',
         letterSpacing: -0.5,
-        marginBottom: 16,
+        marginBottom: 18,
         paddingHorizontal: 4,
     },
     liquidStatsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 14,
+        justifyContent: 'space-between',
     },
     liquidStatCard: {
         flex: 1,
@@ -1864,14 +1865,6 @@ const styles = StyleSheet.create({
         fontWeight: '400',
         color: '#8E8E93',
         letterSpacing: -0.4,
-    },
-
-    // ScrollView
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 20,
     },
 
     // Header
@@ -1942,7 +1935,6 @@ const styles = StyleSheet.create({
     // ScrollView
     scrollView: {
         flex: 1,
-        backgroundColor: '#F2F2F7',
     },
     scrollContent: {
         padding: 24,
@@ -2103,7 +2095,7 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         fontSize: 22,
-        fontWeight: '700',
+        fontWeight: '800',
         color: '#000000',
         marginBottom: 20,
         letterSpacing: -0.5,
@@ -2169,20 +2161,36 @@ const styles = StyleSheet.create({
     quickActions: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 16,
+        gap: 18,
+        justifyContent: 'flex-start',
     },
     quickActionButton: {
         flex: 1,
-        minWidth: 75,
+        minWidth: 80,
+        maxWidth: 110,
         alignItems: 'center',
         gap: 12,
     },
     quickActionIcon: {
         width: 64,
         height: 64,
-        borderRadius: 18,
+        borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.06,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            },
+        }),
     },
     quickActionLabel: {
         fontSize: 14,
@@ -2696,6 +2704,20 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#374151',
         textAlign: 'center',
+    },
+    webActionTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'center',
+        letterSpacing: -0.3,
+    },
+    webActionDescription: {
+        fontSize: 13,
+        fontWeight: '400',
+        color: '#6b7280',
+        textAlign: 'center',
+        marginTop: 4,
     },
 
     // Web Section
