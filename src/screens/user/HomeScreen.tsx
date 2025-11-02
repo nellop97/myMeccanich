@@ -466,8 +466,8 @@ const HomeScreen = () => {
     // RENDER EMPTY STATE
     // ============================================
     if (vehicles.length === 0) {
-        // Web empty state
-        if (isDesktop || Platform.OS === 'web') {
+        // Desktop/Tablet empty state (width >= 1024)
+        if (isDesktop) {
             return (
                 <View style={[styles.webContainer, { backgroundColor: themeColors.background }]}>
                     <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
@@ -584,9 +584,9 @@ const HomeScreen = () => {
     }
 
     // ============================================
-    // RENDER WEB LAYOUT (Desktop with vehicles)
+    // RENDER DESKTOP LAYOUT (width >= 1024, with vehicles)
     // ============================================
-    if (isDesktop || Platform.OS === 'web') {
+    if (isDesktop) {
         return (
             <View style={[styles.webContainer, { backgroundColor: themeColors.background }]}>
                 <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
