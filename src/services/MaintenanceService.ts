@@ -42,34 +42,164 @@ export class MaintenanceService {
     userId: string
   ): Promise<MaintenanceRecord[]> {
     try {
+      console.log('🔍 Getting maintenance history for vehicleId:', vehicleId);
+      console.log('🔍 User ID:', userId);
+
       // Log accesso
       await this.security.logDataAccess(userId, vehicleId, 'view_maintenance');
 
-      const q = query(
+      // Prima prova una query semplice senza orderBy per vedere se ci sono record
+      const simpleQuery = query(
         collection(db, this.maintenanceCollection),
         where('vehicleId', '==', vehicleId),
-        where('isVisible', '==', true),
-        orderBy('date', 'desc')
+        where('isVisible', '==', true)
       );
 
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          date: data.date?.toDate(),
-          createdAt: data.createdAt?.toDate(),
-          updatedAt: data.updatedAt?.toDate(),
-          nextServiceDate: data.nextServiceDate?.toDate(),
-          warrantyExpiry: data.warrantyExpiry?.toDate()
-        } as MaintenanceRecord;
-      });
-    } catch (error) {
-      console.error('Error getting maintenance history:', error);
+      console.log('🔍 Executing simple query without orderBy...');
+      const simpleSnapshot = await getDocs(simpleQuery);
+      console.log('📊 Simple query found', simpleSnapshot.size, 'records');
+
+      if (simpleSnapshot.size === 0) {
+        console.warn('⚠️ No records found for vehicleId:', vehicleId);
+        console.log('💡 Check if records exist with vehicleId:', vehicleId);
+
+        // Query per vedere TUTTI i record senza filtri
+        const allRecordsQuery = query(
+          collection(db, this.maintenanceCollection),
+          limit(10)
+        );
+        const allSnapshot = await getDocs(allRecordsQuery);
+        console.log('📊 Total records in collection:', allSnapshot.size);
+
+        if (allSnapshot.size > 0) {
+          console.log('📋 Sample records:');
+          allSnapshot.docs.slice(0, 3).forEach(doc => {
+            const data = doc.data();
+            console.log(`  - ID: ${doc.id}, vehicleId: ${data.vehicleId}, isVisible: ${data.isVisible}`);
+          });
+        }
+
+        return [];
+      }
+
+      // Se ci sono record, prova con orderBy
+      try {
+        console.log('🔍 Executing query with orderBy...');
+        const q = query(
+          collection(db, this.maintenanceCollection),
+          where('vehicleId', '==', vehicleId),
+          where('isVisible', '==', true),
+          orderBy('date', 'desc')
+        );
+
+        const querySnapshot = await getDocs(q);
+        console.log('✅ Query with orderBy successful, found', querySnapshot.size, 'records');
+
+        return querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            date: data.date?.toDate(),
+            createdAt: data.createdAt?.toDate(),
+            updatedAt: data.updatedAt?.toDate(),
+            nextServiceDate: data.nextServiceDate?.toDate(),
+            warrantyExpiry: data.warrantyExpiry?.toDate()
+          } as MaintenanceRecord;
+        });
+      } catch (orderByError: any) {
+        console.error('❌ Query with orderBy failed:', orderByError.message);
+
+        if (orderByError.message?.includes('index')) {
+          console.error('🔴 MISSING INDEX! You need to create a composite index in Firestore.');
+          console.error('🔗 Index URL should be in the error message above.');
+          console.error('📝 Required index: vehicleId (Ascending) + isVisible (Ascending) + date (Descending)');
+        }
+
+        // Fallback: restituisci i record senza ordinamento
+        console.log('⚠️ Returning unordered records as fallback');
+        return simpleSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            date: data.date?.toDate(),
+            createdAt: data.createdAt?.toDate(),
+            updatedAt: data.updatedAt?.toDate(),
+            nextServiceDate: data.nextServiceDate?.toDate(),
+            warrantyExpiry: data.warrantyExpiry?.toDate()
+          } as MaintenanceRecord;
+        }).sort((a, b) => {
+          // Ordina localmente per data
+          return b.date.getTime() - a.date.getTime();
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Error getting maintenance history:', error);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
       throw error;
     }
+  }
+
+  // Helper per pulire i dati prima dell'invio a Firestore
+  private sanitizeData(data: any): any {
+    const sanitized: any = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      // Salta campi undefined
+      if (value === undefined) continue;
+
+      // Salta campi null (opzionale, dipende dalla logica)
+      // if (value === null) continue;
+
+      // Salta campi NaN
+      if (typeof value === 'number' && isNaN(value)) continue;
+
+      // Salta campi Infinity
+      if (value === Infinity || value === -Infinity) continue;
+
+      // Gestisci array
+      if (Array.isArray(value)) {
+        // Salta array vuoti per campi opzionali (parts, documents)
+        if (value.length === 0 && (key === 'parts' || key === 'documents')) {
+          continue;
+        }
+        // Sanitizza ogni elemento dell'array
+        const cleanedArray = value
+          .map(item => typeof item === 'object' && item !== null ? this.sanitizeData(item) : item)
+          .filter(item => item !== undefined && item !== null);
+
+        if (cleanedArray.length > 0) {
+          sanitized[key] = cleanedArray;
+        }
+      }
+      // Gestisci Timestamp di Firebase (lascialo com'è)
+      else if (value && typeof value === 'object' &&
+               (value.constructor?.name === 'Timestamp' ||
+                value.toDate !== undefined ||
+                value.seconds !== undefined)) {
+        sanitized[key] = value;
+      }
+      // Gestisci oggetti nested
+      else if (value && typeof value === 'object') {
+        const cleaned = this.sanitizeData(value);
+        // Solo se l'oggetto pulito ha almeno una proprietà
+        if (Object.keys(cleaned).length > 0) {
+          sanitized[key] = cleaned;
+        }
+      }
+      // Gestisci stringhe vuote (opzionale)
+      else if (typeof value === 'string' && value.trim() === '') {
+        continue; // Salta stringhe vuote
+      }
+      // Aggiungi valore valido
+      else {
+        sanitized[key] = value;
+      }
+    }
+
+    return sanitized;
   }
 
   // Aggiungi record manutenzione
@@ -78,22 +208,151 @@ export class MaintenanceService {
   ): Promise<string> {
     try {
       const docRef = doc(collection(db, this.maintenanceCollection));
-      
+
+      console.log('=== MAINTENANCE RECORD DEBUG ===');
+      console.log('Original record:', JSON.stringify(record, null, 2));
+
+      // Pulisci i dati prima dell'invio
+      const cleanedRecord = this.sanitizeData(record);
+
+      console.log('Cleaned record:', JSON.stringify(cleanedRecord, null, 2));
+
       const maintenanceRecord = {
-        ...record,
+        ...cleanedRecord,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         isVisible: true
       };
 
-      await setDoc(docRef, maintenanceRecord);
+      // Log dettagliato di ogni campo
+      Object.entries(maintenanceRecord).forEach(([key, value]) => {
+        console.log(`Field "${key}":`, typeof value, value);
+      });
+
+      console.log('Final record to Firestore:', maintenanceRecord);
+      console.log('=== END DEBUG ===');
+
+      console.log('Calling setDoc with docId:', docRef.id);
+
+      // Helper per convertire Date in Timestamp
+      const convertDateToTimestamp = (dateValue: any) => {
+        if (!dateValue) return null;
+
+        // Se è già un Timestamp di Firebase, restituiscilo
+        if (dateValue && typeof dateValue === 'object' &&
+            (dateValue.constructor?.name === 'Timestamp' || dateValue.seconds !== undefined)) {
+          return dateValue;
+        }
+
+        // Se è un Date JavaScript, convertilo
+        if (dateValue instanceof Date) {
+          return Timestamp.fromDate(dateValue);
+        }
+
+        // Se è una stringa, prova a parsarla
+        if (typeof dateValue === 'string') {
+          const parsed = new Date(dateValue);
+          if (!isNaN(parsed.getTime())) {
+            return Timestamp.fromDate(parsed);
+          }
+        }
+
+        return null;
+      };
+
+      // TEST: Prova con dati minimali, convertendo tutte le date
+      const minimalRecord: any = {
+        vehicleId: cleanedRecord.vehicleId,
+        ownerId: cleanedRecord.ownerId,
+        type: cleanedRecord.type,
+        description: cleanedRecord.description,
+        date: convertDateToTimestamp(cleanedRecord.date),
+        mileage: cleanedRecord.mileage,
+        cost: cleanedRecord.cost || 0,
+        warranty: cleanedRecord.warranty || false,
+        isVisible: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      // Aggiungi campi opzionali se presenti, convertendo le date
+      if (cleanedRecord.workshopName) minimalRecord.workshopName = cleanedRecord.workshopName;
+      if (cleanedRecord.workshopId) minimalRecord.workshopId = cleanedRecord.workshopId;
+      if (cleanedRecord.mechanicName) minimalRecord.mechanicName = cleanedRecord.mechanicName;
+      if (cleanedRecord.notes) minimalRecord.notes = cleanedRecord.notes;
+      if (cleanedRecord.laborCost) minimalRecord.laborCost = cleanedRecord.laborCost;
+      if (cleanedRecord.partsCost) minimalRecord.partsCost = cleanedRecord.partsCost;
+
+      // Converti date opzionali
+      if (cleanedRecord.warrantyExpiry) {
+        minimalRecord.warrantyExpiry = convertDateToTimestamp(cleanedRecord.warrantyExpiry);
+      }
+      if (cleanedRecord.nextServiceDate) {
+        minimalRecord.nextServiceDate = convertDateToTimestamp(cleanedRecord.nextServiceDate);
+      }
+
+      // Aggiungi array di parts se presente
+      if (cleanedRecord.parts && Array.isArray(cleanedRecord.parts) && cleanedRecord.parts.length > 0) {
+        minimalRecord.parts = cleanedRecord.parts;
+      } else {
+        minimalRecord.parts = [];
+      }
+
+      // Aggiungi array di documents se presente
+      if (cleanedRecord.documents && Array.isArray(cleanedRecord.documents) && cleanedRecord.documents.length > 0) {
+        minimalRecord.documents = cleanedRecord.documents;
+      } else {
+        minimalRecord.documents = [];
+      }
+
+      console.log('MINIMAL RECORD TEST:', minimalRecord);
+      console.log('Date type:', minimalRecord.date?.constructor?.name);
+      if (minimalRecord.warrantyExpiry) {
+        console.log('WarrantyExpiry type:', minimalRecord.warrantyExpiry?.constructor?.name);
+      }
+      if (minimalRecord.nextServiceDate) {
+        console.log('NextServiceDate type:', minimalRecord.nextServiceDate?.constructor?.name);
+      }
+
+      try {
+        await setDoc(docRef, minimalRecord);
+        console.log('✅ setDoc with minimal record completed successfully!');
+      } catch (setDocError: any) {
+        console.error('❌ setDoc failed with minimal record');
+        console.error('Error:', setDocError);
+        console.error('Error code:', setDocError?.code);
+        console.error('Error message:', setDocError?.message);
+
+        // Prova con Timestamp invece di serverTimestamp
+        console.log('Trying with Timestamp.now() instead of serverTimestamp...');
+        const withTimestamp = {
+          ...minimalRecord,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+        await setDoc(docRef, withTimestamp);
+        console.log('✅ Worked with Timestamp.now()!');
+      }
 
       // Aggiorna contatore manutenzioni del veicolo
-      await this.updateVehicleMaintenanceCount(record.vehicleId);
+      // TEMPORANEAMENTE COMMENTATO PER DEBUG
+      try {
+        console.log('Updating vehicle maintenance count...');
+        await this.updateVehicleMaintenanceCount(record.vehicleId);
+        console.log('✅ Vehicle maintenance count updated!');
+      } catch (countError) {
+        console.warn('⚠️ Failed to update maintenance count, but record was saved:', countError);
+        // Non bloccare il salvataggio se il contatore fallisce
+      }
 
       return docRef.id;
-    } catch (error) {
+    } catch (error: any) {
+      console.error('=== FIRESTORE ERROR ===');
       console.error('Error adding maintenance record:', error);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error('=== END ERROR ===');
       throw error;
     }
   }
@@ -105,13 +364,48 @@ export class MaintenanceService {
   ): Promise<void> {
     try {
       const docRef = doc(db, this.maintenanceCollection, recordId);
-      
+
+      // Converti Date in Timestamp per tutti i campi data
+      const sanitizedUpdates: any = { ...updates };
+
+      // Helper per convertire Date in Timestamp
+      const convertDateToTimestamp = (dateValue: any) => {
+        if (!dateValue) return null;
+        if (dateValue && typeof dateValue === 'object' &&
+            (dateValue.constructor?.name === 'Timestamp' || dateValue.seconds !== undefined)) {
+          return dateValue;
+        }
+        if (dateValue instanceof Date) {
+          return Timestamp.fromDate(dateValue);
+        }
+        if (typeof dateValue === 'string') {
+          const parsed = new Date(dateValue);
+          if (!isNaN(parsed.getTime())) {
+            return Timestamp.fromDate(parsed);
+          }
+        }
+        return null;
+      };
+
+      // Converti campi data se presenti
+      if (sanitizedUpdates.date) {
+        sanitizedUpdates.date = convertDateToTimestamp(sanitizedUpdates.date);
+      }
+      if (sanitizedUpdates.warrantyExpiry) {
+        sanitizedUpdates.warrantyExpiry = convertDateToTimestamp(sanitizedUpdates.warrantyExpiry);
+      }
+      if (sanitizedUpdates.nextServiceDate) {
+        sanitizedUpdates.nextServiceDate = convertDateToTimestamp(sanitizedUpdates.nextServiceDate);
+      }
+
       await updateDoc(docRef, {
-        ...updates,
+        ...sanitizedUpdates,
         updatedAt: serverTimestamp()
       });
+
+      console.log('✅ Maintenance record updated successfully');
     } catch (error) {
-      console.error('Error updating maintenance record:', error);
+      console.error('❌ Error updating maintenance record:', error);
       throw error;
     }
   }
@@ -263,15 +557,27 @@ export class MaintenanceService {
   private async updateVehicleMaintenanceCount(vehicleId: string): Promise<void> {
     try {
       const records = await this.getVehicleMaintenanceHistory(vehicleId, 'system');
-      
+
       const vehicleRef = doc(db, 'vehicles', vehicleId);
-      await updateDoc(vehicleRef, {
+
+      // Prepara i dati da aggiornare
+      const updateData: any = {
         maintenanceCount: records.length,
-        lastMaintenanceDate: records[0]?.date || null,
         updatedAt: serverTimestamp()
-      });
+      };
+
+      // Solo se ci sono record, aggiungi la data dell'ultima manutenzione
+      if (records.length > 0 && records[0]?.date) {
+        // Converti Date in Timestamp di Firebase
+        updateData.lastMaintenanceDate = Timestamp.fromDate(records[0].date);
+      }
+
+      console.log('Updating vehicle with data:', updateData);
+      await updateDoc(vehicleRef, updateData);
+      console.log('✅ Vehicle maintenance count updated successfully');
     } catch (error) {
-      console.error('Error updating vehicle maintenance count:', error);
+      console.error('❌ Error updating vehicle maintenance count:', error);
+      // Non bloccare il flusso, solo logga l'errore
     }
   }
 }

@@ -43,8 +43,7 @@ const AddFuelScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { carId } = route.params as RouteParams;
-    const { darkMode } = useStore();
-    const { colors } = useAppThemeManager();
+    const { colors, isDark } = useAppThemeManager();
 
     const [formData, setFormData] = useState({
         date: new Date(),
@@ -62,15 +61,6 @@ const AddFuelScreen = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [consumption, setConsumption] = useState<{kmPerLiter?: number, costPer100km?: number}>({});
-
-    const theme = {
-        background: darkMode ? '#121212' : '#f5f5f5',
-        cardBackground: darkMode ? '#1e1e1e' : '#ffffff',
-        text: darkMode ? '#ffffff' : '#000000',
-        textSecondary: darkMode ? '#a0a0a0' : '#666666',
-        primary: '#007AFF',
-        border: darkMode ? '#333333' : '#e0e0e0',
-    };
 
     const updateField = (field: string, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -159,12 +149,12 @@ const AddFuelScreen = () => {
     };
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-            <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.outline }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()}>
-                    <ArrowLeft size={24} color={theme.text} />
+                    <ArrowLeft size={24} color={colors.onSurface} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>Nuovo Rifornimento</Text>
+                <Text style={[styles.headerTitle, { color: colors.onSurface }]}>Nuovo Rifornimento</Text>
                 <View style={{ width: 24 }} />
             </View>
 
@@ -175,11 +165,11 @@ const AddFuelScreen = () => {
                 <ScrollView contentContainerStyle={styles.content}>
                     {/* Data */}
                     <TouchableOpacity
-                        style={[styles.dateButton, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                        style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.outline }]}
                         onPress={() => setShowDatePicker(true)}
                     >
-                        <Calendar size={20} color={theme.primary} />
-                        <Text style={[styles.dateText, { color: theme.text }]}>
+                        <Calendar size={20} color={colors.primary} />
+                        <Text style={[styles.dateText, { color: colors.onSurface }]}>
                             {formData.date.toLocaleDateString('it-IT')}
                         </Text>
                     </TouchableOpacity>
@@ -192,8 +182,8 @@ const AddFuelScreen = () => {
                                 style={[
                                     styles.fuelTypeButton,
                                     {
-                                        backgroundColor: formData.fuelType === type.id ? theme.primary : theme.cardBackground,
-                                        borderColor: theme.border
+                                        backgroundColor: formData.fuelType === type.id ? colors.primary : colors.surface,
+                                        borderColor: colors.outline
                                     }
                                 ]}
                                 onPress={() => updateField('fuelType', type.id)}
@@ -201,7 +191,7 @@ const AddFuelScreen = () => {
                                 <Text style={styles.fuelTypeIcon}>{type.icon}</Text>
                                 <Text style={[
                                     styles.fuelTypeLabel,
-                                    { color: formData.fuelType === type.id ? '#fff' : theme.text }
+                                    { color: formData.fuelType === type.id ? '#fff' : colors.onSurface }
                                 ]}>
                                     {type.label}
                                 </Text>
@@ -211,13 +201,13 @@ const AddFuelScreen = () => {
 
                     {/* Litri */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Litri Riforniti *</Text>
+                        <Text style={[styles.label, { color: colors.onSurface }]}>Litri Riforniti *</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: theme.cardBackground, color: theme.text, borderColor: errors.liters ? '#ef4444' : theme.border }]}
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: errors.liters ? '#ef4444' : colors.outline }]}
                             value={formData.liters}
                             onChangeText={(text) => updateField('liters', text)}
                             placeholder="es. 45.50"
-                            placeholderTextColor={theme.textSecondary}
+                            placeholderTextColor={colors.onSurfaceVariant}
                             keyboardType="decimal-pad"
                         />
                         {errors.liters && <Text style={styles.errorText}>{errors.liters}</Text>}
@@ -225,13 +215,13 @@ const AddFuelScreen = () => {
 
                     {/* Costo Totale */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Costo Totale (€) *</Text>
+                        <Text style={[styles.label, { color: colors.onSurface }]}>Costo Totale (€) *</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: theme.cardBackground, color: theme.text, borderColor: errors.totalCost ? '#ef4444' : theme.border }]}
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: errors.totalCost ? '#ef4444' : colors.outline }]}
                             value={formData.totalCost}
                             onChangeText={(text) => updateField('totalCost', text)}
                             placeholder="es. 75.00"
-                            placeholderTextColor={theme.textSecondary}
+                            placeholderTextColor={colors.onSurfaceVariant}
                             keyboardType="decimal-pad"
                         />
                         {errors.totalCost && <Text style={styles.errorText}>{errors.totalCost}</Text>}
@@ -239,13 +229,13 @@ const AddFuelScreen = () => {
 
                     {/* Prezzo al Litro (auto-calcolato) */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Prezzo al Litro (€)</Text>
+                        <Text style={[styles.label, { color: colors.onSurface }]}>Prezzo al Litro (€)</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: theme.cardBackground, color: theme.text, borderColor: theme.border }]}
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={formData.pricePerLiter}
                             onChangeText={(text) => updateField('pricePerLiter', text)}
                             placeholder="Calcolato automaticamente"
-                            placeholderTextColor={theme.textSecondary}
+                            placeholderTextColor={colors.onSurfaceVariant}
                             keyboardType="decimal-pad"
                             editable={false}
                         />
@@ -253,13 +243,13 @@ const AddFuelScreen = () => {
 
                     {/* Chilometraggio */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Chilometraggio Attuale *</Text>
+                        <Text style={[styles.label, { color: colors.onSurface }]}>Chilometraggio Attuale *</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: theme.cardBackground, color: theme.text, borderColor: errors.currentMileage ? '#ef4444' : theme.border }]}
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: errors.currentMileage ? '#ef4444' : colors.outline }]}
                             value={formData.currentMileage}
                             onChangeText={(text) => updateField('currentMileage', text)}
                             placeholder="es. 45000"
-                            placeholderTextColor={theme.textSecondary}
+                            placeholderTextColor={colors.onSurfaceVariant}
                             keyboardType="number-pad"
                         />
                         {errors.currentMileage && <Text style={styles.errorText}>{errors.currentMileage}</Text>}
@@ -267,37 +257,37 @@ const AddFuelScreen = () => {
 
                     {/* Stazione di Servizio */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Stazione di Servizio</Text>
+                        <Text style={[styles.label, { color: colors.onSurface }]}>Stazione di Servizio</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: theme.cardBackground, color: theme.text, borderColor: theme.border }]}
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={formData.gasStation}
                             onChangeText={(text) => updateField('gasStation', text)}
                             placeholder="es. Eni"
-                            placeholderTextColor={theme.textSecondary}
+                            placeholderTextColor={colors.onSurfaceVariant}
                         />
                     </View>
 
                     {/* Località */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Località</Text>
+                        <Text style={[styles.label, { color: colors.onSurface }]}>Località</Text>
                         <TextInput
-                            style={[styles.input, { backgroundColor: theme.cardBackground, color: theme.text, borderColor: theme.border }]}
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={formData.location}
                             onChangeText={(text) => updateField('location', text)}
                             placeholder="es. Milano"
-                            placeholderTextColor={theme.textSecondary}
+                            placeholderTextColor={colors.onSurfaceVariant}
                         />
                     </View>
 
                     {/* Note */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: theme.text }]}>Note</Text>
+                        <Text style={[styles.label, { color: colors.onSurface }]}>Note</Text>
                         <TextInput
-                            style={[styles.input, styles.textArea, { backgroundColor: theme.cardBackground, color: theme.text, borderColor: theme.border }]}
+                            style={[styles.input, styles.textArea, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={formData.notes}
                             onChangeText={(text) => updateField('notes', text)}
                             placeholder="Note aggiuntive..."
-                            placeholderTextColor={theme.textSecondary}
+                            placeholderTextColor={colors.onSurfaceVariant}
                             multiline
                             numberOfLines={3}
                         />
@@ -305,7 +295,7 @@ const AddFuelScreen = () => {
 
                     {/* Pulsante Salva */}
                     <TouchableOpacity
-                        style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                        style={[styles.saveButton, { backgroundColor: colors.primary }]}
                         onPress={handleSubmit}
                         disabled={isLoading}
                     >

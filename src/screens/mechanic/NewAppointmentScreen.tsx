@@ -266,6 +266,8 @@ const NewAppointmentScreen = () => {
                 ownerEmail: selectedCustomer.email,
                 ownerPhone: selectedCustomer.phone || null,
                 workshopId: user.id,
+                mechanicId: user.id, // Aggiungi anche mechanicId per compatibilità
+                status: 'in_progress', // Stato della riparazione
                 entryDate: now,
                 isActive: true,
                 createdAt: serverTimestamp(),
@@ -297,7 +299,7 @@ const NewAppointmentScreen = () => {
             Alert.alert(
                 'Successo!',
                 `${vehicleData.make} ${vehicleData.model} aggiunto all'officina`,
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
+                [{ text: 'OK', onPress: () => navigation.navigate('MechanicDashboard' as never) }]
             );
         } catch (error: any) {
             console.error('❌ Errore salvataggio:', error);

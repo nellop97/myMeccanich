@@ -68,11 +68,10 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
   // Usa l'hook per le statistiche reali
   const { stats: dashboardStats, recentActivity, isLoading, error, refreshStats } = useMechanicStats();
 
-  // Funzione placeholder per la navigazione alla schermata delle auto in officina
+  // Navigazione alla schermata delle auto in officina
   const goToWorkshopCars = () => {
     console.log("Navigating to workshop cars screen...");
-    // Qui andrebbe la navigazione effettiva, es: navigation.navigate('WorkshopCarsScreen');
-    // Per ora, simuliamo solo un log.
+    navigation.navigate('AllCarsInWorkshop' as never);
   };
 
   // Statistiche principali
@@ -117,6 +116,15 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
 
   // Quick Actions
   const quickActions: QuickAction[] = [
+    {
+      id: 'booking_requests',
+      title: 'Prenotazioni',
+      subtitle: 'Gestisci richieste clienti',
+      icon: 'calendar-clock',
+      color: '#8b5cf6',
+      gradient: ['#8b5cf6', '#7c3aed'],
+      onPress: () => navigation.navigate('MechanicBookings'),
+    },
     {
       id: 'add_car',
       title: 'Nuova Auto',

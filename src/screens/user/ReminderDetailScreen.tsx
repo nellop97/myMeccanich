@@ -1,7 +1,7 @@
-// src/screens/user/AddReminderScreen.tsx
-// Schermata creazione promemoria con Apple Liquid Glass Design
+// src/screens/user/ReminderDetailScreen.tsx
+// Schermata dettaglio/modifica promemoria con Apple Liquid Glass Design
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,8 @@ import {
   Info,
   Gauge,
   DollarSign,
+  Download,
+  Trash2,
   Clock,
 } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -41,7 +43,9 @@ import { BlurView } from 'expo-blur';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
 import ReminderService from '../../services/ReminderService';
-import { ReminderType } from '../../types/database.types';
+import { Reminder, ReminderType } from '../../types/database.types';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 // ============================================
 // GLASS CARD COMPONENT
@@ -84,46 +88,76 @@ const GlassCard = ({ children, style }: any) => {
   );
 };
 
-const AddReminderScreen = () => {
+const ReminderDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { colors, isDark } = useAppThemeManager();
   const { vehicles } = useUserData();
   const { width } = useWindowDimensions();
 
-  const preselectedVehicleId = (route.params as any)?.vehicleId;
+  const reminderId = (route.params as any)?.reminderId;
 
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reminder, setReminder] = useState<Reminder | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Form data
-  const [vehicleId, setVehicleId] = useState(preselectedVehicleId || vehicles[0]?.id || '');
+  const [vehicleId, setVehicleId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<ReminderType>('maintenance');
-  const [dueDate, setDueDate] = useState(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow;
-  });
+  const [dueDate, setDueDate] = useState(new Date());
   const [dueMileage, setDueMileage] = useState('');
   const [cost, setCost] = useState('');
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringInterval, setRecurringInterval] = useState(1);
-  const [recurringUnit, setRecurringUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('years');
+  const [recurringInterval, setRecurringInterval] = useState(365);
+  const [recurringUnit, setRecurringUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('days');
   const [notifyDaysBefore, setNotifyDaysBefore] = useState(7);
 
   const isLargeScreen = width >= 768;
   const isWeb = Platform.OS === 'web';
 
-  const handleSave = async () => {
-    if (!vehicleId) {
-      Alert.alert('Errore', 'Seleziona un veicolo');
-      return;
-    }
+  useEffect(() => {
+    loadReminder();
+  }, [reminderId]);
 
+  const loadReminder = async () => {
+    try {
+      setLoading(true);
+      const data = await ReminderService.getReminderById(reminderId);
+
+      if (!data) {
+        Alert.alert('Errore', 'Promemoria non trovato');
+        navigation.goBack();
+        return;
+      }
+
+      setReminder(data);
+      setVehicleId(data.vehicleId);
+      setTitle(data.title);
+      setDescription(data.description || '');
+      setType(data.type);
+      setDueDate(data.dueDate);
+      setDueMileage(data.dueMileage?.toString() || '');
+      setCost(data.cost?.toString() || '');
+      setNotes(data.notes || '');
+      setIsActive(data.isActive);
+      setIsRecurring(data.isRecurring);
+      setRecurringInterval(data.recurringInterval || 365);
+      setRecurringUnit(data.recurringUnit || 'days');
+      setNotifyDaysBefore(data.notifyDaysBefore);
+    } catch (error) {
+      console.error('Errore caricamento promemoria:', error);
+      Alert.alert('Errore', 'Impossibile caricare il promemoria');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Errore', 'Inserisci un titolo per il promemoria');
       return;
@@ -132,43 +166,115 @@ const AddReminderScreen = () => {
     try {
       setSaving(true);
 
-      const reminderData: any = {
+      const updates: Partial<Reminder> = {
         vehicleId,
         title: title.trim(),
         type,
         dueDate,
         isActive,
-        isCompleted: false,
         isRecurring,
         notifyDaysBefore,
-        notificationSent: false,
       };
 
       // Aggiungi campi opzionali solo se presenti
-      if (description.trim()) reminderData.description = description.trim();
-      if (dueMileage) reminderData.dueMileage = parseInt(dueMileage);
-      if (cost) reminderData.cost = parseFloat(cost);
-      if (notes.trim()) reminderData.notes = notes.trim();
+      if (description.trim()) {
+        updates.description = description.trim();
+      }
+      if (dueMileage) {
+        updates.dueMileage = parseInt(dueMileage);
+      }
+      if (cost) {
+        updates.cost = parseFloat(cost);
+      }
+      if (notes.trim()) {
+        updates.notes = notes.trim();
+      }
 
       // Campi ricorrenza
       if (isRecurring) {
-        reminderData.recurringInterval = recurringInterval;
-        reminderData.recurringUnit = recurringUnit;
+        updates.recurringInterval = recurringInterval;
+        updates.recurringUnit = recurringUnit;
       }
 
-      await ReminderService.createReminder(reminderData);
+      await ReminderService.updateReminder(reminderId, updates);
 
-      Alert.alert('Successo', 'Promemoria creato con successo', [
+      Alert.alert('Successo', 'Promemoria aggiornato', [
         {
           text: 'OK',
           onPress: () => navigation.goBack(),
         },
       ]);
     } catch (error) {
-      console.error('Errore creazione promemoria:', error);
-      Alert.alert('Errore', 'Impossibile creare il promemoria');
+      console.error('Errore salvataggio promemoria:', error);
+      Alert.alert('Errore', 'Impossibile salvare il promemoria');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Elimina Promemoria',
+      `Sei sicuro di voler eliminare "${title}"?`,
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Elimina',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await ReminderService.deleteReminder(reminderId);
+              Alert.alert('Successo', 'Promemoria eliminato');
+              navigation.goBack();
+            } catch (error) {
+              Alert.alert('Errore', 'Impossibile eliminare il promemoria');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const exportToCalendar = async () => {
+    if (!reminder) return;
+
+    try {
+      const vehicle = vehicles.find(v => v.id === vehicleId);
+      const vehicleName = vehicle ? `${vehicle.make} ${vehicle.model}` : 'Veicolo';
+
+      const icsContent = ReminderService.generateICSFile(reminder, vehicleName);
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `promemoria-${title.replace(/\s+/g, '-')}.ics`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        Alert.alert('Successo', 'File calendario scaricato');
+      } else {
+        const fileName = `promemoria-${title.replace(/\s+/g, '-')}.ics`;
+        const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+
+        await FileSystem.writeAsStringAsync(fileUri, icsContent, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'text/calendar',
+            dialogTitle: 'Aggiungi al calendario',
+            UTI: 'public.calendar-event',
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Errore export calendario:', error);
+      Alert.alert('Errore', 'Impossibile esportare il promemoria');
     }
   };
 
@@ -202,23 +308,18 @@ const AddReminderScreen = () => {
     { value: 30, label: '1 mese prima' },
   ];
 
-  // Suggerimenti per tipo
-  const getSuggestionsForType = (type: string): string[] => {
-    const suggestions: Record<string, string[]> = {
-      maintenance: ['Tagliando completo', 'Cambio olio motore', 'Cambio filtri', 'Controllo freni'],
-      insurance: ['Rinnovo RCA', 'Rinnovo Kasko', 'Scadenza polizza'],
-      tax: ['Pagamento bollo auto', 'Tassa di circolazione'],
-      inspection: ['Revisione ministeriale', 'Controllo tecnico'],
-      tire_change: ['Cambio gomme estive', 'Cambio gomme invernali'],
-      oil_change: ['Cambio olio motore', 'Sostituzione filtro olio'],
-      document: ['Scadenza patente', 'Rinnovo certificato'],
-      custom: [],
-      other: [],
-    };
-    return suggestions[type] || [];
-  };
-
-  const suggestions = getSuggestionsForType(type);
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <LinearGradient
+          colors={isDark ? ['#1a1a1a', '#0a0a0a'] : ['#f8f9fa', '#e9ecef']}
+          style={styles.gradient}
+        >
+          <ActivityIndicator size="large" color={colors.primary} />
+        </LinearGradient>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -233,8 +334,16 @@ const AddReminderScreen = () => {
               <ArrowLeft size={24} color={colors.onSurface} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
-              Nuovo Promemoria
+              Dettaglio Promemoria
             </Text>
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={exportToCalendar} style={styles.iconButton}>
+              <Download size={22} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDelete} style={styles.iconButton}>
+              <Trash2 size={22} color={colors.error} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -321,28 +430,6 @@ const AddReminderScreen = () => {
                   );
                 })}
               </View>
-
-              {/* Suggerimenti */}
-              {suggestions.length > 0 && (
-                <View style={styles.suggestionsContainer}>
-                  <Text style={[styles.suggestionsTitle, { color: colors.onSurfaceVariant }]}>
-                    Suggerimenti:
-                  </Text>
-                  <View style={styles.suggestionsList}>
-                    {suggestions.map((suggestion, index) => (
-                      <TouchableOpacity
-                        key={index}
-                        style={[styles.suggestionChip, { backgroundColor: colors.primaryContainer }]}
-                        onPress={() => setTitle(suggestion)}
-                      >
-                        <Text style={[styles.suggestionChipText, { color: colors.primary }]}>
-                          {suggestion}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
             </GlassCard>
 
             {/* Dettagli */}
@@ -401,7 +488,6 @@ const AddReminderScreen = () => {
                     value={dueDate}
                     mode="date"
                     display="default"
-                    minimumDate={new Date()}
                     onChange={(event, selectedDate) => {
                       setShowDatePicker(Platform.OS === 'ios');
                       if (selectedDate) setDueDate(selectedDate);
@@ -514,7 +600,7 @@ const AddReminderScreen = () => {
               <View style={styles.cardContent}>
                 <View style={styles.switchRow}>
                   <Text style={[styles.switchLabel, { color: colors.onSurface }]}>
-                    Attiva notifiche
+                    Promemoria attivo
                   </Text>
                   <Switch
                     value={isActive}
@@ -595,7 +681,7 @@ const AddReminderScreen = () => {
                 ) : (
                   <>
                     <Save size={20} color="white" />
-                    <Text style={styles.saveButtonText}>Crea Promemoria</Text>
+                    <Text style={styles.saveButtonText}>Salva Modifiche</Text>
                   </>
                 )}
               </LinearGradient>
@@ -629,7 +715,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   backButton: {
+    padding: 8,
+  },
+  iconButton: {
     padding: 8,
   },
   headerTitle: {
@@ -702,28 +796,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  suggestionsContainer: {
-    marginTop: 16,
-  },
-  suggestionsTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  suggestionsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  suggestionChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  suggestionChipText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   input: {
     borderRadius: 12,
@@ -812,4 +884,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AddReminderScreen;
+export default ReminderDetailScreen;

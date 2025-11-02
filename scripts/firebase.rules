@@ -39,41 +39,76 @@ service cloud.firestore {
     // USERS COLLECTION
     // ============================================
     match /users/{userId} {
-      // Lettura: solo il proprietario o meccanici autenticati
-      allow read: if isOwner(userId) || isMechanic();
+      // Lettura singola: solo il proprietario o meccanici autenticati
+      allow get: if isOwner(userId) || isMechanic();
+
+      // Lettura query: utenti autenticati possono cercare meccanici (per ricerca officine)
+      // Limitato ai soli meccanici tramite query where('userType', '==', 'mechanic')
+      allow list: if isAuthenticated() &&
+                     request.query.limit <= 20;
 
       // Scrittura: solo il proprietario
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
+
+      // ============================================
+      // USER REMINDERS SUBCOLLECTION
+      // ============================================
+      match /reminders/{reminderId} {
+        // Lettura: solo il proprietario dell'utente
+        allow read: if isOwner(userId);
+
+        // Creazione: solo il proprietario dell'utente
+        allow create: if isOwner(userId) &&
+                         request.resource.data.userId == userId;
+
+        // Aggiornamento: solo il proprietario dell'utente
+        allow update: if isOwner(userId) &&
+                         resource.data.userId == userId;
+
+        // Cancellazione: solo il proprietario dell'utente
+        allow delete: if isOwner(userId) &&
+                         resource.data.userId == userId;
+      }
     }
 
     // ============================================
     // VEHICLES COLLECTION (veicoli utenti)
     // ============================================
     match /vehicles/{vehicleId} {
-      // Lettura: proprietario o veicolo condiviso
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        request.auth.uid in resource.data.get('sharedWith', [])
+      // Lettura: chiunque autenticato può leggere (necessario per ricerca veicoli)
+      // In alternativa, solo proprietario o condiviso:
+      // allow read: if isAuthenticated() && (
+      //   resource.data.userId == request.auth.uid ||
+      //   resource.data.ownerId == request.auth.uid ||
+      //   request.auth.uid in resource.data.get('sharedWith', [])
+      // );
+      allow read: if isAuthenticated();
+
+      // Creazione: solo utenti autenticati per se stessi
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid
       );
 
-      // Creazione: solo utenti autenticati
-      allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      hasRequiredFields(['make', 'model', 'year', 'licensePlate']);
-
       // Aggiornamento: solo il proprietario
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
 
       // Cancellazione: solo il proprietario
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
     }
 
     // ============================================
     // WORKSHOP CARS COLLECTION (veicoli in officina)
     // ============================================
-    // MODIFICATO: Aggiunto supporto per mechanicId
+    // MODIFICATO: Aggiunto supporto per mechanicId e permessi owner
     match /workshop_cars/{carId} {
       // Lettura: meccanico proprietario o cliente proprietario del veicolo
       allow read: if isAuthenticated() && (
@@ -82,17 +117,60 @@ service cloud.firestore {
         resource.data.ownerId == request.auth.uid
       );
 
-      // Creazione: solo meccanici per la propria officina
-      allow create: if isMechanic() && (
-        request.resource.data.workshopId == request.auth.uid ||
-        request.resource.data.mechanicId == request.auth.uid
-      ) && hasRequiredFields(['make', 'model', 'licensePlate', 'ownerId']);
+      // Creazione: meccanici per la propria officina OPPURE owner per le proprie auto
+      allow create: if isAuthenticated() && (
+        (isMechanic() && (
+          request.resource.data.workshopId == request.auth.uid ||
+          request.resource.data.mechanicId == request.auth.uid
+        )) ||
+        request.resource.data.ownerId == request.auth.uid
+      );
 
-      // Aggiornamento: solo il meccanico proprietario
-      allow update: if isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId));
+      // Aggiornamento: meccanico proprietario o owner del veicolo
+      allow update: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
 
-      // Cancellazione: solo il meccanico proprietario
-      allow delete: if isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId));
+      // Cancellazione: meccanico proprietario o owner del veicolo
+      allow delete: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
+    }
+
+    // ============================================
+    // WORKSHOP CARS COLLECTION - VARIANTE CAMELCASE
+    // ============================================
+    // NOTA: Supporto per inconsistenza naming (workshopCars vs workshop_cars)
+    match /workshopCars/{carId} {
+      // Lettura: meccanico proprietario o cliente proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.workshopId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
+
+      // Creazione: meccanici per la propria officina OPPURE owner per le proprie auto
+      allow create: if isAuthenticated() && (
+        (isMechanic() && (
+          request.resource.data.workshopId == request.auth.uid ||
+          request.resource.data.mechanicId == request.auth.uid
+        )) ||
+        request.resource.data.ownerId == request.auth.uid
+      );
+
+      // Aggiornamento: meccanico proprietario o owner del veicolo
+      allow update: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
+
+      // Cancellazione: meccanico proprietario o owner del veicolo
+      allow delete: if isAuthenticated() && (
+        isMechanicOwner(resource.data.get('workshopId', resource.data.mechanicId)) ||
+        resource.data.ownerId == request.auth.uid
+      );
     }
 
     // ============================================
@@ -157,26 +235,44 @@ service cloud.firestore {
     // MAINTENANCE RECORDS COLLECTION
     // ============================================
     match /maintenance_records/{recordId} {
-      // Lettura: proprietario veicolo o meccanico che ha fatto l'intervento
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
+
+      // Lettura: proprietario diretto, meccanico, o proprietario del veicolo
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
-        resource.data.mechanicId == request.auth.uid
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
       );
 
       // Creazione: utenti per i propri veicoli o meccanici
       allow create: if isAuthenticated() && (
         request.resource.data.userId == request.auth.uid ||
-        (isMechanic() && request.resource.data.mechanicId == request.auth.uid)
-      ) && hasRequiredFields(['vehicleId', 'date', 'type', 'description']);
+        request.resource.data.ownerId == request.auth.uid ||
+        (isMechanic() && request.resource.data.mechanicId == request.auth.uid) ||
+        ownsVehicle(request.resource.data.vehicleId)
+      );
 
       // Aggiornamento: proprietario o meccanico che ha creato il record
       allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
-        resource.data.mechanicId == request.auth.uid
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
       );
 
       // Cancellazione: solo il proprietario
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
     }
 
     // ============================================
@@ -225,38 +321,82 @@ service cloud.firestore {
     // EXPENSES COLLECTION
     // ============================================
     match /expenses/{expenseId} {
-      // Lettura: solo il proprietario
-      allow read: if isOwner(resource.data.userId);
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
 
-      // Creazione: utenti autenticati per se stessi
-      allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      hasRequiredFields(['amount', 'category', 'date']);
+      // Lettura: proprietario diretto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+      );
+
+      // Creazione: utenti autenticati per se stessi o per i propri veicoli
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        (request.resource.data.get('vehicleId', null) != null && ownsVehicle(request.resource.data.vehicleId))
+      );
 
       // Aggiornamento: solo il proprietario
-      allow update: if isOwner(resource.data.userId);
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+      );
 
       // Cancellazione: solo il proprietario
-      allow delete: if isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+      );
     }
 
     // ============================================
     // FUEL RECORDS COLLECTION
     // ============================================
     match /fuel_records/{recordId} {
-      // Lettura: solo il proprietario
-      allow read: if isOwner(resource.data.userId);
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
 
-      // Creazione: utenti autenticati per se stessi
-      allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      hasRequiredFields(['vehicleId', 'date', 'liters', 'cost']);
+      // Lettura: proprietario diretto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Creazione: utenti autenticati per i propri veicoli
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(request.resource.data.vehicleId)
+      );
 
       // Aggiornamento: solo il proprietario
-      allow update: if isOwner(resource.data.userId);
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
 
       // Cancellazione: solo il proprietario
-      allow delete: if isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
     }
 
     // ============================================
@@ -278,6 +418,148 @@ service cloud.firestore {
 
       // Cancellazione: solo il proprietario
       allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ============================================
+    // VEHICLE PHOTOS COLLECTION
+    // ============================================
+    match /vehicle_photos/{photoId} {
+      // Lettura: proprietario della foto
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Creazione: utenti autenticati (verifica solo che l'userId corrisponda)
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.keys().hasAll(['userId', 'vehicleId', 'base64', 'mimeType']);
+
+      // Aggiornamento: solo il proprietario della foto
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Cancellazione: solo il proprietario della foto
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================
+    // REMINDERS COLLECTION
+    // ============================================
+    match /reminders/{reminderId} {
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
+
+      // Lettura: proprietario diretto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+      );
+
+      // Creazione: utenti autenticati per se stessi o per i propri veicoli
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        (request.resource.data.get('vehicleId', null) != null && ownsVehicle(request.resource.data.vehicleId))
+      );
+
+      // Aggiornamento: solo il proprietario
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+      );
+
+      // Cancellazione: solo il proprietario
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+      );
+    }
+
+    // ============================================
+    // DEADLINES COLLECTION
+    // ============================================
+    match /deadlines/{deadlineId} {
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
+
+      // Lettura: proprietario diretto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Creazione: utenti autenticati per i propri veicoli
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(request.resource.data.vehicleId)
+      );
+
+      // Aggiornamento: proprietario
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Cancellazione: proprietario
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+    }
+
+    // ============================================
+    // ACTIVITIES COLLECTION
+    // ============================================
+    match /activities/{activityId} {
+      // Helper: verifica proprietà del veicolo
+      function ownsVehicle(vehicleId) {
+        return isAuthenticated() && (
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
+        );
+      }
+
+      // Lettura: proprietario diretto o proprietario del veicolo
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Creazione: utenti autenticati per i propri veicoli
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(request.resource.data.vehicleId)
+      );
+
+      // Aggiornamento: proprietario
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
+
+      // Cancellazione: proprietario
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        ownsVehicle(resource.data.vehicleId)
+      );
     }
 
     // ============================================
@@ -323,6 +605,93 @@ service cloud.firestore {
     }
 
     // ============================================
+    // CAR TRANSFER REQUESTS COLLECTION (legacy)
+    // ============================================
+    match /carTransferRequests/{requestId} {
+      // Lettura: mittente o destinatario
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserEmail == request.auth.token.email
+      );
+
+      // Creazione: utente autenticato
+      allow create: if isAuthenticated();
+
+      // Aggiornamento: mittente o destinatario
+      allow update: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserEmail == request.auth.token.email
+      );
+
+      // Cancellazione: solo il mittente
+      allow delete: if isAuthenticated() && resource.data.fromUserId == request.auth.uid;
+    }
+
+    // ============================================
+    // TRANSFER LOGS COLLECTION
+    // ============================================
+    match /transferLogs/{logId} {
+      // Lettura: utenti coinvolti nel trasferimento
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      );
+
+      // Creazione: utenti autenticati
+      allow create: if isAuthenticated();
+
+      // Nessun aggiornamento o cancellazione
+      allow update, delete: if false;
+    }
+
+    // ============================================
+    // VEHICLE VIEW REQUESTS COLLECTION
+    // ============================================
+    match /vehicle_view_requests/{requestId} {
+      // Lettura: proprietario del veicolo o richiedente
+      allow read: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.requesterEmail == request.auth.token.email
+      );
+
+      // Creazione: chiunque autenticato può creare una richiesta
+      allow create: if isAuthenticated() &&
+                      hasRequiredFields(['vehicleId', 'ownerId', 'requesterName', 'requesterEmail']);
+
+      // Aggiornamento:
+      // - Proprietario può approvare/rifiutare (cambiare status, visibleData, etc.)
+      // - Richiedente può solo incrementare viewsCount quando status è 'approved'
+      allow update: if isAuthenticated() && (
+        // Proprietario può aggiornare tutto
+        resource.data.ownerId == request.auth.uid ||
+        // Richiedente può aggiornare SOLO viewsCount, lastViewedAt, updatedAt quando approved
+        (resource.data.requesterEmail == request.auth.token.email &&
+         resource.data.status == 'approved' &&
+         // Verifica che solo questi campi vengano modificati
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount', 'lastViewedAt', 'updatedAt']) &&
+         // Verifica che viewsCount sia incrementato di 1
+         request.resource.data.viewsCount == resource.data.viewsCount + 1)
+      );
+
+      // Cancellazione: solo il proprietario del veicolo
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // ============================================
+    // VEHICLE VIEW LOGS COLLECTION
+    // ============================================
+    match /vehicle_view_logs/{logId} {
+      // Lettura: utente coinvolto nel log
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Creazione: utenti autenticati
+      allow create: if isAuthenticated();
+
+      // Nessun aggiornamento o cancellazione (solo audit)
+      allow update, delete: if false;
+    }
+
+    // ============================================
     // ACCESS LOGS COLLECTION (solo lettura, creazione da cloud functions)
     // ============================================
     match /access_logs/{logId} {
@@ -351,6 +720,122 @@ service cloud.firestore {
 
       // Cancellazione: solo il proprietario
       allow delete: if isMechanicOwner(settingId);
+    }
+
+    // ============================================
+    // WORKSHOPS COLLECTION
+    // ============================================
+    match /workshops/{workshopId} {
+      // Lettura singola: tutti gli utenti autenticati possono leggere un'officina specifica
+      allow get: if isAuthenticated();
+
+      // Lettura query: utenti autenticati possono cercare officine
+      // Limitato per performance e sicurezza
+      allow list: if isAuthenticated() &&
+                     request.query.limit <= 100;
+
+      // Creazione: solo meccanici per se stessi
+      allow create: if isMechanic() &&
+                      request.resource.data.ownerId == request.auth.uid &&
+                      hasRequiredFields(['name', 'email', 'phone', 'ownerId']);
+
+      // Aggiornamento: solo il proprietario dell'officina
+      allow update: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+
+      // Cancellazione: solo il proprietario
+      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // ============================================
+    // BOOKING REQUESTS COLLECTION
+    // ============================================
+    match /booking_requests/{bookingId} {
+      // Lettura: utente cliente o meccanico dell'officina
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid ||
+        resource.data.workshopId == request.auth.uid
+      );
+
+      // Creazione: utenti autenticati per prenotare
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      hasRequiredFields(['userId', 'workshopId', 'mechanicId', 'vehicleId', 'serviceName', 'problemDescription']);
+
+      // Aggiornamento: utente o meccanico coinvolti
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid
+      );
+
+      // Cancellazione: solo il creatore o il meccanico
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid
+      );
+    }
+
+    // ============================================
+    // QUOTES COLLECTION
+    // ============================================
+    match /quotes/{quoteId} {
+      // Lettura: utente cliente o meccanico dell'officina
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.mechanicId == request.auth.uid
+      );
+
+      // Creazione: solo meccanici per preventivi ai propri clienti
+      allow create: if isMechanic() &&
+                      request.resource.data.mechanicId == request.auth.uid &&
+                      hasRequiredFields(['userId', 'workshopId', 'mechanicId', 'vehicleId', 'bookingRequestId']);
+
+      // Aggiornamento: meccanico proprietario o utente (per approvare/rifiutare)
+      allow update: if isAuthenticated() && (
+        resource.data.mechanicId == request.auth.uid ||
+        (resource.data.userId == request.auth.uid &&
+         // L'utente può solo cambiare status e campi di approvazione/rifiuto
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedAt', 'rejectedAt', 'rejectionReason', 'updatedAt']))
+      );
+
+      // Cancellazione: solo il meccanico proprietario
+      allow delete: if isMechanic() && resource.data.mechanicId == request.auth.uid;
+    }
+
+    // ============================================
+    // TRUSTED WORKSHOPS COLLECTION
+    // ============================================
+    match /trusted_workshops/{trustId} {
+      // Lettura: solo il proprietario
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Creazione: utenti autenticati per se stessi
+      allow create: if isAuthenticated() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      hasRequiredFields(['userId', 'workshopId']);
+
+      // Aggiornamento: solo il proprietario
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Cancellazione: solo il proprietario
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================
+    // USER NOTIFICATIONS COLLECTION
+    // ============================================
+    match /user_notifications/{notificationId} {
+      // Lettura: solo il destinatario
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Creazione: sistema o utenti autenticati (per notifiche tra utenti)
+      allow create: if isAuthenticated();
+
+      // Aggiornamento: solo il destinatario (per marcare come letto)
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // Cancellazione: solo il destinatario
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // ============================================

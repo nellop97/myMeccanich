@@ -80,9 +80,11 @@ const AddVehicleScreen = () => {
             case 2:
                 return !!formData.fuelType;
             case 3:
-                return true; // Opzionale
+                return true; // Foto opzionali
             case 4:
-                return true; // Riepilogo
+                return true; // Scadenze opzionali
+            case 5:
+                return true; // Riepilogo finale
             default:
                 return false;
         }
@@ -104,7 +106,8 @@ const AddVehicleScreen = () => {
             )
         );
 
-        if (currentStep < 4) {
+        // Permetti di andare fino allo step 5 (ci sono 5 step totali)
+        if (currentStep < 5) {
             setCurrentStep(currentStep + 1);
         }
     };
@@ -128,45 +131,67 @@ const AddVehicleScreen = () => {
         setIsSubmitting(true);
 
         try {
-            // Prepara dati per Firestore
+            console.log('📝 Salvando veicolo per utente:', user.id);
+
+            // Helper per serializzare le date
+            const serializeDate = (date: any): string | null => {
+                if (!date) return null;
+                if (typeof date === 'string') return date;
+                if (date instanceof Date) return date.toISOString();
+                // Se è un oggetto Timestamp di Firebase
+                if (date.toDate && typeof date.toDate === 'function') {
+                    return date.toDate().toISOString();
+                }
+                return null;
+            };
+
+            // Prepara dati per Firestore (solo valori primitivi e serializzabili)
             const vehicleData = {
-                // ✅ FIX PRINCIPALE: Aggiungi userId per le regole Firestore
-                userId: user.id, // ⚠️ QUESTO CAMPO È OBBLIGATORIO!
+                // ✅ ID Utente (richiesto dalle security rules)
+                userId: user.id,
+                ownerId: user.id, // Mantieni per compatibilità
 
                 // Dati base
                 make: formData.make,
                 model: formData.model,
-                year: formData.year,
+                year: Number(formData.year),
                 licensePlate: formData.licensePlate.toUpperCase(),
 
                 // Dettagli tecnici
                 fuel: formData.fuelType || 'benzina',
+                fuelType: formData.fuelType || 'benzina', // Aggiungi anche fuelType
                 transmission: formData.transmission || 'manuale',
-                engineSize: formData.engineSize || null,
-                power: formData.power || null,
+                engineSize: formData.engineSize ? Number(formData.engineSize) : null,
+                power: formData.power ? Number(formData.power) : null,
                 vin: formData.vin || null,
-                registrationDate: formData.registrationDate || null,
+                registrationDate: serializeDate(formData.registrationDate),
                 color: formData.color || 'Bianco',
                 bodyType: formData.bodyType || null,
-                doors: formData.doors || 4,
-                seats: formData.seats || 5,
+                doors: Number(formData.doors || 4),
+                seats: Number(formData.seats || 5),
 
                 // Chilometraggio
-                mileage: formData.currentMileage || 0,
+                mileage: Number(formData.currentMileage || 0),
+                currentMileage: Number(formData.currentMileage || 0),
                 lastUpdatedMileage: new Date().toISOString(),
 
-                // Scadenze
-                insuranceExpiry: formData.insurance?.expiryDate || null,
+                // Immagini (se presenti)
+                mainImageUrl: formData.mainImage || null,
+                imageUrl: formData.mainImage || null, // Per compatibilità
+                images: formData.images || [],
+                photos: formData.images || [], // Per compatibilità
+
+                // Scadenze (serializzate)
+                insuranceExpiry: serializeDate(formData.insurance?.expiryDate),
                 insuranceCompany: formData.insurance?.company || null,
-                revisionExpiry: formData.revision?.expiryDate || null,
-                roadTaxExpiry: formData.roadTax?.expiryDate || null,
+                revisionExpiry: serializeDate(formData.revision?.expiryDate),
+                roadTaxExpiry: serializeDate(formData.roadTax?.expiryDate),
 
                 // Note
                 notes: formData.notes || null,
 
                 // Metadata
-                ownerId: user.id, // Mantieni anche questo per compatibilità
-                ownerName: user.name || user.email,
+                ownerName: user.name || user.email || 'Utente',
                 isActive: true,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
@@ -190,18 +215,23 @@ const AddVehicleScreen = () => {
                     requirePinForTransfer: true,
                 },
 
-                // Array vuoti iniziali - verranno popolati dopo
-                images: [],
-                photos: [], // Per compatibilità con altri screen
-                optionals: [],
+                // Array opzionali
+                optionals: formData.optionals || [],
             };
+
+            console.log('📤 Dati veicolo da salvare:', {
+                make: vehicleData.make,
+                model: vehicleData.model,
+                userId: vehicleData.userId,
+                ownerId: vehicleData.ownerId,
+            });
 
             // Salva su Firestore
             const docRef = await addDoc(collection(db, 'vehicles'), vehicleData);
 
             console.log('✅ Veicolo creato con ID:', docRef.id);
 
-            // Mostra successo
+            // Mostra successo e redirect alla Home
             Alert.alert(
                 'Veicolo Aggiunto!',
                 `${formData.make} ${formData.model} è stato aggiunto correttamente.`,
@@ -209,7 +239,11 @@ const AddVehicleScreen = () => {
                     {
                         text: 'OK',
                         onPress: () => {
-                            navigation.goBack();
+                            // Redirect alla Home dell'Owner
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'Home' as never }],
+                            });
                         },
                     },
                 ]

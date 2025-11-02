@@ -1,7 +1,16 @@
 // src/store/index.ts - Store Principale compatibile con Zustand 4.x
-import create from 'zustand'; // ⚠️ NOTA: import diverso in Zustand 4.x
-import { persist } from 'zustand/middleware';
+import create from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
+// Storage adapter che usa localStorage per web e AsyncStorage per mobile
+const getStorageAdapter = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+        return createJSONStorage(() => window.localStorage);
+    }
+    return createJSONStorage(() => AsyncStorage);
+};
 
 // ====================================
 // INTERFACCE E TIPI
@@ -80,6 +89,7 @@ interface StoreState {
 
     // === RESET E PULIZIA ===
     resetStore: () => void;
+    resetAppData: () => void;
     logout: () => void;
 }
 
@@ -199,6 +209,17 @@ export const useStore = create<StoreState>(
                 });
             },
 
+            resetAppData: () => {
+                console.log('🗑️ Store: Resetting app data (keeping user logged in)');
+                // Reset solo i dati dell'app, mantiene l'utente loggato
+                set({
+                    preferences: defaultPreferences,
+                    appSettings: { ...get().appSettings, lastUpdate: new Date().toISOString() },
+                    isLoading: false,
+                    error: null,
+                });
+            },
+
             logout: () => {
                 console.log('🚪 Store: Logging out user');
                 set({
@@ -210,20 +231,22 @@ export const useStore = create<StoreState>(
         }),
         {
             name: 'auto-manager-storage',
-            // ⚠️ In Zustand 4.x, getStorage è diverso
-            getStorage: () => AsyncStorage,
+            storage: getStorageAdapter(),
 
-            // Persisti solo dati essenziali
+            // Persisti dati essenziali INCLUSO user per mantenere la sessione
             partialize: (state) => ({
+                user: state.user, // ✅ PERSISTIAMO user per mantenere sessione
                 darkMode: state.darkMode,
                 preferences: state.preferences,
                 appSettings: state.appSettings,
-                // NON persistere user, isLoading, error (stati temporanei)
+                // NON persistere isLoading, error (stati temporanei)
             }),
 
             // Gestione migrazione versioni
-            version: 2,
+            version: 3, // Incrementata a 3 per includere user
             migrate: (persistedState: any, version: number) => {
+                console.log(`🔄 Migrating storage from version ${version} to 3`);
+
                 if (version < 2) {
                     // Migrazione dalla versione 1 alla 2
                     const { user, ...rest } = persistedState;
@@ -233,7 +256,31 @@ export const useStore = create<StoreState>(
                         appSettings: { ...defaultAppSettings, ...persistedState.appSettings },
                     };
                 }
+
+                if (version < 3) {
+                    // Migrazione dalla versione 2 alla 3 - mantieni user se esiste
+                    return {
+                        ...persistedState,
+                        user: persistedState.user || null,
+                    };
+                }
+
                 return persistedState;
+            },
+
+            // Logging per debug
+            onRehydrateStorage: () => {
+                console.log('💾 Hydrating storage...');
+                return (state, error) => {
+                    if (error) {
+                        console.error('❌ Hydration error:', error);
+                    } else {
+                        console.log('✅ Storage hydrated successfully', {
+                            hasUser: !!state?.user,
+                            userEmail: state?.user?.email,
+                        });
+                    }
+                };
             },
         }
     )

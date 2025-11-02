@@ -34,6 +34,7 @@ import {
     Star,
     CheckCircle,
     AlertCircle,
+    ArrowLeft,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,16 +42,17 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { useProfile } from '../hooks/useProfile';
 import { useStore } from '../store';
-import { signOut } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { useLogout } from '../hooks/useAuthSync';
 
 const ProfileScreen = () => {
     const navigation = useNavigation();
     const { width } = useWindowDimensions();
-    const { user, setUser } = useStore();
+    const { user } = useStore();
     const { profile, loading, uploadProfilePhoto, uploadingPhoto } = useProfile();
+    const { logout } = useLogout();
 
     const [refreshing, setRefreshing] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
 
     // Breakpoints
     const isDesktop = width >= 1024;
@@ -102,10 +104,14 @@ const ProfileScreen = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await signOut(auth);
-                            setUser(null);
+                            setLoggingOut(true);
+                            await logout();
+                            // Il redirect alla login screen sarà gestito automaticamente da AppNavigator
+                            console.log('✅ Logout completato con successo');
                         } catch (error) {
-                            Alert.alert('Errore', 'Impossibile disconnettersi');
+                            console.error('❌ Errore logout:', error);
+                            Alert.alert('Errore', 'Impossibile disconnettersi. Riprova.');
+                            setLoggingOut(false);
                         }
                     },
                 },
@@ -142,6 +148,16 @@ const ProfileScreen = () => {
             colors={isMechanic ? ['#FF6B35', '#FF8A65'] : ['#007AFF', '#5AC8FA']}
             style={styles.header}
         >
+            {/* Pulsante Back */}
+            <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.7}
+            >
+                <ArrowLeft size={24} color="#ffffff" />
+                <Text style={styles.backButtonText}>Indietro</Text>
+            </TouchableOpacity>
+
             <View style={styles.headerContent}>
                 <View style={styles.avatarContainer}>
                     {profile.photoURL ? (
@@ -408,6 +424,20 @@ const styles = StyleSheet.create({
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             },
         }),
+    },
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        marginBottom: 16,
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+    },
+    backButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 8,
     },
     headerContent: {
         alignItems: 'center',

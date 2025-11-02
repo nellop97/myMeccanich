@@ -1,5 +1,5 @@
-// src/screens/user/CarDetailScreen.tsx - REDESIGN COMPLETO
-import React, { useState } from 'react';
+// src/screens/user/CarDetailScreen.tsx - REDESIGN COMPLETO con Foto e Documenti
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -10,8 +10,13 @@ import {
   RefreshControl,
   Platform,
   ActivityIndicator,
+  Image,
+  Dimensions,
+  Alert,
+  Modal,
+  useWindowDimensions,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import {
   ArrowLeft,
   Edit,
@@ -22,12 +27,63 @@ import {
   AlertCircle,
   Clock,
   Shield,
+  FileText,
+  Image as ImageIcon,
+  Trash2,
+  Download,
+  X,
+  Upload,
+  Eye,
 } from 'lucide-react-native';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
+import { db, auth } from '../../services/firebase';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  updateDoc
+} from 'firebase/firestore';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaintenanceService } from '../../services/MaintenanceService';
+import { MaintenanceRecord } from '../../types/database.types';
+import { useAuth } from '../../hooks/useAuth';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export interface RouteParams {
   carId: string;
+}
+
+interface VehiclePhoto {
+  id: string;
+  base64: string; // Immagine in formato base64
+  mimeType: string; // es: 'image/jpeg', 'image/png'
+  caption?: string;
+  uploadedAt: any;
+  vehicleId: string;
+  userId: string;
+  isMain?: boolean; // Se è l'immagine principale del veicolo
+}
+
+interface VehicleDocument {
+  id: string;
+  name: string;
+  type: string;
+  base64: string; // Documento in formato base64
+  mimeType: string;
+  size?: number;
+  uploadedAt: any;
+  vehicleId: string;
+  userId: string;
+  expiryDate?: any;
 }
 
 const CarDetailScreen = () => {
@@ -35,49 +91,717 @@ const CarDetailScreen = () => {
   const route = useRoute();
   const { carId } = route.params as RouteParams;
   const { colors, isDark } = useAppThemeManager();
+  const { width } = useWindowDimensions();
+  const { user } = useAuth();
+  const maintenanceService = MaintenanceService.getInstance();
+
   const {
     vehicles,
-    recentMaintenance,
     upcomingReminders,
     refreshData,
     loading,
   } = useUserData();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
+  const [loadingMaintenance, setLoadingMaintenance] = useState(false);
+  const [photos, setPhotos] = useState<VehiclePhoto[]>([]);
+  const [documents, setDocuments] = useState<VehicleDocument[]>([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<VehiclePhoto | null>(null);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [showPhotoOptionsModal, setShowPhotoOptionsModal] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<VehicleDocument | null>(null);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  // Responsive
+  const isWeb = Platform.OS === 'web';
+  const isLargeScreen = width >= 768;
+  const isDesktop = width >= 1024;
+  const photoWidth = isDesktop ? 200 : isLargeScreen ? 150 : (SCREEN_WIDTH - 60) / 3;
+
+  // Helper function to show toast notifications
+  const showToastMessage = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  // Helper function to convert URI to base64
+  const uriToBase64 = async (uri: string): Promise<string> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          // Remove the data URI prefix (e.g., "data:image/jpeg;base64,")
+          const base64 = base64data.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  };
 
   // Get vehicle data
   const vehicle = vehicles.find((v) => v.id === carId);
-
-  // Filter maintenance records for this vehicle
-  const maintenanceRecords = recentMaintenance
-    .filter((record) => record.vehicleId === carId)
-    .slice(0, 10);
 
   // Filter reminders for this vehicle
   const reminders = upcomingReminders
     .filter((reminder) => reminder.vehicleId === carId)
     .slice(0, 10);
 
+  // Load maintenance records
+  const loadMaintenanceRecords = async () => {
+    console.log('🔄 ========== CAR DETAIL: LOADING MAINTENANCE ==========');
+    console.log('👤 user:', user);
+    console.log('👤 user?.uid:', user?.uid);
+    console.log('🚗 carId:', carId);
+
+    if (!user?.uid || !carId) {
+      console.warn('⚠️ Cannot load maintenance: missing user.uid or carId');
+      console.log('  - user?.uid:', user?.uid);
+      console.log('  - carId:', carId);
+      return;
+    }
+
+    try {
+      setLoadingMaintenance(true);
+      console.log('🔧 Calling MaintenanceService.getVehicleMaintenanceHistory()...');
+      console.log('  - vehicleId:', carId);
+      console.log('  - userId:', user.uid);
+
+      const records = await maintenanceService.getVehicleMaintenanceHistory(carId, user.uid);
+      console.log('📊✅ MaintenanceService returned:', records.length, 'records');
+
+      if (records.length > 0) {
+        console.log('📋 First record:');
+        console.log('  - ID:', records[0].id);
+        console.log('  - vehicleId:', records[0].vehicleId);
+        console.log('  - type:', records[0].type);
+        console.log('  - date:', records[0].date);
+      } else {
+        console.warn('⚠️ NO RECORDS RETURNED from MaintenanceService!');
+      }
+
+      // Take only the 10 most recent
+      const recentRecords = records.slice(0, 10);
+      console.log('📝 Setting state with top', recentRecords.length, 'records...');
+      setMaintenanceRecords(recentRecords);
+
+      console.log('✅ Maintenance records state updated!');
+    } catch (error) {
+      console.error('❌ Error loading maintenance records:', error);
+    } finally {
+      setLoadingMaintenance(false);
+    }
+  };
+
+  useEffect(() => {
+    if (carId && user?.uid) {
+      console.log('✅ User authenticated in CarDetail, loading all data...');
+      loadPhotos();
+      loadDocuments();
+      loadMaintenanceRecords();
+    } else {
+      console.log('⏳ Waiting for user authentication or carId...', { carId, userUid: user?.uid });
+    }
+  }, [carId, user?.uid]); // ✅ Aggiungi user?.uid come dependency
+
+  // Ricarica dati quando la schermata torna in focus (dopo salvataggio manutenzione)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 CarDetail screen focused, refreshing data...');
+      if (user?.uid) {
+        console.log('✅ User authenticated, refreshing...');
+        refreshData();
+        loadPhotos();
+        loadDocuments();
+        loadMaintenanceRecords();
+      } else {
+        console.log('⏳ User not ready, skipping refresh');
+      }
+    }, [carId, user?.uid]) // ✅ Aggiungi user?.uid come dependency
+  );
+
+  const loadPhotos = async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      setLoadingPhotos(true);
+      const photosQuery = query(
+        collection(db, 'vehicle_photos'),
+        where('vehicleId', '==', carId),
+        where('userId', '==', auth.currentUser.uid)
+      );
+
+      const snapshot = await getDocs(photosQuery);
+      const photosData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as VehiclePhoto[];
+
+      setPhotos(photosData);
+    } catch (error) {
+      console.error('Error loading photos:', error);
+    } finally {
+      setLoadingPhotos(false);
+    }
+  };
+
+  const loadDocuments = async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      setLoadingDocuments(true);
+      const docsQuery = query(
+        collection(db, 'documents'),
+        where('vehicleId', '==', carId),
+        where('userId', '==', auth.currentUser.uid)
+      );
+
+      const snapshot = await getDocs(docsQuery);
+      const docsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as VehicleDocument[];
+
+      setDocuments(docsData);
+    } catch (error) {
+      console.error('Error loading documents:', error);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshData();
+    await Promise.all([
+      refreshData(),
+      loadPhotos(),
+      loadDocuments()
+    ]);
     setRefreshing(false);
+  };
+
+  const pickImage = async () => {
+    try {
+      setShowPhotoOptionsModal(false);
+
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        showToastMessage('Hai bisogno di abilitare l\'accesso alla galleria', 'error');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadPhoto(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      showToastMessage('Impossibile selezionare l\'immagine', 'error');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      setShowPhotoOptionsModal(false);
+
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        showToastMessage('Hai bisogno di abilitare l\'accesso alla fotocamera', 'error');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadPhoto(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      showToastMessage('Impossibile scattare la foto', 'error');
+    }
+  };
+
+  const uploadPhoto = async (uri: string) => {
+    if (!auth.currentUser || !vehicle) return;
+
+    try {
+      setUploadingPhoto(true);
+
+      // Converti l'immagine in base64
+      const base64 = await uriToBase64(uri);
+
+      // Determina il tipo MIME dall'URI
+      const mimeType = uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+
+      // Verifica la dimensione (Firestore ha limite di ~1MB per documento)
+      const sizeInBytes = (base64.length * 3) / 4; // Approssimazione della dimensione
+      if (sizeInBytes > 900000) { // 900KB per sicurezza
+        showToastMessage('L\'immagine è troppo grande. Riduci la qualità o le dimensioni.', 'error');
+        return;
+      }
+
+      // Salva direttamente in Firestore
+      const isFirstPhoto = photos.length === 0;
+      await addDoc(collection(db, 'vehicle_photos'), {
+        vehicleId: carId,
+        userId: auth.currentUser.uid,
+        base64: base64,
+        mimeType: mimeType,
+        uploadedAt: serverTimestamp(),
+        isMain: isFirstPhoto, // La prima foto diventa automaticamente principale
+      });
+
+      // Se è la prima foto, aggiorna anche il veicolo con mainImageUrl
+      if (isFirstPhoto) {
+        await updateDoc(doc(db, 'vehicles', carId), {
+          mainImageUrl: `data:${mimeType};base64,${base64}`,
+        });
+      }
+
+      await loadPhotos();
+      showToastMessage('Foto caricata con successo!', 'success');
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      showToastMessage('Impossibile caricare la foto: ' + (error as Error).message, 'error');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const setAsMainPhoto = async (photo: VehiclePhoto) => {
+    try {
+      // Rimuovi isMain da tutte le altre foto
+      const updatePromises = photos.map(p => 
+        updateDoc(doc(db, 'vehicle_photos', p.id), { isMain: false })
+      );
+      await Promise.all(updatePromises);
+
+      // Imposta questa come principale
+      await updateDoc(doc(db, 'vehicle_photos', photo.id), { isMain: true });
+
+      // Aggiorna anche il veicolo con mainImageUrl
+      const mainImageUrl = `data:${photo.mimeType};base64,${photo.base64}`;
+      await updateDoc(doc(db, 'vehicles', carId), { mainImageUrl });
+
+      await loadPhotos();
+      showToastMessage('Immagine principale aggiornata!', 'success');
+    } catch (error) {
+      console.error('Error setting main photo:', error);
+      showToastMessage('Errore nell\'impostare l\'immagine principale', 'error');
+    }
+  };
+
+  const deletePhoto = async (photo: VehiclePhoto) => {
+    Alert.alert(
+      'Elimina Foto',
+      'Sei sicuro di voler eliminare questa foto?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Elimina',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Elimina solo da Firestore
+              await deleteDoc(doc(db, 'vehicle_photos', photo.id));
+
+              // Se era l'immagine principale, imposta la prima disponibile come principale
+              if (photo.isMain && photos.length > 1) {
+                const remainingPhotos = photos.filter(p => p.id !== photo.id);
+                if (remainingPhotos.length > 0) {
+                  await setAsMainPhoto(remainingPhotos[0]);
+                } else {
+                  await updateDoc(doc(db, 'vehicles', carId), { mainImageUrl: null });
+                }
+              }
+
+              await loadPhotos();
+              Alert.alert('Successo', 'Foto eliminata');
+            } catch (error) {
+              console.error('Error deleting photo:', error);
+              Alert.alert('Errore', 'Impossibile eliminare la foto');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.type === 'success' || !result.canceled) {
+        // @ts-ignore
+        const file = result.assets ? result.assets[0] : result;
+        await uploadDocument(file);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      showToastMessage('Impossibile selezionare il documento', 'error');
+    }
+  };
+
+  const uploadDocument = async (file: any) => {
+    if (!auth.currentUser || !vehicle) return;
+
+    try {
+      setUploadingDocument(true);
+
+      // Converti il documento in base64
+      const base64 = await uriToBase64(file.uri);
+
+      // Verifica la dimensione (Firestore ha limite di ~1MB per documento)
+      const sizeInBytes = (base64.length * 3) / 4;
+      if (sizeInBytes > 900000) { // 900KB per sicurezza
+        showToastMessage('Il file è troppo grande (max 900KB). Prova con un file più piccolo.', 'error');
+        return;
+      }
+
+      // Salva direttamente in Firestore
+      await addDoc(collection(db, 'documents'), {
+        vehicleId: carId,
+        userId: auth.currentUser.uid,
+        name: file.name,
+        type: file.mimeType || 'application/octet-stream',
+        mimeType: file.mimeType || 'application/octet-stream',
+        size: file.size,
+        base64: base64,
+        uploadedAt: serverTimestamp(),
+      });
+
+      await loadDocuments();
+      showToastMessage('Documento caricato con successo!', 'success');
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      showToastMessage('Impossibile caricare il documento: ' + (error as Error).message, 'error');
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const downloadDocument = (document: VehicleDocument) => {
+    try {
+      // Crea un data URI dal base64
+      const dataUri = `data:${document.mimeType};base64,${document.base64}`;
+
+      if (Platform.OS === 'web') {
+        // Su web crea un link temporaneo e simula il click per scaricare
+        const link = window.document.createElement('a');
+        link.href = dataUri;
+        link.download = document.name;
+        window.document.body.appendChild(link);
+        link.click();
+        window.document.body.removeChild(link);
+        showToastMessage('Download avviato!', 'success');
+      } else {
+        // Su mobile mostra il toast e il documento verrà visualizzato nel modal
+        showToastMessage('Documento visualizzato', 'success');
+      }
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      showToastMessage('Errore durante il download', 'error');
+    }
+  };
+
+  const deleteDocument = async (document: VehicleDocument) => {
+    if (isWeb) {
+      // Su web usa conferma nativa
+      if (window.confirm(`Sei sicuro di voler eliminare "${document.name}"?`)) {
+        try {
+          await deleteDoc(doc(db, 'documents', document.id));
+          await loadDocuments();
+          showToastMessage('Documento eliminato', 'success');
+        } catch (error) {
+          console.error('Error deleting document:', error);
+          showToastMessage('Impossibile eliminare il documento', 'error');
+        }
+      }
+    } else {
+      // Su mobile usa Alert.alert
+      Alert.alert(
+        'Elimina Documento',
+        `Sei sicuro di voler eliminare "${document.name}"?`,
+        [
+          { text: 'Annulla', style: 'cancel' },
+          {
+            text: 'Elimina',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteDoc(doc(db, 'documents', document.id));
+                await loadDocuments();
+                showToastMessage('Documento eliminato', 'success');
+              } catch (error) {
+                console.error('Error deleting document:', error);
+                showToastMessage('Impossibile eliminare il documento', 'error');
+              }
+            },
+          },
+        ]
+      );
+    }
   };
 
   const formatDate = (date: any) => {
     if (!date) return '';
     const d = date.toDate ? date.toDate() : new Date(date);
-    return d.toLocaleDateString('it-IT', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric' 
+    return d.toLocaleDateString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     });
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '';
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    return `${(kb / 1024).toFixed(1)} MB`;
   };
 
   const isOverdue = (dueDate: any) => {
     if (!dueDate) return false;
     const due = dueDate.toDate ? dueDate.toDate() : new Date(dueDate);
     return due < new Date();
+  };
+
+  const showPhotoOptions = () => {
+    if (isWeb) {
+      // Su web usa il modale personalizzato
+      setShowPhotoOptionsModal(true);
+    } else {
+      // Su mobile usa Alert.alert()
+      Alert.alert(
+        'Aggiungi Foto',
+        'Scegli come aggiungere la foto',
+        [
+          {
+            text: 'Scatta Foto',
+            onPress: takePhoto,
+          },
+          {
+            text: 'Scegli dalla Galleria',
+            onPress: pickImage,
+          },
+          {
+            text: 'Annulla',
+            style: 'cancel',
+          },
+        ]
+      );
+    }
+  };
+
+  // Render Photo Modal
+  const renderPhotoModal = () => (
+    <Modal
+      visible={showPhotoModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowPhotoModal(false)}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowPhotoModal(false)}
+      >
+        <View style={styles.modalContent}>
+          {selectedPhoto && (
+            <>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowPhotoModal(false)}
+              >
+                <X size={24} color="#fff" />
+              </TouchableOpacity>
+              <Image
+                source={{ uri: `data:${selectedPhoto.mimeType};base64,${selectedPhoto.base64}` }}
+                style={styles.modalImage}
+                resizeMode="contain"
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalActionButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => {
+                    setShowPhotoModal(false);
+                    deletePhoto(selectedPhoto);
+                  }}
+                >
+                  <Trash2 size={20} color="#fff" />
+                  <Text style={styles.modalActionText}>Elimina</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Render Photo Options Modal (for web)
+  const renderPhotoOptionsModal = () => (
+    <Modal
+      visible={showPhotoOptionsModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowPhotoOptionsModal(false)}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowPhotoOptionsModal(false)}
+      >
+        <View style={styles.optionsModalContent} onStartShouldSetResponder={() => true}>
+          <Text style={[styles.optionsModalTitle, { color: colors.onSurface }]}>
+            Aggiungi Foto
+          </Text>
+          <Text style={[styles.optionsModalSubtitle, { color: colors.onSurfaceVariant }]}>
+            Scegli come aggiungere la foto
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.optionButton, { backgroundColor: colors.primary }]}
+            onPress={pickImage}
+          >
+            <Upload size={20} color="#fff" />
+            <Text style={styles.optionButtonText}>Scegli dalla Galleria</Text>
+          </TouchableOpacity>
+
+          {!isWeb && (
+            <TouchableOpacity
+              style={[styles.optionButton, { backgroundColor: colors.primary }]}
+              onPress={takePhoto}
+            >
+              <ImageIcon size={20} color="#fff" />
+              <Text style={styles.optionButtonText}>Scatta Foto</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.optionButton, styles.cancelButton, { borderColor: colors.outline }]}
+            onPress={() => setShowPhotoOptionsModal(false)}
+          >
+            <X size={20} color={colors.onSurface} />
+            <Text style={[styles.optionButtonText, { color: colors.onSurface }]}>Annulla</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Render Document Modal
+  const renderDocumentModal = () => (
+    <Modal
+      visible={showDocumentModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowDocumentModal(false)}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowDocumentModal(false)}
+      >
+        <View style={styles.documentModalContent} onStartShouldSetResponder={() => true}>
+          {selectedDocument && (
+            <>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowDocumentModal(false)}
+              >
+                <X size={24} color="#fff" />
+              </TouchableOpacity>
+
+              <View style={styles.documentPreview}>
+                <FileText size={80} color={colors.primary} />
+                <Text style={[styles.documentModalName, { color: colors.onSurface }]}>
+                  {selectedDocument.name}
+                </Text>
+                <Text style={[styles.documentModalInfo, { color: colors.onSurfaceVariant }]}>
+                  {formatFileSize(selectedDocument.size)}
+                </Text>
+                {selectedDocument.uploadedAt && (
+                  <Text style={[styles.documentModalInfo, { color: colors.onSurfaceVariant }]}>
+                    Caricato il {formatDate(selectedDocument.uploadedAt)}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.documentModalActions}>
+                <TouchableOpacity
+                  style={[styles.modalActionButton, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    downloadDocument(selectedDocument);
+                  }}
+                >
+                  <Download size={20} color="#fff" />
+                  <Text style={styles.modalActionText}>Scarica</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalActionButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => {
+                    setShowDocumentModal(false);
+                    deleteDocument(selectedDocument);
+                  }}
+                >
+                  <Trash2 size={20} color="#fff" />
+                  <Text style={styles.modalActionText}>Elimina</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Render Toast Notification
+  const renderToast = () => {
+    if (!showToast) return null;
+
+    return (
+      <View style={[
+        styles.toast,
+        toastType === 'success' ? styles.toastSuccess : styles.toastError,
+        isDesktop && styles.toastDesktop
+      ]}>
+        <Text style={styles.toastText}>{toastMessage}</Text>
+      </View>
+    );
   };
 
   if (!vehicle) {
@@ -98,10 +822,13 @@ const CarDetailScreen = () => {
     );
   }
 
+  const containerStyle = isDesktop ? styles.webContainer : styles.container;
+  const contentStyle = isDesktop ? styles.webContent : styles.scrollContent;
+
   return (
     <SafeAreaView
       style={[
-        styles.container,
+        containerStyle,
         { backgroundColor: isDark ? colors.background : '#F8F9FA' },
       ]}
     >
@@ -135,214 +862,501 @@ const CarDetailScreen = () => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={contentStyle}
         showsVerticalScrollIndicator={false}
       >
-        {/* Vehicle Info Card */}
-        <View
-          style={[
-            styles.vehicleCard,
-            { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
-          ]}
-        >
-          <Text style={[styles.vehicleName, { color: colors.onSurface }]}>
-            {vehicle.make} {vehicle.model} {vehicle.year}
-          </Text>
-          <Text style={[styles.vehicleVIN, { color: colors.onSurfaceVariant }]}>
-            VIN: {vehicle.vin || '1HGCV2F69JL000000'}
-          </Text>
-        </View>
-
-        {/* Storico Manutenzioni Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
-              Storico Manutenzioni
-            </Text>
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
-              onPress={() =>
-                (navigation as any).navigate('AddMaintenance', { carId })
-              }
-            >
-              <Plus size={20} color={colors.primary} strokeWidth={2.5} />
-              <Text style={[styles.addButtonText, { color: colors.primary }]}>
-                Aggiungi
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : maintenanceRecords.length === 0 ? (
+        <View style={isDesktop ? styles.webGrid : undefined}>
+          <View style={isDesktop ? styles.webMainColumn : undefined}>
+            {/* Vehicle Info Card */}
             <View
               style={[
-                styles.emptySection,
+                styles.vehicleCard,
                 { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
               ]}
             >
-              <Wrench size={32} color={colors.onSurfaceVariant} strokeWidth={1.5} />
-              <Text
-                style={[
-                  styles.emptySectionText,
-                  { color: colors.onSurfaceVariant },
-                ]}
-              >
-                Nessuna manutenzione registrata
+              <Text style={[styles.vehicleName, { color: colors.onSurface }]}>
+                {vehicle.make} {vehicle.model} {vehicle.year}
+              </Text>
+              <Text style={[styles.vehicleVIN, { color: colors.onSurfaceVariant }]}>
+                VIN: {vehicle.vin || '1HGCV2F69JL000000'}
               </Text>
             </View>
-          ) : (
-            maintenanceRecords.map((record) => (
-              <TouchableOpacity
-                key={record.id}
-                style={[
-                  styles.recordCard,
-                  { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
-                ]}
-                onPress={() => {
-                  // Navigate to maintenance detail
-                }}
-              >
-                <View style={[styles.recordIcon, { backgroundColor: '#3B82F620' }]}>
-                  <Wrench size={20} color="#3B82F6" strokeWidth={2} />
-                </View>
 
-                <View style={styles.recordInfo}>
-                  <Text style={[styles.recordTitle, { color: colors.onSurface }]}>
-                    {record.type}
-                  </Text>
+            {/* Photos Section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                  Galleria Foto
+                </Text>
+                <TouchableOpacity
+                  style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
+                  onPress={showPhotoOptions}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <>
+                      <Plus size={20} color={colors.primary} strokeWidth={2.5} />
+                      <Text style={[styles.addButtonText, { color: colors.primary }]}>
+                        Aggiungi
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {loadingPhotos ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : photos.length === 0 ? (
+                <View
+                  style={[
+                    styles.emptySection,
+                    { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+                  ]}
+                >
+                  <ImageIcon size={32} color={colors.onSurfaceVariant} strokeWidth={1.5} />
                   <Text
                     style={[
-                      styles.recordDate,
+                      styles.emptySectionText,
                       { color: colors.onSurfaceVariant },
                     ]}
                   >
-                    {formatDate(record.completedDate)}
+                    Nessuna foto caricata
                   </Text>
                 </View>
+              ) : (
+                <View style={[styles.photosGrid, isDesktop && styles.photosGridWeb]}>
+                  {photos.map((photo) => (
+                    <TouchableOpacity
+                      key={photo.id}
+                      style={[
+                        styles.photoItem,
+                        { width: photoWidth, height: photoWidth },
+                      ]}
+                      onPress={() => {
+                        setSelectedPhoto(photo);
+                        setShowPhotoModal(true);
+                      }}
+                    >
+                      <Image
+                        source={{ uri: `data:${photo.mimeType};base64,${photo.base64}` }}
+                        style={styles.photoImage}
+                        resizeMode="cover"
+                      />
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.6)']}
+                        style={styles.photoOverlay}
+                      >
+                        <TouchableOpacity
+                          style={styles.photoDeleteButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            deletePhoto(photo);
+                          }}
+                        >
+                          <Trash2 size={16} color="#fff" />
+                        </TouchableOpacity>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
 
-                <ChevronRight
-                  size={20}
-                  color={colors.onSurfaceVariant}
-                  strokeWidth={2}
-                />
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
+            {/* Documents Section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                  Documenti
+                </Text>
+                <TouchableOpacity
+                  style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
+                  onPress={pickDocument}
+                  disabled={uploadingDocument}
+                >
+                  {uploadingDocument ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <>
+                      <Plus size={20} color={colors.primary} strokeWidth={2.5} />
+                      <Text style={[styles.addButtonText, { color: colors.primary }]}>
+                        Aggiungi
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
 
-        {/* Scadenze e Promemoria Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
-              Scadenze e Promemoria
-            </Text>
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
-              onPress={() =>
-                (navigation as any).navigate('AddReminder', { carId })
-              }
-            >
-              <Plus size={20} color={colors.primary} strokeWidth={2.5} />
-              <Text style={[styles.addButtonText, { color: colors.primary }]}>
-                Aggiungi
-              </Text>
-            </TouchableOpacity>
+              {loadingDocuments ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : documents.length === 0 ? (
+                <View
+                  style={[
+                    styles.emptySection,
+                    { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+                  ]}
+                >
+                  <FileText size={32} color={colors.onSurfaceVariant} strokeWidth={1.5} />
+                  <Text
+                    style={[
+                      styles.emptySectionText,
+                      { color: colors.onSurfaceVariant },
+                    ]}
+                  >
+                    Nessun documento caricato
+                  </Text>
+                </View>
+              ) : (
+                documents.map((document) => (
+                  <TouchableOpacity
+                    key={document.id}
+                    style={[
+                      styles.documentCard,
+                      { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+                    ]}
+                    onPress={() => {
+                      setSelectedDocument(document);
+                      setShowDocumentModal(true);
+                    }}
+                  >
+                    <View style={[styles.documentIcon, { backgroundColor: '#3B82F620' }]}>
+                      <FileText size={20} color="#3B82F6" strokeWidth={2} />
+                    </View>
+
+                    <View style={styles.documentInfo}>
+                      <Text style={[styles.documentName, { color: colors.onSurface }]}>
+                        {document.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.documentMeta,
+                          { color: colors.onSurfaceVariant },
+                        ]}
+                      >
+                        {formatDate(document.uploadedAt)} • {formatFileSize(document.size)}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.documentDeleteButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        deleteDocument(document);
+                      }}
+                    >
+                      <Trash2 size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+
+            {/* Storico Manutenzioni Section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                  Storico Manutenzioni
+                </Text>
+                <View style={styles.sectionActions}>
+                  <TouchableOpacity
+                    style={[styles.viewAllButton, { marginRight: 8 }]}
+                    onPress={() =>
+                      (navigation as any).navigate('MaintenanceHistory', { carId })
+                    }
+                  >
+                    <Text style={[styles.viewAllText, { color: colors.primary }]}>
+                      Vedi tutte
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
+                    onPress={() =>
+                      (navigation as any).navigate('AddMaintenance', { carId })
+                    }
+                  >
+                    <Plus size={20} color={colors.primary} strokeWidth={2.5} />
+                    <Text style={[styles.addButtonText, { color: colors.primary }]}>
+                      Aggiungi
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {loadingMaintenance ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : maintenanceRecords.length === 0 ? (
+                <View
+                  style={[
+                    styles.emptySection,
+                    { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+                  ]}
+                >
+                  <Wrench size={32} color={colors.onSurfaceVariant} strokeWidth={1.5} />
+                  <Text
+                    style={[
+                      styles.emptySectionText,
+                      { color: colors.onSurfaceVariant },
+                    ]}
+                  >
+                    Nessuna manutenzione registrata
+                  </Text>
+                </View>
+              ) : (
+                maintenanceRecords.map((record) => (
+                  <TouchableOpacity
+                    key={record.id}
+                    style={[
+                      styles.recordCard,
+                      { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+                    ]}
+                    onPress={() => {
+                      (navigation as any).navigate('MaintenanceDetail', {
+                        maintenanceId: record.id,
+                        carId
+                      });
+                    }}
+                  >
+                    <View style={[styles.recordIcon, { backgroundColor: '#3B82F620' }]}>
+                      <Wrench size={20} color="#3B82F6" strokeWidth={2} />
+                    </View>
+
+                    <View style={styles.recordInfo}>
+                      <Text style={[styles.recordTitle, { color: colors.onSurface }]}>
+                        {record.type}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.recordDate,
+                          { color: colors.onSurfaceVariant },
+                        ]}
+                      >
+                        {formatDate(record.date)}
+                      </Text>
+                    </View>
+
+                    <ChevronRight
+                      size={20}
+                      color={colors.onSurfaceVariant}
+                      strokeWidth={2}
+                    />
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
           </View>
 
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : reminders.length === 0 ? (
-            <View
-              style={[
-                styles.emptySection,
-                { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
-              ]}
-            >
-              <Calendar
-                size={32}
-                color={colors.onSurfaceVariant}
-                strokeWidth={1.5}
-              />
-              <Text
-                style={[
-                  styles.emptySectionText,
-                  { color: colors.onSurfaceVariant },
-                ]}
-              >
-                Nessuna scadenza programmata
-              </Text>
-            </View>
-          ) : (
-            reminders.map((reminder) => {
-              const overdueStatus = isOverdue(reminder.dueDate);
-              const iconColor = overdueStatus ? '#EF4444' : '#F59E0B';
-              const backgroundColor = overdueStatus ? '#FEE2E2' : '#FEF3C7';
-              
-              const IconComponent = 
-                reminder.type === 'maintenance' ? Wrench :
-                reminder.type === 'insurance' ? Shield :
-                reminder.type === 'inspection' ? AlertCircle :
-                Calendar;
+          {isDesktop && (
+            <View style={styles.webSidebar}>
+              {/* Scadenze e Promemoria Section */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                    Scadenze e Promemoria
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
+                    onPress={() =>
+                      (navigation as any).navigate('AddReminder', { carId })
+                    }
+                  >
+                    <Plus size={20} color={colors.primary} strokeWidth={2.5} />
+                  </TouchableOpacity>
+                </View>
 
-              return (
+                {loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : reminders.length === 0 ? (
+                  <View
+                    style={[
+                      styles.emptySection,
+                      { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+                    ]}
+                  >
+                    <Calendar
+                      size={32}
+                      color={colors.onSurfaceVariant}
+                      strokeWidth={1.5}
+                    />
+                    <Text
+                      style={[
+                        styles.emptySectionText,
+                        { color: colors.onSurfaceVariant },
+                      ]}
+                    >
+                      Nessuna scadenza programmata
+                    </Text>
+                  </View>
+                ) : (
+                  reminders.map((reminder) => {
+                    const overdueStatus = isOverdue(reminder.dueDate);
+                    const iconColor = overdueStatus ? '#EF4444' : '#F59E0B';
+                    const backgroundColor = overdueStatus ? '#FEE2E2' : '#FEF3C7';
+
+                    const IconComponent =
+                      reminder.type === 'maintenance' ? Wrench :
+                      reminder.type === 'insurance' ? Shield :
+                      reminder.type === 'inspection' ? AlertCircle :
+                      Calendar;
+
+                    return (
+                      <TouchableOpacity
+                        key={reminder.id}
+                        style={[
+                          styles.recordCard,
+                          overdueStatus && styles.overdueCard,
+                          {
+                            backgroundColor: overdueStatus
+                              ? backgroundColor
+                              : (isDark ? colors.surface : '#FFFFFF')
+                          },
+                        ]}
+                        onPress={() => {
+                          // Navigate to reminder detail
+                        }}
+                      >
+                        <View style={[styles.recordIcon, { backgroundColor: `${iconColor}20` }]}>
+                          <IconComponent size={20} color={iconColor} strokeWidth={2} />
+                        </View>
+
+                        <View style={styles.recordInfo}>
+                          <Text
+                            style={[
+                              styles.recordTitle,
+                              { color: overdueStatus ? '#991B1B' : colors.onSurface },
+                            ]}
+                          >
+                            {reminder.title}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.recordDate,
+                              {
+                                color: overdueStatus
+                                  ? '#DC2626'
+                                  : colors.onSurfaceVariant,
+                              },
+                            ]}
+                          >
+                            Scadenza: {formatDate(reminder.dueDate)}
+                          </Text>
+                        </View>
+
+                        <ChevronRight
+                          size={20}
+                          color={overdueStatus ? '#DC2626' : colors.onSurfaceVariant}
+                          strokeWidth={2}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </View>
+            </View>
+          )}
+
+          {!isDesktop && reminders.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                  Scadenze e Promemoria
+                </Text>
                 <TouchableOpacity
-                  key={reminder.id}
-                  style={[
-                    styles.recordCard,
-                    overdueStatus && styles.overdueCard,
-                    { 
-                      backgroundColor: overdueStatus 
-                        ? backgroundColor 
-                        : (isDark ? colors.surface : '#FFFFFF') 
-                    },
-                  ]}
-                  onPress={() => {
-                    // Navigate to reminder detail
-                  }}
+                  style={[styles.addButton, { backgroundColor: `${colors.primary}15` }]}
+                  onPress={() =>
+                    (navigation as any).navigate('AddReminder', { carId })
+                  }
                 >
-                  <View style={[styles.recordIcon, { backgroundColor: `${iconColor}20` }]}>
-                    <IconComponent size={20} color={iconColor} strokeWidth={2} />
-                  </View>
-
-                  <View style={styles.recordInfo}>
-                    <Text
-                      style={[
-                        styles.recordTitle,
-                        { color: overdueStatus ? '#991B1B' : colors.onSurface },
-                      ]}
-                    >
-                      {reminder.title}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.recordDate,
-                        {
-                          color: overdueStatus
-                            ? '#DC2626'
-                            : colors.onSurfaceVariant,
-                        },
-                      ]}
-                    >
-                      Scadenza: {formatDate(reminder.dueDate)}
-                    </Text>
-                  </View>
-
-                  <ChevronRight
-                    size={20}
-                    color={overdueStatus ? '#DC2626' : colors.onSurfaceVariant}
-                    strokeWidth={2}
-                  />
+                  <Plus size={20} color={colors.primary} strokeWidth={2.5} />
                 </TouchableOpacity>
-              );
-            })
+              </View>
+
+              {reminders.map((reminder) => {
+                const overdueStatus = isOverdue(reminder.dueDate);
+                const iconColor = overdueStatus ? '#EF4444' : '#F59E0B';
+                const backgroundColor = overdueStatus ? '#FEE2E2' : '#FEF3C7';
+
+                const IconComponent =
+                  reminder.type === 'maintenance' ? Wrench :
+                  reminder.type === 'insurance' ? Shield :
+                  reminder.type === 'inspection' ? AlertCircle :
+                  Calendar;
+
+                return (
+                  <TouchableOpacity
+                    key={reminder.id}
+                    style={[
+                      styles.recordCard,
+                      overdueStatus && styles.overdueCard,
+                      {
+                        backgroundColor: overdueStatus
+                          ? backgroundColor
+                          : (isDark ? colors.surface : '#FFFFFF')
+                      },
+                    ]}
+                    onPress={() => {
+                      // Navigate to reminder detail
+                    }}
+                  >
+                    <View style={[styles.recordIcon, { backgroundColor: `${iconColor}20` }]}>
+                      <IconComponent size={20} color={iconColor} strokeWidth={2} />
+                    </View>
+
+                    <View style={styles.recordInfo}>
+                      <Text
+                        style={[
+                          styles.recordTitle,
+                          { color: overdueStatus ? '#991B1B' : colors.onSurface },
+                        ]}
+                      >
+                        {reminder.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.recordDate,
+                          {
+                            color: overdueStatus
+                              ? '#DC2626'
+                              : colors.onSurfaceVariant,
+                          },
+                        ]}
+                      >
+                        Scadenza: {formatDate(reminder.dueDate)}
+                      </Text>
+                    </View>
+
+                    <ChevronRight
+                      size={20}
+                      color={overdueStatus ? '#DC2626' : colors.onSurfaceVariant}
+                      strokeWidth={2}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
         </View>
       </ScrollView>
+
+      {/* Photo Modal */}
+      {renderPhotoModal()}
+
+      {/* Photo Options Modal */}
+      {renderPhotoOptionsModal()}
+
+      {/* Document Modal */}
+      {renderDocumentModal()}
+
+      {/* Toast Notification */}
+      {renderToast()}
     </SafeAreaView>
   );
 };
@@ -350,6 +1364,12 @@ const CarDetailScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  webContainer: {
+    flex: 1,
+    maxWidth: 1400,
+    width: '100%',
+    alignSelf: 'center',
   },
   centerContent: {
     flex: 1,
@@ -394,6 +1414,19 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
+  },
+  webContent: {
+    padding: 32,
+  },
+  webGrid: {
+    flexDirection: 'row',
+    gap: 32,
+  },
+  webMainColumn: {
+    flex: 1,
+  },
+  webSidebar: {
+    width: 380,
   },
 
   // Vehicle Card
@@ -442,6 +1475,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: -0.3,
   },
+  sectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  viewAllButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -470,39 +1515,121 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Record Card
-  recordCard: {
+  // Photos Grid
+  photosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  photosGridWeb: {
+    gap: 16,
+  },
+  photoItem: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 50,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 8,
+  },
+  photoDeleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Documents
+  documentCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 12,
     marginBottom: 12,
+    gap: 12,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
+        shadowOpacity: 0.05,
         shadowRadius: 4,
       },
       android: {
         elevation: 2,
       },
       web: {
-        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+      },
+    }),
+  },
+  documentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  documentInfo: {
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  documentMeta: {
+    fontSize: 13,
+  },
+  documentDeleteButton: {
+    padding: 8,
+  },
+
+  // Records
+  recordCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
       },
     }),
   },
   overdueCard: {
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
   },
   recordIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   recordInfo: {
     flex: 1,
@@ -514,6 +1641,189 @@ const styles = StyleSheet.create({
   },
   recordDate: {
     fontSize: 13,
+  },
+
+  // Photo Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  modalImage: {
+    width: '90%',
+    height: '70%',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    marginTop: 20,
+    gap: 12,
+  },
+  modalActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  modalActionText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Options Modal (for web)
+  optionsModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
+      },
+    }),
+  },
+  optionsModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  optionsModalSubtitle: {
+    fontSize: 14,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+  },
+  optionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
+  // Document Modal
+  documentModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 32,
+    width: '90%',
+    maxWidth: 500,
+    alignSelf: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
+      },
+    }),
+  },
+  documentPreview: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  documentModalName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  documentModalInfo: {
+    fontSize: 14,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  documentModalActions: {
+    flexDirection: 'row',
+    marginTop: 20,
+    gap: 12,
+  },
+
+  // Toast
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+      },
+    }),
+  },
+  toastDesktop: {
+    left: 'auto',
+    right: 40,
+    maxWidth: 400,
+  },
+  toastSuccess: {
+    backgroundColor: '#10b981',
+  },
+  toastError: {
+    backgroundColor: '#EF4444',
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

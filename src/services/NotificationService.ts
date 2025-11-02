@@ -18,6 +18,9 @@ export interface NotificationSettings {
   documentExpiry: boolean;
   expenseAlerts: boolean;
   weeklyReports: boolean;
+  bookingNotifications: boolean;
+  quoteNotifications: boolean;
+  messageNotifications: boolean;
 }
 
 export class NotificationService {
@@ -223,6 +226,9 @@ export class NotificationService {
       documentExpiry: true,
       expenseAlerts: true,
       weeklyReports: false,
+      bookingNotifications: true,
+      quoteNotifications: true,
+      messageNotifications: true,
     };
   }
 
@@ -316,6 +322,244 @@ export class NotificationService {
       await Notifications.setBadgeCountAsync(count);
     } catch (error) {
       console.error('Error setting badge count:', error);
+    }
+  }
+
+  // =====================================================
+  // NOTIFICHE SISTEMA PRENOTAZIONE MECCANICO
+  // =====================================================
+
+  // Notifica prenotazione confermata
+  static async notifyBookingConfirmed(
+    workshopName: string,
+    date: Date,
+    bookingId: string
+  ) {
+    const settings = await this.getNotificationSettings();
+    if (!settings.bookingNotifications) return;
+
+    const title = 'Prenotazione Confermata';
+    const body = `La tua prenotazione presso ${workshopName} è stata confermata per il ${date.toLocaleDateString('it-IT', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'booking_confirmed',
+          bookingId,
+        },
+      },
+      trigger: null, // Invia subito
+    });
+
+    // Programma promemoria 1 giorno prima
+    const reminderDate = new Date(date);
+    reminderDate.setDate(reminderDate.getDate() - 1);
+    reminderDate.setHours(18, 0, 0, 0);
+
+    if (reminderDate > new Date()) {
+      await this.scheduleLocalNotification(
+        'Promemoria Appuntamento',
+        `Domani hai l'appuntamento presso ${workshopName}`,
+        reminderDate,
+        {
+          type: 'booking_reminder',
+          bookingId,
+        }
+      );
+    }
+  }
+
+  // Notifica preventivo ricevuto
+  static async notifyQuoteReceived(
+    workshopName: string,
+    totalCost: number,
+    quoteId: string,
+    bookingId: string
+  ) {
+    const settings = await this.getNotificationSettings();
+    if (!settings.quoteNotifications) return;
+
+    const title = 'Preventivo Ricevuto';
+    const body = `${workshopName} ha inviato un preventivo di €${totalCost.toFixed(2)}. Visualizzalo e approvalo.`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'quote_received',
+          quoteId,
+          bookingId,
+        },
+      },
+      trigger: null,
+    });
+  }
+
+  // Notifica proposta data ricevuta
+  static async notifyDateProposed(
+    workshopName: string,
+    proposedDate: Date,
+    bookingId: string
+  ) {
+    const settings = await this.getNotificationSettings();
+    if (!settings.bookingNotifications) return;
+
+    const title = 'Nuova Proposta Data';
+    const body = `${workshopName} ha proposto il ${proposedDate.toLocaleDateString('it-IT', {
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit'
+    })} per il tuo appuntamento`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'date_proposed',
+          bookingId,
+        },
+      },
+      trigger: null,
+    });
+  }
+
+  // Notifica auto pronta
+  static async notifyVehicleReady(
+    carInfo: { make: string; model: string; licensePlate: string },
+    workshopName: string,
+    bookingId: string
+  ) {
+    const settings = await this.getNotificationSettings();
+    if (!settings.bookingNotifications) return;
+
+    const title = 'Auto Pronta! 🎉';
+    const body = `La tua ${carInfo.make} ${carInfo.model} (${carInfo.licensePlate}) è pronta presso ${workshopName}. Puoi passare a ritirarla.`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'vehicle_ready',
+          bookingId,
+        },
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null,
+    });
+  }
+
+  // Notifica nuovo messaggio
+  static async notifyNewMessage(
+    senderName: string,
+    message: string,
+    bookingId: string
+  ) {
+    const settings = await this.getNotificationSettings();
+    if (!settings.messageNotifications) return;
+
+    const title = `Messaggio da ${senderName}`;
+    const body = message.length > 100 ? `${message.substring(0, 100)}...` : message;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'message_received',
+          bookingId,
+        },
+      },
+      trigger: null,
+    });
+  }
+
+  // Notifica prenotazione cancellata
+  static async notifyBookingCancelled(
+    workshopName: string,
+    reason: string,
+    bookingId: string
+  ) {
+    const settings = await this.getNotificationSettings();
+    if (!settings.bookingNotifications) return;
+
+    const title = 'Prenotazione Cancellata';
+    const body = reason
+      ? `La tua prenotazione presso ${workshopName} è stata cancellata. Motivo: ${reason}`
+      : `La tua prenotazione presso ${workshopName} è stata cancellata.`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'booking_cancelled',
+          bookingId,
+        },
+      },
+      trigger: null,
+    });
+  }
+
+  // Notifica richiesta prenotazione per meccanico
+  static async notifyNewBookingRequest(
+    userName: string,
+    vehicleInfo: string,
+    serviceType: string,
+    bookingId: string
+  ) {
+    const title = 'Nuova Richiesta Prenotazione';
+    const body = `${userName} ha richiesto una prenotazione per ${vehicleInfo} - ${serviceType}`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'new_booking_request',
+          bookingId,
+        },
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null,
+    });
+  }
+
+  // Configura canali Android per prenotazioni
+  static async setupBookingChannels() {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('bookings', {
+        name: 'Prenotazioni',
+        importance: Notifications.AndroidImportance.HIGH,
+        description: 'Notifiche per prenotazioni e appuntamenti',
+        vibrationPattern: [0, 250, 250, 250],
+      });
+
+      await Notifications.setNotificationChannelAsync('quotes', {
+        name: 'Preventivi',
+        importance: Notifications.AndroidImportance.HIGH,
+        description: 'Notifiche per preventivi ricevuti',
+      });
+
+      await Notifications.setNotificationChannelAsync('messages', {
+        name: 'Messaggi',
+        importance: Notifications.AndroidImportance.MAX,
+        description: 'Messaggi da officine e meccanici',
+        vibrationPattern: [0, 250, 250, 250],
+      });
     }
   }
 }
