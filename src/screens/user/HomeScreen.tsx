@@ -609,6 +609,20 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 8,
     },
+    webActionTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#111827',
+        textAlign: 'center',
+        letterSpacing: -0.3,
+    },
+    webActionDescription: {
+        fontSize: 13,
+        fontWeight: '400',
+        color: '#6b7280',
+        textAlign: 'center',
+        marginTop: 4,
+    },
 
     // Glass Card
     glassCard: {
