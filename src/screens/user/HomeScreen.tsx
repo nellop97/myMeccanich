@@ -327,7 +327,7 @@ const HomeScreen = () => {
     useEffect(() => {
         const interval = setInterval(() => {
             if (user?.id) {
-                console.log('🔔 Polling pending view requests...');
+                console.log('🔔 Polling pending view requests ....');
                 loadPendingViewRequests();
             }
         }, 180000); // <-- 3 minuti
