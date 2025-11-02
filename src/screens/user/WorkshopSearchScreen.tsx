@@ -91,9 +91,12 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
       const city = workshop.address?.city?.toLowerCase() || '';
       const province = workshop.address?.province?.toLowerCase() || '';
       const street = workshop.address?.street?.toLowerCase() || '';
-      const hasSpecMatch = workshop.specializations?.some(spec =>
-        spec?.toLowerCase().includes(searchLower)
-      ) || false;
+
+      // Verifica che specializations sia un array prima di usare .some()
+      const hasSpecMatch = Array.isArray(workshop.specializations) &&
+        workshop.specializations.some(spec =>
+          spec?.toLowerCase().includes(searchLower)
+        );
 
       return name.includes(searchLower) ||
              city.includes(searchLower) ||
