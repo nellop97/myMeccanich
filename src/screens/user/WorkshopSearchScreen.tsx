@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Star, Phone, Clock, Heart, Navigation } from 'lucide-react-native';
+import { MapPin, Star, Phone, Clock, Heart, Navigation, Search, X } from 'lucide-react-native';
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
 import { Workshop } from '../../types/database.types';
@@ -28,6 +28,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
   const { darkMode, user } = useStore();
   const [loading, setLoading] = useState(false);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [allWorkshops, setAllWorkshops] = useState<Workshop[]>([]);
   const [trustedWorkshops, setTrustedWorkshops] = useState<Workshop[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'trusted' | 'nearby'>('all');
@@ -53,8 +54,9 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
     try {
       setLoading(true);
       const data = await WorkshopService.searchWorkshops({
-        minRating: 3,
+        minRating: 0,
       });
+      setAllWorkshops(data);
       setWorkshops(data);
     } catch (error) {
       console.error('Errore caricamento officine:', error);
@@ -73,23 +75,30 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
     }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      loadWorkshops();
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+
+    if (!query.trim()) {
+      setWorkshops(allWorkshops);
       return;
     }
 
-    try {
-      setLoading(true);
-      const data = await WorkshopService.searchWorkshops({
-        city: searchQuery,
-      });
-      setWorkshops(data);
-    } catch (error) {
-      console.error('Errore ricerca:', error);
-    } finally {
-      setLoading(false);
-    }
+    // Filtra per ricerca case-insensitive su città, provincia, nome e indirizzo
+    const searchLower = query.toLowerCase().trim();
+    const filtered = allWorkshops.filter(workshop =>
+      workshop.name?.toLowerCase().includes(searchLower) ||
+      workshop.address?.city?.toLowerCase().includes(searchLower) ||
+      workshop.address?.province?.toLowerCase().includes(searchLower) ||
+      workshop.address?.street?.toLowerCase().includes(searchLower) ||
+      workshop.specializations?.some(spec => spec.toLowerCase().includes(searchLower))
+    );
+
+    setWorkshops(filtered);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setWorkshops(allWorkshops);
   };
 
   const toggleTrusted = async (workshopId: string, isTrusted: boolean) => {
@@ -227,16 +236,28 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
       {/* Barra di ricerca */}
       <View style={styles.searchContainer}>
         <View style={[styles.searchBar, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <MapPin size={20} color={theme.textSecondary} />
+          <Search size={20} color={theme.textSecondary} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Cerca per città o provincia..."
+            placeholder="Cerca per nome, città, provincia..."
             placeholderTextColor={theme.textSecondary}
             value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
+            onChangeText={handleSearch}
+            returnKeyType="search"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <X size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* Risultati ricerca */}
+        {searchQuery.length > 0 && (
+          <Text style={[styles.searchResults, { color: theme.textSecondary }]}>
+            {workshops.length} {workshops.length === 1 ? 'risultato' : 'risultati'} trovati
+          </Text>
+        )}
       </View>
 
       {/* Filtri */}
@@ -346,6 +367,14 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  searchResults: {
+    fontSize: 14,
+    marginTop: 8,
+    paddingHorizontal: 4,
   },
   filtersContainer: {
     flexDirection: 'row',

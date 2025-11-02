@@ -12,7 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Car, FileText, Clock, AlertCircle, Check } from 'lucide-react-native';
+import { Calendar, Car, FileText, Clock, AlertCircle, Check, ArrowLeft } from 'lucide-react-native';
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
 import BookingService from '../../services/BookingService';
@@ -525,10 +525,20 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
         style={styles.header}
       >
-        <Text style={styles.headerTitle}>Nuova Prenotazione</Text>
-        {workshop && (
-          <Text style={styles.headerSubtitle}>{workshop.name}</Text>
-        )}
+        <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <ArrowLeft size={24} color="#fff" strokeWidth={2} />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Nuova Prenotazione</Text>
+            {workshop && (
+              <Text style={styles.headerSubtitle}>{workshop.name}</Text>
+            )}
+          </View>
+        </View>
       </LinearGradient>
 
       {renderStepIndicator()}
@@ -598,6 +608,20 @@ const styles = StyleSheet.create({
   header: {
     padding: 24,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
