@@ -106,7 +106,7 @@ const MechanicDashboard: React.FC = () => {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    
+
     // Navigazione basata sul tab selezionato
     switch (tab) {
       case 'cars':
@@ -124,8 +124,12 @@ const MechanicDashboard: React.FC = () => {
       case 'parts':
         navigation.navigate('RepairPartsManagement' as never, { carId: '', repairId: '' } as never);
         break;
+      case 'mechanicProfile':
+        navigation.navigate('MechanicProfile' as never);
+        break;
       case 'profile':
-        navigation.navigate('Profile' as never, { userId: user?.uid || '' } as never);
+        // Fallback per compatibilità
+        navigation.navigate('MechanicProfile' as never);
         break;
       // Dashboard è il default, non naviga
       default:

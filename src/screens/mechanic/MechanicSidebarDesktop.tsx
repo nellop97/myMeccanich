@@ -123,7 +123,12 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
       case "CustomersList":
         onTabChange("customers");
         break;
+      case "MechanicProfile":
+        onTabChange("mechanicProfile");
+        break;
       case "Profile":
+        // Fallback per compatibilità
+        onTabChange("mechanicProfile");
         break;
       default:
         console.log("Navigation not implemented for:", itemId);
@@ -190,7 +195,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
         {/* User Profile Section */}
         <TouchableOpacity
           style={[styles.profileSection, { backgroundColor: theme.surface }]}
-          onPress={() => handleMenuNavigation("Profile")}
+          onPress={() => handleMenuNavigation("MechanicProfile")}
         >
           <View style={[styles.userAvatar, { backgroundColor: theme.primary }]}>
             <Text style={styles.userAvatarText}>{getUserInitials()}</Text>
