@@ -27,12 +27,15 @@ import {
   CheckCircle,
   Info,
   ArrowRight,
+  Search,
+  User,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useAppThemeManager } from '../hooks/useTheme';
 import { TransferService } from '../services/TransferService';
 import { VehicleTransfer } from '../types/database.types';
+import UserSearchModal from './UserSearchModal';
 
 interface VehicleTransferModalProps {
   visible: boolean;
@@ -105,6 +108,8 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
 
   const [step, setStep] = useState<'buyer' | 'options' | 'confirm'>('buyer');
   const [loading, setLoading] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
 
   // Dati compratore
   const [buyerName, setBuyerName] = useState('');
@@ -125,10 +130,20 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
     reminders: false,
   });
 
+  const handleSelectUser = (user: any) => {
+    // Salva l'utente selezionato e popola i dati del compratore
+    const fullName = `${user.firstName} ${user.lastName}`;
+    setSelectedUser(user);
+    setBuyerName(fullName);
+    setBuyerEmail(user.email);
+    setBuyerPhone(user.phone || '');
+    setShowSearchModal(false);
+  };
+
   const handleTransfer = async () => {
     // Validazione
-    if (!buyerName.trim()) {
-      Alert.alert('Errore', 'Inserisci il nome del nuovo proprietario');
+    if (!selectedUser || !buyerName.trim()) {
+      Alert.alert('Errore', 'Devi selezionare un proprietario dal database');
       return;
     }
 
@@ -188,6 +203,7 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
 
   const resetForm = () => {
     setStep('buyer');
+    setSelectedUser(null);
     setBuyerName('');
     setBuyerEmail('');
     setBuyerPhone('');
@@ -219,54 +235,88 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
         </Text>
       </View>
 
-      <View style={styles.inputContainer}>
-        <View style={styles.inputRow}>
-          <UserPlus size={20} color={colors.primary} />
-          <TextInput
-            style={[styles.input, { color: colors.onSurface }]}
-            placeholder="Nome completo"
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={buyerName}
-            onChangeText={setBuyerName}
-            autoComplete="name"
-            textContentType="name"
-          />
-        </View>
+      {!selectedUser ? (
+        // Mostra pulsante di ricerca se nessun utente è selezionato
+        <View>
+          <TouchableOpacity
+            style={[styles.searchButton]}
+            onPress={() => setShowSearchModal(true)}
+          >
+            <LinearGradient
+              colors={[colors.primary, colors.secondary]}
+              style={styles.searchButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Search size={20} color="white" />
+              <Text style={styles.searchButtonText}>Cerca Proprietario</Text>
+            </LinearGradient>
+          </TouchableOpacity>
 
-        <View style={styles.inputRow}>
-          <Mail size={20} color={colors.primary} />
-          <TextInput
-            style={[styles.input, { color: colors.onSurface }]}
-            placeholder="Email"
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={buyerEmail}
-            onChangeText={setBuyerEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            textContentType="emailAddress"
-          />
+          <GlassCard style={styles.emptyStateCard}>
+            <User size={40} color={colors.onSurfaceVariant} />
+            <Text style={[styles.emptyStateText, { color: colors.onSurfaceVariant }]}>
+              Cerca e seleziona il nuovo proprietario dal database
+            </Text>
+          </GlassCard>
         </View>
+      ) : (
+        // Mostra card con dati utente selezionato
+        <View>
+          <GlassCard style={styles.selectedUserCard}>
+            <View style={styles.selectedUserContent}>
+              <View style={[styles.userAvatar, { backgroundColor: colors.primary }]}>
+                <Text style={styles.userAvatarText}>
+                  {selectedUser.firstName.charAt(0)}{selectedUser.lastName.charAt(0)}
+                </Text>
+              </View>
+              <View style={styles.userInfoContainer}>
+                <Text style={[styles.userName, { color: colors.onSurface }]}>
+                  {selectedUser.firstName} {selectedUser.lastName}
+                </Text>
+                <View style={styles.userDetailRow}>
+                  <Mail size={14} color={colors.onSurfaceVariant} />
+                  <Text style={[styles.userDetail, { color: colors.onSurfaceVariant }]}>
+                    {selectedUser.email}
+                  </Text>
+                </View>
+                {selectedUser.phone && (
+                  <View style={styles.userDetailRow}>
+                    <Phone size={14} color={colors.onSurfaceVariant} />
+                    <Text style={[styles.userDetail, { color: colors.onSurfaceVariant }]}>
+                      {selectedUser.phone}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </GlassCard>
 
-        <View style={styles.inputRow}>
-          <Phone size={20} color={colors.primary} />
-          <TextInput
-            style={[styles.input, { color: colors.onSurface }]}
-            placeholder="Telefono (opzionale)"
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={buyerPhone}
-            onChangeText={setBuyerPhone}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            textContentType="telephoneNumber"
-          />
+          <TouchableOpacity
+            style={[styles.changeUserButton, { borderColor: colors.outline }]}
+            onPress={() => {
+              setSelectedUser(null);
+              setShowSearchModal(true);
+            }}
+          >
+            <Search size={16} color={colors.onSurface} />
+            <Text style={[styles.changeUserButtonText, { color: colors.onSurface }]}>
+              Cambia Proprietario
+            </Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      )}
 
       <TouchableOpacity
-        style={[styles.nextButton, { opacity: !buyerName || !buyerEmail ? 0.5 : 1 }]}
-        onPress={() => setStep('options')}
-        disabled={!buyerName || !buyerEmail}
+        style={[styles.nextButton, { opacity: !selectedUser ? 0.5 : 1, marginTop: 16 }]}
+        onPress={() => {
+          if (!selectedUser) {
+            Alert.alert('Attenzione', 'Devi selezionare un proprietario prima di continuare');
+            return;
+          }
+          setStep('options');
+        }}
+        disabled={!selectedUser}
       >
         <LinearGradient
           colors={[colors.primary, colors.secondary]}
@@ -624,6 +674,14 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      {/* User Search Modal */}
+      <UserSearchModal
+        visible={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onSelectUser={handleSelectUser}
+        darkMode={isDark}
+      />
     </Modal>
   );
 };
@@ -868,6 +926,96 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '700',
+  },
+  searchButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    marginBottom: 16,
+  },
+  searchButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  searchButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  emptyStateCard: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    minHeight: 180,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 250,
+  },
+  selectedUserCard: {
+    padding: 20,
+    marginBottom: 16,
+  },
+  selectedUserContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  userAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  userInfoContainer: {
+    flex: 1,
+    gap: 6,
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  userDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  userDetail: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  changeUserButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 8,
+  },
+  changeUserButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
