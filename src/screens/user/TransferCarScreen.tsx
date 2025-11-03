@@ -19,20 +19,23 @@ import {
   Phone,
   FileText,
   Send,
-  AlertTriangle
+  AlertTriangle,
+  Search
 } from 'lucide-react-native';
 import { db, auth } from '../../services/firebase';
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  query, 
-  where, 
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  doc,
+  query,
+  where,
   getDocs,
-  serverTimestamp 
+  serverTimestamp
 } from 'firebase/firestore';
 import { useStore } from '../../store';
+import { useForm, Controller } from 'react-hook-form';
+import UserSearchModal from '../../components/UserSearchModal';
 
 interface TransferFormData {
   newOwnerEmail: string;
@@ -60,6 +63,7 @@ const TransferCarScreen = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1); // 1: Form, 2: Confirmation, 3: Success
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const theme = {
     background: darkMode ? '#121212' : '#f5f5f5',
@@ -72,7 +76,7 @@ const TransferCarScreen = () => {
     success: '#34C759'
   };
 
-  const { control, handleSubmit, watch, formState: { errors } } = useForm<TransferFormData>({
+  const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm<TransferFormData>({
     defaultValues: {
       newOwnerEmail: '',
       newOwnerName: '',
@@ -85,6 +89,15 @@ const TransferCarScreen = () => {
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  const handleSelectUser = (user: any) => {
+    // Popola i campi del form con i dati dell'utente selezionato
+    const fullName = `${user.firstName} ${user.lastName}`;
+    setValue('newOwnerEmail', user.email);
+    setValue('newOwnerName', fullName);
+    setValue('newOwnerPhone', user.phone || '');
+    setShowSearchModal(false);
   };
 
   const checkUserExists = async (email: string) => {
@@ -195,6 +208,21 @@ const TransferCarScreen = () => {
       {/* New Owner Info */}
       <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Nuovo Proprietario</Text>
+
+        {/* Search Button */}
+        <TouchableOpacity
+          style={[styles.searchButton, { backgroundColor: theme.primary }]}
+          onPress={() => setShowSearchModal(true)}
+        >
+          <Search size={20} color="#ffffff" />
+          <Text style={styles.searchButtonText}>Cerca Proprietario</Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider}>
+          <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+          <Text style={[styles.dividerText, { color: theme.textSecondary }]}>oppure inserisci manualmente</Text>
+          <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+        </View>
 
         <View style={styles.inputContainer}>
           <Text style={[styles.inputLabel, { color: theme.text }]}>Email *</Text>
@@ -430,6 +458,14 @@ const TransferCarScreen = () => {
       {step === 1 && renderForm()}
       {step === 2 && renderConfirmation()}
       {step === 3 && renderSuccess()}
+
+      {/* User Search Modal */}
+      <UserSearchModal
+        visible={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onSelectUser={handleSelectUser}
+        darkMode={darkMode}
+      />
     </SafeAreaView>
   );
 };
@@ -646,6 +682,34 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  searchButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 12,
+    textTransform: 'uppercase',
   },
 });
 
