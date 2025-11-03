@@ -552,7 +552,7 @@ const FuelTrackingScreen = () => {
       <FAB
         icon="plus"
         style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate('AddFuelRecord', { carId: selectedVehicle })}
+        onPress={() => navigation.navigate('AddFuel', { carId: selectedVehicle })}
       />
     </SafeAreaView>
   );

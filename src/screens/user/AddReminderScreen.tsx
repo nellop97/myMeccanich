@@ -119,36 +119,106 @@ const AddReminderScreen = () => {
   const isWeb = Platform.OS === 'web';
 
   const handleSave = async () => {
-    if (!vehicleId) {
-      Alert.alert('Errore', 'Seleziona un veicolo');
+    // ============================================
+    // VALIDAZIONI CAMPI OBBLIGATORI
+    // ============================================
+
+    // Veicolo obbligatorio
+    if (!vehicleId || vehicleId.trim() === '') {
+      Alert.alert('Campo obbligatorio', 'Devi selezionare un veicolo per creare il promemoria');
       return;
     }
 
-    if (!title.trim()) {
-      Alert.alert('Errore', 'Inserisci un titolo per il promemoria');
+    // Titolo obbligatorio
+    if (!title || title.trim() === '') {
+      Alert.alert('Campo obbligatorio', 'Il titolo del promemoria è obbligatorio');
       return;
+    }
+
+    // Tipo obbligatorio
+    if (!type) {
+      Alert.alert('Campo obbligatorio', 'Seleziona il tipo di promemoria');
+      return;
+    }
+
+    // Data scadenza obbligatoria
+    if (!dueDate) {
+      Alert.alert('Campo obbligatorio', 'Seleziona la data di scadenza del promemoria');
+      return;
+    }
+
+    // Validazione data futura
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (dueDate < today) {
+      Alert.alert('Data non valida', 'La data di scadenza non può essere nel passato');
+      return;
+    }
+
+    // Validazione campi numerici opzionali
+    if (dueMileage && dueMileage.trim() !== '') {
+      const mileageNum = parseInt(dueMileage);
+      if (isNaN(mileageNum) || mileageNum <= 0) {
+        Alert.alert('Valore non valido', 'Il chilometraggio deve essere un numero positivo');
+        return;
+      }
+    }
+
+    if (cost && cost.trim() !== '') {
+      const costNum = parseFloat(cost);
+      if (isNaN(costNum) || costNum < 0) {
+        Alert.alert('Valore non valido', 'Il costo deve essere un numero positivo o zero');
+        return;
+      }
+    }
+
+    // Validazione ricorrenza
+    if (isRecurring) {
+      if (!recurringInterval || recurringInterval <= 0) {
+        Alert.alert('Ricorrenza non valida', 'L\'intervallo di ricorrenza deve essere maggiore di zero');
+        return;
+      }
+      if (!recurringUnit) {
+        Alert.alert('Ricorrenza non valida', 'Seleziona l\'unità di tempo per la ricorrenza');
+        return;
+      }
     }
 
     try {
       setSaving(true);
 
       const reminderData: any = {
-        vehicleId,
+        userId: '', // Verrà impostato automaticamente dal service
+        vehicleId: vehicleId.trim(),
         title: title.trim(),
         type,
         dueDate,
-        isActive,
+        isActive: isActive ?? true,
         isCompleted: false,
-        isRecurring,
-        notifyDaysBefore,
+        isRecurring: isRecurring ?? false,
+        notifyDaysBefore: notifyDaysBefore ?? 7,
         notificationSent: false,
       };
 
-      // Aggiungi campi opzionali solo se presenti
-      if (description.trim()) reminderData.description = description.trim();
-      if (dueMileage) reminderData.dueMileage = parseInt(dueMileage);
-      if (cost) reminderData.cost = parseFloat(cost);
-      if (notes.trim()) reminderData.notes = notes.trim();
+      // Aggiungi campi opzionali solo se presenti e validi
+      if (description && description.trim()) {
+        reminderData.description = description.trim();
+      }
+      if (dueMileage && dueMileage.trim()) {
+        const mileageNum = parseInt(dueMileage);
+        if (!isNaN(mileageNum) && mileageNum > 0) {
+          reminderData.dueMileage = mileageNum;
+        }
+      }
+      if (cost && cost.trim()) {
+        const costNum = parseFloat(cost);
+        if (!isNaN(costNum) && costNum >= 0) {
+          reminderData.cost = costNum;
+        }
+      }
+      if (notes && notes.trim()) {
+        reminderData.notes = notes.trim();
+      }
 
       // Campi ricorrenza
       if (isRecurring) {
@@ -158,15 +228,27 @@ const AddReminderScreen = () => {
 
       await ReminderService.createReminder(reminderData);
 
-      Alert.alert('Successo', 'Promemoria creato con successo', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
+      // ============================================
+      // POPUP DI SUCCESSO
+      // ============================================
+      Alert.alert(
+        '✅ Promemoria Creato',
+        `Il promemoria "${title.trim()}" è stato aggiunto con successo al tuo calendario`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Naviga indietro
+              navigation.goBack();
+            },
+          },
+        ],
+        { cancelable: false }
+      );
     } catch (error) {
       console.error('Errore creazione promemoria:', error);
-      Alert.alert('Errore', 'Impossibile creare il promemoria');
+      const errorMessage = error instanceof Error ? error.message : 'Impossibile creare il promemoria. Riprova.';
+      Alert.alert('❌ Errore', errorMessage);
     } finally {
       setSaving(false);
     }
@@ -396,7 +478,7 @@ const AddReminderScreen = () => {
                   </Text>
                 </TouchableOpacity>
 
-                {showDatePicker && (
+                {showDatePicker && Platform.OS !== 'web' && (
                   <DateTimePicker
                     value={dueDate}
                     mode="date"
@@ -407,6 +489,34 @@ const AddReminderScreen = () => {
                       if (selectedDate) setDueDate(selectedDate);
                     }}
                   />
+                )}
+
+                {showDatePicker && Platform.OS === 'web' && (
+                  <View style={[styles.inputRow, { marginTop: 12 }]}>
+                    <View style={styles.inputIcon}>
+                      <Calendar size={20} color={colors.primary} />
+                    </View>
+                    <input
+                      type="date"
+                      value={dueDate.toISOString().split('T')[0]}
+                      min={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const selectedDate = new Date(e.target.value);
+                        setDueDate(selectedDate);
+                        setShowDatePicker(false);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: 12,
+                        fontSize: 16,
+                        borderRadius: 12,
+                        border: 'none',
+                        backgroundColor: colors.surfaceVariant,
+                        color: colors.onSurface,
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                  </View>
                 )}
 
                 <View style={styles.inputRow}>

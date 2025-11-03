@@ -29,8 +29,12 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
-      const q = query(remindersRef, orderBy('dueDate', 'asc'));
+      const remindersRef = collection(db, this.COLLECTION_NAME);
+      const q = query(
+        remindersRef,
+        where('userId', '==', uid),
+        orderBy('dueDate', 'asc')
+      );
       const snapshot = await getDocs(q);
 
       return snapshot.docs.map(doc => this.convertFirestoreToReminder(doc.id, doc.data()));
@@ -48,9 +52,10 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('isActive', '==', true),
         where('isCompleted', '==', false),
         orderBy('dueDate', 'asc')
@@ -73,9 +78,10 @@ export class ReminderService {
       if (!uid) throw new Error('Utente non autenticato');
 
       const now = Timestamp.now();
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('isActive', '==', true),
         where('isCompleted', '==', false),
         where('dueDate', '<', now),
@@ -102,9 +108,10 @@ export class ReminderService {
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + days);
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('isActive', '==', true),
         where('isCompleted', '==', false),
         where('dueDate', '>=', Timestamp.fromDate(now)),
@@ -128,9 +135,10 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('vehicleId', '==', vehicleId),
         orderBy('dueDate', 'asc')
       );
@@ -151,7 +159,7 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
       const reminderSnap = await getDoc(reminderRef);
 
       if (!reminderSnap.exists()) {
@@ -173,7 +181,18 @@ export class ReminderService {
       const uid = auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
+
+      // Validazioni obbligatorie
+      if (!reminderData.vehicleId || reminderData.vehicleId.trim() === '') {
+        throw new Error('vehicleId è obbligatorio per creare un promemoria');
+      }
+      if (!reminderData.title || reminderData.title.trim() === '') {
+        throw new Error('title è obbligatorio per creare un promemoria');
+      }
+      if (!reminderData.dueDate || !(reminderData.dueDate instanceof Date)) {
+        throw new Error('dueDate deve essere una data valida');
+      }
 
       // Calcola la prossima scadenza se ricorrente
       let nextDueDate = null;
@@ -187,32 +206,50 @@ export class ReminderService {
 
       const newReminder: any = {
         userId: uid,
-        vehicleId: reminderData.vehicleId,
-        title: reminderData.title,
+        vehicleId: reminderData.vehicleId.trim(),
+        title: reminderData.title.trim(),
         type: reminderData.type,
         dueDate: Timestamp.fromDate(reminderData.dueDate),
-        isActive: reminderData.isActive,
+        isActive: reminderData.isActive ?? true,
         isCompleted: false,
-        isRecurring: reminderData.isRecurring,
-        notifyDaysBefore: reminderData.notifyDaysBefore,
+        isRecurring: reminderData.isRecurring ?? false,
+        notifyDaysBefore: reminderData.notifyDaysBefore ?? 7,
         notificationSent: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      // Aggiungi campi opzionali solo se presenti
-      if (reminderData.description) newReminder.description = reminderData.description;
-      if (reminderData.dueMileage) newReminder.dueMileage = reminderData.dueMileage;
-      if (reminderData.cost) newReminder.cost = reminderData.cost;
-      if (reminderData.notes) newReminder.notes = reminderData.notes;
-      if (reminderData.relatedMaintenanceId) newReminder.relatedMaintenanceId = reminderData.relatedMaintenanceId;
-      if (reminderData.relatedDocumentId) newReminder.relatedDocumentId = reminderData.relatedDocumentId;
+      // Aggiungi campi opzionali solo se presenti e validi
+      if (reminderData.description && reminderData.description.trim()) {
+        newReminder.description = reminderData.description.trim();
+      }
+      if (reminderData.dueMileage && reminderData.dueMileage > 0) {
+        newReminder.dueMileage = reminderData.dueMileage;
+      }
+      if (reminderData.cost && reminderData.cost > 0) {
+        newReminder.cost = reminderData.cost;
+      }
+      if (reminderData.notes && reminderData.notes.trim()) {
+        newReminder.notes = reminderData.notes.trim();
+      }
+      if (reminderData.relatedMaintenanceId && reminderData.relatedMaintenanceId.trim()) {
+        newReminder.relatedMaintenanceId = reminderData.relatedMaintenanceId.trim();
+      }
+      if (reminderData.relatedDocumentId && reminderData.relatedDocumentId.trim()) {
+        newReminder.relatedDocumentId = reminderData.relatedDocumentId.trim();
+      }
 
-      // Campi ricorrenza
+      // Campi ricorrenza - aggiungi solo se effettivamente ricorrente e con valori validi
       if (reminderData.isRecurring) {
-        if (reminderData.recurringInterval) newReminder.recurringInterval = reminderData.recurringInterval;
-        if (reminderData.recurringUnit) newReminder.recurringUnit = reminderData.recurringUnit;
-        if (nextDueDate) newReminder.nextDueDate = Timestamp.fromDate(nextDueDate);
+        if (reminderData.recurringInterval && reminderData.recurringInterval > 0) {
+          newReminder.recurringInterval = reminderData.recurringInterval;
+        }
+        if (reminderData.recurringUnit) {
+          newReminder.recurringUnit = reminderData.recurringUnit;
+        }
+        if (nextDueDate) {
+          newReminder.nextDueDate = Timestamp.fromDate(nextDueDate);
+        }
       }
 
       const docRef = await addDoc(remindersRef, newReminder);
@@ -235,45 +272,110 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
 
       const updateData: any = {
         updatedAt: serverTimestamp(),
       };
 
-      // Aggiungi solo i campi che sono effettivamente presenti nell'update
-      if (updates.vehicleId !== undefined) updateData.vehicleId = updates.vehicleId;
-      if (updates.title !== undefined) updateData.title = updates.title;
-      if (updates.description !== undefined) updateData.description = updates.description;
-      if (updates.type !== undefined) updateData.type = updates.type;
-      if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
-      if (updates.isCompleted !== undefined) updateData.isCompleted = updates.isCompleted;
-      if (updates.isRecurring !== undefined) updateData.isRecurring = updates.isRecurring;
-      if (updates.notifyDaysBefore !== undefined) updateData.notifyDaysBefore = updates.notifyDaysBefore;
-      if (updates.notificationSent !== undefined) updateData.notificationSent = updates.notificationSent;
-      if (updates.dueMileage !== undefined) updateData.dueMileage = updates.dueMileage;
-      if (updates.cost !== undefined) updateData.cost = updates.cost;
-      if (updates.notes !== undefined) updateData.notes = updates.notes;
-      if (updates.recurringInterval !== undefined) updateData.recurringInterval = updates.recurringInterval;
-      if (updates.recurringUnit !== undefined) updateData.recurringUnit = updates.recurringUnit;
-      if (updates.relatedMaintenanceId !== undefined) updateData.relatedMaintenanceId = updates.relatedMaintenanceId;
-      if (updates.relatedDocumentId !== undefined) updateData.relatedDocumentId = updates.relatedDocumentId;
+      // Aggiungi solo i campi che sono effettivamente presenti nell'update con valori validi
+      // Campi stringa: validare che non siano vuoti
+      if (updates.vehicleId !== undefined && updates.vehicleId !== null) {
+        if (typeof updates.vehicleId === 'string' && updates.vehicleId.trim() !== '') {
+          updateData.vehicleId = updates.vehicleId.trim();
+        }
+      }
+      if (updates.title !== undefined && updates.title !== null) {
+        if (typeof updates.title === 'string' && updates.title.trim() !== '') {
+          updateData.title = updates.title.trim();
+        }
+      }
+      if (updates.description !== undefined) {
+        if (updates.description === null || updates.description === '') {
+          updateData.description = null; // Permetti rimozione
+        } else if (typeof updates.description === 'string' && updates.description.trim() !== '') {
+          updateData.description = updates.description.trim();
+        }
+      }
+      if (updates.notes !== undefined) {
+        if (updates.notes === null || updates.notes === '') {
+          updateData.notes = null; // Permetti rimozione
+        } else if (typeof updates.notes === 'string' && updates.notes.trim() !== '') {
+          updateData.notes = updates.notes.trim();
+        }
+      }
 
-      // Converti le date in Timestamp se presenti
-      if (updates.dueDate) {
+      // Campi enum/tipo
+      if (updates.type !== undefined && updates.type !== null) updateData.type = updates.type;
+      if (updates.recurringUnit !== undefined && updates.recurringUnit !== null) updateData.recurringUnit = updates.recurringUnit;
+
+      // Campi booleani
+      if (typeof updates.isActive === 'boolean') updateData.isActive = updates.isActive;
+      if (typeof updates.isCompleted === 'boolean') updateData.isCompleted = updates.isCompleted;
+      if (typeof updates.isRecurring === 'boolean') updateData.isRecurring = updates.isRecurring;
+      if (typeof updates.notificationSent === 'boolean') updateData.notificationSent = updates.notificationSent;
+
+      // Campi numerici: validare che siano numeri positivi
+      if (typeof updates.notifyDaysBefore === 'number' && updates.notifyDaysBefore >= 0) {
+        updateData.notifyDaysBefore = updates.notifyDaysBefore;
+      }
+      if (typeof updates.dueMileage === 'number' && updates.dueMileage > 0) {
+        updateData.dueMileage = updates.dueMileage;
+      }
+      if (typeof updates.cost === 'number' && updates.cost >= 0) {
+        updateData.cost = updates.cost;
+      }
+      if (typeof updates.recurringInterval === 'number' && updates.recurringInterval > 0) {
+        updateData.recurringInterval = updates.recurringInterval;
+      }
+
+      // ID relazionali
+      if (updates.relatedMaintenanceId !== undefined) {
+        if (updates.relatedMaintenanceId === null || updates.relatedMaintenanceId === '') {
+          updateData.relatedMaintenanceId = null; // Permetti rimozione
+        } else if (typeof updates.relatedMaintenanceId === 'string' && updates.relatedMaintenanceId.trim() !== '') {
+          updateData.relatedMaintenanceId = updates.relatedMaintenanceId.trim();
+        }
+      }
+      if (updates.relatedDocumentId !== undefined) {
+        if (updates.relatedDocumentId === null || updates.relatedDocumentId === '') {
+          updateData.relatedDocumentId = null; // Permetti rimozione
+        } else if (typeof updates.relatedDocumentId === 'string' && updates.relatedDocumentId.trim() !== '') {
+          updateData.relatedDocumentId = updates.relatedDocumentId.trim();
+        }
+      }
+
+      // Converti le date in Timestamp se presenti e valide
+      if (updates.dueDate && updates.dueDate instanceof Date && !isNaN(updates.dueDate.getTime())) {
         updateData.dueDate = Timestamp.fromDate(updates.dueDate);
       }
       if (updates.completedAt) {
-        updateData.completedAt = Timestamp.fromDate(updates.completedAt);
+        if (updates.completedAt instanceof Date && !isNaN(updates.completedAt.getTime())) {
+          updateData.completedAt = Timestamp.fromDate(updates.completedAt);
+        } else if (updates.completedAt === null) {
+          updateData.completedAt = null; // Permetti rimozione
+        }
       }
       if (updates.lastNotified) {
-        updateData.lastNotified = Timestamp.fromDate(updates.lastNotified);
+        if (updates.lastNotified instanceof Date && !isNaN(updates.lastNotified.getTime())) {
+          updateData.lastNotified = Timestamp.fromDate(updates.lastNotified);
+        } else if (updates.lastNotified === null) {
+          updateData.lastNotified = null;
+        }
       }
       if (updates.lastCompletedDate) {
-        updateData.lastCompletedDate = Timestamp.fromDate(updates.lastCompletedDate);
+        if (updates.lastCompletedDate instanceof Date && !isNaN(updates.lastCompletedDate.getTime())) {
+          updateData.lastCompletedDate = Timestamp.fromDate(updates.lastCompletedDate);
+        } else if (updates.lastCompletedDate === null) {
+          updateData.lastCompletedDate = null;
+        }
       }
       if (updates.nextDueDate) {
-        updateData.nextDueDate = Timestamp.fromDate(updates.nextDueDate);
+        if (updates.nextDueDate instanceof Date && !isNaN(updates.nextDueDate.getTime())) {
+          updateData.nextDueDate = Timestamp.fromDate(updates.nextDueDate);
+        } else if (updates.nextDueDate === null) {
+          updateData.nextDueDate = null;
+        }
       }
 
       // Ricalcola nextDueDate se necessario
@@ -301,7 +403,7 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
       await deleteDoc(reminderRef);
     } catch (error) {
       console.error('Errore nell\'eliminazione del promemoria:', error);
@@ -320,7 +422,7 @@ export class ReminderService {
       const reminder = await this.getReminderById(reminderId, uid);
       if (!reminder) throw new Error('Promemoria non trovato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
 
       if (reminder.isRecurring && reminder.recurringInterval && reminder.recurringUnit) {
         // Se è ricorrente, sposta la data alla prossima occorrenza
@@ -363,7 +465,7 @@ export class ReminderService {
       const reminder = await this.getReminderById(reminderId, uid);
       if (!reminder) throw new Error('Promemoria non trovato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
       await updateDoc(reminderRef, {
         isActive: !reminder.isActive,
         updatedAt: serverTimestamp(),
@@ -382,8 +484,12 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
-      const q = query(remindersRef, where('isCompleted', '==', true));
+      const remindersRef = collection(db, this.COLLECTION_NAME);
+      const q = query(
+        remindersRef,
+        where('userId', '==', uid),
+        where('isCompleted', '==', true)
+      );
       const snapshot = await getDocs(q);
 
       const batch = writeBatch(db);

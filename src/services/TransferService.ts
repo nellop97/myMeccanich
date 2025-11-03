@@ -9,6 +9,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   getDocs,
@@ -212,10 +213,29 @@ export class TransferService {
       if (!transfer.transferData.maintenanceHistory) {
         updates.maintenanceCount = 0;
         updates.lastMaintenanceDate = null;
+        // Elimina anche i record di manutenzione
+        await this.deleteMaintenanceRecords(transfer.vehicleId);
+      } else {
+        // Trasferisci manutenzioni al nuovo proprietario
+        await this.transferMaintenanceRecords(
+          transfer.vehicleId,
+          transfer.buyerEmail,
+          transfer.sellerId,
+          !transfer.transferData.maintenanceDetails
+        );
       }
 
       if (!transfer.transferData.documents) {
         updates.documentsCount = 0;
+        // Elimina anche i documenti
+        await this.deleteDocuments(transfer.vehicleId, transfer.sellerId);
+      } else {
+        // Trasferisci documenti al nuovo proprietario
+        await this.transferDocuments(
+          transfer.vehicleId,
+          transfer.sellerId,
+          transfer.buyerEmail
+        );
       }
 
       if (!transfer.transferData.photos) {
@@ -223,16 +243,19 @@ export class TransferService {
         updates.mainImageUrl = null;
       }
 
-      await updateDoc(vehicleRef, updates);
-
-      // Nascondi/trasferisci manutenzioni
-      if (transfer.transferData.maintenanceHistory) {
-        await this.transferMaintenanceRecords(
+      // Trasferisci promemoria se richiesto
+      if (transfer.transferData.reminders) {
+        await this.transferReminders(
           transfer.vehicleId,
-          transfer.buyerEmail,
-          !transfer.transferData.maintenanceDetails
+          transfer.sellerId,
+          transfer.buyerEmail
         );
+      } else {
+        // Elimina i promemoria del veicolo
+        await this.deleteReminders(transfer.vehicleId, transfer.sellerId);
       }
+
+      await updateDoc(vehicleRef, updates);
 
       // Completa trasferimento
       await updateDoc(doc(db, this.transfersCollection, transfer.id), {
@@ -249,12 +272,14 @@ export class TransferService {
   private async transferMaintenanceRecords(
     vehicleId: string,
     newOwnerId: string,
+    oldOwnerId: string,
     hideCosts: boolean
   ): Promise<void> {
     try {
       const q = query(
         collection(db, 'maintenance_records'),
-        where('vehicleId', '==', vehicleId)
+        where('vehicleId', '==', vehicleId),
+        where('userId', '==', oldOwnerId)
       );
 
       const querySnapshot = await getDocs(q);
@@ -262,7 +287,7 @@ export class TransferService {
       const batch = [];
       for (const doc of querySnapshot.docs) {
         const updates: any = {
-          ownerId: newOwnerId,
+          userId: newOwnerId,
           updatedAt: serverTimestamp()
         };
 
@@ -280,6 +305,144 @@ export class TransferService {
       await Promise.all(batch);
     } catch (error) {
       console.error('Error transferring maintenance records:', error);
+      throw error;
+    }
+  }
+
+  // Elimina record manutenzione
+  private async deleteMaintenanceRecords(vehicleId: string): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'maintenance_records'),
+        where('vehicleId', '==', vehicleId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const batch = [];
+
+      for (const docSnap of querySnapshot.docs) {
+        batch.push(deleteDoc(docSnap.ref));
+      }
+
+      await Promise.all(batch);
+    } catch (error) {
+      console.error('Error deleting maintenance records:', error);
+      throw error;
+    }
+  }
+
+  // Trasferisci documenti
+  private async transferDocuments(
+    vehicleId: string,
+    oldOwnerId: string,
+    newOwnerId: string
+  ): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'documents'),
+        where('vehicleId', '==', vehicleId),
+        where('userId', '==', oldOwnerId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const batch = [];
+
+      for (const doc of querySnapshot.docs) {
+        batch.push(
+          updateDoc(doc.ref, {
+            userId: newOwnerId,
+            updatedAt: serverTimestamp()
+          })
+        );
+      }
+
+      await Promise.all(batch);
+    } catch (error) {
+      console.error('Error transferring documents:', error);
+      throw error;
+    }
+  }
+
+  // Elimina documenti
+  private async deleteDocuments(
+    vehicleId: string,
+    ownerId: string
+  ): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'documents'),
+        where('vehicleId', '==', vehicleId),
+        where('userId', '==', ownerId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const batch = [];
+
+      for (const docSnap of querySnapshot.docs) {
+        batch.push(deleteDoc(docSnap.ref));
+      }
+
+      await Promise.all(batch);
+    } catch (error) {
+      console.error('Error deleting documents:', error);
+      throw error;
+    }
+  }
+
+  // Trasferisci promemoria
+  private async transferReminders(
+    vehicleId: string,
+    oldOwnerId: string,
+    newOwnerId: string
+  ): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'reminders'),
+        where('vehicleId', '==', vehicleId),
+        where('userId', '==', oldOwnerId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const batch = [];
+
+      for (const doc of querySnapshot.docs) {
+        batch.push(
+          updateDoc(doc.ref, {
+            userId: newOwnerId,
+            updatedAt: serverTimestamp()
+          })
+        );
+      }
+
+      await Promise.all(batch);
+    } catch (error) {
+      console.error('Error transferring reminders:', error);
+      throw error;
+    }
+  }
+
+  // Elimina promemoria
+  private async deleteReminders(
+    vehicleId: string,
+    ownerId: string
+  ): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'reminders'),
+        where('vehicleId', '==', vehicleId),
+        where('userId', '==', ownerId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const batch = [];
+
+      for (const docSnap of querySnapshot.docs) {
+        batch.push(deleteDoc(docSnap.ref));
+      }
+
+      await Promise.all(batch);
+    } catch (error) {
+      console.error('Error deleting reminders:', error);
       throw error;
     }
   }
