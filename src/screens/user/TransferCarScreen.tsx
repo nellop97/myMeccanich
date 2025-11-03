@@ -15,9 +15,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   ArrowLeft,
   User,
-  Mail,
-  Phone,
-  FileText,
   Send,
   AlertTriangle,
   Search
@@ -64,6 +61,7 @@ const TransferCarScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1); // 1: Form, 2: Confirmation, 3: Success
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
 
   const theme = {
     background: darkMode ? '#121212' : '#f5f5f5',
@@ -92,8 +90,9 @@ const TransferCarScreen = () => {
   };
 
   const handleSelectUser = (user: any) => {
-    // Popola i campi del form con i dati dell'utente selezionato
+    // Salva l'utente selezionato e popola i campi del form
     const fullName = `${user.firstName} ${user.lastName}`;
+    setSelectedUser(user);
     setValue('newOwnerEmail', user.email);
     setValue('newOwnerName', fullName);
     setValue('newOwnerPhone', user.phone || '');
@@ -209,106 +208,64 @@ const TransferCarScreen = () => {
       <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Nuovo Proprietario</Text>
 
-        {/* Search Button */}
-        <TouchableOpacity
-          style={[styles.searchButton, { backgroundColor: theme.primary }]}
-          onPress={() => setShowSearchModal(true)}
-        >
-          <Search size={20} color="#ffffff" />
-          <Text style={styles.searchButtonText}>Cerca Proprietario</Text>
-        </TouchableOpacity>
+        {!selectedUser ? (
+          // Mostra pulsante di ricerca se nessun utente è selezionato
+          <>
+            <TouchableOpacity
+              style={[styles.searchButton, { backgroundColor: theme.primary }]}
+              onPress={() => setShowSearchModal(true)}
+            >
+              <Search size={20} color="#ffffff" />
+              <Text style={styles.searchButtonText}>Cerca Proprietario</Text>
+            </TouchableOpacity>
 
-        <View style={styles.divider}>
-          <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-          <Text style={[styles.dividerText, { color: theme.textSecondary }]}>oppure inserisci manualmente</Text>
-          <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={[styles.inputLabel, { color: theme.text }]}>Email *</Text>
-          <Controller
-            control={control}
-            name="newOwnerEmail"
-            rules={{ 
-              required: 'Email obbligatoria',
-              pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Email non valida' }
-            }}
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.inputWithIcon}>
-                <Mail size={20} color={theme.textSecondary} />
-                <TextInput
-                  style={[styles.input, { 
-                    borderColor: errors.newOwnerEmail ? '#FF3B30' : theme.border,
-                    backgroundColor: theme.cardBackground,
-                    color: theme.text
-                  }]}
-                  value={value}
-                  onChangeText={onChange}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholder="email@example.com"
-                  placeholderTextColor={theme.textSecondary}
-                />
+            <View style={[styles.emptySelectionCard, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <User size={32} color={theme.textSecondary} />
+              <Text style={[styles.emptySelectionText, { color: theme.textSecondary }]}>
+                Cerca e seleziona il nuovo proprietario dal database
+              </Text>
+            </View>
+          </>
+        ) : (
+          // Mostra card con dati utente selezionato
+          <>
+            <View style={[styles.selectedUserCard, { backgroundColor: theme.background, borderColor: theme.success }]}>
+              <View style={styles.selectedUserHeader}>
+                <View style={[styles.selectedUserAvatar, { backgroundColor: theme.success }]}>
+                  <Text style={styles.selectedUserAvatarText}>
+                    {selectedUser.firstName.charAt(0)}{selectedUser.lastName.charAt(0)}
+                  </Text>
+                </View>
+                <View style={styles.selectedUserInfo}>
+                  <Text style={[styles.selectedUserName, { color: theme.text }]}>
+                    {selectedUser.firstName} {selectedUser.lastName}
+                  </Text>
+                  <Text style={[styles.selectedUserEmail, { color: theme.textSecondary }]}>
+                    {selectedUser.email}
+                  </Text>
+                  {selectedUser.phone && (
+                    <Text style={[styles.selectedUserPhone, { color: theme.textSecondary }]}>
+                      📞 {selectedUser.phone}
+                    </Text>
+                  )}
+                </View>
               </View>
-            )}
-          />
-          {errors.newOwnerEmail && (
-            <Text style={styles.errorText}>{errors.newOwnerEmail.message}</Text>
-          )}
-        </View>
+            </View>
 
-        <View style={styles.inputContainer}>
-          <Text style={[styles.inputLabel, { color: theme.text }]}>Nome Completo *</Text>
-          <Controller
-            control={control}
-            name="newOwnerName"
-            rules={{ required: 'Nome obbligatorio' }}
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.inputWithIcon}>
-                <User size={20} color={theme.textSecondary} />
-                <TextInput
-                  style={[styles.input, { 
-                    borderColor: errors.newOwnerName ? '#FF3B30' : theme.border,
-                    backgroundColor: theme.cardBackground,
-                    color: theme.text
-                  }]}
-                  value={value}
-                  onChangeText={onChange}
-                  placeholder="Nome e cognome"
-                  placeholderTextColor={theme.textSecondary}
-                />
-              </View>
-            )}
-          />
-          {errors.newOwnerName && (
-            <Text style={styles.errorText}>{errors.newOwnerName.message}</Text>
-          )}
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={[styles.inputLabel, { color: theme.text }]}>Telefono (opzionale)</Text>
-          <Controller
-            control={control}
-            name="newOwnerPhone"
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.inputWithIcon}>
-                <Phone size={20} color={theme.textSecondary} />
-                <TextInput
-                  style={[styles.input, { 
-                    borderColor: theme.border,
-                    backgroundColor: theme.cardBackground,
-                    color: theme.text
-                  }]}
-                  value={value}
-                  onChangeText={onChange}
-                  keyboardType="phone-pad"
-                  placeholder="+39 123 456 7890"
-                  placeholderTextColor={theme.textSecondary}
-                />
-              </View>
-            )}
-          />
-        </View>
+            <TouchableOpacity
+              style={[styles.changeUserButton, { borderColor: theme.border }]}
+              onPress={() => {
+                setSelectedUser(null);
+                setShowSearchModal(true);
+              }}
+            >
+              <Search size={16} color={theme.text} />
+              <Text style={[styles.changeUserButtonText, { color: theme.text }]}>
+                Cambia Proprietario
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Message */}
@@ -338,9 +295,18 @@ const TransferCarScreen = () => {
 
       {/* Submit Button */}
       <TouchableOpacity
-        style={[styles.submitButton, { backgroundColor: theme.primary }]}
-        onPress={() => setStep(2)}
-        disabled={isLoading}
+        style={[styles.submitButton, {
+          backgroundColor: selectedUser ? theme.primary : theme.border,
+          opacity: selectedUser ? 1 : 0.5
+        }]}
+        onPress={() => {
+          if (!selectedUser) {
+            Alert.alert('Attenzione', 'Devi selezionare un proprietario prima di continuare');
+            return;
+          }
+          setStep(2);
+        }}
+        disabled={isLoading || !selectedUser}
       >
         <Text style={styles.submitButtonText}>Continua</Text>
       </TouchableOpacity>
@@ -710,6 +676,74 @@ const styles = StyleSheet.create({
   dividerText: {
     fontSize: 12,
     textTransform: 'uppercase',
+  },
+  emptySelectionCard: {
+    padding: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 12,
+  },
+  emptySelectionText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  selectedUserCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginTop: 16,
+  },
+  selectedUserHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedUserAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  selectedUserAvatarText: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  selectedUserInfo: {
+    flex: 1,
+  },
+  selectedUserName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  selectedUserEmail: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  selectedUserPhone: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  changeUserButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 12,
+    gap: 8,
+  },
+  changeUserButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 
