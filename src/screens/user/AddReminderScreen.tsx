@@ -396,7 +396,7 @@ const AddReminderScreen = () => {
                   </Text>
                 </TouchableOpacity>
 
-                {showDatePicker && (
+                {showDatePicker && Platform.OS !== 'web' && (
                   <DateTimePicker
                     value={dueDate}
                     mode="date"
@@ -407,6 +407,34 @@ const AddReminderScreen = () => {
                       if (selectedDate) setDueDate(selectedDate);
                     }}
                   />
+                )}
+
+                {showDatePicker && Platform.OS === 'web' && (
+                  <View style={[styles.inputRow, { marginTop: 12 }]}>
+                    <View style={styles.inputIcon}>
+                      <Calendar size={20} color={colors.primary} />
+                    </View>
+                    <input
+                      type="date"
+                      value={dueDate.toISOString().split('T')[0]}
+                      min={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const selectedDate = new Date(e.target.value);
+                        setDueDate(selectedDate);
+                        setShowDatePicker(false);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: 12,
+                        fontSize: 16,
+                        borderRadius: 12,
+                        border: 'none',
+                        backgroundColor: colors.surfaceVariant,
+                        color: colors.onSurface,
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                  </View>
                 )}
 
                 <View style={styles.inputRow}>
