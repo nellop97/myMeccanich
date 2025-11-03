@@ -431,6 +431,7 @@ const TransferCarScreen = () => {
         onClose={() => setShowSearchModal(false)}
         onSelectUser={handleSelectUser}
         darkMode={darkMode}
+        excludeUserId={auth.currentUser?.uid}
       />
     </SafeAreaView>
   );

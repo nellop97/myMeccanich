@@ -681,6 +681,7 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
         onClose={() => setShowSearchModal(false)}
         onSelectUser={handleSelectUser}
         darkMode={isDark}
+        excludeUserId={sellerId}
       />
     </Modal>
   );

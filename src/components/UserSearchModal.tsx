@@ -30,13 +30,15 @@ interface UserSearchModalProps {
   onClose: () => void;
   onSelectUser: (user: User) => void;
   darkMode?: boolean;
+  excludeUserId?: string; // ID dell'utente da escludere dai risultati (es. utente corrente)
 }
 
 const UserSearchModal: React.FC<UserSearchModalProps> = ({
   visible,
   onClose,
   onSelectUser,
-  darkMode = false
+  darkMode = false,
+  excludeUserId
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -91,11 +93,16 @@ const UserSearchModal: React.FC<UserSearchModalProps> = ({
 
       // Combina risultati da entrambe le query
       [...nameSnapshot.docs, ...emailSnapshot.docs].forEach(doc => {
+        // Escludi l'utente specificato (es. utente corrente)
+        if (excludeUserId && doc.id === excludeUserId) {
+          return;
+        }
+
         if (!userIds.has(doc.id)) {
           const userData = doc.data();
           const fullName = `${userData.firstName} ${userData.lastName}`.toLowerCase();
           const searchLower = searchQuery.toLowerCase();
-          
+
           // Filtra per nome, cognome o email
           if (
             fullName.includes(searchLower) ||
