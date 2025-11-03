@@ -125,7 +125,7 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
   >({
     maintenanceHistory: true,
     maintenanceDetails: false,
-    documents: false,
+    documents: true,
     photos: true,
     reminders: false,
   });
@@ -211,7 +211,7 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
     setTransferOptions({
       maintenanceHistory: true,
       maintenanceDetails: false,
-      documents: false,
+      documents: true,
       photos: true,
       reminders: false,
     });
