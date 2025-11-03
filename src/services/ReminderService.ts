@@ -29,8 +29,12 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
-      const q = query(remindersRef, orderBy('dueDate', 'asc'));
+      const remindersRef = collection(db, this.COLLECTION_NAME);
+      const q = query(
+        remindersRef,
+        where('userId', '==', uid),
+        orderBy('dueDate', 'asc')
+      );
       const snapshot = await getDocs(q);
 
       return snapshot.docs.map(doc => this.convertFirestoreToReminder(doc.id, doc.data()));
@@ -48,9 +52,10 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('isActive', '==', true),
         where('isCompleted', '==', false),
         orderBy('dueDate', 'asc')
@@ -73,9 +78,10 @@ export class ReminderService {
       if (!uid) throw new Error('Utente non autenticato');
 
       const now = Timestamp.now();
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('isActive', '==', true),
         where('isCompleted', '==', false),
         where('dueDate', '<', now),
@@ -102,9 +108,10 @@ export class ReminderService {
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + days);
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('isActive', '==', true),
         where('isCompleted', '==', false),
         where('dueDate', '>=', Timestamp.fromDate(now)),
@@ -128,9 +135,10 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
       const q = query(
         remindersRef,
+        where('userId', '==', uid),
         where('vehicleId', '==', vehicleId),
         orderBy('dueDate', 'asc')
       );
@@ -151,7 +159,7 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
       const reminderSnap = await getDoc(reminderRef);
 
       if (!reminderSnap.exists()) {
@@ -173,7 +181,7 @@ export class ReminderService {
       const uid = auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
+      const remindersRef = collection(db, this.COLLECTION_NAME);
 
       // Validazioni obbligatorie
       if (!reminderData.vehicleId || reminderData.vehicleId.trim() === '') {
@@ -264,7 +272,7 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
 
       const updateData: any = {
         updatedAt: serverTimestamp(),
@@ -395,7 +403,7 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
       await deleteDoc(reminderRef);
     } catch (error) {
       console.error('Errore nell\'eliminazione del promemoria:', error);
@@ -414,7 +422,7 @@ export class ReminderService {
       const reminder = await this.getReminderById(reminderId, uid);
       if (!reminder) throw new Error('Promemoria non trovato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
 
       if (reminder.isRecurring && reminder.recurringInterval && reminder.recurringUnit) {
         // Se è ricorrente, sposta la data alla prossima occorrenza
@@ -457,7 +465,7 @@ export class ReminderService {
       const reminder = await this.getReminderById(reminderId, uid);
       if (!reminder) throw new Error('Promemoria non trovato');
 
-      const reminderRef = doc(db, 'users', uid, this.COLLECTION_NAME, reminderId);
+      const reminderRef = doc(db, this.COLLECTION_NAME, reminderId);
       await updateDoc(reminderRef, {
         isActive: !reminder.isActive,
         updatedAt: serverTimestamp(),
@@ -476,8 +484,12 @@ export class ReminderService {
       const uid = userId || auth.currentUser?.uid;
       if (!uid) throw new Error('Utente non autenticato');
 
-      const remindersRef = collection(db, 'users', uid, this.COLLECTION_NAME);
-      const q = query(remindersRef, where('isCompleted', '==', true));
+      const remindersRef = collection(db, this.COLLECTION_NAME);
+      const q = query(
+        remindersRef,
+        where('userId', '==', uid),
+        where('isCompleted', '==', true)
+      );
       const snapshot = await getDocs(q);
 
       const batch = writeBatch(db);
