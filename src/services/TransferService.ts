@@ -19,7 +19,7 @@ import {
 import { db } from './firebase';
 import { VehicleTransfer } from '../types/database.types';
 import * as Crypto from 'expo-crypto';
-import emailjs from '@emailjs/browser';
+// import emailjs from '@emailjs/browser'; // TODO: Uncomment when EmailJS is configured
 
 export class TransferService {
   private static instance: TransferService;
@@ -28,8 +28,15 @@ export class TransferService {
   private transferValidityDays = 30;
 
   private constructor() {
-    // Inizializza EmailJS
-    emailjs.init('firebase-adminsdk-fbsvc@mymecanich.iam.gserviceaccount.com');
+    // TODO: Configura EmailJS per inviare notifiche email
+    // Per configurare EmailJS:
+    // 1. Crea un account su https://www.emailjs.com/
+    // 2. Ottieni la tua Public Key da https://dashboard.emailjs.com/admin/account
+    // 3. Crea un servizio email e ottieni il Service ID
+    // 4. Crea template email e ottieni i Template ID
+    // 5. Sostituisci i placeholder qui sotto con i valori reali
+    //
+    // emailjs.init('YOUR_PUBLIC_KEY');
   }
 
   static getInstance(): TransferService {
@@ -567,8 +574,14 @@ export class TransferService {
     buyerName: string
   ): Promise<void> {
     try {
-      // Usa EmailJS o altro servizio email
-      await emailjs.send('service_id', 'template_id', {
+      console.log('📧 [EmailJS Disabled] Would send transfer notification to:', buyerEmail);
+      console.log('   Transfer ID:', transferId);
+      console.log('   Buyer Name:', buyerName);
+
+      // TODO: Configura EmailJS per inviare email di notifica
+      // Decommentare quando EmailJS è configurato:
+      /*
+      await emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', {
         to_email: buyerEmail,
         to_name: buyerName,
         transfer_link: `https://yourapp.com/accept-transfer/${transferId}`,
@@ -579,6 +592,9 @@ export class TransferService {
       await updateDoc(doc(db, this.transfersCollection, transferId), {
         'notificationsSent.created': true
       });
+      */
+
+      console.log('✅ [EmailJS Disabled] Transfer created successfully. Email notifications are disabled.');
     } catch (error) {
       console.error('Error sending email:', error);
     }
@@ -590,16 +606,26 @@ export class TransferService {
     buyerEmail: string
   ): Promise<void> {
     try {
+      console.log('📧 [EmailJS Disabled] Would send acceptance notification');
+      console.log('   To seller:', sellerEmail);
+      console.log('   To buyer:', buyerEmail);
+
+      // TODO: Configura EmailJS per inviare email di notifica
+      // Decommentare quando EmailJS è configurato:
+      /*
       // Notifica al venditore
-      await emailjs.send('service_id', 'template_acceptance', {
+      await emailjs.send('YOUR_SERVICE_ID', 'YOUR_ACCEPTANCE_TEMPLATE_ID', {
         to_email: sellerEmail,
         buyer_email: buyerEmail
       });
 
       // Notifica al compratore
-      await emailjs.send('service_id', 'template_welcome', {
+      await emailjs.send('YOUR_SERVICE_ID', 'YOUR_WELCOME_TEMPLATE_ID', {
         to_email: buyerEmail
       });
+      */
+
+      console.log('✅ [EmailJS Disabled] Transfer accepted successfully. Email notifications are disabled.');
     } catch (error) {
       console.error('Error sending acceptance notification:', error);
     }
