@@ -8,6 +8,7 @@ import {
     Platform,
     ScrollView,
     ActivityIndicator,
+    Image,
 } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +18,9 @@ import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { auth, db } from '../services/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+
+// Auth Service
+import { authService } from '../services/AuthService';
 
 // Store
 import { useStore } from '../store';
@@ -33,6 +37,8 @@ const LoginScreen = () => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [loadingGoogle, setLoadingGoogle] = useState(false);
+    const [loadingApple, setLoadingApple] = useState(false);
     const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
     // 🆕 STATI PER TOAST POPUP
@@ -191,6 +197,95 @@ const LoginScreen = () => {
     };
 
     // ============================================================
+    // SOCIAL LOGIN
+    // ============================================================
+
+    const handleGoogleSignIn = async () => {
+        setLoadingGoogle(true);
+        try {
+            const userProfile = await authService.signInWithGoogle();
+
+            if (userProfile) {
+                // Aggiorna store
+                const isMechanic = userProfile.role === 'mechanic';
+                setUser({
+                    id: userProfile.uid,
+                    uid: userProfile.uid,
+                    name: userProfile.displayName,
+                    email: userProfile.email,
+                    firstName: userProfile.firstName,
+                    lastName: userProfile.lastName,
+                    photoURL: userProfile.photoURL,
+                    isLoggedIn: true,
+                    isMechanic,
+                    userType: isMechanic ? 'mechanic' : 'user',
+                    role: userProfile.role,
+                    loginProvider: 'google',
+                    ...(isMechanic && {
+                        workshopName: userProfile.workshopName,
+                        workshopAddress: userProfile.address,
+                        vatNumber: userProfile.vatNumber,
+                    }),
+                });
+
+                console.log('✅ Login Google completato');
+            } else {
+                showToast('Login Google annullato', 'error');
+            }
+        } catch (error: any) {
+            console.error('❌ Errore Google Sign In:', error);
+            showToast(error.message || 'Errore durante il login con Google', 'error');
+        } finally {
+            setLoadingGoogle(false);
+        }
+    };
+
+    const handleAppleSignIn = async () => {
+        if (Platform.OS !== 'ios') {
+            showToast('Apple Sign In è disponibile solo su iOS', 'error');
+            return;
+        }
+
+        setLoadingApple(true);
+        try {
+            const userProfile = await authService.signInWithApple();
+
+            if (userProfile) {
+                // Aggiorna store
+                const isMechanic = userProfile.role === 'mechanic';
+                setUser({
+                    id: userProfile.uid,
+                    uid: userProfile.uid,
+                    name: userProfile.displayName,
+                    email: userProfile.email,
+                    firstName: userProfile.firstName,
+                    lastName: userProfile.lastName,
+                    photoURL: userProfile.photoURL,
+                    isLoggedIn: true,
+                    isMechanic,
+                    userType: isMechanic ? 'mechanic' : 'user',
+                    role: userProfile.role,
+                    loginProvider: 'apple',
+                    ...(isMechanic && {
+                        workshopName: userProfile.workshopName,
+                        workshopAddress: userProfile.address,
+                        vatNumber: userProfile.vatNumber,
+                    }),
+                });
+
+                console.log('✅ Login Apple completato');
+            } else {
+                showToast('Login Apple annullato', 'error');
+            }
+        } catch (error: any) {
+            console.error('❌ Errore Apple Sign In:', error);
+            showToast(error.message || 'Errore durante il login con Apple', 'error');
+        } finally {
+            setLoadingApple(false);
+        }
+    };
+
+    // ============================================================
     // RENDER
     // ============================================================
 
@@ -337,11 +432,51 @@ const LoginScreen = () => {
                         <View style={styles.dividerLine} />
                     </View>
 
+                    {/* Google Sign In */}
+                    <TouchableOpacity
+                        style={[styles.socialButton, styles.googleButton]}
+                        onPress={handleGoogleSignIn}
+                        disabled={loading || loadingGoogle || loadingApple}
+                    >
+                        {loadingGoogle ? (
+                            <ActivityIndicator color="#1f1f1f" />
+                        ) : (
+                            <>
+                                <Image
+                                    source={{ uri: 'https://www.google.com/favicon.ico' }}
+                                    style={styles.socialIcon}
+                                />
+                                <Text style={styles.googleButtonText}>Continua con Google</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+
+                    {/* Apple Sign In (solo iOS) */}
+                    {Platform.OS === 'ios' && (
+                        <TouchableOpacity
+                            style={[styles.socialButton, styles.appleButton]}
+                            onPress={handleAppleSignIn}
+                            disabled={loading || loadingGoogle || loadingApple}
+                        >
+                            {loadingApple ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Image
+                                        source={{ uri: 'https://www.apple.com/favicon.ico' }}
+                                        style={styles.socialIcon}
+                                    />
+                                    <Text style={styles.appleButtonText}>Continua con Apple</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    )}
+
                     {/* Registrazione */}
                     <TouchableOpacity
                         style={styles.registerButton}
                         onPress={() => navigation.navigate('Register' as never)}
-                        disabled={loading}
+                        disabled={loading || loadingGoogle || loadingApple}
                     >
                         <Text style={styles.registerButtonText}>
                             Non hai un account?{' '}
@@ -512,6 +647,46 @@ const styles = StyleSheet.create({
     footerText: {
         fontSize: 12,
         color: '#94a3b8',
+    },
+    socialButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        borderRadius: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    googleButton: {
+        backgroundColor: '#fff',
+        borderColor: '#e2e8f0',
+    },
+    appleButton: {
+        backgroundColor: '#000',
+        borderColor: '#000',
+    },
+    socialIcon: {
+        width: 20,
+        height: 20,
+        marginRight: 12,
+    },
+    googleButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1f1f1f',
+    },
+    appleButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#fff',
     },
 });
 
