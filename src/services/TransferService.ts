@@ -72,7 +72,7 @@ export class TransferService {
         sellerEmail,
         buyerName: buyerData.name,
         buyerEmail: buyerData.email,
-        buyerPhone: buyerData.phone,
+        ...(buyerData.phone ? { buyerPhone: buyerData.phone } : {}),
         transferPin: hashedPin,
         pinAttempts: 0,
         maxPinAttempts: this.maxPinAttempts,
@@ -241,6 +241,15 @@ export class TransferService {
       if (!transfer.transferData.photos) {
         updates.images = [];
         updates.mainImageUrl = null;
+        // Elimina anche le foto
+        await this.deletePhotos(transfer.vehicleId, transfer.sellerId);
+      } else {
+        // Trasferisci foto al nuovo proprietario
+        await this.transferPhotos(
+          transfer.vehicleId,
+          transfer.sellerId,
+          transfer.buyerEmail
+        );
       }
 
       // Trasferisci promemoria se richiesto
@@ -385,6 +394,64 @@ export class TransferService {
       await Promise.all(batch);
     } catch (error) {
       console.error('Error deleting documents:', error);
+      throw error;
+    }
+  }
+
+  // Trasferisci foto
+  private async transferPhotos(
+    vehicleId: string,
+    oldOwnerId: string,
+    newOwnerId: string
+  ): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'vehicle_photos'),
+        where('vehicleId', '==', vehicleId),
+        where('userId', '==', oldOwnerId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const batch = [];
+
+      for (const doc of querySnapshot.docs) {
+        batch.push(
+          updateDoc(doc.ref, {
+            userId: newOwnerId,
+            updatedAt: serverTimestamp()
+          })
+        );
+      }
+
+      await Promise.all(batch);
+    } catch (error) {
+      console.error('Error transferring photos:', error);
+      throw error;
+    }
+  }
+
+  // Elimina foto
+  private async deletePhotos(
+    vehicleId: string,
+    ownerId: string
+  ): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'vehicle_photos'),
+        where('vehicleId', '==', vehicleId),
+        where('userId', '==', ownerId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const batch = [];
+
+      for (const docSnap of querySnapshot.docs) {
+        batch.push(deleteDoc(docSnap.ref));
+      }
+
+      await Promise.all(batch);
+    } catch (error) {
+      console.error('Error deleting photos:', error);
       throw error;
     }
   }
