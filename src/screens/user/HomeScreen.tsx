@@ -145,6 +145,7 @@ const HomeScreen = () => {
     const [activeTransfers, setActiveTransfers] = useState<VehicleTransfer[]>([]);
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [selectedTransfer, setSelectedTransfer] = useState<VehicleTransfer | null>(null);
+    const [unreadNotifications, setUnreadNotifications] = useState(0);
     const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
     const [isTabSectionExpanded, setIsTabSectionExpanded] = useState(true);
     const [tabSectionHeight] = useState(new Animated.Value(1));
@@ -329,6 +330,28 @@ const HomeScreen = () => {
         }
     };
 
+    const loadUnreadNotifications = async () => {
+        try {
+            if (!user?.email) {
+                console.log('⚠️ No user email, skipping notifications load');
+                return;
+            }
+
+            console.log('🔔 Loading unread notifications for user:', user.email);
+            const { inAppNotificationService } = await import('../../services/InAppNotificationService');
+
+            // Carica notifiche non lette
+            const notifications = await inAppNotificationService.getUserNotifications(user.email);
+            const unreadCount = notifications.filter(n => !n.read).length;
+            console.log('📬 Unread notifications:', unreadCount);
+
+            setUnreadNotifications(unreadCount);
+        } catch (error) {
+            console.error('❌ Error loading notifications:', error);
+            setUnreadNotifications(0);
+        }
+    };
+
     // Toggle espansione sezione tab
     const toggleTabSection = () => {
         const toValue = isTabSectionExpanded ? 0 : 1;
@@ -367,6 +390,7 @@ const HomeScreen = () => {
                 console.log('🔔 Polling pending requests ....');
                 loadPendingViewRequests();
                 loadPendingTransferRequests();
+                loadUnreadNotifications();
             }
         }, 180000); // <-- 3 minuti
 

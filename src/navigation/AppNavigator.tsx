@@ -40,6 +40,7 @@ import AddExpenseScreen from '../screens/user/AddExpenseScreen';
 import RemindersListScreen from '../screens/user/RemindersListScreen';
 import AddReminderScreen from '../screens/user/AddReminderScreen';
 import ReminderDetailScreen from '../screens/user/ReminderDetailScreen';
+import NotificationsScreen from '../screens/user/NotificationsScreen';
 
 // Vehicle View Request Screens
 import RequestVehicleViewScreen from '../screens/user/RequestVehicleViewScreen';
@@ -123,6 +124,9 @@ export type RootStackParamList = {
 
     // Reminders
     Reminders: undefined;
+
+    // Notifications
+    Notifications: undefined;
 
     // Vehicle View Requests
     RequestVehicleView: undefined;
@@ -702,6 +706,17 @@ export default function AppNavigator() {
                         component={ReminderDetailScreen}
                         options={{
                             title: 'Dettaglio Promemoria',
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                        }}
+                    />
+
+                    {/* Notifications */}
+                    <Stack.Screen
+                        name="Notifications"
+                        component={NotificationsScreen}
+                        options={{
+                            title: 'Notifiche',
                             headerShown: false,
                             animation: 'slide_from_right',
                         }}
