@@ -589,10 +589,10 @@ service cloud.firestore {
         resource.data.buyerEmail == request.auth.token.email
       );
 
-      // Creazione: solo il venditore
+      // Creazione: solo il venditore (deve includere campi base)
       allow create: if isAuthenticated() &&
                       request.resource.data.sellerId == request.auth.uid &&
-                      hasRequiredFields(['vehicleId', 'sellerId', 'buyerEmail', 'transferPin']);
+                      request.resource.data.keys().hasAll(['vehicleId', 'sellerId', 'buyerEmail', 'transferPin']);
 
       // Aggiornamento: venditore o acquirente
       allow update: if isAuthenticated() && (
@@ -601,7 +601,7 @@ service cloud.firestore {
       );
 
       // Cancellazione: solo il venditore
-      allow delete: if isOwner(resource.data.sellerId);
+      allow delete: if isAuthenticated() && resource.data.sellerId == request.auth.uid;
     }
 
     // ============================================
@@ -836,6 +836,27 @@ service cloud.firestore {
 
       // Cancellazione: solo il destinatario
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================
+    // IN-APP NOTIFICATIONS COLLECTION
+    // ============================================
+    match /in_app_notifications/{notificationId} {
+      // Lettura: solo il destinatario (userId è l'email)
+      allow read: if isAuthenticated() &&
+                     resource.data.userId == request.auth.token.email;
+
+      // Creazione: qualsiasi utente autenticato può creare notifiche
+      // (necessario per notifiche di trasferimento tra utenti)
+      allow create: if isAuthenticated();
+
+      // Aggiornamento: solo il destinatario (per marcare come letto)
+      allow update: if isAuthenticated() &&
+                       resource.data.userId == request.auth.token.email;
+
+      // Cancellazione: solo il destinatario o sistema
+      allow delete: if isAuthenticated() &&
+                       resource.data.userId == request.auth.token.email;
     }
 
     // ============================================
