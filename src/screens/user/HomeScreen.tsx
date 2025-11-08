@@ -340,7 +340,8 @@ const HomeScreen = () => {
                 return;
             }
 
-            console.log('🔔 Loading unread notifications for user:', user.email);
+            console.log('🔔 [DEBUG] Loading unread notifications for user:', user.email);
+            console.log('🔔 [DEBUG] Current unread count before load:', unreadNotifications);
             const { inAppNotificationService } = await import('../../services/InAppNotificationService');
 
             // Carica notifiche non lette
