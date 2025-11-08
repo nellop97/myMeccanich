@@ -68,8 +68,9 @@ export class TransferService {
       expiresAt.setDate(expiresAt.getDate() + this.transferValidityDays);
 
       const docRef = doc(collection(db, this.transfersCollection));
-      
-      const transfer: Omit<VehicleTransfer, 'id'> = {
+
+      // Crea oggetto transfer per Firestore con tipi corretti
+      const transferData_toSave = {
         vehicleId,
         sellerId,
         sellerName,
@@ -81,9 +82,9 @@ export class TransferService {
         pinAttempts: 0,
         maxPinAttempts: this.maxPinAttempts,
         transferData,
-        status: 'pending',
-        createdAt: new Date(),
-        expiresAt,
+        status: 'pending' as const,
+        createdAt: serverTimestamp(),
+        expiresAt: Timestamp.fromDate(expiresAt),
         notificationsSent: {
           created: false,
           reminder: false,
@@ -92,11 +93,13 @@ export class TransferService {
         }
       };
 
-      await setDoc(docRef, {
-        ...transfer,
-        createdAt: serverTimestamp(),
-        expiresAt: Timestamp.fromDate(expiresAt)
+      console.log('📝 Creazione trasferimento con dati:', {
+        vehicleId,
+        buyerEmail: buyerData.email,
+        sellerEmail
       });
+
+      await setDoc(docRef, transferData_toSave);
 
       // Invia email al compratore
       await this.sendTransferNotification(docRef.id, buyerData.email, buyerData.name);
