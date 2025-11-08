@@ -1,4 +1,4 @@
-// src/screens/LoginScreen.tsx - VERSIONE COMPLETA CON TOAST POPUP
+// src/screens/LoginScreen.tsx - VERSIONE COMPLETA CON TOAST POPUP E OAUTH
 import React, { useState } from 'react';
 import {
     View,
@@ -8,6 +8,7 @@ import {
     Platform,
     ScrollView,
     ActivityIndicator,
+    Image,
 } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +18,9 @@ import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { auth, db } from '../services/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+
+// Services
+import { authService } from '../services/AuthService';
 
 // Store
 import { useStore } from '../store';
@@ -191,6 +195,52 @@ const LoginScreen = () => {
     };
 
     // ============================================================
+    // LOGIN OAUTH (Google e Apple)
+    // ============================================================
+    const handleGoogleLogin = async () => {
+        setLoading(true);
+
+        try {
+            console.log('🔐 Inizio Google Sign In...');
+            const userProfile = await authService.signInWithGoogle();
+
+            if (userProfile) {
+                console.log('✅ Google Sign In completato:', userProfile);
+                // Il redirect sarà gestito da AppNavigator in base a profileComplete
+            }
+        } catch (error: any) {
+            console.error('❌ Errore Google Sign In:', error);
+            showToast(error.message || 'Errore durante il login con Google', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAppleLogin = async () => {
+        if (Platform.OS !== 'ios') {
+            showToast('Apple Sign In è disponibile solo su iOS', 'error');
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            console.log('🔐 Inizio Apple Sign In...');
+            const userProfile = await authService.signInWithApple();
+
+            if (userProfile) {
+                console.log('✅ Apple Sign In completato:', userProfile);
+                // Il redirect sarà gestito da AppNavigator in base a profileComplete
+            }
+        } catch (error: any) {
+            console.error('❌ Errore Apple Sign In:', error);
+            showToast(error.message || 'Errore durante il login con Apple', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ============================================================
     // RENDER
     // ============================================================
 
@@ -335,6 +385,41 @@ const LoginScreen = () => {
                         <View style={styles.dividerLine} />
                         <Text style={styles.dividerText}>OPPURE</Text>
                         <View style={styles.dividerLine} />
+                    </View>
+
+                    {/* Pulsanti OAuth */}
+                    <View style={styles.oauthButtonsContainer}>
+                        {/* Google Sign In */}
+                        <TouchableOpacity
+                            style={styles.oauthButton}
+                            onPress={handleGoogleLogin}
+                            disabled={loading}
+                        >
+                            <View style={styles.oauthButtonContent}>
+                                <View style={styles.oauthIcon}>
+                                    <Text style={styles.oauthIconText}>G</Text>
+                                </View>
+                                <Text style={styles.oauthButtonText}>Continua con Google</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        {/* Apple Sign In - Solo iOS */}
+                        {Platform.OS === 'ios' && (
+                            <TouchableOpacity
+                                style={[styles.oauthButton, styles.oauthButtonApple]}
+                                onPress={handleAppleLogin}
+                                disabled={loading}
+                            >
+                                <View style={styles.oauthButtonContent}>
+                                    <View style={styles.oauthIcon}>
+                                        <Text style={styles.oauthIconText}></Text>
+                                    </View>
+                                    <Text style={[styles.oauthButtonText, styles.oauthButtonTextApple]}>
+                                        Continua con Apple
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        )}
                     </View>
 
                     {/* Registrazione */}
@@ -492,6 +577,56 @@ const styles = StyleSheet.create({
         color: '#94a3b8',
         marginHorizontal: 16,
         fontWeight: '600',
+    },
+    oauthButtonsContainer: {
+        gap: 12,
+        marginBottom: 24,
+    },
+    oauthButton: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    oauthButtonApple: {
+        backgroundColor: '#000',
+        borderColor: '#000',
+    },
+    oauthButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+    },
+    oauthIcon: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+    },
+    oauthIconText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#4285F4',
+    },
+    oauthButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1e293b',
+    },
+    oauthButtonTextApple: {
+        color: '#fff',
     },
     registerButton: {
         paddingVertical: 16,

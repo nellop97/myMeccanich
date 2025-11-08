@@ -1,4 +1,4 @@
-// src/screens/RegisterScreen.tsx - VERSIONE RESPONSIVE WEB/MOBILE CON OAUTH
+// src/screens/OAuthRegistrationScreen.tsx - Completa registrazione OAuth
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -9,15 +9,12 @@ import {
     KeyboardAvoidingView,
     Alert,
     Animated,
-    Dimensions,
     useWindowDimensions,
+    ActivityIndicator,
 } from 'react-native';
-import {Text, ProgressBar, TextInput, ActivityIndicator} from 'react-native-paper';
+import { Text, ProgressBar, TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import {
-    Mail,
-    Lock,
-    User,
     Phone,
     Building,
     ArrowRight,
@@ -31,8 +28,7 @@ import {
 
 // Firebase
 import { auth, db } from '../services/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 // Services
 import { authService } from '../services/AuthService';
@@ -46,37 +42,26 @@ import { useStore } from '../store';
 type UserType = 'owner' | 'mechanic';
 
 interface FormData {
-    email: string;
-    password: string;
-    confirmPassword: string;
-    firstName: string;
-    lastName: string;
-    phone: string;
+    phone?: string;
     workshopName?: string;
     vatNumber?: string;
     address?: string;
 }
 
-const RegisterScreen = () => {
+const OAuthRegistrationScreen = () => {
     const navigation = useNavigation();
     const { setUser } = useStore();
     const { width } = useWindowDimensions();
 
-    // Determina se è desktop/tablet (breakpoint)
+    // Determina se è desktop/tablet
     const isDesktop = width >= 768;
-    const isTablet = width >= 600 && width < 768;
-    const isMobile = width < 600;
 
     // Stati
     const [currentStep, setCurrentStep] = useState(0);
     const [userType, setUserType] = useState<UserType | null>(null);
     const [loading, setLoading] = useState(false);
+    const [userData, setUserData] = useState<any>(null);
     const [formData, setFormData] = useState<FormData>({
-        email: '',
-        password: '',
-        confirmPassword: '',
-        firstName: '',
-        lastName: '',
         phone: '',
         workshopName: '',
         vatNumber: '',
@@ -88,8 +73,27 @@ const RegisterScreen = () => {
     const fadeAnim = useState(new Animated.Value(1))[0];
     const slideAnim = useState(new Animated.Value(0))[0];
 
-    const totalSteps = 3;
+    const totalSteps = 2;
     const progress = (currentStep + 1) / totalSteps;
+
+    // Carica dati utente OAuth
+    useEffect(() => {
+        loadUserData();
+    }, []);
+
+    const loadUserData = async () => {
+        const user = auth.currentUser;
+        if (!user) {
+            Alert.alert('Errore', 'Nessun utente autenticato');
+            navigation.navigate('Login' as never);
+            return;
+        }
+
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+            setUserData(userDoc.data());
+        }
+    };
 
     // Animazione cambio step
     useEffect(() => {
@@ -112,41 +116,15 @@ const RegisterScreen = () => {
     const validateStep = () => {
         const newErrors: Partial<FormData> = {};
 
-        if (currentStep === 1) {
-            if (!formData.email.trim()) {
-                newErrors.email = 'Email richiesta';
-            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-                newErrors.email = 'Email non valida';
+        if (currentStep === 1 && userType === 'mechanic') {
+            if (!formData.workshopName?.trim()) {
+                newErrors.workshopName = 'Nome officina richiesto';
             }
-
-            if (!formData.password) {
-                newErrors.password = 'Password richiesta';
-            } else if (formData.password.length < 6) {
-                newErrors.password = 'Password troppo corta (min. 6 caratteri)';
+            if (!formData.phone?.trim()) {
+                newErrors.phone = 'Numero di telefono richiesto';
             }
-
-            if (formData.password !== formData.confirmPassword) {
-                newErrors.confirmPassword = 'Le password non coincidono';
-            }
-        }
-
-        if (currentStep === 2) {
-            if (!formData.firstName.trim()) {
-                newErrors.firstName = 'Nome richiesto';
-            }
-            if (!formData.lastName.trim()) {
-                newErrors.lastName = 'Cognome richiesto';
-            }
-            if (userType === 'mechanic') {
-                if (!formData.workshopName?.trim()) {
-                    newErrors.workshopName = 'Nome officina richiesto';
-                }
-                if (!formData.phone?.trim()) {
-                    newErrors.phone = 'Numero di telefono richiesto';
-                }
-                if (!formData.address?.trim()) {
-                    newErrors.address = 'Indirizzo richiesto';
-                }
+            if (!formData.address?.trim()) {
+                newErrors.address = 'Indirizzo richiesto';
             }
         }
 
@@ -162,7 +140,7 @@ const RegisterScreen = () => {
                 slideAnim.setValue(20);
                 setCurrentStep(currentStep + 1);
             } else {
-                handleRegister();
+                handleCompleteRegistration();
             }
         }
     };
@@ -171,159 +149,73 @@ const RegisterScreen = () => {
         if (currentStep > 0) {
             setCurrentStep(currentStep - 1);
         } else {
-            navigation.goBack();
+            // Logout e torna al login
+            authService.logout();
+            navigation.navigate('Login' as never);
         }
     };
 
-    // Registrazione
-    const handleRegister = async () => {
-        if (!validateStep()) return;
+    // Completa registrazione
+    const handleCompleteRegistration = async () => {
+        if (!validateStep() || !userType) return;
 
         setLoading(true);
 
         try {
-            console.log('🔐 Inizio registrazione...');
+            console.log('🔐 Completamento registrazione OAuth...');
 
-            // 1. Crea utente Firebase Auth
-            const userCredential = await createUserWithEmailAndPassword(
-                auth,
-                formData.email.trim(),
-                formData.password
+            // Completa il profilo
+            const updatedProfile = await authService.completeOAuthProfile(
+                userType,
+                {
+                    workshopName: formData.workshopName,
+                    phone: formData.phone,
+                    address: formData.address,
+                    vatNumber: formData.vatNumber,
+                }
             );
 
-            const userId = userCredential.user.uid;
-            console.log('✅ Utente creato su Firebase Auth:', userId);
+            console.log('✅ Profilo completato:', updatedProfile);
 
-            // 2. Determina tipo per Firestore
+            // Analytics
+            logRegistration(userType);
+
+            // Aggiorna Store
             const firestoreUserType = userType === 'owner' ? 'user' : 'mechanic';
-
-            // 3. Prepara dati utente
-            const userData: any = {
-                uid: userId,
-                email: formData.email.trim(),
-                firstName: formData.firstName.trim(),
-                lastName: formData.lastName.trim(),
-                name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-                userType: firestoreUserType,
-                role: userType,
-                phone: formData.phone?.trim() || null,
-                emailVerified: false,
-                loginProvider: 'email',
-                profileComplete: true,
-                createdAt: serverTimestamp(),
-                lastLoginAt: serverTimestamp(),
-            };
-
-            // 4. Aggiungi campi specifici per meccanici
-            if (userType === 'mechanic') {
-                userData.workshopName = formData.workshopName?.trim() || null;
-                userData.address = formData.address?.trim() || null;
-                userData.vatNumber = formData.vatNumber?.trim() || null;
-                userData.rating = 0;
-                userData.reviewsCount = 0;
-                userData.verified = false;
-            }
-
-            // 5. Salva su Firestore
-            await setDoc(doc(db, 'users', userId), userData);
-            console.log('✅ Dati salvati su Firestore');
-
-            // 6. Analytics
-            logRegistration(userType || 'owner');
-
-            // 7. Aggiorna Store
             setUser({
-                id: userId,
-                uid: userId,
-                name: userData.name,
-                email: userData.email,
-                firstName: userData.firstName,
-                lastName: userData.lastName,
+                id: updatedProfile.uid,
+                uid: updatedProfile.uid,
+                name: updatedProfile.displayName || `${updatedProfile.firstName} ${updatedProfile.lastName}`,
+                email: updatedProfile.email,
+                firstName: updatedProfile.firstName,
+                lastName: updatedProfile.lastName,
                 isLoggedIn: true,
                 isMechanic: userType === 'mechanic',
                 userType: firestoreUserType,
                 role: userType,
-                phoneNumber: userData.phone || undefined,
-                emailVerified: false,
+                phoneNumber: formData.phone || undefined,
+                emailVerified: updatedProfile.emailVerified || false,
                 profileComplete: true,
+                photoURL: updatedProfile.photoURL,
                 ...(userType === 'mechanic' && {
-                    workshopName: userData.workshopName,
-                    workshopAddress: userData.address,
-                    vatNumber: userData.vatNumber,
+                    workshopName: formData.workshopName,
+                    workshopAddress: formData.address,
+                    vatNumber: formData.vatNumber,
                     rating: 0,
                     reviewsCount: 0,
                     verified: false,
                 }),
             });
 
-            // 8. Successo
+            // Successo - redirect automatico tramite AppNavigator
             Alert.alert(
-                'Successo! 🎉',
-                `Benvenuto ${formData.firstName}! Il tuo account è stato creato.`,
+                'Benvenuto! 🎉',
+                `Il tuo profilo ${userType === 'mechanic' ? 'officina' : 'proprietario'} è stato completato.`,
                 [{ text: 'OK' }]
             );
         } catch (error: any) {
-            console.error('❌ Errore registrazione:', error);
-
-            let errorMessage = 'Errore durante la registrazione';
-
-            if (error.code === 'auth/email-already-in-use') {
-                errorMessage = 'Email già registrata';
-            } else if (error.code === 'auth/weak-password') {
-                errorMessage = 'Password troppo debole';
-            } else if (error.code === 'auth/network-request-failed') {
-                errorMessage = 'Errore di connessione';
-            } else if (error.code === 'auth/invalid-email') {
-                errorMessage = 'Email non valida';
-            }
-
-            Alert.alert('Errore', errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // ============================================================
-    // OAUTH SIGN IN (Google e Apple)
-    // ============================================================
-    const handleGoogleSignIn = async () => {
-        setLoading(true);
-
-        try {
-            console.log('🔐 Inizio Google Sign In per registrazione...');
-            const userProfile = await authService.signInWithGoogle();
-
-            if (userProfile) {
-                console.log('✅ Google Sign In completato:', userProfile);
-                // Il redirect sarà gestito da AppNavigator in base a profileComplete
-            }
-        } catch (error: any) {
-            console.error('❌ Errore Google Sign In:', error);
-            Alert.alert('Errore', error.message || 'Errore durante la registrazione con Google');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleAppleSignIn = async () => {
-        if (Platform.OS !== 'ios') {
-            Alert.alert('Non disponibile', 'Apple Sign In è disponibile solo su iOS');
-            return;
-        }
-
-        setLoading(true);
-
-        try {
-            console.log('🔐 Inizio Apple Sign In per registrazione...');
-            const userProfile = await authService.signInWithApple();
-
-            if (userProfile) {
-                console.log('✅ Apple Sign In completato:', userProfile);
-                // Il redirect sarà gestito da AppNavigator in base a profileComplete
-            }
-        } catch (error: any) {
-            console.error('❌ Errore Apple Sign In:', error);
-            Alert.alert('Errore', error.message || 'Errore durante la registrazione con Apple');
+            console.error('❌ Errore completamento registrazione:', error);
+            Alert.alert('Errore', error.message || 'Errore durante il completamento della registrazione');
         } finally {
             setLoading(false);
         }
@@ -335,10 +227,22 @@ const RegisterScreen = () => {
 
     const renderUserTypeSelection = () => (
         <View style={[styles.stepContainer, isDesktop && styles.stepContainerDesktop]}>
-            <Text style={styles.stepTitle}>Scegli il tuo profilo</Text>
+            <Text style={styles.stepTitle}>Completa il tuo profilo</Text>
             <Text style={styles.stepSubtitle}>
-                Seleziona il tipo di account che vuoi creare
+                Ciao {userData?.firstName || 'utente'}! Seleziona il tipo di account
             </Text>
+
+            {/* Info utente OAuth */}
+            <View style={styles.oauthInfoCard}>
+                <Text style={styles.oauthInfoLabel}>Email:</Text>
+                <Text style={styles.oauthInfoValue}>{userData?.email}</Text>
+                {userData?.displayName && (
+                    <>
+                        <Text style={styles.oauthInfoLabel}>Nome:</Text>
+                        <Text style={styles.oauthInfoValue}>{userData.displayName}</Text>
+                    </>
+                )}
+            </View>
 
             <View style={[styles.userTypeContainer, isDesktop && styles.userTypeContainerDesktop]}>
                 {/* Owner Card */}
@@ -405,151 +309,18 @@ const RegisterScreen = () => {
                     )}
                 </TouchableOpacity>
             </View>
-
-            {/* Divider */}
-            <View style={styles.oauthDivider}>
-                <View style={styles.oauthDividerLine} />
-                <Text style={styles.oauthDividerText}>OPPURE REGISTRATI CON</Text>
-                <View style={styles.oauthDividerLine} />
-            </View>
-
-            {/* Pulsanti OAuth */}
-            <View style={styles.oauthButtonsContainer}>
-                {/* Google Sign In */}
-                <TouchableOpacity
-                    style={styles.oauthButton}
-                    onPress={handleGoogleSignIn}
-                    disabled={loading}
-                >
-                    <View style={styles.oauthButtonContent}>
-                        <View style={styles.oauthIcon}>
-                            <Text style={styles.oauthIconText}>G</Text>
-                        </View>
-                        <Text style={styles.oauthButtonText}>Continua con Google</Text>
-                    </View>
-                </TouchableOpacity>
-
-                {/* Apple Sign In - Solo iOS */}
-                {Platform.OS === 'ios' && (
-                    <TouchableOpacity
-                        style={[styles.oauthButton, styles.oauthButtonApple]}
-                        onPress={handleAppleSignIn}
-                        disabled={loading}
-                    >
-                        <View style={styles.oauthButtonContent}>
-                            <View style={styles.oauthIcon}>
-                                <Text style={styles.oauthIconText}></Text>
-                            </View>
-                            <Text style={[styles.oauthButtonText, styles.oauthButtonTextApple]}>
-                                Continua con Apple
-                            </Text>
-                        </View>
-                    </TouchableOpacity>
-                )}
-            </View>
         </View>
     );
 
-    const renderCredentialsStep = () => (
-        <View style={[styles.stepContainer, isDesktop && styles.stepContainerDesktop]}>
-            <Text style={styles.stepTitle}>Crea il tuo account</Text>
-            <Text style={styles.stepSubtitle}>
-                Inserisci email e password per iniziare
-            </Text>
-
-            <View style={[styles.formContainer, isDesktop && styles.formContainerDesktop]}>
-                {/* Email */}
-                <View style={styles.inputWrapper}>
-                    <Mail size={20} color="#64748b" style={styles.inputIcon} />
-                    <TextInput
-                        mode="outlined"
-                        label="Email"
-                        value={formData.email}
-                        onChangeText={(text) => {
-                            setFormData({ ...formData, email: text });
-                            setErrors({ ...errors, email: '' });
-                        }}
-                        error={!!errors.email}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        style={styles.input}
-                        disabled={loading}
-                        theme={{
-                            colors: {
-                                primary: '#3b82f6',
-                                outline: errors.email ? '#ef4444' : '#e2e8f0',
-                            },
-                        }}
-                    />
-                </View>
-                {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-                {/* Password */}
-                <View style={styles.inputWrapper}>
-                    <Lock size={20} color="#64748b" style={styles.inputIcon} />
-                    <TextInput
-                        mode="outlined"
-                        label="Password"
-                        value={formData.password}
-                        onChangeText={(text) => {
-                            setFormData({ ...formData, password: text });
-                            setErrors({ ...errors, password: '' });
-                        }}
-                        error={!!errors.password}
-                        secureTextEntry
-                        autoCapitalize="none"
-                        style={styles.input}
-                        disabled={loading}
-                        theme={{
-                            colors: {
-                                primary: '#3b82f6',
-                                outline: errors.password ? '#ef4444' : '#e2e8f0',
-                            },
-                        }}
-                    />
-                </View>
-                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-
-                {/* Confirm Password */}
-                <View style={styles.inputWrapper}>
-                    <Lock size={20} color="#64748b" style={styles.inputIcon} />
-                    <TextInput
-                        mode="outlined"
-                        label="Conferma Password"
-                        value={formData.confirmPassword}
-                        onChangeText={(text) => {
-                            setFormData({ ...formData, confirmPassword: text });
-                            setErrors({ ...errors, confirmPassword: '' });
-                        }}
-                        error={!!errors.confirmPassword}
-                        secureTextEntry
-                        autoCapitalize="none"
-                        style={styles.input}
-                        disabled={loading}
-                        theme={{
-                            colors: {
-                                primary: '#3b82f6',
-                                outline: errors.confirmPassword ? '#ef4444' : '#e2e8f0',
-                            },
-                        }}
-                    />
-                </View>
-                {errors.confirmPassword && (
-                    <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-                )}
-            </View>
-        </View>
-    );
-
-    const renderPersonalInfoStep = () => (
+    const renderAdditionalInfoStep = () => (
         <View style={[styles.stepContainer, isDesktop && styles.stepContainerDesktop]}>
             <Text style={styles.stepTitle}>
-                Dati {userType === 'mechanic' ? 'Officina' : 'Personali'}
+                {userType === 'mechanic' ? 'Dati Officina' : 'Dati Aggiuntivi (opzionali)'}
             </Text>
             <Text style={styles.stepSubtitle}>
                 {userType === 'mechanic'
                     ? 'Completa il profilo della tua officina'
-                    : 'Completa il tuo profilo personale'}
+                    : 'Aggiungi informazioni aggiuntive al tuo profilo'}
             </Text>
 
             <ScrollView
@@ -557,84 +328,14 @@ const RegisterScreen = () => {
                 showsVerticalScrollIndicator={false}
             >
                 <View style={[styles.formContainer, isDesktop && styles.formContainerDesktop]}>
-                    {/* Nome e Cognome - Side by side on desktop */}
-                    <View style={[isDesktop && styles.rowInputs]}>
-                        <View style={[styles.inputWrapper, isDesktop && styles.halfWidth]}>
-                            <User size={20} color="#64748b" style={styles.inputIcon} />
-                            <TextInput
-                                mode="outlined"
-                                label="Nome"
-                                value={formData.firstName}
-                                onChangeText={(text) => {
-                                    setFormData({ ...formData, firstName: text });
-                                    setErrors({ ...errors, firstName: '' });
-                                }}
-                                error={!!errors.firstName}
-                                style={styles.input}
-                                disabled={loading}
-                                theme={{
-                                    colors: {
-                                        primary: '#3b82f6',
-                                        outline: errors.firstName ? '#ef4444' : '#e2e8f0',
-                                    },
-                                }}
-                            />
-                        </View>
-                        {errors.firstName && !isDesktop && (
-                            <Text style={styles.errorText}>{errors.firstName}</Text>
-                        )}
-
-                        <View style={[styles.inputWrapper, isDesktop && styles.halfWidth]}>
-                            <User size={20} color="#64748b" style={styles.inputIcon} />
-                            <TextInput
-                                mode="outlined"
-                                label="Cognome"
-                                value={formData.lastName}
-                                onChangeText={(text) => {
-                                    setFormData({ ...formData, lastName: text });
-                                    setErrors({ ...errors, lastName: '' });
-                                }}
-                                error={!!errors.lastName}
-                                style={styles.input}
-                                disabled={loading}
-                                theme={{
-                                    colors: {
-                                        primary: '#3b82f6',
-                                        outline: errors.lastName ? '#ef4444' : '#e2e8f0',
-                                    },
-                                }}
-                            />
-                        </View>
-                        {errors.lastName && !isDesktop && (
-                            <Text style={styles.errorText}>{errors.lastName}</Text>
-                        )}
-                    </View>
-
-                    {/* Errori desktop */}
-                    {isDesktop && (
-                        <View style={styles.rowInputs}>
-                            {errors.firstName && (
-                                <Text style={[styles.errorText, styles.halfWidth]}>
-                                    {errors.firstName}
-                                </Text>
-                            )}
-                            {errors.lastName && (
-                                <Text style={[styles.errorText, styles.halfWidth]}>
-                                    {errors.lastName}
-                                </Text>
-                            )}
-                        </View>
-                    )}
-
-                    {/* Campi specifici per meccanico */}
-                    {userType === 'mechanic' && (
+                    {userType === 'mechanic' ? (
                         <>
                             {/* Workshop Name */}
                             <View style={styles.inputWrapper}>
                                 <Building size={20} color="#64748b" style={styles.inputIcon} />
                                 <TextInput
                                     mode="outlined"
-                                    label="Nome Officina"
+                                    label="Nome Officina *"
                                     value={formData.workshopName}
                                     onChangeText={(text) => {
                                         setFormData({ ...formData, workshopName: text });
@@ -660,7 +361,7 @@ const RegisterScreen = () => {
                                 <Phone size={20} color="#64748b" style={styles.inputIcon} />
                                 <TextInput
                                     mode="outlined"
-                                    label="Telefono"
+                                    label="Telefono *"
                                     value={formData.phone}
                                     onChangeText={(text) => {
                                         setFormData({ ...formData, phone: text });
@@ -685,7 +386,7 @@ const RegisterScreen = () => {
                                 <MapPin size={20} color="#64748b" style={styles.inputIcon} />
                                 <TextInput
                                     mode="outlined"
-                                    label="Indirizzo"
+                                    label="Indirizzo *"
                                     value={formData.address}
                                     onChangeText={(text) => {
                                         setFormData({ ...formData, address: text });
@@ -726,6 +427,33 @@ const RegisterScreen = () => {
                                 />
                             </View>
                         </>
+                    ) : (
+                        <>
+                            {/* Phone (opzionale per owner) */}
+                            <View style={styles.inputWrapper}>
+                                <Phone size={20} color="#64748b" style={styles.inputIcon} />
+                                <TextInput
+                                    mode="outlined"
+                                    label="Telefono (opzionale)"
+                                    value={formData.phone}
+                                    onChangeText={(text) => {
+                                        setFormData({ ...formData, phone: text });
+                                    }}
+                                    keyboardType="phone-pad"
+                                    style={styles.input}
+                                    disabled={loading}
+                                    theme={{
+                                        colors: {
+                                            primary: '#3b82f6',
+                                            outline: '#e2e8f0',
+                                        },
+                                    }}
+                                />
+                            </View>
+                            <Text style={styles.helperText}>
+                                Puoi saltare questo passaggio e completarlo in seguito dal tuo profilo
+                            </Text>
+                        </>
                     )}
                 </View>
             </ScrollView>
@@ -741,8 +469,7 @@ const RegisterScreen = () => {
                 }}
             >
                 {currentStep === 0 && renderUserTypeSelection()}
-                {currentStep === 1 && renderCredentialsStep()}
-                {currentStep === 2 && renderPersonalInfoStep()}
+                {currentStep === 1 && renderAdditionalInfoStep()}
             </Animated.View>
         );
     };
@@ -910,9 +637,28 @@ const styles = StyleSheet.create({
     stepSubtitle: {
         fontSize: 15,
         color: '#64748b',
-        marginBottom: 32,
+        marginBottom: 24,
         textAlign: 'center',
         lineHeight: 22,
+    },
+    oauthInfoCard: {
+        backgroundColor: '#eff6ff',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#dbeafe',
+    },
+    oauthInfoLabel: {
+        fontSize: 12,
+        color: '#64748b',
+        fontWeight: '600',
+        marginTop: 8,
+    },
+    oauthInfoValue: {
+        fontSize: 14,
+        color: '#1e293b',
+        marginBottom: 4,
     },
     userTypeContainer: {
         gap: 16,
@@ -978,13 +724,6 @@ const styles = StyleSheet.create({
     formScrollContainer: {
         maxHeight: 400,
     },
-    rowInputs: {
-        flexDirection: 'row',
-        gap: 16,
-    },
-    halfWidth: {
-        flex: 1,
-    },
     inputWrapper: {
         position: 'relative',
         marginBottom: 16,
@@ -1005,6 +744,14 @@ const styles = StyleSheet.create({
         marginTop: -12,
         marginBottom: 8,
         marginLeft: 16,
+    },
+    helperText: {
+        fontSize: 12,
+        color: '#64748b',
+        marginTop: -8,
+        marginBottom: 16,
+        marginLeft: 16,
+        fontStyle: 'italic',
     },
     footer: {
         backgroundColor: '#fff',
@@ -1067,71 +814,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#fff',
     },
-    oauthDivider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 24,
-    },
-    oauthDividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#e2e8f0',
-    },
-    oauthDividerText: {
-        fontSize: 11,
-        color: '#94a3b8',
-        marginHorizontal: 16,
-        fontWeight: '600',
-    },
-    oauthButtonsContainer: {
-        gap: 12,
-    },
-    oauthButton: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        paddingVertical: 14,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 1,
-        },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
-    },
-    oauthButtonApple: {
-        backgroundColor: '#000',
-        borderColor: '#000',
-    },
-    oauthButtonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-    },
-    oauthIcon: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#fff',
-    },
-    oauthIconText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#4285F4',
-    },
-    oauthButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#1e293b',
-    },
-    oauthButtonTextApple: {
-        color: '#fff',
-    },
 });
 
-export default RegisterScreen;
+export default OAuthRegistrationScreen;

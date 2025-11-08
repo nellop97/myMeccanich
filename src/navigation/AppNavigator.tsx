@@ -17,6 +17,7 @@ import { useAuthSync } from '../hooks/useAuthSync';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import OAuthRegistrationScreen from '../screens/OAuthRegistrationScreen';
 
 // ============================================
 // USER (OWNER) SCREENS
@@ -86,6 +87,7 @@ export type RootStackParamList = {
     Login: undefined;
     Register: undefined;
     ForgotPassword: undefined;
+    OAuthRegistration: undefined;
 
     // Common
     Profile: undefined;
@@ -240,12 +242,14 @@ export default function AppNavigator() {
     const { user, isAuthenticated, loading, isInitializing } = useAuthSync();
 
     const isMechanic = user?.isMechanic;
+    const profileComplete = user?.profileComplete !== false; // Default true se non specificato
 
     console.log('📱 AppNavigator State:', {
         isAuthenticated,
         isInitializing,
         loading,
         isMechanic,
+        profileComplete,
         userEmail: user?.email,
         userId: user?.id,
     });
@@ -272,6 +276,18 @@ export default function AppNavigator() {
                     options={{
                         headerShown: false,
                         animationTypeForReplace: 'pop',
+                    }}
+                />
+            ) : !profileComplete ? (
+                // ============================================
+                // OAUTH REGISTRATION FLOW (Profilo incompleto)
+                // ============================================
+                <Stack.Screen
+                    name="OAuthRegistration"
+                    component={OAuthRegistrationScreen}
+                    options={{
+                        headerShown: false,
+                        animationTypeForReplace: 'push',
                     }}
                 />
             ) : isMechanic ? (

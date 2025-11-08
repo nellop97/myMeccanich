@@ -244,7 +244,7 @@ class AuthService {
     }
 
     // Ottieni o crea profilo utente
-    private async getOrCreateUserProfile(user: User): Promise<UserProfile> {
+    private async getOrCreateUserProfile(user: User, skipProfileCompletion: boolean = false): Promise<UserProfile> {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
 
         if (userDoc.exists()) {
@@ -255,23 +255,30 @@ class AuthService {
             return userDoc.data() as UserProfile;
         }
 
-        // Crea nuovo profilo per utenti social
+        // Crea nuovo profilo per utenti social (INCOMPLETO se è la prima volta)
         const nameParts = (user.displayName || '').split(' ');
-        const userProfile: UserProfile = {
+        const userProfile: any = {
             uid: user.uid,
             email: user.email!,
             displayName: user.displayName || '',
             firstName: nameParts[0] || '',
             lastName: nameParts.slice(1).join(' ') || '',
             photoURL: user.photoURL || undefined,
-            role: 'owner', // Default per nuovi utenti social
+            emailVerified: user.emailVerified,
+            loginProvider: 'oauth', // Indica che l'utente ha usato OAuth
             createdAt: serverTimestamp(),
             lastLoginAt: serverTimestamp(),
-            emailVerified: user.emailVerified,
+            profileComplete: skipProfileCompletion ? true : false, // Profilo incompleto se è la prima volta
         };
 
+        // Se skipProfileCompletion è true, impostiamo un ruolo di default
+        if (skipProfileCompletion) {
+            userProfile.role = 'owner';
+            userProfile.userType = 'user';
+        }
+
         await setDoc(doc(db, 'users', user.uid), userProfile);
-        return userProfile;
+        return userProfile as UserProfile;
     }
 
     // Recupera profilo utente corrente
@@ -282,6 +289,48 @@ class AuthService {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (!userDoc.exists()) return null;
 
+        return userDoc.data() as UserProfile;
+    }
+
+    // Completa profilo OAuth (dopo login social)
+    async completeOAuthProfile(
+        userType: 'owner' | 'mechanic',
+        additionalData: {
+            workshopName?: string;
+            phone?: string;
+            address?: string;
+            vatNumber?: string;
+        }
+    ): Promise<UserProfile> {
+        const user = auth.currentUser;
+        if (!user) throw new Error('Nessun utente autenticato');
+
+        const firestoreUserType = userType === 'owner' ? 'user' : 'mechanic';
+
+        const updateData: any = {
+            role: userType,
+            userType: firestoreUserType,
+            profileComplete: true,
+            lastLoginAt: serverTimestamp(),
+        };
+
+        // Aggiungi dati specifici per meccanici
+        if (userType === 'mechanic') {
+            updateData.workshopName = additionalData.workshopName || null;
+            updateData.phone = additionalData.phone || null;
+            updateData.address = additionalData.address || null;
+            updateData.vatNumber = additionalData.vatNumber || null;
+            updateData.rating = 0;
+            updateData.reviewsCount = 0;
+            updateData.verified = false;
+        } else if (additionalData.phone) {
+            updateData.phone = additionalData.phone;
+        }
+
+        await updateDoc(doc(db, 'users', user.uid), updateData);
+
+        // Recupera profilo aggiornato
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
         return userDoc.data() as UserProfile;
     }
 

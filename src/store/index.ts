@@ -27,6 +27,7 @@ export interface User {
     emailVerified?: boolean;
     createdAt?: string;
     lastLoginAt?: string;
+    profileComplete?: boolean; // Indica se il profilo OAuth è completo
     // Dati specifici per meccanici
     workshopName?: string;
     workshopAddress?: string;
