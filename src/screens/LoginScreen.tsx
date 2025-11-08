@@ -202,10 +202,33 @@ const LoginScreen = () => {
 
         try {
             console.log('🔐 Inizio Google Sign In...');
-            const userProfile = await authService.signInWithGoogle();
+            const userProfile = await authService.signInWithGoogle(); // false = login (default)
 
             if (userProfile) {
                 console.log('✅ Google Sign In completato:', userProfile);
+
+                // Aggiorna lo store con i dati del profilo
+                const isMechanic = userProfile.role === 'mechanic';
+                setUser({
+                    id: userProfile.uid,
+                    uid: userProfile.uid,
+                    name: userProfile.displayName || `${userProfile.firstName} ${userProfile.lastName}`,
+                    email: userProfile.email,
+                    firstName: userProfile.firstName,
+                    lastName: userProfile.lastName,
+                    isLoggedIn: true,
+                    isMechanic,
+                    photoURL: userProfile.photoURL,
+                    emailVerified: userProfile.emailVerified || false,
+                    profileComplete: (userProfile as any).profileComplete !== false, // Leggi da Firestore
+                    loginProvider: 'oauth',
+                    ...(isMechanic && {
+                        workshopName: userProfile.workshopName,
+                        workshopAddress: userProfile.address,
+                        vatNumber: userProfile.vatNumber,
+                    }),
+                });
+
                 // Il redirect sarà gestito da AppNavigator in base a profileComplete
             }
         } catch (error: any) {
@@ -221,10 +244,33 @@ const LoginScreen = () => {
 
         try {
             console.log('🔐 Inizio Apple Sign In...');
-            const userProfile = await authService.signInWithApple();
+            const userProfile = await authService.signInWithApple(); // false = login (default)
 
             if (userProfile) {
                 console.log('✅ Apple Sign In completato:', userProfile);
+
+                // Aggiorna lo store con i dati del profilo
+                const isMechanic = userProfile.role === 'mechanic';
+                setUser({
+                    id: userProfile.uid,
+                    uid: userProfile.uid,
+                    name: userProfile.displayName || `${userProfile.firstName} ${userProfile.lastName}`,
+                    email: userProfile.email,
+                    firstName: userProfile.firstName,
+                    lastName: userProfile.lastName,
+                    isLoggedIn: true,
+                    isMechanic,
+                    photoURL: userProfile.photoURL,
+                    emailVerified: userProfile.emailVerified || false,
+                    profileComplete: (userProfile as any).profileComplete !== false, // Leggi da Firestore
+                    loginProvider: 'oauth',
+                    ...(isMechanic && {
+                        workshopName: userProfile.workshopName,
+                        workshopAddress: userProfile.address,
+                        vatNumber: userProfile.vatNumber,
+                    }),
+                });
+
                 // Il redirect sarà gestito da AppNavigator in base a profileComplete
             }
         } catch (error: any) {

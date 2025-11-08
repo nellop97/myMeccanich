@@ -295,7 +295,25 @@ const RegisterScreen = () => {
 
             if (userProfile) {
                 console.log('✅ Google Sign In completato:', userProfile);
-                // Il redirect sarà gestito da AppNavigator in base a profileComplete
+
+                // IMPORTANTE: Aggiorna lo store con il profilo incompleto
+                setUser({
+                    id: userProfile.uid,
+                    uid: userProfile.uid,
+                    name: userProfile.displayName || `${userProfile.firstName} ${userProfile.lastName}`,
+                    email: userProfile.email,
+                    firstName: userProfile.firstName,
+                    lastName: userProfile.lastName,
+                    isLoggedIn: true,
+                    isMechanic: false, // Ancora da determinare
+                    photoURL: userProfile.photoURL,
+                    emailVerified: userProfile.emailVerified || false,
+                    profileComplete: false, // PROFILO INCOMPLETO - deve completare registrazione
+                    loginProvider: 'oauth',
+                });
+
+                // Il redirect sarà gestito da AppNavigator in base a profileComplete: false
+                console.log('📱 Store aggiornato con profilo incompleto, redirect a OAuthRegistrationScreen...');
             }
         } catch (error: any) {
             console.error('❌ Errore Google Sign In:', error);
@@ -314,7 +332,25 @@ const RegisterScreen = () => {
 
             if (userProfile) {
                 console.log('✅ Apple Sign In completato:', userProfile);
-                // Il redirect sarà gestito da AppNavigator in base a profileComplete
+
+                // IMPORTANTE: Aggiorna lo store con il profilo incompleto
+                setUser({
+                    id: userProfile.uid,
+                    uid: userProfile.uid,
+                    name: userProfile.displayName || `${userProfile.firstName} ${userProfile.lastName}`,
+                    email: userProfile.email,
+                    firstName: userProfile.firstName,
+                    lastName: userProfile.lastName,
+                    isLoggedIn: true,
+                    isMechanic: false, // Ancora da determinare
+                    photoURL: userProfile.photoURL,
+                    emailVerified: userProfile.emailVerified || false,
+                    profileComplete: false, // PROFILO INCOMPLETO - deve completare registrazione
+                    loginProvider: 'oauth',
+                });
+
+                // Il redirect sarà gestito da AppNavigator in base a profileComplete: false
+                console.log('📱 Store aggiornato con profilo incompleto, redirect a OAuthRegistrationScreen...');
             }
         } catch (error: any) {
             console.error('❌ Errore Apple Sign In:', error);

@@ -18,6 +18,7 @@ const getStorageAdapter = () => {
 
 export interface User {
     id: string;
+    uid?: string; // Firebase UID
     name: string;
     email: string;
     isLoggedIn: boolean;
@@ -28,6 +29,13 @@ export interface User {
     createdAt?: string;
     lastLoginAt?: string;
     profileComplete?: boolean; // Indica se il profilo OAuth è completo
+    loginProvider?: 'email' | 'oauth'; // Provider di autenticazione
+    // Dati personali
+    firstName?: string;
+    lastName?: string;
+    // Ruoli
+    userType?: 'user' | 'mechanic'; // Tipo in Firestore
+    role?: 'owner' | 'mechanic'; // Ruolo applicazione
     // Dati specifici per meccanici
     workshopName?: string;
     workshopAddress?: string;
