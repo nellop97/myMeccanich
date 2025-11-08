@@ -217,11 +217,6 @@ const LoginScreen = () => {
     };
 
     const handleAppleLogin = async () => {
-        if (Platform.OS !== 'ios') {
-            showToast('Apple Sign In è disponibile solo su iOS', 'error');
-            return;
-        }
-
         setLoading(true);
 
         try {
@@ -403,23 +398,21 @@ const LoginScreen = () => {
                             </View>
                         </TouchableOpacity>
 
-                        {/* Apple Sign In - Solo iOS */}
-                        {Platform.OS === 'ios' && (
-                            <TouchableOpacity
-                                style={[styles.oauthButton, styles.oauthButtonApple]}
-                                onPress={handleAppleLogin}
-                                disabled={loading}
-                            >
-                                <View style={styles.oauthButtonContent}>
-                                    <View style={styles.oauthIcon}>
-                                        <Text style={styles.oauthIconText}></Text>
-                                    </View>
-                                    <Text style={[styles.oauthButtonText, styles.oauthButtonTextApple]}>
-                                        Continua con Apple
-                                    </Text>
+                        {/* Apple Sign In */}
+                        <TouchableOpacity
+                            style={[styles.oauthButton, styles.oauthButtonApple]}
+                            onPress={handleAppleLogin}
+                            disabled={loading}
+                        >
+                            <View style={styles.oauthButtonContent}>
+                                <View style={styles.oauthIcon}>
+                                    <Text style={styles.oauthIconText}></Text>
                                 </View>
-                            </TouchableOpacity>
-                        )}
+                                <Text style={[styles.oauthButtonText, styles.oauthButtonTextApple]}>
+                                    Continua con Apple
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
                     </View>
 
                     {/* Registrazione */}

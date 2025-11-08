@@ -11,6 +11,7 @@ import {
     signInWithCredential,
     OAuthCredential,
     signInWithPopup,
+    OAuthProvider,
     getIdToken
 } from 'firebase/auth';
 import {
@@ -130,7 +131,7 @@ class AuthService {
     }
 
     // Google Sign In con expo-auth-session (compatibile SDK 54)
-    async signInWithGoogle(): Promise<UserProfile | null> {
+    async signInWithGoogle(isRegistration: boolean = false): Promise<UserProfile | null> {
         try {
             if (isWeb) {
                 // Web: usa signInWithPopup
@@ -139,7 +140,7 @@ class AuthService {
                 provider.addScope('email');
 
                 const result = await signInWithPopup(auth, provider);
-                return await this.handleGoogleUser(result.user);
+                return await this.handleGoogleUser(result.user, isRegistration);
             } else {
                 // Mobile: usa expo-auth-session
                 const redirectUri = AuthSession.makeRedirectUri({
@@ -169,7 +170,7 @@ class AuthService {
 
                     // Autentica con Firebase
                     const userCredential = await signInWithCredential(auth, credential);
-                    return await this.handleGoogleUser(userCredential.user);
+                    return await this.handleGoogleUser(userCredential.user, isRegistration);
                 }
 
                 return null;
@@ -180,67 +181,103 @@ class AuthService {
         }
     }
 
-    // Apple Sign In (solo iOS)
-    async signInWithApple(): Promise<UserProfile | null> {
-        if (Platform.OS !== 'ios') {
-            throw new Error('Apple Sign In è disponibile solo su iOS');
-        }
-
+    // Apple Sign In
+    async signInWithApple(isRegistration: boolean = false): Promise<UserProfile | null> {
         try {
-            const nonce = Math.random().toString(36).substring(2, 10);
-            const hashedNonce = await Crypto.digestStringAsync(
-                Crypto.CryptoDigestAlgorithm.SHA256,
-                nonce
-            );
+            // Su iOS native, usa AppleAuthentication
+            if (Platform.OS === 'ios') {
+                const nonce = Math.random().toString(36).substring(2, 10);
+                const hashedNonce = await Crypto.digestStringAsync(
+                    Crypto.CryptoDigestAlgorithm.SHA256,
+                    nonce
+                );
 
-            const credential = await AppleAuthentication.signInAsync({
-                requestedScopes: [
-                    AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                ],
-                nonce: hashedNonce,
-            });
-
-            if (credential.identityToken) {
-                // Importa dinamicamente OAuthProvider per evitare errori su Android
-                const { OAuthProvider } = await import('firebase/auth');
-                const provider = new OAuthProvider('apple.com');
-                const oAuthCredential = provider.credential({
-                    idToken: credential.identityToken,
-                    rawNonce: nonce,
+                const credential = await AppleAuthentication.signInAsync({
+                    requestedScopes: [
+                        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                    ],
+                    nonce: hashedNonce,
                 });
 
-                const userCredential = await signInWithCredential(auth, oAuthCredential);
-
-                // Gestisci i dati Apple (nome disponibile solo al primo login)
-                const user = userCredential.user;
-                const userProfile = await this.getOrCreateUserProfile(user);
-
-                if (credential.fullName && !userProfile.firstName) {
-                    // Aggiorna il nome solo se non già presente
-                    await updateDoc(doc(db, 'users', user.uid), {
-                        firstName: credential.fullName.givenName,
-                        lastName: credential.fullName.familyName,
-                        displayName: `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim(),
+                if (credential.identityToken) {
+                    const provider = new OAuthProvider('apple.com');
+                    const oAuthCredential = provider.credential({
+                        idToken: credential.identityToken,
+                        rawNonce: nonce,
                     });
+
+                    const userCredential = await signInWithCredential(auth, oAuthCredential);
+                    const user = userCredential.user;
+
+                    // Controlla se è un nuovo utente
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    const userExists = userDoc.exists();
+
+                    if (!isRegistration && !userExists) {
+                        // Login di un account non esistente
+                        await this.logout();
+                        throw new Error('Account non trovato. Registrati prima di effettuare il login.');
+                    }
+
+                    const userProfile = await this.getOrCreateUserProfile(user, false);
+
+                    if (credential.fullName && !userProfile.firstName) {
+                        await updateDoc(doc(db, 'users', user.uid), {
+                            firstName: credential.fullName.givenName,
+                            lastName: credential.fullName.familyName,
+                            displayName: `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim(),
+                        });
+                    }
+
+                    return userProfile;
                 }
 
-                return userProfile;
-            }
+                return null;
+            } else if (isWeb) {
+                // Su Web, usa OAuthProvider di Firebase
+                const provider = new OAuthProvider('apple.com');
+                provider.addScope('email');
+                provider.addScope('name');
 
-            return null;
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
+
+                // Controlla se è un nuovo utente
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                const userExists = userDoc.exists();
+
+                if (!isRegistration && !userExists) {
+                    // Login di un account non esistente
+                    await this.logout();
+                    throw new Error('Account non trovato. Registrati prima di effettuare il login.');
+                }
+
+                return await this.getOrCreateUserProfile(user, false);
+            } else {
+                throw new Error('Apple Sign In non è supportato su questa piattaforma');
+            }
         } catch (error) {
             if ((error as any).code === 'ERR_CANCELED') {
-                // Utente ha annullato
                 return null;
             }
-            throw new Error(handleAuthError(error));
+            throw error instanceof Error ? error : new Error(handleAuthError(error));
         }
     }
 
     // Helper per gestire utente Google
-    private async handleGoogleUser(user: User): Promise<UserProfile> {
-        return await this.getOrCreateUserProfile(user);
+    private async handleGoogleUser(user: User, isRegistration: boolean = false): Promise<UserProfile> {
+        // Controlla se è un nuovo utente
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userExists = userDoc.exists();
+
+        if (!isRegistration && !userExists) {
+            // Login di un account non esistente
+            await this.logout();
+            throw new Error('Account non trovato. Registrati prima di effettuare il login.');
+        }
+
+        return await this.getOrCreateUserProfile(user, false);
     }
 
     // Ottieni o crea profilo utente

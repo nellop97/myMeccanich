@@ -291,7 +291,7 @@ const RegisterScreen = () => {
 
         try {
             console.log('🔐 Inizio Google Sign In per registrazione...');
-            const userProfile = await authService.signInWithGoogle();
+            const userProfile = await authService.signInWithGoogle(true); // true = registrazione
 
             if (userProfile) {
                 console.log('✅ Google Sign In completato:', userProfile);
@@ -306,16 +306,11 @@ const RegisterScreen = () => {
     };
 
     const handleAppleSignIn = async () => {
-        if (Platform.OS !== 'ios') {
-            Alert.alert('Non disponibile', 'Apple Sign In è disponibile solo su iOS');
-            return;
-        }
-
         setLoading(true);
 
         try {
             console.log('🔐 Inizio Apple Sign In per registrazione...');
-            const userProfile = await authService.signInWithApple();
+            const userProfile = await authService.signInWithApple(true); // true = registrazione
 
             if (userProfile) {
                 console.log('✅ Apple Sign In completato:', userProfile);
@@ -429,23 +424,21 @@ const RegisterScreen = () => {
                     </View>
                 </TouchableOpacity>
 
-                {/* Apple Sign In - Solo iOS */}
-                {Platform.OS === 'ios' && (
-                    <TouchableOpacity
-                        style={[styles.oauthButton, styles.oauthButtonApple]}
-                        onPress={handleAppleSignIn}
-                        disabled={loading}
-                    >
-                        <View style={styles.oauthButtonContent}>
-                            <View style={styles.oauthIcon}>
-                                <Text style={styles.oauthIconText}></Text>
-                            </View>
-                            <Text style={[styles.oauthButtonText, styles.oauthButtonTextApple]}>
-                                Continua con Apple
-                            </Text>
+                {/* Apple Sign In */}
+                <TouchableOpacity
+                    style={[styles.oauthButton, styles.oauthButtonApple]}
+                    onPress={handleAppleSignIn}
+                    disabled={loading}
+                >
+                    <View style={styles.oauthButtonContent}>
+                        <View style={styles.oauthIcon}>
+                            <Text style={styles.oauthIconText}></Text>
                         </View>
-                    </TouchableOpacity>
-                )}
+                        <Text style={[styles.oauthButtonText, styles.oauthButtonTextApple]}>
+                            Continua con Apple
+                        </Text>
+                    </View>
+                </TouchableOpacity>
             </View>
         </View>
     );
