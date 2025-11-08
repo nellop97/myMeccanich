@@ -59,6 +59,13 @@ import { useStore } from '../../store';
 
 // Services
 import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
+import { TransferService } from '../../services/TransferService';
+
+// Components
+import TransferAcceptanceModal from '../../components/TransferAcceptanceModal';
+
+// Types
+import { VehicleTransfer } from '../../types/database.types';
 
 // ============================================
 // INTERFACES
@@ -134,6 +141,10 @@ const HomeScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [pendingViewRequests, setPendingViewRequests] = useState(0);
     const [approvedViewRequests, setApprovedViewRequests] = useState(0);
+    const [pendingTransferRequests, setPendingTransferRequests] = useState(0);
+    const [activeTransfers, setActiveTransfers] = useState<VehicleTransfer[]>([]);
+    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [selectedTransfer, setSelectedTransfer] = useState<VehicleTransfer | null>(null);
     const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
     const [isTabSectionExpanded, setIsTabSectionExpanded] = useState(true);
     const [tabSectionHeight] = useState(new Animated.Value(1));
@@ -188,6 +199,9 @@ const HomeScreen = () => {
 
             // Carica richieste di visualizzazione pendenti
             await loadPendingViewRequests();
+
+            // Carica richieste di trasferimento pendenti
+            await loadPendingTransferRequests();
         } catch (error) {
             console.error('Error loading data:', error);
             Alert.alert('Errore', 'Impossibile caricare i dati');
@@ -292,6 +306,29 @@ const HomeScreen = () => {
         }
     };
 
+    const loadPendingTransferRequests = async () => {
+        try {
+            if (!user?.email) {
+                console.log('⚠️ No user email, skipping transfer requests load');
+                return;
+            }
+
+            console.log('🚗 Loading transfer requests for user:', user.email);
+            const transferService = TransferService.getInstance();
+
+            // Carica richieste di trasferimento ricevute
+            const transfers = await transferService.getActiveTransfers(user.email);
+            console.log('📋 Total active transfers:', transfers.length);
+
+            setActiveTransfers(transfers);
+            setPendingTransferRequests(transfers.length);
+        } catch (error: any) {
+            console.error('❌ Error loading transfer requests:', error);
+            setPendingTransferRequests(0);
+            setActiveTransfers([]);
+        }
+    };
+
     // Toggle espansione sezione tab
     const toggleTabSection = () => {
         const toValue = isTabSectionExpanded ? 0 : 1;
@@ -323,17 +360,18 @@ const HomeScreen = () => {
         }, [loadData])
     );
 
-    // Polling automatico per richieste pendenti ogni 30 secondi
+    // Polling automatico per richieste pendenti ogni 3 minuti
     useEffect(() => {
         const interval = setInterval(() => {
-            if (user?.id) {
-                console.log('🔔 Polling pending view requests ....');
+            if (user?.id && user?.email) {
+                console.log('🔔 Polling pending requests ....');
                 loadPendingViewRequests();
+                loadPendingTransferRequests();
             }
         }, 180000); // <-- 3 minuti
 
         return () => clearInterval(interval);
-    }, [user?.id]);
+    }, [user?.id, user?.email]);
 
     // ============================================
     // RENDER HELPERS
@@ -1390,6 +1428,28 @@ const HomeScreen = () => {
                             </View>
                             <Text style={styles.quickActionLabel}>Richieste</Text>
                         </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.quickActionButton}
+                            onPress={() => {
+                                if (pendingTransferRequests > 0) {
+                                    setSelectedTransfer(activeTransfers[0]);
+                                    setShowTransferModal(true);
+                                } else {
+                                    Alert.alert('Nessuna Richiesta', 'Non hai richieste di trasferimento in sospeso.');
+                                }
+                            }}
+                        >
+                            <View style={[styles.quickActionIcon, { backgroundColor: '#dcfce7' }]}>
+                                <Package size={20} color="#10b981" />
+                                {pendingTransferRequests > 0 && (
+                                    <View style={styles.quickActionBadge}>
+                                        <Text style={styles.quickActionBadgeText}>{pendingTransferRequests}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <Text style={styles.quickActionLabel}>Trasferimenti</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -1541,6 +1601,20 @@ const HomeScreen = () => {
 
             {/* Add Vehicle Modal */}
             {renderAddVehicleModal()}
+
+            {/* Transfer Acceptance Modal */}
+            <TransferAcceptanceModal
+                visible={showTransferModal}
+                onClose={() => {
+                    setShowTransferModal(false);
+                    setSelectedTransfer(null);
+                }}
+                transfer={selectedTransfer}
+                onTransferProcessed={() => {
+                    // Ricarica i dati dopo aver processato il trasferimento
+                    loadData();
+                }}
+            />
         </View>
     );
 };

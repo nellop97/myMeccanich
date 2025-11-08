@@ -158,10 +158,12 @@ export interface VehicleTransfer {
   
   // Dati da trasferire
   transferData: {
-    basicInfo: boolean;
+    basicInfo?: boolean;
     maintenanceHistory: boolean;
+    maintenanceDetails?: boolean; // Se includere anche i costi e dettagli delle manutenzioni
     documents: boolean;
     photos: boolean;
+    reminders?: boolean; // Se trasferire anche i promemoria
   };
   
   // Stati
