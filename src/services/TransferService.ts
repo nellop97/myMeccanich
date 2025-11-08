@@ -19,7 +19,7 @@ import {
 import { db } from './firebase';
 import { VehicleTransfer } from '../types/database.types';
 import * as Crypto from 'expo-crypto';
-// import emailjs from '@emailjs/browser'; // TODO: Uncomment when EmailJS is configured
+import emailjs from '@emailjs/browser';
 
 export class TransferService {
   private static instance: TransferService;
@@ -28,15 +28,10 @@ export class TransferService {
   private transferValidityDays = 30;
 
   private constructor() {
-    // TODO: Configura EmailJS per inviare notifiche email
-    // Per configurare EmailJS:
-    // 1. Crea un account su https://www.emailjs.com/
-    // 2. Ottieni la tua Public Key da https://dashboard.emailjs.com/admin/account
-    // 3. Crea un servizio email e ottieni il Service ID
-    // 4. Crea template email e ottieni i Template ID
-    // 5. Sostituisci i placeholder qui sotto con i valori reali
-    //
-    // emailjs.init('YOUR_PUBLIC_KEY');
+    // Inizializza EmailJS con la Public Key
+    // NOTA: Per inviare email servono anche Service ID e Template ID
+    // da configurare su https://dashboard.emailjs.com/
+    emailjs.init('uYcW9iVrI19UoOfDj');
   }
 
   static getInstance(): TransferService {
