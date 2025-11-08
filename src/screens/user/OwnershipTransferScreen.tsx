@@ -43,7 +43,9 @@ import {
   EyeOff
 } from 'lucide-react-native';
 import { SecurityService } from '../../security/SecurityService'
+import { TransferService } from '../../services/TransferService';
 import { useAppThemeManager } from '../../hooks/useTheme';
+import { useStore } from '../../store';
 
 interface TransferData {
   buyerName: string;
@@ -64,7 +66,9 @@ export default function OwnershipTransferScreen() {
   const route = useRoute();
   const { colors } = useAppThemeManager();
   const security = SecurityService.getInstance();
-  
+  const transferService = TransferService.getInstance();
+  const { user } = useStore();
+
   const { carId } = route.params as { carId: string };
   
   const [currentStep, setCurrentStep] = useState(0);
@@ -146,15 +150,39 @@ export default function OwnershipTransferScreen() {
     try {
       // Log trasferimento
       await security.logDataAccess(
-        'currentUserId',
+        user?.id || 'currentUserId',
         carId,
         `transfer_to_${transferData.buyerEmail}`
       );
-      
-      // Simula trasferimento
+
+      // Crea trasferimento tramite TransferService
+      const transferId = await transferService.createTransfer(
+        carId,
+        user?.id || 'currentUserId',
+        user?.name || 'Proprietario',
+        user?.email || '',
+        {
+          name: transferData.buyerName,
+          email: transferData.buyerEmail,
+          phone: transferData.buyerPhone
+        },
+        {
+          basicInfo: transferData.selectedData.basicInfo,
+          maintenanceHistory: transferData.selectedData.maintenanceHistory,
+          maintenanceDetails: true, // Include i dettagli della manutenzione
+          documents: transferData.selectedData.documents,
+          photos: transferData.selectedData.photos,
+          reminders: false // Non trasferire i promemoria per default
+        },
+        transferData.transferPin
+      );
+
+      console.log('✅ Trasferimento creato:', transferId);
+
+      // Mostra messaggio di successo personalizzato
       Alert.alert(
-        '✅ Trasferimento Completato',
-        `Lo storico del veicolo è stato trasferito a ${transferData.buyerName}. L'acquirente riceverà una notifica con il PIN per accedere ai dati.`,
+        '✅ Email Inviata con Successo',
+        `Una email di conferma è stata inviata a ${transferData.buyerName}.\n\nAppena ${transferData.buyerName} accetterà il veicolo, riceverai una notifica e il trasferimento verrà completato automaticamente.`,
         [
           {
             text: 'OK',
@@ -163,7 +191,11 @@ export default function OwnershipTransferScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert('Errore', 'Impossibile completare il trasferimento');
+      console.error('❌ Errore trasferimento:', error);
+      Alert.alert(
+        'Errore',
+        error instanceof Error ? error.message : 'Impossibile completare il trasferimento. Riprova.'
+      );
     }
   };
 

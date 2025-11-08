@@ -20,6 +20,7 @@ import { db } from './firebase';
 import { VehicleTransfer } from '../types/database.types';
 import * as Crypto from 'expo-crypto';
 import emailjs from '@emailjs/browser';
+import * as Notifications from 'expo-notifications';
 
 export class TransferService {
   private static instance: TransferService;
@@ -569,29 +570,33 @@ export class TransferService {
     buyerName: string
   ): Promise<void> {
     try {
-      console.log('📧 [EmailJS Disabled] Would send transfer notification to:', buyerEmail);
+      console.log('📧 Invio email di trasferimento a:', buyerEmail);
       console.log('   Transfer ID:', transferId);
       console.log('   Buyer Name:', buyerName);
 
-      // TODO: Configura EmailJS per inviare email di notifica
-      // Decommentare quando EmailJS è configurato:
-      /*
-      await emailjs.send('YOUR_SERVICE_ID', 'YOUR_TEMPLATE_ID', {
-        to_email: buyerEmail,
-        to_name: buyerName,
-        transfer_link: `https://yourapp.com/accept-transfer/${transferId}`,
-        expiry_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()
-      });
+      // Invia email tramite EmailJS
+      await emailjs.send(
+        'service_zcjt1ki', // Service ID da EmailJS
+        'template_transfer', // Template ID per il trasferimento
+        {
+          to_email: buyerEmail,
+          to_name: buyerName,
+          transfer_id: transferId,
+          transfer_link: `https://yourapp.com/accept-transfer/${transferId}`,
+          expiry_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('it-IT')
+        }
+      );
 
       // Aggiorna flag notifica
       await updateDoc(doc(db, this.transfersCollection, transferId), {
         'notificationsSent.created': true
       });
-      */
 
-      console.log('✅ [EmailJS Disabled] Transfer created successfully. Email notifications are disabled.');
+      console.log('✅ Email inviata con successo a', buyerEmail);
     } catch (error) {
-      console.error('Error sending email:', error);
+      console.error('❌ Errore invio email:', error);
+      // Non bloccare il trasferimento anche se l'email fallisce
+      console.log('⚠️ Trasferimento creato ma email non inviata');
     }
   }
 
@@ -601,28 +606,56 @@ export class TransferService {
     buyerEmail: string
   ): Promise<void> {
     try {
-      console.log('📧 [EmailJS Disabled] Would send acceptance notification');
-      console.log('   To seller:', sellerEmail);
-      console.log('   To buyer:', buyerEmail);
+      console.log('📧 Invio notifiche di accettazione trasferimento');
+      console.log('   Al venditore:', sellerEmail);
+      console.log('   Al compratore:', buyerEmail);
 
-      // TODO: Configura EmailJS per inviare email di notifica
-      // Decommentare quando EmailJS è configurato:
-      /*
-      // Notifica al venditore
-      await emailjs.send('YOUR_SERVICE_ID', 'YOUR_ACCEPTANCE_TEMPLATE_ID', {
-        to_email: sellerEmail,
-        buyer_email: buyerEmail
+      // Notifica in-app al venditore (locale)
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🎉 Trasferimento Accettato',
+          body: `Il nuovo proprietario ha accettato il trasferimento del veicolo. Il veicolo è stato trasferito con successo.`,
+          data: {
+            type: 'transfer_accepted',
+            buyerEmail,
+          },
+          sound: 'default',
+        },
+        trigger: null, // Invia subito
       });
 
-      // Notifica al compratore
-      await emailjs.send('YOUR_SERVICE_ID', 'YOUR_WELCOME_TEMPLATE_ID', {
-        to_email: buyerEmail
-      });
-      */
+      // Notifica email al venditore
+      try {
+        await emailjs.send(
+          'service_zcjt1ki',
+          'template_acceptance_seller', // Template per notifica venditore
+          {
+            to_email: sellerEmail,
+            buyer_email: buyerEmail,
+          }
+        );
+        console.log('✅ Email inviata al venditore');
+      } catch (error) {
+        console.error('⚠️ Errore invio email al venditore:', error);
+      }
 
-      console.log('✅ [EmailJS Disabled] Transfer accepted successfully. Email notifications are disabled.');
+      // Notifica email al compratore
+      try {
+        await emailjs.send(
+          'service_zcjt1ki',
+          'template_acceptance_buyer', // Template per notifica compratore
+          {
+            to_email: buyerEmail,
+          }
+        );
+        console.log('✅ Email inviata al compratore');
+      } catch (error) {
+        console.error('⚠️ Errore invio email al compratore:', error);
+      }
+
+      console.log('✅ Notifiche di accettazione inviate con successo');
     } catch (error) {
-      console.error('Error sending acceptance notification:', error);
+      console.error('❌ Errore invio notifiche:', error);
     }
   }
 
