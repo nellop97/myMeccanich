@@ -1,4 +1,4 @@
-
+// src/screens/user/NotificationsScreen.tsx - Notifiche con Firebase
 import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
@@ -9,7 +9,9 @@ import {
   StyleSheet,
   Switch,
   Alert,
-  RefreshControl
+  RefreshControl,
+  useWindowDimensions,
+  Clipboard
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -23,29 +25,21 @@ import {
   Settings,
   ArrowLeft,
   Clock,
-  Car
+  Car,
+  Copy,
+  Truck
 } from 'lucide-react-native';
 import { useStore } from '../../store';
 import { NotificationService } from '../../services/NotificationService';
-
-interface Notification {
-  id: string;
-  type: 'reminder' | 'maintenance' | 'document' | 'expense';
-  title: string;
-  message: string;
-  carId?: string;
-  carInfo?: string;
-  date: Date;
-  read: boolean;
-  priority: 'low' | 'medium' | 'high';
-  actionRequired?: boolean;
-}
+import { inAppNotificationService, InAppNotification } from '../../services/InAppNotificationService';
 
 const NotificationsScreen = () => {
   const navigation = useNavigation();
-  const { darkMode } = useStore();
+  const { user, darkMode } = useStore();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [settings, setSettings] = useState({
     pushNotifications: true,
     maintenanceReminders: true,
@@ -54,65 +48,61 @@ const NotificationsScreen = () => {
     weeklyReports: false,
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'settings'>('all');
 
   const theme = {
-    background: darkMode ? '#121212' : '#f5f5f5',
+    background: darkMode ? '#121212' : '#f8fafc',
     cardBackground: darkMode ? '#1e1e1e' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#a0a0a0' : '#666666',
-    primary: '#007AFF',
-    border: darkMode ? '#333333' : '#e0e0e0',
-    success: '#34C759',
-    warning: '#FF9500',
-    error: '#FF3B30'
+    text: darkMode ? '#ffffff' : '#1e293b',
+    textSecondary: darkMode ? '#a0a0a0' : '#64748b',
+    primary: '#3b82f6',
+    border: darkMode ? '#333333' : '#e2e8f0',
+    success: '#10b981',
+    warning: '#f59e0b',
+    error: '#ef4444'
   };
 
   useEffect(() => {
     loadNotifications();
     loadSettings();
-  }, []);
 
-  const loadNotifications = () => {
-    // Mock notifications - in realtà queste verranno da Firebase
-    const mockNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'reminder',
-        title: 'Revisione in Scadenza',
-        message: 'La revisione della tua Fiat 500 scade tra 15 giorni',
-        carId: 'car1',
-        carInfo: 'Fiat 500',
-        date: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        read: false,
-        priority: 'high',
-        actionRequired: true
-      },
-      {
-        id: '2',
-        type: 'maintenance',
-        title: 'Manutenzione Programmata',
-        message: 'È ora di fare il tagliando alla BMW X3',
-        carId: 'car2',
-        carInfo: 'BMW X3',
-        date: new Date(Date.now() - 4 * 60 * 60 * 1000),
-        read: false,
-        priority: 'medium'
-      },
-      {
-        id: '3',
-        type: 'document',
-        title: 'Assicurazione Rinnovata',
-        message: 'L\'assicurazione è stata rinnovata con successo',
-        carId: 'car1',
-        carInfo: 'Fiat 500',
-        date: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        read: true,
-        priority: 'low'
-      }
-    ];
+    // Cleanup scadute
+    if (user?.email) {
+      inAppNotificationService.deleteExpiredNotifications(user.email);
+    }
 
-    setNotifications(mockNotifications);
+    // Real-time listener
+    let unsubscribe: (() => void) | null = null;
+    if (user?.email) {
+      unsubscribe = inAppNotificationService.subscribeToNotifications(
+        user.email,
+        (notifs) => {
+          setNotifications(notifs);
+          setLoading(false);
+        }
+      );
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user?.email]);
+
+  const loadNotifications = async () => {
+    if (!user?.email) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const notifs = await inAppNotificationService.getUserNotifications(user.email);
+      setNotifications(notifs);
+    } catch (error) {
+      console.error('Errore caricamento notifiche:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadSettings = async () => {
@@ -130,33 +120,49 @@ const NotificationsScreen = () => {
     setRefreshing(false);
   };
 
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      )
-    );
+  const markAsRead = async (notificationId: string) => {
+    try {
+      await inAppNotificationService.markAsRead(notificationId);
+      // Il listener real-time aggiornerà automaticamente
+    } catch (error) {
+      console.error('Errore aggiornamento notifica:', error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, read: true }))
-    );
+  const markAllAsRead = async () => {
+    if (!user?.email) return;
+
+    try {
+      await inAppNotificationService.markAllAsRead(user.email);
+      Alert.alert('Successo', 'Tutte le notifiche sono state segnate come lette');
+    } catch (error) {
+      console.error('Errore aggiornamento notifiche:', error);
+      Alert.alert('Errore', 'Impossibile aggiornare le notifiche');
+    }
   };
 
-  const deleteNotification = (notificationId: string) => {
-    setNotifications(prev => 
-      prev.filter(notif => notif.id !== notificationId)
-    );
+  const deleteNotification = async (notificationId: string) => {
+    try {
+      await inAppNotificationService.deleteNotification(notificationId);
+      // Il listener real-time aggiornerà automaticamente
+    } catch (error) {
+      console.error('Errore eliminazione notifica:', error);
+      Alert.alert('Errore', 'Impossibile eliminare la notifica');
+    }
+  };
+
+  const copyPinToClipboard = (pin: string) => {
+    Clipboard.setString(pin);
+    Alert.alert('✅ Copiato', 'PIN copiato negli appunti');
   };
 
   const updateSetting = async (key: string, value: boolean) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
-    
+
     try {
       await NotificationService.updateNotificationSettings(newSettings);
-      
+
       if (key === 'pushNotifications' && value) {
         await NotificationService.requestPermissions();
       }
@@ -167,18 +173,21 @@ const NotificationsScreen = () => {
   };
 
   const getNotificationIcon = (type: string, priority: string) => {
-    const color = priority === 'high' ? theme.error : 
+    const color = priority === 'high' ? theme.error :
                  priority === 'medium' ? theme.warning : theme.success;
-    
+
     switch (type) {
+      case 'transfer_request':
+      case 'transfer_accepted':
+        return <Truck size={20} color={color} />;
       case 'reminder':
         return <Calendar size={20} color={color} />;
       case 'maintenance':
         return <Wrench size={20} color={color} />;
       case 'document':
         return <Shield size={20} color={color} />;
-      case 'expense':
-        return <DollarSign size={20} color={color} />;
+      case 'booking':
+        return <Car size={20} color={color} />;
       default:
         return <Bell size={20} color={color} />;
     }
@@ -187,14 +196,14 @@ const NotificationsScreen = () => {
   const formatDate = (date: Date) => {
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Adesso';
     if (diffInHours < 24) return `${diffInHours}h fa`;
-    
+
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays === 1) return 'Ieri';
     if (diffInDays < 7) return `${diffInDays} giorni fa`;
-    
+
     return date.toLocaleDateString('it-IT');
   };
 
@@ -203,31 +212,27 @@ const NotificationsScreen = () => {
     return true;
   });
 
-  const renderNotification = (notification: Notification) => (
+  const renderNotification = (notification: InAppNotification) => (
     <TouchableOpacity
       key={notification.id}
       style={[
         styles.notificationCard,
-        { 
+        isDesktop && styles.notificationCardDesktop,
+        {
           backgroundColor: theme.cardBackground,
           borderLeftColor: notification.priority === 'high' ? theme.error :
                           notification.priority === 'medium' ? theme.warning : theme.success
         },
         !notification.read && { backgroundColor: theme.primary + '10' }
       ]}
-      onPress={() => {
-        markAsRead(notification.id);
-        if (notification.carId) {
-          navigation.navigate('CarDetail', { carId: notification.carId });
-        }
-      }}
+      onPress={() => markAsRead(notification.id)}
     >
       <View style={styles.notificationContent}>
         <View style={styles.notificationHeader}>
           <View style={styles.notificationIcon}>
             {getNotificationIcon(notification.type, notification.priority)}
           </View>
-          
+
           <View style={styles.notificationInfo}>
             <Text style={[styles.notificationTitle, { color: theme.text }]}>
               {notification.title}
@@ -235,19 +240,43 @@ const NotificationsScreen = () => {
             <Text style={[styles.notificationMessage, { color: theme.textSecondary }]}>
               {notification.message}
             </Text>
-            {notification.carInfo && (
+
+            {/* PIN per notifiche di trasferimento */}
+            {notification.type === 'transfer_request' && notification.data?.transferPin && (
+              <View style={[styles.pinContainer, { backgroundColor: theme.border + '30', borderColor: theme.border }]}>
+                <View style={styles.pinHeader}>
+                  <Text style={[styles.pinLabel, { color: theme.textSecondary }]}>
+                    🔒 PIN Trasferimento:
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => copyPinToClipboard(notification.data!.transferPin!)}
+                    style={styles.copyButton}
+                  >
+                    <Copy size={16} color={theme.primary} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.pinValue, { color: theme.text }]}>
+                  {notification.data.transferPin}
+                </Text>
+                <Text style={[styles.pinHint, { color: theme.textSecondary }]}>
+                  Usa questo PIN per accettare il trasferimento
+                </Text>
+              </View>
+            )}
+
+            {notification.data?.carInfo && (
               <View style={styles.carInfo}>
                 <Car size={12} color={theme.textSecondary} />
                 <Text style={[styles.carInfoText, { color: theme.textSecondary }]}>
-                  {notification.carInfo}
+                  {notification.data.carInfo}
                 </Text>
               </View>
             )}
           </View>
-          
+
           <View style={styles.notificationMeta}>
             <Text style={[styles.notificationTime, { color: theme.textSecondary }]}>
-              {formatDate(notification.date)}
+              {formatDate(notification.createdAt)}
             </Text>
             {!notification.read && (
               <View style={[styles.unreadDot, { backgroundColor: theme.primary }]} />
@@ -255,21 +284,11 @@ const NotificationsScreen = () => {
           </View>
         </View>
 
-        {notification.actionRequired && (
+        {notification.actionRequired && notification.type === 'transfer_request' && (
           <View style={styles.actionSection}>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.primary }]}
-              onPress={() => {
-                // Naviga alla schermata appropriata
-                if (notification.type === 'reminder') {
-                  navigation.navigate('RemindersList');
-                } else if (notification.type === 'maintenance') {
-                  navigation.navigate('AddMaintenance', { carId: notification.carId });
-                }
-              }}
-            >
-              <Text style={styles.actionButtonText}>Vai</Text>
-            </TouchableOpacity>
+            <Text style={[styles.actionHint, { color: theme.textSecondary }]}>
+              Vai alla sezione "Trasferimenti in arrivo" per accettare
+            </Text>
           </View>
         )}
       </View>
@@ -284,11 +303,11 @@ const NotificationsScreen = () => {
   );
 
   const renderSettings = () => (
-    <View style={styles.settingsContainer}>
+    <View style={[styles.settingsContainer, isDesktop && styles.settingsContainerDesktop]}>
       <View style={[styles.settingsSection, { backgroundColor: theme.cardBackground }]}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Notifiche Push</Text>
-        
-        <View style={styles.settingItem}>
+
+        <View style={[styles.settingItem, { borderBottomColor: theme.border }]}>
           <View style={styles.settingInfo}>
             <Text style={[styles.settingTitle, { color: theme.text }]}>
               Attiva Notifiche
@@ -305,7 +324,7 @@ const NotificationsScreen = () => {
           />
         </View>
 
-        <View style={styles.settingItem}>
+        <View style={[styles.settingItem, { borderBottomColor: theme.border }]}>
           <View style={styles.settingInfo}>
             <Text style={[styles.settingTitle, { color: theme.text }]}>
               Promemoria Manutenzioni
@@ -322,7 +341,7 @@ const NotificationsScreen = () => {
           />
         </View>
 
-        <View style={styles.settingItem}>
+        <View style={[styles.settingItem, { borderBottomColor: theme.border }]}>
           <View style={styles.settingInfo}>
             <Text style={[styles.settingTitle, { color: theme.text }]}>
               Scadenza Documenti
@@ -339,24 +358,7 @@ const NotificationsScreen = () => {
           />
         </View>
 
-        <View style={styles.settingItem}>
-          <View style={styles.settingInfo}>
-            <Text style={[styles.settingTitle, { color: theme.text }]}>
-              Alert Spese
-            </Text>
-            <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-              Notifiche per spese elevate
-            </Text>
-          </View>
-          <Switch
-            value={settings.expenseAlerts}
-            onValueChange={(value) => updateSetting('expenseAlerts', value)}
-            trackColor={{ false: theme.border, true: theme.primary + '50' }}
-            thumbColor={settings.expenseAlerts ? theme.primary : theme.textSecondary}
-          />
-        </View>
-
-        <View style={styles.settingItem}>
+        <View style={[styles.settingItem, { borderBottomColor: theme.border }]}>
           <View style={styles.settingInfo}>
             <Text style={[styles.settingTitle, { color: theme.text }]}>
               Report Settimanali
@@ -376,42 +378,70 @@ const NotificationsScreen = () => {
     </View>
   );
 
+  if (!user?.email) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.emptyState}>
+          <Bell size={64} color={theme.textSecondary} />
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>
+            Accesso Richiesto
+          </Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+            Effettua il login per vedere le notifiche
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ArrowLeft size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Notifiche</Text>
-        <TouchableOpacity onPress={markAllAsRead}>
-          <CheckCircle size={24} color={theme.primary} />
-        </TouchableOpacity>
+      <View style={[
+        styles.header,
+        isDesktop && styles.headerDesktop,
+        { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }
+      ]}>
+        <View style={[styles.headerContent, isDesktop && styles.headerContentDesktop]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <ArrowLeft size={24} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Notifiche</Text>
+          <TouchableOpacity onPress={markAllAsRead}>
+            <CheckCircle size={24} color={theme.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tabs */}
-      <View style={[styles.tabBar, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-        {[
-          { key: 'all', label: 'Tutte', count: notifications.length },
-          { key: 'unread', label: 'Non lette', count: notifications.filter(n => !n.read).length },
-          { key: 'settings', label: 'Impostazioni', count: 0 }
-        ].map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[
-              styles.tab,
-              activeTab === tab.key && { borderBottomColor: theme.primary }
-            ]}
-            onPress={() => setActiveTab(tab.key as any)}
-          >
-            <Text style={[
-              styles.tabText,
-              { color: activeTab === tab.key ? theme.primary : theme.textSecondary }
-            ]}>
-              {tab.label} {tab.count > 0 && `(${tab.count})`}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={[
+        styles.tabBar,
+        isDesktop && styles.tabBarDesktop,
+        { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }
+      ]}>
+        <View style={[styles.tabContainer, isDesktop && styles.tabContainerDesktop]}>
+          {[
+            { key: 'all', label: 'Tutte', count: notifications.length },
+            { key: 'unread', label: 'Non lette', count: notifications.filter(n => !n.read).length },
+            { key: 'settings', label: 'Impostazioni', count: 0 }
+          ].map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.tab,
+                activeTab === tab.key && { borderBottomColor: theme.primary }
+              ]}
+              onPress={() => setActiveTab(tab.key as any)}
+            >
+              <Text style={[
+                styles.tabText,
+                { color: activeTab === tab.key ? theme.primary : theme.textSecondary }
+              ]}>
+                {tab.label} {tab.count > 0 && `(${tab.count})`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Content */}
@@ -422,6 +452,7 @@ const NotificationsScreen = () => {
       ) : (
         <ScrollView
           style={styles.content}
+          contentContainerStyle={isDesktop && styles.contentDesktop}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -430,16 +461,22 @@ const NotificationsScreen = () => {
             />
           }
         >
-          {filteredNotifications.length === 0 ? (
+          {loading ? (
+            <View style={styles.loadingState}>
+              <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+                Caricamento notifiche...
+              </Text>
+            </View>
+          ) : filteredNotifications.length === 0 ? (
             <View style={styles.emptyState}>
               <Bell size={64} color={theme.textSecondary} />
               <Text style={[styles.emptyTitle, { color: theme.text }]}>
                 {activeTab === 'unread' ? 'Tutto letto!' : 'Nessuna notifica'}
               </Text>
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                {activeTab === 'unread' 
+                {activeTab === 'unread'
                   ? 'Non hai notifiche non lette.'
-                  : 'Le tue notifiche appariranno qui.'
+                  : 'Le tue notifiche appariranno qui quando riceverai nuovi aggiornamenti.'
                 }
               </Text>
             </View>
@@ -459,11 +496,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    borderBottomWidth: 1,
+  },
+  headerDesktop: {
+    paddingHorizontal: 0,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    borderBottomWidth: 1,
+  },
+  headerContentDesktop: {
+    maxWidth: 900,
+    width: '100%',
+    marginHorizontal: 'auto',
   },
   backButton: {
     padding: 4,
@@ -475,8 +522,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabBar: {
-    flexDirection: 'row',
     borderBottomWidth: 1,
+  },
+  tabBarDesktop: {
+    paddingHorizontal: 0,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+  },
+  tabContainerDesktop: {
+    maxWidth: 900,
+    width: '100%',
+    marginHorizontal: 'auto',
   },
   tab: {
     flex: 1,
@@ -493,6 +550,11 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  contentDesktop: {
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
+  },
   notificationsList: {
     padding: 16,
   },
@@ -506,6 +568,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     position: 'relative',
+  },
+  notificationCardDesktop: {
+    maxWidth: '100%',
   },
   notificationContent: {
     padding: 16,
@@ -529,7 +594,38 @@ const styles = StyleSheet.create({
   notificationMessage: {
     fontSize: 14,
     lineHeight: 20,
+    marginBottom: 8,
+  },
+  pinContainer: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  pinHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  pinLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  copyButton: {
+    padding: 4,
+  },
+  pinValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    letterSpacing: 4,
+    fontFamily: 'monospace',
     marginBottom: 4,
+  },
+  pinHint: {
+    fontSize: 11,
+    fontStyle: 'italic',
   },
   carInfo: {
     flexDirection: 'row',
@@ -542,6 +638,7 @@ const styles = StyleSheet.create({
   },
   notificationMeta: {
     alignItems: 'flex-end',
+    marginLeft: 12,
   },
   notificationTime: {
     fontSize: 12,
@@ -554,34 +651,35 @@ const styles = StyleSheet.create({
   },
   actionSection: {
     marginTop: 12,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
-  actionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  actionButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
+  actionHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   deleteButton: {
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 24,
-    height: 24,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 16,
   },
   deleteButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   settingsContainer: {
     padding: 16,
+  },
+  settingsContainerDesktop: {
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
   },
   settingsSection: {
     borderRadius: 12,
@@ -602,7 +700,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   settingInfo: {
     flex: 1,
@@ -623,6 +720,13 @@ const styles = StyleSheet.create({
     padding: 32,
     marginTop: 64,
   },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    marginTop: 64,
+  },
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -633,6 +737,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  loadingText: {
+    fontSize: 16,
   },
 });
 

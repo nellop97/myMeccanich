@@ -21,6 +21,7 @@ import { VehicleTransfer } from '../types/database.types';
 import * as Crypto from 'expo-crypto';
 import emailjs from '@emailjs/browser';
 import * as Notifications from 'expo-notifications';
+import { inAppNotificationService } from './InAppNotificationService';
 
 export class TransferService {
   private static instance: TransferService;
@@ -99,6 +100,16 @@ export class TransferService {
 
       // Invia email al compratore
       await this.sendTransferNotification(docRef.id, buyerData.email, buyerData.name);
+
+      // Crea notifica in-app per il compratore con il PIN
+      await inAppNotificationService.createTransferRequestNotification(
+        buyerData.email,
+        sellerName,
+        docRef.id,
+        pin, // PIN in chiaro per la notifica
+        `${vehicleId}` // Info veicolo
+      );
+      console.log('✅ Notifica in-app creata per il compratore');
 
       // Aggiorna stato veicolo
       await this.updateVehicleTransferStatus(vehicleId, true, buyerData.email);
@@ -184,7 +195,15 @@ export class TransferService {
       // Trasferisci dati selezionati
       await this.transferVehicleData(transfer);
 
-      // Invia notifiche
+      // Crea notifica in-app per il venditore
+      await inAppNotificationService.createTransferAcceptedNotification(
+        transfer.sellerEmail,
+        transfer.buyerEmail,
+        transfer.vehicleId
+      );
+      console.log('✅ Notifica in-app accettazione creata per il venditore');
+
+      // Invia notifiche email
       await this.sendAcceptanceNotification(
         transfer.sellerEmail,
         transfer.buyerEmail
