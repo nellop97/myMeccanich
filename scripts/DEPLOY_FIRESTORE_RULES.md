@@ -2,17 +2,61 @@
 
 Le regole di sicurezza Firestore sono state aggiornate per supportare le nuove funzionalità di notifiche in-app e trasferimenti veicoli.
 
+## 🚨 AZIONE RICHIESTA - DISTRIBUIRE IMMEDIATAMENTE
+
+**❌ I trasferimenti veicolo NON funzioneranno fino alla distribuzione delle regole!**
+
+### Errori che verranno risolti dopo la distribuzione:
+- ❌ `TransferService.ts:346 Error transferring maintenance records: Missing or insufficient permissions`
+- ❌ `TransferService.ts:305 Error transferring vehicle data: Missing or insufficient permissions`
+- ❌ `TransferService.ts:220 Error accepting transfer: Missing or insufficient permissions`
+- ❌ `TransferService.ts:182 Error verifying PIN: Missing or insufficient permissions`
+
 ## ⚠️ IMPORTANTE
 
 **Le regole Firestore devono essere distribuite manualmente su Firebase Console o tramite Firebase CLI.**
 
 Il file locale `firebase.rules` contiene le regole aggiornate, ma **NON** vengono applicate automaticamente!
 
+**👉 Vai alla sezione "Metodo 1: Firebase Console" qui sotto per distribuire SUBITO.**
+
 ---
 
 ## 📝 Modifiche Apportate
 
-### Nuove Collezioni Aggiunte
+### Collezioni con Regole di Trasferimento Aggiornate (CRITICO)
+
+⚠️ **AGGIORNAMENTO URGENTE**: Le seguenti collezioni sono state aggiornate per permettere i trasferimenti veicolo:
+
+1. **`vehicles`** - Permesso update durante trasferimento
+   - Nuovo: acquirente può aggiornare ownerId durante accettazione
+   - Validazione: nuovo ownerId deve corrispondere all'email autenticata
+
+2. **`maintenance_records`** - Permesso update/delete durante trasferimento
+   - Acquirente può modificare/eliminare records durante trasferimento
+   - ⚠️ Delete temporaneo permissivo (richiede miglioramento sicurezza)
+
+3. **`documents`** - Permesso update/delete durante trasferimento
+   - Acquirente può modificare/eliminare documenti durante trasferimento
+   - ⚠️ Delete temporaneo permissivo (richiede miglioramento sicurezza)
+
+4. **`vehicle_photos`** - Permesso update/delete durante trasferimento
+   - Acquirente può modificare/eliminare foto durante trasferimento
+   - ⚠️ Delete temporaneo permissivo (richiede miglioramento sicurezza)
+
+5. **`reminders`** - Permesso update/delete durante trasferimento
+   - Acquirente può modificare/eliminare promemoria durante trasferimento
+   - ⚠️ Delete temporaneo permissivo (richiede miglioramento sicurezza)
+
+6. **`deadlines`** - Permesso update/delete durante trasferimento
+   - Acquirente può modificare/eliminare scadenze durante trasferimento
+   - ⚠️ Delete temporaneo permissivo (richiede miglioramento sicurezza)
+
+7. **`activities`** - Permesso update/delete durante trasferimento
+   - Acquirente può modificare/eliminare attività durante trasferimento
+   - ⚠️ Delete temporaneo permissivo (richiede miglioramento sicurezza)
+
+### Nuove Collezioni Aggiunte (Precedente)
 
 1. **`in_app_notifications`** - Notifiche in-app per trasferimenti veicoli
    - Lettura: solo destinatario (tramite email)
@@ -20,7 +64,7 @@ Il file locale `firebase.rules` contiene le regole aggiornate, ma **NON** vengon
    - Aggiornamento: solo destinatario
    - Cancellazione: solo destinatario
 
-2. **`vehicle_transfers`** (regole aggiornate)
+2. **`vehicle_transfers`** - Gestione trasferimenti veicoli
    - Lettura: venditore o acquirente
    - Creazione: solo venditore (con validazione campi)
    - Aggiornamento: venditore o acquirente
