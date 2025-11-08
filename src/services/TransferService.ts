@@ -501,7 +501,7 @@ export class TransferService {
   ): Promise<void> {
     try {
       // Usa EmailJS o altro servizio email
-      await emailjs.send('service_id', 'template_id', {
+      await emailjs.send('service_idjyc26', 'template_0a79c36', {
         to_email: buyerEmail,
         to_name: buyerName,
         transfer_link: `https://yourapp.com/accept-transfer/${transferId}`,
