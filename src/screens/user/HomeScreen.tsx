@@ -203,6 +203,9 @@ const HomeScreen = () => {
 
             // Carica richieste di trasferimento pendenti
             await loadPendingTransferRequests();
+
+            // Carica notifiche non lette
+            await loadUnreadNotifications();
         } catch (error) {
             console.error('Error loading data:', error);
             Alert.alert('Errore', 'Impossibile caricare i dati');
@@ -602,12 +605,37 @@ const HomeScreen = () => {
                 {/* Header */}
                 <View style={[styles.header, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
                     <Text style={[styles.headerTitle, { color: themeColors.text }]}>I Miei Veicoli</Text>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => navigation.navigate('Settings' as never)}
-                    >
-                        <SettingsIcon size={24} color={themeColors.textSecondary} />
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <TouchableOpacity
+                            style={styles.headerButton}
+                            onPress={() => navigation.navigate('Notifications' as never)}
+                        >
+                            <Bell size={24} color={unreadNotifications > 0 ? "#f59e0b" : themeColors.textSecondary} />
+                            {unreadNotifications > 0 && (
+                                <View style={{
+                                    position: 'absolute',
+                                    top: -4,
+                                    right: -4,
+                                    backgroundColor: '#ef4444',
+                                    borderRadius: 10,
+                                    width: 20,
+                                    height: 20,
+                                    justifyContent: 'center',
+                                    alignItems: 'center'
+                                }}>
+                                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                                        {unreadNotifications}
+                                    </Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.headerButton}
+                            onPress={() => navigation.navigate('Settings' as never)}
+                        >
+                            <SettingsIcon size={24} color={themeColors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Empty State */}
@@ -670,9 +698,20 @@ const HomeScreen = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.webIconButton}
+                            onPress={() => navigation.navigate('Notifications' as never)}
+                        >
+                            <Bell size={22} color={unreadNotifications > 0 ? "#3b82f6" : themeColors.textSecondary} />
+                            {unreadNotifications > 0 && (
+                                <View style={styles.webBadge}>
+                                    <Text style={styles.webBadgeText}>{unreadNotifications}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.webIconButton}
                             onPress={() => navigation.navigate('ViewRequests' as never)}
                         >
-                            <Bell size={22} color={pendingViewRequests > 0 ? "#f59e0b" : themeColors.textSecondary} />
+                            <Eye size={22} color={pendingViewRequests > 0 ? "#f59e0b" : themeColors.textSecondary} />
                             {pendingViewRequests > 0 && (
                                 <View style={styles.webBadge}>
                                     <Text style={styles.webBadgeText}>{pendingViewRequests}</Text>
@@ -683,7 +722,7 @@ const HomeScreen = () => {
                             style={styles.webIconButton}
                             onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
                         >
-                            <Eye size={22} color={approvedViewRequests > 0 ? "#10b981" : themeColors.textSecondary} />
+                            <TrendingUp size={22} color={approvedViewRequests > 0 ? "#10b981" : themeColors.textSecondary} />
                             {approvedViewRequests > 0 && (
                                 <View style={styles.webBadge}>
                                     <Text style={styles.webBadgeText}>{approvedViewRequests}</Text>
@@ -1100,6 +1139,33 @@ const HomeScreen = () => {
                         ]}>
                             <TouchableOpacity
                                 style={[styles.liquidPill, {
+                                    backgroundColor: unreadNotifications > 0
+                                        ? isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.15)'
+                                        : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                                    borderColor: unreadNotifications > 0
+                                        ? isDark ? 'rgba(59,130,246,0.3)' : 'rgba(59,130,246,0.25)'
+                                        : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
+                                }]}
+                                onPress={() => navigation.navigate('Notifications' as never)}
+                            >
+                                <Bell
+                                    size={20}
+                                    color={unreadNotifications > 0 ? "#3b82f6" : themeColors.text}
+                                />
+                                <Text style={[styles.liquidPillText, {
+                                    color: unreadNotifications > 0 ? "#3b82f6" : themeColors.text
+                                }]}>
+                                    Notifiche
+                                </Text>
+                                {unreadNotifications > 0 && (
+                                    <View style={styles.liquidBadge}>
+                                        <Text style={styles.liquidBadgeText}>{unreadNotifications}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.liquidPill, {
                                     backgroundColor: pendingViewRequests > 0
                                         ? isDark ? 'rgba(251,146,60,0.2)' : 'rgba(251,146,60,0.15)'
                                         : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
@@ -1109,7 +1175,7 @@ const HomeScreen = () => {
                                 }]}
                                 onPress={() => navigation.navigate('ViewRequests' as never)}
                             >
-                                <Bell
+                                <Eye
                                     size={20}
                                     color={pendingViewRequests > 0 ? "#fb923c" : themeColors.text}
                                 />
