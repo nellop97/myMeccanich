@@ -556,6 +556,39 @@ const HomeScreen = () => {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.webIconButton}
+                                onPress={() => navigation.navigate('Notifications' as never)}
+                            >
+                                <Bell size={22} color={unreadNotifications > 0 ? "#3b82f6" : themeColors.textSecondary} />
+                                {unreadNotifications > 0 && (
+                                    <View style={styles.webBadge}>
+                                        <Text style={styles.webBadgeText}>{unreadNotifications}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.webIconButton}
+                                onPress={() => navigation.navigate('ViewRequests' as never)}
+                            >
+                                <Eye size={22} color={pendingViewRequests > 0 ? "#f59e0b" : themeColors.textSecondary} />
+                                {pendingViewRequests > 0 && (
+                                    <View style={styles.webBadge}>
+                                        <Text style={styles.webBadgeText}>{pendingViewRequests}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.webIconButton}
+                                onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                            >
+                                <TrendingUp size={22} color={approvedViewRequests > 0 ? "#10b981" : themeColors.textSecondary} />
+                                {approvedViewRequests > 0 && (
+                                    <View style={styles.webBadge}>
+                                        <Text style={styles.webBadgeText}>{approvedViewRequests}</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.webIconButton}
                                 onPress={() => navigation.navigate('Settings' as never)}
                             >
                                 <SettingsIcon size={22} color={themeColors.textSecondary} />
@@ -580,20 +613,67 @@ const HomeScreen = () => {
                             <Text style={styles.webEmptyButtonText}>Aggiungi Primo Veicolo</Text>
                         </TouchableOpacity>
 
-                        {/* Link to view sent requests */}
-                        <TouchableOpacity
-                            style={styles.emptySecondaryLink}
-                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                        >
-                            <TrendingUp size={18} color={themeColors.primary} />
-                            <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
-                                Visualizza le Mie Richieste Inviate
-                            </Text>
-                        </TouchableOpacity>
+                        {/* Links utili */}
+                        <View style={{ marginTop: 20, gap: 12 }}>
+                            <TouchableOpacity
+                                style={styles.emptySecondaryLink}
+                                onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                            >
+                                <TrendingUp size={18} color={themeColors.primary} />
+                                <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
+                                    Visualizza le Mie Richieste Inviate
+                                </Text>
+                            </TouchableOpacity>
+
+                            {pendingTransferRequests > 0 && (
+                                <TouchableOpacity
+                                    style={[styles.emptySecondaryLink, {
+                                        backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.05)',
+                                        padding: 12,
+                                        borderRadius: 8
+                                    }]}
+                                    onPress={() => {
+                                        if (activeTransfers.length > 0) {
+                                            setSelectedTransfer(activeTransfers[0]);
+                                            setShowTransferModal(true);
+                                        }
+                                    }}
+                                >
+                                    <Truck size={18} color="#3b82f6" />
+                                    <Text style={[styles.emptySecondaryLinkText, { color: '#3b82f6', fontWeight: '600' }]}>
+                                        {pendingTransferRequests} Trasferimento{pendingTransferRequests > 1 ? 'i' : ''} Pendente{pendingTransferRequests > 1 ? 'i' : ''}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <TouchableOpacity
+                                style={styles.emptySecondaryLink}
+                                onPress={() => navigation.navigate('Notifications' as never)}
+                            >
+                                <Bell size={18} color={themeColors.primary} />
+                                <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
+                                    Visualizza Tutte le Notifiche
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     {/* Add Vehicle Modal */}
                     {renderAddVehicleModal()}
+
+                    {/* Transfer Acceptance Modal */}
+                    <TransferAcceptanceModal
+                        visible={showTransferModal}
+                        onClose={() => {
+                            setShowTransferModal(false);
+                            setSelectedTransfer(null);
+                        }}
+                        transfer={selectedTransfer}
+                        onAccept={async () => {
+                            setShowTransferModal(false);
+                            await loadData();
+                        }}
+                    />
                 </View>
             );
         }
@@ -656,20 +736,67 @@ const HomeScreen = () => {
                         <Text style={styles.emptyButtonText}>Aggiungi Veicolo</Text>
                     </TouchableOpacity>
 
-                    {/* Link to view sent requests */}
-                    <TouchableOpacity
-                        style={styles.emptySecondaryLink}
-                        onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                    >
-                        <TrendingUp size={16} color={themeColors.primary} />
-                        <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
-                            Visualizza le Mie Richieste Inviate
-                        </Text>
-                    </TouchableOpacity>
+                    {/* Links utili */}
+                    <View style={{ marginTop: 20, gap: 12 }}>
+                        <TouchableOpacity
+                            style={styles.emptySecondaryLink}
+                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
+                        >
+                            <TrendingUp size={16} color={themeColors.primary} />
+                            <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
+                                Visualizza le Mie Richieste Inviate
+                            </Text>
+                        </TouchableOpacity>
+
+                        {pendingTransferRequests > 0 && (
+                            <TouchableOpacity
+                                style={[styles.emptySecondaryLink, {
+                                    backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.05)',
+                                    padding: 12,
+                                    borderRadius: 8
+                                }]}
+                                onPress={() => {
+                                    if (activeTransfers.length > 0) {
+                                        setSelectedTransfer(activeTransfers[0]);
+                                        setShowTransferModal(true);
+                                    }
+                                }}
+                            >
+                                <Truck size={16} color="#3b82f6" />
+                                <Text style={[styles.emptySecondaryLinkText, { color: '#3b82f6', fontWeight: '600' }]}>
+                                    {pendingTransferRequests} Trasferimento{pendingTransferRequests > 1 ? 'i' : ''} Pendente{pendingTransferRequests > 1 ? 'i' : ''}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                            style={styles.emptySecondaryLink}
+                            onPress={() => navigation.navigate('Notifications' as never)}
+                        >
+                            <Bell size={16} color={themeColors.primary} />
+                            <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
+                                Visualizza Tutte le Notifiche
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Add Vehicle Modal */}
                 {renderAddVehicleModal()}
+
+                {/* Transfer Acceptance Modal */}
+                <TransferAcceptanceModal
+                    visible={showTransferModal}
+                    onClose={() => {
+                        setShowTransferModal(false);
+                        setSelectedTransfer(null);
+                    }}
+                    transfer={selectedTransfer}
+                    onAccept={async () => {
+                        setShowTransferModal(false);
+                        await loadData();
+                    }}
+                />
             </SafeAreaView>
         );
     }
