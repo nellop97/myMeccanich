@@ -63,9 +63,10 @@ export class InAppNotificationService {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30); // Scade dopo 30 giorni
 
-      const notification: Omit<InAppNotification, 'id'> = {
+      // Crea notifica con tipi Firestore nativi
+      const notificationData = {
         userId: buyerEmail,
-        type: 'transfer_request',
+        type: 'transfer_request' as const,
         title: '🚗 Richiesta di Trasferimento Veicolo',
         message: `${sellerName} vuole trasferire ${carInfo || 'un veicolo'} a te. Usa il PIN ricevuto via email per accettare.`,
         data: {
@@ -75,17 +76,13 @@ export class InAppNotificationService {
           carInfo: carInfo || 'Veicolo'
         },
         read: false,
-        priority: 'high',
+        priority: 'high' as const,
         actionRequired: true,
-        createdAt: new Date(),
-        expiresAt
-      };
-
-      await setDoc(notifRef, {
-        ...notification,
         createdAt: serverTimestamp(),
         expiresAt: Timestamp.fromDate(expiresAt)
-      });
+      };
+
+      await setDoc(notifRef, notificationData);
 
       console.log('✅ Notifica in-app creata per:', buyerEmail);
       return notifRef.id;
@@ -104,9 +101,10 @@ export class InAppNotificationService {
     try {
       const notifRef = doc(collection(db, this.notificationsCollection));
 
-      const notification: Omit<InAppNotification, 'id'> = {
+      // Crea notifica con tipi Firestore nativi
+      const notificationData = {
         userId: sellerEmail,
-        type: 'transfer_accepted',
+        type: 'transfer_accepted' as const,
         title: '🎉 Trasferimento Accettato',
         message: `${buyerEmail} ha accettato il trasferimento ${carInfo ? `di ${carInfo}` : 'del veicolo'}. Il trasferimento è stato completato.`,
         data: {
@@ -114,14 +112,11 @@ export class InAppNotificationService {
           carInfo: carInfo || 'Veicolo'
         },
         read: false,
-        priority: 'high',
-        createdAt: new Date()
+        priority: 'high' as const,
+        createdAt: serverTimestamp()
       };
 
-      await setDoc(notifRef, {
-        ...notification,
-        createdAt: serverTimestamp()
-      });
+      await setDoc(notifRef, notificationData);
 
       console.log('✅ Notifica accettazione creata per:', sellerEmail);
       return notifRef.id;

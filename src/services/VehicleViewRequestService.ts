@@ -156,8 +156,9 @@ export class VehicleViewRequestService {
           photos: true
         },
         status: 'pending',
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        expiresAt: Timestamp.fromDate(expiresAt),
         notificationsSent: {
           requestCreated: false,
           requestApproved: false,
@@ -166,12 +167,7 @@ export class VehicleViewRequestService {
         }
       };
 
-      await setDoc(docRef, {
-        ...viewRequest,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        expiresAt: Timestamp.fromDate(expiresAt)
-      });
+      await setDoc(docRef, viewRequest);
 
       // Invia notifica al proprietario
       await this.notifyOwner(docRef.id, vehicle.ownerId, requesterData.name);

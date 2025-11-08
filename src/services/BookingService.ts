@@ -187,7 +187,7 @@ export class BookingService {
       const newProposal: BookingProposal = {
         ...proposal,
         id: doc(collection(db, '_')).id,
-        createdAt: new Date(),
+        createdAt: Timestamp.now().toDate(),
         status: 'pending',
       };
 
@@ -263,7 +263,7 @@ export class BookingService {
       const counterProposal: BookingProposal = {
         ...newProposal,
         id: doc(collection(db, '_')).id,
-        createdAt: new Date(),
+        createdAt: Timestamp.now().toDate(),
         status: 'pending',
       };
 
@@ -297,7 +297,7 @@ export class BookingService {
       const newMessage: BookingMessage = {
         ...message,
         id: doc(collection(db, '_')).id,
-        createdAt: new Date(),
+        createdAt: Timestamp.now().toDate(),
         isRead: false,
       };
 
