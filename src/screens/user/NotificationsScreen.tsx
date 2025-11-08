@@ -32,6 +32,9 @@ import {
 import { useStore } from '../../store';
 import { NotificationService } from '../../services/NotificationService';
 import { inAppNotificationService, InAppNotification } from '../../services/InAppNotificationService';
+import { TransferService } from '../../services/TransferService';
+import { VehicleTransfer } from '../../types/database.types';
+import TransferAcceptanceModal from '../../components/TransferAcceptanceModal';
 
 const NotificationsScreen = () => {
   const navigation = useNavigation();
@@ -50,6 +53,8 @@ const NotificationsScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'settings'>('all');
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [selectedTransfer, setSelectedTransfer] = useState<VehicleTransfer | null>(null);
 
   const theme = {
     background: darkMode ? '#121212' : '#f8fafc',
@@ -126,6 +131,71 @@ const NotificationsScreen = () => {
       // Il listener real-time aggiornerà automaticamente
     } catch (error) {
       console.error('Errore aggiornamento notifica:', error);
+    }
+  };
+
+  const handleNotificationPress = async (notification: InAppNotification) => {
+    // Marca come letta
+    await markAsRead(notification.id);
+
+    // Naviga in base al tipo di notifica
+    switch (notification.type) {
+      case 'transfer_request':
+        // Apri modal trasferimento
+        if (notification.data?.transferId) {
+          try {
+            const transferService = TransferService.getInstance();
+            const transfer = await transferService.getTransferById(notification.data.transferId);
+
+            if (transfer) {
+              setSelectedTransfer(transfer);
+              setShowTransferModal(true);
+            } else {
+              Alert.alert('Errore', 'Trasferimento non trovato o già completato');
+            }
+          } catch (error) {
+            console.error('Error loading transfer:', error);
+            Alert.alert('Errore', 'Impossibile caricare il trasferimento');
+          }
+        }
+        break;
+
+      case 'transfer_accepted':
+        // Torna alla home per vedere il veicolo
+        navigation.goBack();
+        break;
+
+      case 'reminder':
+        // Vai ai promemoria
+        navigation.navigate('Reminders' as never);
+        break;
+
+      case 'maintenance':
+        // Vai alla manutenzione (se c'è vehicleId)
+        if (notification.data?.vehicleId) {
+          navigation.navigate('MaintenanceHistory' as never, {
+            carId: notification.data.vehicleId
+          } as never);
+        }
+        break;
+
+      case 'document':
+        // Vai ai documenti del veicolo
+        if (notification.data?.vehicleId) {
+          navigation.navigate('CarDetail' as never, {
+            carId: notification.data.vehicleId
+          } as never);
+        }
+        break;
+
+      case 'booking':
+        // Vai alle prenotazioni
+        navigation.navigate('BookingsDashboard' as never);
+        break;
+
+      default:
+        // Comportamento di default: nessuna navigazione
+        break;
     }
   };
 
@@ -225,7 +295,7 @@ const NotificationsScreen = () => {
         },
         !notification.read && { backgroundColor: theme.primary + '10' }
       ]}
-      onPress={() => markAsRead(notification.id)}
+      onPress={() => handleNotificationPress(notification)}
     >
       <View style={styles.notificationContent}>
         <View style={styles.notificationHeader}>
@@ -487,6 +557,22 @@ const NotificationsScreen = () => {
           )}
         </ScrollView>
       )}
+
+      {/* Transfer Acceptance Modal */}
+      <TransferAcceptanceModal
+        visible={showTransferModal}
+        onClose={() => {
+          setShowTransferModal(false);
+          setSelectedTransfer(null);
+        }}
+        transfer={selectedTransfer}
+        onAccept={async () => {
+          setShowTransferModal(false);
+          setSelectedTransfer(null);
+          // Ricarica le notifiche dopo l'accettazione
+          await loadNotifications();
+        }}
+      />
     </SafeAreaView>
   );
 };

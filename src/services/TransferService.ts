@@ -712,6 +712,30 @@ export class TransferService {
     }
   }
 
+  /**
+   * Ottiene un trasferimento per ID
+   */
+  async getTransferById(transferId: string): Promise<VehicleTransfer | null> {
+    try {
+      const transferDoc = await getDoc(doc(db, this.transfersCollection, transferId));
+
+      if (!transferDoc.exists()) {
+        return null;
+      }
+
+      const data = transferDoc.data();
+      return {
+        id: transferDoc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        expiresAt: data.expiresAt?.toDate() || new Date()
+      } as VehicleTransfer;
+    } catch (error) {
+      console.error('Error getting transfer by ID:', error);
+      throw error;
+    }
+  }
+
   // Ottieni trasferimenti attivi per un utente
   async getActiveTransfers(userEmail: string): Promise<VehicleTransfer[]> {
     try {
