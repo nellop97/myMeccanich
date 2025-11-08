@@ -69,6 +69,11 @@ export class TransferService {
 
       const docRef = doc(collection(db, this.transfersCollection));
 
+      // Rimuovi campi undefined da transferData (Firestore non li accetta)
+      const cleanTransferData = Object.fromEntries(
+        Object.entries(transferData).filter(([_, value]) => value !== undefined)
+      );
+
       // Crea oggetto transfer per Firestore con tipi corretti
       const transferData_toSave = {
         vehicleId,
@@ -81,9 +86,9 @@ export class TransferService {
         transferPin: hashedPin,
         pinAttempts: 0,
         maxPinAttempts: this.maxPinAttempts,
-        transferData,
+        transferData: cleanTransferData,
         status: 'pending' as const,
-        createdAt: serverTimestamp(),
+        createdAt: Timestamp.now(),
         expiresAt: Timestamp.fromDate(expiresAt),
         notificationsSent: {
           created: false,

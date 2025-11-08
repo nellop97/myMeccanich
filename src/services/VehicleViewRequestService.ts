@@ -156,8 +156,8 @@ export class VehicleViewRequestService {
           photos: true
         },
         status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
         expiresAt: Timestamp.fromDate(expiresAt),
         notificationsSent: {
           requestCreated: false,

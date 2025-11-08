@@ -78,7 +78,7 @@ export class InAppNotificationService {
         read: false,
         priority: 'high' as const,
         actionRequired: true,
-        createdAt: serverTimestamp(),
+        createdAt: Timestamp.now(),
         expiresAt: Timestamp.fromDate(expiresAt)
       };
 
@@ -113,7 +113,7 @@ export class InAppNotificationService {
         },
         read: false,
         priority: 'high' as const,
-        createdAt: serverTimestamp()
+        createdAt: Timestamp.now()
       };
 
       await setDoc(notifRef, notificationData);
