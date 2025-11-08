@@ -574,7 +574,9 @@ export class TransferService {
       console.log('   Transfer ID:', transferId);
       console.log('   Buyer Name:', buyerName);
 
-      // Invia email tramite EmailJS
+      // TODO: Attiva quando EmailJS è configurato
+      // Per ora simula invio con successo
+      /*
       await emailjs.send(
         'service_zcjt1ki', // Service ID da EmailJS
         'template_transfer', // Template ID per il trasferimento
@@ -586,13 +588,22 @@ export class TransferService {
           expiry_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('it-IT')
         }
       );
+      */
+
+      // Simula invio email (rimuovere quando EmailJS è attivo)
+      console.log('📧 [SIMULAZIONE] Email che verrebbe inviata:');
+      console.log('   - Template: template_transfer');
+      console.log('   - Destinatario:', buyerEmail);
+      console.log('   - Nome:', buyerName);
+      console.log('   - Link:', `https://yourapp.com/accept-transfer/${transferId}`);
+      console.log('   - Scadenza:', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('it-IT'));
 
       // Aggiorna flag notifica
       await updateDoc(doc(db, this.transfersCollection, transferId), {
         'notificationsSent.created': true
       });
 
-      console.log('✅ Email inviata con successo a', buyerEmail);
+      console.log('✅ [SIMULAZIONE] Email inviata con successo a', buyerEmail);
     } catch (error) {
       console.error('❌ Errore invio email:', error);
       // Non bloccare il trasferimento anche se l'email fallisce
@@ -623,9 +634,14 @@ export class TransferService {
         },
         trigger: null, // Invia subito
       });
+      console.log('✅ Notifica in-app inviata al venditore');
 
-      // Notifica email al venditore
+      // TODO: Attiva quando EmailJS è configurato
+      // Per ora simula invio email con successo
+
+      // Notifica email al venditore (SIMULATA)
       try {
+        /*
         await emailjs.send(
           'service_zcjt1ki',
           'template_acceptance_seller', // Template per notifica venditore
@@ -634,13 +650,19 @@ export class TransferService {
             buyer_email: buyerEmail,
           }
         );
-        console.log('✅ Email inviata al venditore');
+        */
+        console.log('📧 [SIMULAZIONE] Email al venditore:');
+        console.log('   - Template: template_acceptance_seller');
+        console.log('   - Destinatario:', sellerEmail);
+        console.log('   - Nuovo proprietario:', buyerEmail);
+        console.log('✅ [SIMULAZIONE] Email inviata al venditore');
       } catch (error) {
         console.error('⚠️ Errore invio email al venditore:', error);
       }
 
-      // Notifica email al compratore
+      // Notifica email al compratore (SIMULATA)
       try {
+        /*
         await emailjs.send(
           'service_zcjt1ki',
           'template_acceptance_buyer', // Template per notifica compratore
@@ -648,7 +670,11 @@ export class TransferService {
             to_email: buyerEmail,
           }
         );
-        console.log('✅ Email inviata al compratore');
+        */
+        console.log('📧 [SIMULAZIONE] Email al compratore:');
+        console.log('   - Template: template_acceptance_buyer');
+        console.log('   - Destinatario:', buyerEmail);
+        console.log('✅ [SIMULAZIONE] Email inviata al compratore');
       } catch (error) {
         console.error('⚠️ Errore invio email al compratore:', error);
       }
