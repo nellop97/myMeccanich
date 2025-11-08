@@ -38,6 +38,7 @@ import {
     Search,
     Package,
     X,
+    Truck,
 } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
