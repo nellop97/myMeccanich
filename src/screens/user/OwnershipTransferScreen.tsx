@@ -179,17 +179,17 @@ export default function OwnershipTransferScreen() {
 
       console.log('✅ Trasferimento creato:', transferId);
 
-      // Mostra messaggio di successo personalizzato
-      Alert.alert(
-        '✅ Email Inviata con Successo',
-        `Una email di conferma è stata inviata a ${transferData.buyerName}.\n\nAppena ${transferData.buyerName} accetterà il veicolo, riceverai una notifica e il trasferimento verrà completato automaticamente.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack()
-          }
-        ]
-      );
+      // Chiudi lo screen immediatamente
+      navigation.goBack();
+
+      // Mostra messaggio di successo dopo la chiusura
+      setTimeout(() => {
+        Alert.alert(
+          '✅ Trasferimento Avviato con Successo',
+          `Una email di conferma è stata inviata a ${transferData.buyerName} (${transferData.buyerEmail}).\n\nAppena ${transferData.buyerName} accetterà il veicolo, riceverai una notifica e il trasferimento verrà completato automaticamente.\n\nIl trasferimento è valido per 30 giorni.`,
+          [{ text: 'OK' }]
+        );
+      }, 300);
     } catch (error) {
       console.error('❌ Errore trasferimento:', error);
       Alert.alert(

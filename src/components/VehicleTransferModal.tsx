@@ -177,19 +177,18 @@ const VehicleTransferModal: React.FC<VehicleTransferModalProps> = ({
         transferPin
       );
 
-      Alert.alert(
-        'Trasferimento Avviato',
-        `È stata inviata una email a ${buyerEmail} con le istruzioni per completare il trasferimento. Il trasferimento è valido per 30 giorni.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onClose();
-              resetForm();
-            },
-          },
-        ]
-      );
+      // Chiudi immediatamente tutte le modali
+      onClose();
+      resetForm();
+
+      // Mostra messaggio di successo dopo la chiusura
+      setTimeout(() => {
+        Alert.alert(
+          '✅ Trasferimento Avviato con Successo',
+          `Una email di conferma è stata inviata a ${buyerName} (${buyerEmail}).\n\nAppena ${buyerName} accetterà il veicolo, riceverai una notifica e il trasferimento verrà completato automaticamente.\n\nIl trasferimento è valido per 30 giorni.`,
+          [{ text: 'OK' }]
+        );
+      }, 300);
     } catch (error) {
       console.error('Errore trasferimento:', error);
       Alert.alert(
