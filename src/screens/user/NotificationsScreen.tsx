@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   pinValue: {
-    fontSize: 36,
+    fontSize: 24,
     fontWeight: 'bold',
     letterSpacing: 4,
     fontFamily: 'monospace',
