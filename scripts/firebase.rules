@@ -268,7 +268,8 @@ service cloud.firestore {
         resource.data.ownerId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
         ownsVehicle(resource.data.vehicleId) ||
-        // Permette modifica durante trasferimento
+        // Permette modifica durante trasferimento (supporta sia userId che ownerId)
+        request.resource.data.userId == request.auth.token.email ||
         request.resource.data.ownerId == request.auth.token.email
       );
 
