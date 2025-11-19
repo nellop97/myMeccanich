@@ -77,6 +77,11 @@ service cloud.firestore {
     // VEHICLES COLLECTION (veicoli utenti)
     // ============================================
     match /vehicles/{vehicleId} {
+      // Helper: verifica se esiste un trasferimento accettato per questo veicolo
+      function hasAcceptedTransfer() {
+        return exists(/databases/$(database)/documents/vehicle_transfers/$(vehicleId + '_transfer'));
+      }
+
       // Lettura: chiunque autenticato può leggere (necessario per ricerca veicoli)
       // In alternativa, solo proprietario o condiviso:
       // allow read: if isAuthenticated() && (
@@ -92,10 +97,14 @@ service cloud.firestore {
         request.resource.data.ownerId == request.auth.uid
       );
 
-      // Aggiornamento: solo il proprietario
+      // Aggiornamento: proprietario o buyer durante trasferimento accettato
       allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid
+        resource.data.ownerId == request.auth.uid ||
+        // Permetti aggiornamento durante trasferimento al nuovo proprietario
+        (resource.data.get('transferPending', false) == true &&
+         request.resource.data.get('ownerId', '') != '' &&
+         request.resource.data.get('transferPending', true) == false)
       );
 
       // Cancellazione: solo il proprietario
@@ -243,6 +252,13 @@ service cloud.firestore {
         );
       }
 
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
+      }
+
       // Lettura: proprietario diretto, meccanico, o proprietario del veicolo
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -259,19 +275,23 @@ service cloud.firestore {
         ownsVehicle(request.resource.data.vehicleId)
       );
 
-      // Aggiornamento: proprietario o meccanico che ha creato il record
+      // Aggiornamento: proprietario, meccanico, o buyer durante trasferimento
       allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId)
+        ownsVehicle(resource.data.vehicleId) ||
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId)
       );
 
-      // Cancellazione: solo il proprietario
+      // Cancellazione: proprietario o buyer durante trasferimento
       allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId)
+        ownsVehicle(resource.data.vehicleId) ||
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId)
       );
     }
 
@@ -403,6 +423,13 @@ service cloud.firestore {
     // DOCUMENTS COLLECTION
     // ============================================
     match /documents/{documentId} {
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
+      }
+
       // Lettura: proprietario o meccanico condiviso
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -413,17 +440,32 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
                       request.resource.data.userId == request.auth.uid;
 
-      // Aggiornamento: solo il proprietario
-      allow update: if isOwner(resource.data.userId);
+      // Aggiornamento: proprietario o buyer durante trasferimento
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.userId) ||
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
+      );
 
-      // Cancellazione: solo il proprietario
-      allow delete: if isOwner(resource.data.userId);
+      // Cancellazione: proprietario o buyer durante trasferimento
+      allow delete: if isAuthenticated() && (
+        isOwner(resource.data.userId) ||
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
+      );
     }
 
     // ============================================
     // VEHICLE PHOTOS COLLECTION
     // ============================================
     match /vehicle_photos/{photoId} {
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
+      }
+
       // Lettura: proprietario della foto
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
 
@@ -432,11 +474,19 @@ service cloud.firestore {
                       request.resource.data.userId == request.auth.uid &&
                       request.resource.data.keys().hasAll(['userId', 'vehicleId', 'base64', 'mimeType']);
 
-      // Aggiornamento: solo il proprietario della foto
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Aggiornamento: proprietario o buyer durante trasferimento
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId)
+      );
 
-      // Cancellazione: solo il proprietario della foto
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Cancellazione: proprietario o buyer durante trasferimento
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId)
+      );
     }
 
     // ============================================
@@ -449,6 +499,13 @@ service cloud.firestore {
           get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
         );
+      }
+
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
       }
 
       // Lettura: proprietario diretto o proprietario del veicolo
@@ -465,18 +522,22 @@ service cloud.firestore {
         (request.resource.data.get('vehicleId', null) != null && ownsVehicle(request.resource.data.vehicleId))
       );
 
-      // Aggiornamento: solo il proprietario
+      // Aggiornamento: proprietario o buyer durante trasferimento
       allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
-        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId)) ||
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
       );
 
-      // Cancellazione: solo il proprietario
+      // Cancellazione: proprietario o buyer durante trasferimento
       allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
-        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId)) ||
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
       );
     }
 
