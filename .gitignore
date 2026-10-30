@@ -10,3 +10,7 @@ expo-env.d.ts
 
 # Temporary attached assets
 attached_assets/
+
+# Chiavi admin Firebase (solo in locale, mai nel repository)
+mymecanich-firebase-adminsdk-fbsvc-2204b9aa28.json
+scripts/serviceAccountKey.json
