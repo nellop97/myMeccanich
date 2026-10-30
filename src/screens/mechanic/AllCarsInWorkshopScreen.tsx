@@ -1,7 +1,7 @@
 // src/screens/mechanic/AllCarsInWorkshopScreen.tsx
 import { useNavigation } from '@react-navigation/native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
+  AlertCircle,
   Calendar,
   Car,
   ChevronDown,
@@ -10,13 +10,11 @@ import {
   DollarSign,
   Filter,
   Phone,
-  Search,
   User,
   Wrench,
 } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Dimensions,
   FlatList,
   Platform,
   SafeAreaView,
@@ -24,15 +22,17 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 
-const { width: screenWidth } = Dimensions.get('window');
+import { mechanicButton, mechanicButtonText, mechanicCard, mechanicStaticColors, useMechanicTheme, useMechanicBreakpoints } from './mechanicTheme';
+import MechanicTextInput from './MechanicTextInput';
+import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
 
+import MechanicHeader from './MechanicHeader';
 interface ExtendedCar {
   id: string;
   model: string;
@@ -53,28 +53,39 @@ interface ExtendedCar {
 
 const AllCarsInWorkshopScreen = () => {
   const navigation = useNavigation();
-  const { user, darkMode } = useStore();
-  const { cars, updateRepairStatus } = useWorkshopStore();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
+  const { cars, fetchCars, updateRepairStatus } = useWorkshopStore();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filterBy, setFilterBy] = useState('all'); // all, in-progress, pending, priority
   const [sortBy, setSortBy] = useState('entry'); // entry, priority, cost, model
   const [showFilters, setShowFilters] = useState(false);
   
-  const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+  const { isDesktop } = useMechanicBreakpoints();
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-  };
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  // Carica le auto all'apertura: senza dati in store la lista mostrerebbe un falso vuoto
+  const loadCars = useCallback(async () => {
+    if (!user?.id) {
+      setInitialLoading(false);
+      return;
+    }
+    setInitialLoading(true);
+    await fetchCars(user.id);
+    setLoadFailed(!!useWorkshopStore.getState().error);
+    setInitialLoading(false);
+  }, [user?.id, fetchCars]);
+
+  useEffect(() => {
+    loadCars();
+  }, [loadCars]);
 
   // Estendi i dati delle auto con informazioni aggiuntive per la demo
   const extendedCars: ExtendedCar[] = cars
-    .filter(car => car.repairs.some(repair => repair.status === 'in-progress' || repair.status === 'pending'))
+    .filter(car => car.repairs?.some(repair => repair.status === 'in-progress' || repair.status === 'pending'))
     .map((car, index) => {
       const activeRepairs = car.repairs.filter(repair => repair.status === 'in-progress' || repair.status === 'pending');
       const currentRepair = activeRepairs[0];
@@ -139,18 +150,18 @@ const AllCarsInWorkshopScreen = () => {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return '#ef4444';
-      case 'medium': return '#f59e0b';
-      case 'low': return '#10b981';
+      case 'high': return theme.error;
+      case 'medium': return theme.warning;
+      case 'low': return theme.success;
       default: return theme.textSecondary;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'in-progress': return darkMode ? '#3b82f6' : '#2563eb';
-      case 'pending': return darkMode ? '#f59e0b' : '#d97706';
-      case 'completed': return darkMode ? '#10b981' : '#059669';
+      case 'in-progress': return theme.primary;
+      case 'pending': return theme.warning;
+      case 'completed': return theme.success;
       default: return theme.textSecondary;
     }
   };
@@ -165,7 +176,7 @@ const AllCarsInWorkshopScreen = () => {
 
   const renderCarCard = ({ item: car }: { item: ExtendedCar }) => (
     <TouchableOpacity
-      style={[styles.carCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+      style={[styles.carCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
       onPress={() => console.log('Dettagli auto:', car.id)}
       activeOpacity={0.7}
     >
@@ -227,7 +238,7 @@ const AllCarsInWorkshopScreen = () => {
       {/* Dettagli riparazione corrente */}
       <View style={[styles.repairInfo, { borderColor: theme.border }]}>
         <View style={styles.repairHeader}>
-          <Wrench size={16} color={theme.accent} />
+          <Wrench size={16} color={theme.primary} />
           <Text style={[styles.repairTitle, { color: theme.text }]}>
             Intervento Corrente
           </Text>
@@ -287,10 +298,10 @@ const AllCarsInWorkshopScreen = () => {
                 }
             }}
             >
-            <Text style={[styles.secondaryActionText, { color: theme.accent }]}>
+            <Text style={[styles.secondaryActionText, { color: theme.primary }]}>
                 Dettagli
             </Text>
-            <ChevronRight size={16} color={theme.accent} />
+            <ChevronRight size={16} color={theme.primary} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -300,22 +311,22 @@ const AllCarsInWorkshopScreen = () => {
     <View style={styles.headerContainer}>
       {/* Statistiche rapide */}
       <View style={styles.statsContainer}>
-        <View style={[styles.statItem, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Car size={20} color={theme.accent} />
+        <View style={[styles.statItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Car size={20} color={theme.primary} />
           <Text style={[styles.statNumber, { color: theme.text }]}>{sortedCars.length}</Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Auto Totali</Text>
         </View>
         
-        <View style={[styles.statItem, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Wrench size={20} color="#f59e0b" />
+        <View style={[styles.statItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Wrench size={20} color={theme.warning} />
           <Text style={[styles.statNumber, { color: theme.text }]}>
             {sortedCars.filter(car => car.currentRepair?.status === 'in-progress').length}
           </Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>In Lavorazione</Text>
         </View>
         
-        <View style={[styles.statItem, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Clock size={20} color="#10b981" />
+        <View style={[styles.statItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Clock size={20} color={theme.success} />
           <Text style={[styles.statNumber, { color: theme.text }]}>
             {sortedCars.filter(car => car.currentRepair?.status === 'pending').length}
           </Text>
@@ -324,21 +335,18 @@ const AllCarsInWorkshopScreen = () => {
       </View>
 
       {/* Barra di ricerca */}
-      <View style={[styles.searchContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-        <Search size={20} color={theme.textSecondary} />
-        <TextInput
-          style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Cerca per targa, modello, proprietario o VIN..."
-          placeholderTextColor={theme.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
+      <MechanicTextInput
+        variant="search"
+        containerStyle={styles.searchContainer}
+        placeholder="Cerca per targa, modello, proprietario o VIN..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
 
       {/* Filtri e ordinamento */}
       <View style={styles.controlsContainer}>
         <TouchableOpacity
-          style={[styles.filterButton, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+          style={[styles.filterButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
           onPress={() => setShowFilters(!showFilters)}
         >
           <Filter size={16} color={theme.text} />
@@ -364,14 +372,14 @@ const AllCarsInWorkshopScreen = () => {
               key={sort.key}
               style={[
                 styles.sortButton,
-                { backgroundColor: theme.cardBackground, borderColor: theme.border },
-                sortBy === sort.key && { backgroundColor: theme.accent }
+                { backgroundColor: theme.surface, borderColor: theme.border },
+                sortBy === sort.key && { backgroundColor: theme.primary }
               ]}
               onPress={() => setSortBy(sort.key)}
             >
               <Text style={[
                 styles.sortButtonText,
-                { color: sortBy === sort.key ? '#ffffff' : theme.text }
+                { color: sortBy === sort.key ? theme.onPrimary : theme.text }
               ]}>
                 {sort.label}
               </Text>
@@ -382,7 +390,7 @@ const AllCarsInWorkshopScreen = () => {
 
       {/* Pannello filtri espandibile */}
       {showFilters && (
-        <View style={[styles.filtersPanel, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+        <View style={[styles.filtersPanel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.filtersPanelTitle, { color: theme.text }]}>Filtra per:</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {[
@@ -396,13 +404,13 @@ const AllCarsInWorkshopScreen = () => {
                 style={[
                   styles.filterChip,
                   { borderColor: theme.border },
-                  filterBy === filter.key && { backgroundColor: theme.accent }
+                  filterBy === filter.key && { backgroundColor: theme.primary }
                 ]}
                 onPress={() => setFilterBy(filter.key)}
               >
                 <Text style={[
                   styles.filterChipText,
-                  { color: filterBy === filter.key ? '#ffffff' : theme.text }
+                  { color: filterBy === filter.key ? theme.onPrimary : theme.text }
                 ]}>
                   {filter.label}
                 </Text>
@@ -416,24 +424,9 @@ const AllCarsInWorkshopScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} />
       
-      {/* Header con pulsante indietro */}
-      <View style={[styles.titleContainer, { borderBottomColor: theme.border }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.text} />
-        </TouchableOpacity>
-        
-        <Text style={[styles.screenTitle, { color: theme.text }]}>
-          Auto in Officina
-        </Text>
-        
-        <View style={styles.placeholder} />
-      </View>
+      <MechanicHeader title="Auto in Officina" onBack={() => navigation.goBack()} />
 
       <FlatList
         data={sortedCars}
@@ -443,15 +436,23 @@ const AllCarsInWorkshopScreen = () => {
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Car size={48} color={theme.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>
-              Nessuna auto trovata
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-              {searchQuery ? 'Prova a modificare i criteri di ricerca' : 'Non ci sono auto in officina al momento'}
-            </Text>
-          </View>
+          initialLoading ? (
+            <MechanicLoadingState text="Caricamento auto..." />
+          ) : loadFailed ? (
+            <MechanicEmptyState
+              icon={AlertCircle}
+              title="Impossibile caricare le auto"
+              subtitle="Controlla la connessione e riprova"
+              actionLabel="Riprova"
+              onAction={loadCars}
+            />
+          ) : (
+            <MechanicEmptyState
+              icon={Car}
+              title="Nessuna auto trovata"
+              subtitle={searchQuery ? 'Prova a modificare i criteri di ricerca' : 'Non ci sono auto in officina al momento'}
+            />
+          )
         }
       />
     </SafeAreaView>
@@ -461,24 +462,6 @@ const AllCarsInWorkshopScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  screenTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  placeholder: {
-    width: 40,
   },
   headerContainer: {
     paddingHorizontal: 16,
@@ -507,18 +490,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
   },
   controlsContainer: {
     flexDirection: 'row',
@@ -587,15 +559,15 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   carCard: {
-    borderRadius: 12,
-    borderWidth: 1,
+    ...mechanicCard,
+    padding: 0,
     marginBottom: 16,
     overflow: 'hidden',
   },
   carCardHeader: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: mechanicStaticColors.divider,
   },
   carMainInfo: {
     marginBottom: 12,
@@ -616,7 +588,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   priorityText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   carModel: {
@@ -641,7 +613,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   daysInShop: {
-    fontSize: 11,
+    fontSize: 12,
   },
   customerInfo: {
     paddingHorizontal: 16,
@@ -693,45 +665,24 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionButton: {
+    ...mechanicButton.compact,
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   primaryAction: {
-    backgroundColor: '#2563eb',
+    backgroundColor: mechanicStaticColors.primary,
   },
   secondaryAction: {
     borderWidth: 1,
     flexDirection: 'row',
   },
   actionButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
+    ...mechanicButtonText.compact,
+    color: mechanicStaticColors.onPrimary,
   },
   secondaryActionText: {
     fontSize: 14,
     fontWeight: '500',
     marginRight: 4,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 32,
   },
 });
 

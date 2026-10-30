@@ -7,19 +7,16 @@ import {
     Text,
     ScrollView,
     TouchableOpacity,
-    TextInput,
     StyleSheet,
     SafeAreaView,
     Alert,
     KeyboardAvoidingView,
     Platform,
-    Dimensions,
     ActivityIndicator,
     FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
-    ArrowLeft,
     Car,
     User,
     FileText,
@@ -42,8 +39,11 @@ import QuickAddCustomerModal from '../../components/QuickAddCustomerModal';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
-const { width: screenWidth } = Dimensions.get('window');
+import { mechanicButton, mechanicStaticColors, useMechanicTheme, useMechanicBreakpoints } from './mechanicTheme';
+import MechanicTextInput from './MechanicTextInput';
+import { MechanicEmptyState } from './MechanicStates';
 
+import MechanicHeader from './MechanicHeader';
 interface SelectedCustomer {
     id: string;
     firstName: string;
@@ -66,11 +66,11 @@ interface ExistingCar {
 
 const NewAppointmentScreen = () => {
     const navigation = useNavigation();
-    const { user, darkMode } = useStore();
+    const { user } = useStore();
+    const theme = useMechanicTheme();
     const { addCar, fetchCars } = useWorkshopStore();
 
-    const isDesktop = Platform.OS === 'web' && screenWidth > 768;
-    const isTablet = screenWidth >= 768 && screenWidth < 1024;
+    const { isDesktop, isTablet } = useMechanicBreakpoints();
 
     // Stati per il form veicolo
     const [vehicleData, setVehicleData] = useState({
@@ -111,20 +111,6 @@ const NewAppointmentScreen = () => {
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [currentStep, setCurrentStep] = useState(1);
 
-    const theme = {
-        background: darkMode ? '#111827' : '#f3f4f6',
-        cardBackground: darkMode ? '#1f2937' : '#ffffff',
-        text: darkMode ? '#ffffff' : '#000000',
-        textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-        border: darkMode ? '#374151' : '#e5e7eb',
-        inputBackground: darkMode ? '#374151' : '#ffffff',
-        placeholderColor: darkMode ? '#9ca3af' : '#6b7280',
-        accent: '#2563eb',
-        success: '#10b981',
-        warning: '#f59e0b',
-        error: '#ef4444',
-        info: '#3b82f6',
-    };
 
     // ⭐ CARICA AUTO ESISTENTI DEL CLIENTE quando viene selezionato
     useEffect(() => {
@@ -329,8 +315,8 @@ const NewAppointmentScreen = () => {
         // Loading state
         if (loadingExistingCars) {
             return (
-                <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border, padding: 24, alignItems: 'center' }]}>
-                    <ActivityIndicator size="small" color={theme.accent} />
+                <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, padding: 24, alignItems: 'center' }]}>
+                    <ActivityIndicator size="small" color={theme.primary} />
                     <Text style={[{ color: theme.textSecondary, marginTop: 8, fontSize: 14 }]}>
                         Caricamento auto del cliente...
                     </Text>
@@ -341,10 +327,10 @@ const NewAppointmentScreen = () => {
         // Ha caricato e ci sono auto esistenti
         if (hasLoadedCars && existingCars.length > 0 && showCarSuggestions) {
             return (
-                <View style={[styles.suggestionsCard, { backgroundColor: theme.cardBackground, borderColor: theme.accent }]}>
+                <View style={[styles.suggestionsCard, { backgroundColor: theme.surface, borderColor: theme.primary }]}>
                     <View style={styles.suggestionsHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Lightbulb size={20} color={theme.accent} />
+                            <Lightbulb size={20} color={theme.primary} />
                             <Text style={[styles.suggestionsTitle, { color: theme.text }]}>
                                 Auto già in archivio
                             </Text>
@@ -370,7 +356,7 @@ const NewAppointmentScreen = () => {
                                 style={[
                                     styles.carSuggestionItem,
                                     {
-                                        backgroundColor: darkMode ? '#374151' : '#f9fafb',
+                                        backgroundColor: theme.hover,
                                         borderColor: theme.border,
                                         minWidth: isDesktop ? 280 : undefined,
                                     },
@@ -378,7 +364,7 @@ const NewAppointmentScreen = () => {
                                 onPress={() => applyExistingCar(item)}
                             >
                                 <View style={styles.carSuggestionIcon}>
-                                    <Car size={20} color={theme.accent} />
+                                    <Car size={20} color={theme.primary} />
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.carSuggestionTitle, { color: theme.text }]}>
@@ -404,21 +390,21 @@ const NewAppointmentScreen = () => {
         // ⭐ Ha caricato ma NON ci sono auto - NUOVO MESSAGGIO
         if (hasLoadedCars && existingCars.length === 0) {
             return (
-                <View style={[styles.emptyStateCard, { backgroundColor: darkMode ? '#1e3a5f' : '#eff6ff', borderColor: theme.info }]}>
+                <View style={[styles.emptyStateCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}>
                     <View style={styles.emptyStateHeader}>
-                        <Info size={20} color={theme.info} />
+                        <Info size={20} color={theme.onPrimaryLight} />
                         <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
                             Primo accesso
                         </Text>
                     </View>
-                    <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                    <Text style={[styles.emptyStateText, { color: theme.onPrimaryLight }]}>
                         Questo cliente non ha ancora portato auto nella tua officina. Compila i dati del veicolo per iniziare.
                     </Text>
                     <TouchableOpacity
-                        style={[styles.emptyStateButton, { backgroundColor: theme.accent }]}
+                        style={[styles.emptyStateButton, { backgroundColor: theme.primary }]}
                         onPress={() => setCurrentStep(2)}
                     >
-                        <Plus size={18} color="#ffffff" />
+                        <Plus size={18} color={theme.onPrimary} />
                         <Text style={styles.emptyStateButtonText}>Aggiungi Veicolo</Text>
                     </TouchableOpacity>
                 </View>
@@ -445,14 +431,14 @@ const NewAppointmentScreen = () => {
                                 style={[
                                     styles.stepCircle,
                                     {
-                                        backgroundColor: isActive || isCompleted ? theme.accent : theme.border,
+                                        backgroundColor: isActive || isCompleted ? theme.primary : theme.border,
                                     },
                                 ]}
                             >
                                 <Text
                                     style={[
                                         styles.stepNumber,
-                                        { color: isActive || isCompleted ? '#ffffff' : theme.textSecondary },
+                                        { color: isActive || isCompleted ? theme.onPrimary : theme.textSecondary },
                                     ]}
                                 >
                                     {stepNumber}
@@ -474,7 +460,7 @@ const NewAppointmentScreen = () => {
                                     style={[
                                         styles.stepLine,
                                         {
-                                            backgroundColor: isCompleted ? theme.accent : theme.border,
+                                            backgroundColor: isCompleted ? theme.primary : theme.border,
                                         },
                                     ]}
                                 />
@@ -489,39 +475,35 @@ const NewAppointmentScreen = () => {
     // Render Step 1: Cliente
     const renderCustomerStep = () => (
         <View style={styles.stepContent}>
-            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.cardHeader}>
-                    <User size={20} color={theme.accent} />
+                    <User size={20} color={theme.primary} />
                     <Text style={[styles.cardTitle, { color: theme.text }]}>Cliente</Text>
                 </View>
 
                 {!selectedCustomer ? (
-                    <View style={styles.emptyState}>
-                        <User size={48} color={theme.textSecondary} />
-                        <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                            Nessun cliente selezionato
-                        </Text>
+                    <MechanicEmptyState icon={User} title="Nessun cliente selezionato">
                         <TouchableOpacity
-                            style={[styles.primaryButton, { backgroundColor: theme.accent }]}
+                            style={[styles.primaryButton, { backgroundColor: theme.primary }]}
                             onPress={() => setShowCustomerSearch(true)}
                         >
-                            <Search size={20} color="#ffffff" />
+                            <Search size={20} color={theme.onPrimary} />
                             <Text style={styles.primaryButtonText}>Cerca Cliente Esistente</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.secondaryButton, { borderColor: theme.accent }]}
+                            style={[styles.secondaryButton, { borderColor: theme.primary }]}
                             onPress={() => setShowQuickAdd(true)}
                         >
-                            <User size={20} color={theme.accent} />
-                            <Text style={[styles.secondaryButtonText, { color: theme.accent }]}>
+                            <User size={20} color={theme.primary} />
+                            <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>
                                 Aggiungi Nuovo Cliente
                             </Text>
                         </TouchableOpacity>
-                    </View>
+                    </MechanicEmptyState>
                 ) : (
-                    <View style={[styles.selectedCustomer, { backgroundColor: darkMode ? '#374151' : '#f9fafb' }]}>
+                    <View style={[styles.selectedCustomer, { backgroundColor: theme.hover }]}>
                         <View style={styles.customerInfo}>
-                            <View style={[styles.customerAvatar, { backgroundColor: theme.accent }]}>
+                            <View style={[styles.customerAvatar, { backgroundColor: theme.primary }]}>
                                 <Text style={styles.customerAvatarText}>
                                     {selectedCustomer.firstName[0]}
                                     {selectedCustomer.lastName[0]}
@@ -556,14 +538,14 @@ const NewAppointmentScreen = () => {
     // Render Step 2: Veicolo
     const renderVehicleStep = () => (
         <View style={styles.stepContent}>
-            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.cardHeader}>
-                    <Car size={20} color={theme.accent} />
+                    <Car size={20} color={theme.primary} />
                     <Text style={[styles.cardTitle, { color: theme.text }]}>Dati Veicolo</Text>
                 </View>
 
                 {selectedExistingCar && (
-                    <View style={[styles.infoBar, { backgroundColor: darkMode ? '#1e3a5f' : '#e0f2fe' }]}>
+                    <View style={[styles.infoBar, { backgroundColor: theme.primaryLight }]}>
                         <CheckCircle size={16} color={theme.success} />
                         <Text style={[styles.infoBarText, { color: theme.text }]}>
                             Auto caricata dall'archivio. Puoi modificare i dati se necessario.
@@ -574,22 +556,14 @@ const NewAppointmentScreen = () => {
                 <View style={styles.formGrid}>
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>Marca *</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    borderColor: errors.make ? theme.error : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
+                        <MechanicTextInput
+                            error={!!errors.make}
                             value={vehicleData.make}
                             onChangeText={(text) => {
                                 setVehicleData({ ...vehicleData, make: text });
                                 setErrors({ ...errors, make: '' });
                             }}
                             placeholder="Es. Ford"
-                            placeholderTextColor={theme.placeholderColor}
                         />
                         {errors.make && (
                             <Text style={[styles.errorText, { color: theme.error }]}>{errors.make}</Text>
@@ -598,22 +572,14 @@ const NewAppointmentScreen = () => {
 
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>Modello *</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    borderColor: errors.model ? theme.error : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
+                        <MechanicTextInput
+                            error={!!errors.model}
                             value={vehicleData.model}
                             onChangeText={(text) => {
                                 setVehicleData({ ...vehicleData, model: text });
                                 setErrors({ ...errors, model: '' });
                             }}
                             placeholder="Es. Fiesta"
-                            placeholderTextColor={theme.placeholderColor}
                         />
                         {errors.model && (
                             <Text style={[styles.errorText, { color: theme.error }]}>{errors.model}</Text>
@@ -622,37 +588,24 @@ const NewAppointmentScreen = () => {
 
                     <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
                         <Text style={[styles.label, { color: theme.text }]}>Anno</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
+                        <MechanicTextInput
                             value={vehicleData.year}
                             onChangeText={(text) => setVehicleData({ ...vehicleData, year: text })}
                             placeholder="2020"
-                            placeholderTextColor={theme.placeholderColor}
                             keyboardType="numeric"
                         />
                     </View>
 
                     <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
                         <Text style={[styles.label, { color: theme.text }]}>Targa *</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    borderColor: errors.licensePlate ? theme.error : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
+                        <MechanicTextInput
+                            error={!!errors.licensePlate}
                             value={vehicleData.licensePlate}
                             onChangeText={(text) => {
                                 setVehicleData({ ...vehicleData, licensePlate: text.toUpperCase() });
                                 setErrors({ ...errors, licensePlate: '' });
                             }}
                             placeholder="XX123XX"
-                            placeholderTextColor={theme.placeholderColor}
                             autoCapitalize="characters"
                         />
                         {errors.licensePlate && (
@@ -662,43 +615,28 @@ const NewAppointmentScreen = () => {
 
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>VIN (opzionale)</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
+                        <MechanicTextInput
                             value={vehicleData.vin}
                             onChangeText={(text) => setVehicleData({ ...vehicleData, vin: text })}
                             placeholder="17 caratteri"
-                            placeholderTextColor={theme.placeholderColor}
                         />
                     </View>
 
                     <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
                         <Text style={[styles.label, { color: theme.text }]}>Colore</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
+                        <MechanicTextInput
                             value={vehicleData.color}
                             onChangeText={(text) => setVehicleData({ ...vehicleData, color: text })}
                             placeholder="Es. Bianco"
-                            placeholderTextColor={theme.placeholderColor}
                         />
                     </View>
 
                     <View style={[styles.formGroup, isDesktop && styles.formGroupHalf]}>
                         <Text style={[styles.label, { color: theme.text }]}>Chilometraggio</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
+                        <MechanicTextInput
                             value={vehicleData.mileage}
                             onChangeText={(text) => setVehicleData({ ...vehicleData, mileage: text })}
                             placeholder="80000"
-                            placeholderTextColor={theme.placeholderColor}
                             keyboardType="numeric"
                         />
                     </View>
@@ -710,27 +648,19 @@ const NewAppointmentScreen = () => {
     // Render Step 3: Riparazione
     const renderRepairStep = () => (
         <View style={styles.stepContent}>
-            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.cardHeader}>
-                    <FileText size={20} color={theme.accent} />
+                    <FileText size={20} color={theme.primary} />
                     <Text style={[styles.cardTitle, { color: theme.text }]}>Dettagli Riparazione</Text>
                 </View>
 
                 <View style={styles.formGrid}>
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>Descrizione Intervento *</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                styles.textArea,
-                                {
-                                    backgroundColor: theme.inputBackground,
-                                    borderColor: errors.description ? theme.error : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
+                        <MechanicTextInput
+                            error={!!errors.description}
+                            style={styles.textArea}
                             placeholder="Descrivi l'intervento da effettuare"
-                            placeholderTextColor={theme.placeholderColor}
                             value={repairData.description}
                             onChangeText={(text) => {
                                 setRepairData({ ...repairData, description: text });
@@ -747,13 +677,8 @@ const NewAppointmentScreen = () => {
                     <View style={[styles.formRow, { flexWrap: isDesktop ? 'nowrap' : 'wrap' }]}>
                         <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
                             <Text style={[styles.label, { color: theme.text }]}>Preventivo Totale (€)</Text>
-                            <TextInput
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                                ]}
+                            <MechanicTextInput
                                 placeholder="500"
-                                placeholderTextColor={theme.placeholderColor}
                                 value={repairData.estimatedCost}
                                 onChangeText={(text) => setRepairData({ ...repairData, estimatedCost: text })}
                                 keyboardType="decimal-pad"
@@ -762,13 +687,8 @@ const NewAppointmentScreen = () => {
 
                         <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
                             <Text style={[styles.label, { color: theme.text }]}>Costo Manodopera (€)</Text>
-                            <TextInput
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                                ]}
+                            <MechanicTextInput
                                 placeholder="150"
-                                placeholderTextColor={theme.placeholderColor}
                                 value={repairData.laborCost}
                                 onChangeText={(text) => setRepairData({ ...repairData, laborCost: text })}
                                 keyboardType="decimal-pad"
@@ -777,13 +697,8 @@ const NewAppointmentScreen = () => {
 
                         <View style={[styles.formGroup, { flex: 1, minWidth: 200 }]}>
                             <Text style={[styles.label, { color: theme.text }]}>Ore Stimate</Text>
-                            <TextInput
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                                ]}
+                            <MechanicTextInput
                                 placeholder="3"
-                                placeholderTextColor={theme.placeholderColor}
                                 value={repairData.estimatedHours}
                                 onChangeText={(text) => setRepairData({ ...repairData, estimatedHours: text })}
                                 keyboardType="decimal-pad"
@@ -793,14 +708,9 @@ const NewAppointmentScreen = () => {
 
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>Note Aggiuntive</Text>
-                        <TextInput
-                            style={[
-                                styles.input,
-                                styles.textArea,
-                                { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
-                            ]}
+                        <MechanicTextInput
+                            style={styles.textArea}
                             placeholder="Note o specifiche particolari"
-                            placeholderTextColor={theme.placeholderColor}
                             value={repairData.notes}
                             onChangeText={(text) => setRepairData({ ...repairData, notes: text })}
                             multiline
@@ -815,9 +725,9 @@ const NewAppointmentScreen = () => {
     // Render Step 4: Date
     const renderDateStep = () => (
         <View style={styles.stepContent}>
-            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.cardHeader}>
-                    <Calendar size={20} color={theme.accent} />
+                    <Calendar size={20} color={theme.primary} />
                     <Text style={[styles.cardTitle, { color: theme.text }]}>Periodo di Lavorazione</Text>
                 </View>
 
@@ -829,7 +739,6 @@ const NewAppointmentScreen = () => {
                         setEndDate(end);
                         setErrors({ ...errors, startDate: '' });
                     }}
-                    theme={theme}
                 />
 
                 {errors.startDate && (
@@ -841,13 +750,7 @@ const NewAppointmentScreen = () => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-            <View style={[styles.header, { backgroundColor: theme.cardBackground, borderBottomColor: theme.border }]}>
-                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                    <ArrowLeft size={24} color={theme.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>Nuovo Veicolo in Officina</Text>
-                <View style={{ width: 40 }} />
-            </View>
+            <MechanicHeader title="Nuovo Veicolo in Officina" onBack={handleBack} />
 
             {renderStepIndicator()}
 
@@ -867,7 +770,7 @@ const NewAppointmentScreen = () => {
                 </ScrollView>
             </KeyboardAvoidingView>
 
-            <View style={[styles.footer, { backgroundColor: theme.cardBackground, borderTopColor: theme.border }]}>
+            <View style={[styles.footer, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
                 <View style={styles.footerButtons}>
                     {currentStep > 1 && (
                         <TouchableOpacity
@@ -883,16 +786,16 @@ const NewAppointmentScreen = () => {
                         style={[
                             styles.footerButton,
                             styles.primaryButton,
-                            { backgroundColor: theme.accent, flex: currentStep === 1 ? 1 : undefined },
+                            { backgroundColor: theme.primary, flex: currentStep === 1 ? 1 : undefined },
                         ]}
                         onPress={handleNext}
                         disabled={isSubmitting}
                     >
                         {isSubmitting ? (
-                            <ActivityIndicator color="#ffffff" />
+                            <ActivityIndicator color={theme.onPrimary} />
                         ) : (
                             <>
-                                {currentStep === 4 ? <Save size={18} color="#ffffff" /> : null}
+                                {currentStep === 4 ? <Save size={18} color={theme.onPrimary} /> : null}
                                 <Text style={styles.primaryButtonText}>
                                     {currentStep === 4 ? 'Salva' : 'Avanti'}
                                 </Text>
@@ -907,7 +810,7 @@ const NewAppointmentScreen = () => {
                 visible={showCustomerSearch}
                 onClose={() => setShowCustomerSearch(false)}
                 onSelectUser={handleCustomerSelect}
-                darkMode={darkMode}
+                darkMode={theme.isDark}
             />
 
             <QuickAddCustomerModal
@@ -921,16 +824,6 @@ const NewAppointmentScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-    },
-    backButton: { padding: 8 },
-    headerTitle: { fontSize: 18, fontWeight: '600' },
     stepIndicatorContainer: {
         flexDirection: 'row',
         paddingHorizontal: 16,
@@ -961,7 +854,7 @@ const styles = StyleSheet.create({
     scrollViewContent: { padding: 16 },
     stepContent: { flex: 1 },
     card: {
-        borderRadius: 12,
+        borderRadius: 20,
         borderWidth: 1,
         padding: 16,
         marginBottom: 16,
@@ -977,45 +870,16 @@ const styles = StyleSheet.create({
     formGroup: { marginBottom: 8 },
     formGroupHalf: { width: '48%' },
     label: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
-    input: {
-        borderWidth: 1,
-        borderRadius: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 12,
-        fontSize: 16,
-    },
     textArea: { height: 100, textAlignVertical: 'top' },
     errorText: { fontSize: 12, marginTop: 4 },
-    emptyState: {
-        alignItems: 'center',
-        paddingVertical: 32,
-        gap: 12,
-    },
     buttonGroup: { flexDirection: 'row', gap: 12, marginTop: 16 },
-    primaryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 8,
-        gap: 8,
-    },
+    primaryButton: mechanicButton.primary,
     primaryButtonText: {
-        color: '#ffffff',
+        color: mechanicStaticColors.onPrimary,
         fontSize: 16,
         fontWeight: '600',
     },
-    secondaryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 8,
-        borderWidth: 1,
-        gap: 8,
-    },
+    secondaryButton: mechanicButton.secondary,
     secondaryButtonText: { fontSize: 16, fontWeight: '600' },
     selectedCustomer: {
         flexDirection: 'row',
@@ -1038,7 +902,7 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     customerAvatarText: {
-        color: '#ffffff',
+        color: mechanicStaticColors.onPrimary,
         fontSize: 16,
         fontWeight: 'bold',
     },
@@ -1047,7 +911,7 @@ const styles = StyleSheet.create({
     customerContact: { fontSize: 14, marginBottom: 2 },
     removeButton: { padding: 8 },
     suggestionsCard: {
-        borderRadius: 12,
+        borderRadius: 20,
         borderWidth: 2,
         padding: 16,
         marginBottom: 16,
@@ -1074,10 +938,10 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#e0f2fe',
+        backgroundColor: mechanicStaticColors.primaryTint,
     },
-    carSuggestionTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
-    carSuggestionDetails: { fontSize: 13, marginBottom: 2 },
+    carSuggestionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+    carSuggestionDetails: { fontSize: 14, marginBottom: 2 },
     carSuggestionLastService: {
         fontSize: 12,
         fontStyle: 'italic',
@@ -1091,10 +955,10 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         gap: 8,
     },
-    infoBarText: { fontSize: 13, flex: 1 },
+    infoBarText: { fontSize: 14, flex: 1 },
     // ⭐ NUOVI STILI per empty state "nessuna auto"
     emptyStateCard: {
-        borderRadius: 12,
+        borderRadius: 20,
         borderWidth: 2,
         padding: 16,
         marginBottom: 16,
@@ -1115,17 +979,11 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     emptyStateButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        gap: 6,
+        ...mechanicButton.primary,
         alignSelf: 'flex-start',
     },
     emptyStateButtonText: {
-        color: '#ffffff',
+        color: mechanicStaticColors.onPrimary,
         fontSize: 14,
         fontWeight: '600',
     },

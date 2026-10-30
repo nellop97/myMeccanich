@@ -14,7 +14,6 @@ import {
 } from 'lucide-react-native';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Dimensions,
   FlatList,
   Platform,
   SafeAreaView,
@@ -30,6 +29,9 @@ import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import { useStore } from '../../store';
 import { useWorkshopStore } from '../../store/workshopStore';
 
+import { mechanicCard, mechanicStaticColors, useMechanicTheme, useMechanicBreakpoints } from './mechanicTheme';
+import { MechanicEmptyState } from './MechanicStates';
+import MechanicHeader from './MechanicHeader';
 // Configurazione italiana per il calendario
 LocaleConfig.locales['it'] = {
   monthNames: [
@@ -46,7 +48,6 @@ LocaleConfig.locales['it'] = {
 };
 LocaleConfig.defaultLocale = 'it';
 
-const { width: screenWidth } = Dimensions.get('window');
 
 interface DayWithRepairs {
   date: string;
@@ -60,13 +61,14 @@ interface DayWithRepairs {
 
 const MechanicCalendarScreen = () => {
   const navigation = useNavigation();
-  const { user, darkMode } = useStore();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
   const { cars, fetchCars, isLoading } = useWorkshopStore();
 
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+  const { isDesktop } = useMechanicBreakpoints();
 
   // Carica le auto all'avvio e quando cambia selectedDate
   useEffect(() => {
@@ -76,17 +78,6 @@ const MechanicCalendarScreen = () => {
     }
   }, [user?.id, selectedDate]);
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
 
   // Calcola i giorni con riparazioni
   const daysWithRepairs = useMemo(() => {
@@ -130,10 +121,10 @@ const MechanicCalendarScreen = () => {
         dotColor: count > 3 ? theme.error : count > 1 ? theme.warning : theme.success,
         customStyles: {
           container: {
-            backgroundColor: selectedDate === date ? theme.accent : 'transparent',
+            backgroundColor: selectedDate === date ? theme.primary : 'transparent',
           },
           text: {
-            color: selectedDate === date ? '#ffffff' : theme.text,
+            color: selectedDate === date ? theme.onPrimary : theme.text,
             fontWeight: selectedDate === date ? 'bold' : 'normal',
           },
           dot: {
@@ -147,7 +138,7 @@ const MechanicCalendarScreen = () => {
     if (selectedDate && !marks[selectedDate]) {
       marks[selectedDate] = {
         selected: true,
-        selectedColor: theme.accent,
+        selectedColor: theme.primary,
       };
     }
     
@@ -159,9 +150,9 @@ const MechanicCalendarScreen = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'in-progress': return darkMode ? '#3b82f6' : '#2563eb';
-      case 'pending': return darkMode ? '#f59e0b' : '#d97706';
-      case 'completed': return darkMode ? '#10b981' : '#059669';
+      case 'in-progress': return theme.primary;
+      case 'pending': return theme.warning;
+      case 'completed': return theme.success;
       default: return theme.textSecondary;
     }
   };
@@ -171,7 +162,7 @@ const MechanicCalendarScreen = () => {
     
     return (
       <TouchableOpacity
-        style={[styles.repairCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+        style={[styles.repairCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
         onPress={() => navigation.navigate('RepairPartsManagement', {
           carId: car.id,
           repairId: repair.id
@@ -233,7 +224,7 @@ const MechanicCalendarScreen = () => {
           
           <View style={styles.detailRow}>
             <DollarSign size={16} color={theme.textSecondary} />
-            <Text style={[styles.detailText, { color: theme.accent }]}>
+            <Text style={[styles.detailText, { color: theme.primary }]}>
               €{repair.totalCost.toFixed(2)}
             </Text>
           </View>
@@ -252,8 +243,8 @@ const MechanicCalendarScreen = () => {
     
     return (
       <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Car size={20} color={theme.accent} />
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Car size={20} color={theme.primary} />
           <Text style={[styles.statNumber, { color: theme.text }]}>
             {totalRepairs}
           </Text>
@@ -262,7 +253,7 @@ const MechanicCalendarScreen = () => {
           </Text>
         </View>
         
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Calendar size={20} color={theme.warning} />
           <Text style={[styles.statNumber, { color: theme.text }]}>
             {todayRepairs}
@@ -272,7 +263,7 @@ const MechanicCalendarScreen = () => {
           </Text>
         </View>
         
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Clock size={20} color={theme.success} />
           <Text style={[styles.statNumber, { color: theme.text }]}>
             {Object.keys(daysWithRepairs).length}
@@ -287,21 +278,9 @@ const MechanicCalendarScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} />
       
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <ChevronLeft size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          Calendario Interventi
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+      <MechanicHeader title="Calendario Interventi" onBack={() => navigation.goBack()} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Statistiche */}
@@ -310,7 +289,7 @@ const MechanicCalendarScreen = () => {
         {/* Loading indicator */}
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={theme.accent} />
+            <ActivityIndicator size="small" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Aggiornamento dati...
             </Text>
@@ -318,26 +297,26 @@ const MechanicCalendarScreen = () => {
         )}
 
         {/* Calendario */}
-        <View style={[styles.calendarContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+        <View style={[styles.calendarContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <RNCalendar
             current={currentMonth.toISOString().split('T')[0]}
             markedDates={markedDates}
             onDayPress={(day) => setSelectedDate(day.dateString)}
             onMonthChange={(month) => setCurrentMonth(new Date(month.timestamp))}
             theme={{
-              backgroundColor: theme.cardBackground,
-              calendarBackground: theme.cardBackground,
+              backgroundColor: theme.surface,
+              calendarBackground: theme.surface,
               textSectionTitleColor: theme.text,
-              selectedDayBackgroundColor: theme.accent,
-              selectedDayTextColor: '#ffffff',
-              todayTextColor: theme.accent,
+              selectedDayBackgroundColor: theme.primary,
+              selectedDayTextColor: theme.onPrimary,
+              todayTextColor: theme.primary,
               dayTextColor: theme.text,
               textDisabledColor: theme.textSecondary,
-              dotColor: theme.accent,
-              selectedDotColor: '#ffffff',
-              arrowColor: theme.accent,
+              dotColor: theme.primary,
+              selectedDotColor: theme.onPrimary,
+              arrowColor: theme.primary,
               monthTextColor: theme.text,
-              indicatorColor: theme.accent,
+              indicatorColor: theme.primary,
               textDayFontFamily: Platform.select({
                 ios: 'System',
                 android: 'Roboto',
@@ -363,8 +342,8 @@ const MechanicCalendarScreen = () => {
             markingType={'custom'}
             renderArrow={(direction) => (
               direction === 'left' ? 
-                <ChevronLeft size={20} color={theme.accent} /> : 
-                <ChevronRight size={20} color={theme.accent} />
+                <ChevronLeft size={20} color={theme.primary} /> : 
+                <ChevronRight size={20} color={theme.primary} />
             )}
           />
           
@@ -393,7 +372,7 @@ const MechanicCalendarScreen = () => {
         
         {/* Lista interventi del giorno selezionato */}
         {selectedDate && (
-          <View style={[styles.dayDetailsContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+          <View style={[styles.dayDetailsContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.dayDetailsHeader}>
               <Text style={[styles.dayDetailsTitle, { color: theme.text }]}>
                 Interventi del {new Date(selectedDate).toLocaleDateString('it-IT', { 
@@ -408,15 +387,13 @@ const MechanicCalendarScreen = () => {
             </View>
             
             {selectedDayRepairs.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Calendar size={48} color={theme.textSecondary} />
-                <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-                  Nessun intervento programmato
-                </Text>
-                <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-                  Non ci sono interventi previsti per questo giorno
-                </Text>
-              </View>
+              isLoading ? null : (
+                <MechanicEmptyState
+                  icon={Calendar}
+                  title="Nessun intervento programmato"
+                  subtitle="Non ci sono interventi previsti per questo giorno"
+                />
+              )
             ) : (
               <FlatList
                 data={selectedDayRepairs}
@@ -437,14 +414,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
   loadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -456,16 +425,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
   },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  placeholder: {
-    width: 40,
-  },
   content: {
     flex: 1,
   },
@@ -475,11 +434,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statCard: {
+    ...mechanicCard,
     flex: 1,
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
   },
   statNumber: {
     fontSize: 24,
@@ -511,7 +468,7 @@ const styles = StyleSheet.create({
   legendDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: 8,
     marginRight: 6,
   },
   legendText: {
@@ -527,7 +484,7 @@ const styles = StyleSheet.create({
   dayDetailsHeader: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: mechanicStaticColors.divider,
   },
   dayDetailsTitle: {
     fontSize: 18,
@@ -537,27 +494,10 @@ const styles = StyleSheet.create({
   dayDetailsCount: {
     fontSize: 14,
   },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  emptyStateTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 12,
-  },
-  emptyStateSubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 4,
-  },
   repairCard: {
+    ...mechanicCard,
     marginHorizontal: 16,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
   },
   repairCardHeader: {
     flexDirection: 'row',

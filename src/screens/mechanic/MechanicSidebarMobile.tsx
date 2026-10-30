@@ -11,13 +11,13 @@ import {
   Modal,
   Alert,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { useMechanicStats } from '../../hooks/useMechanicStats';
 import { useAppThemeManager } from '../../hooks/useTheme';
 
+import { MECHANIC_MIN_TOUCH, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
+import MechanicIcon from './MechanicIcon';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(screenWidth * 0.85, 320);
 
@@ -37,7 +37,7 @@ interface MenuItem {
 
 const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, onTabChange }) => {
   const { user, signOut } = useAuth();
-  const { colors, isDark, toggleTheme } = useAppThemeManager();
+  const { isDark, toggleTheme } = useAppThemeManager();
   
   // Funzione sicura per toggle dark mode
   const handleToggleDarkMode = () => {
@@ -56,21 +56,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
   // Tema dinamico
-  const theme = {
-    background: colors.background,
-    surface: colors.surface,
-    card: colors.surfaceContainer,
-    primary: colors.primary,
-    primaryLight: colors.primaryContainer,
-    text: colors.onSurface,
-    textSecondary: colors.onSurfaceVariant,
-    border: colors.outline,
-    success: colors.success,
-    warning: colors.warning,
-    danger: colors.error,
-    accent: colors.tertiary,
-    overlay: 'rgba(0, 0, 0, 0.5)',
-  };
+  const theme = useMechanicTheme();
 
   // Importa useMechanicStats per ottenere dati reali
   const { stats } = useMechanicStats();
@@ -93,7 +79,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           label: 'Calendario', 
           icon: 'calendar', 
           badge: stats.appointmentsToday, 
-          color: theme.accent 
+          color: theme.secondary 
         },
       ] as MenuItem[]
     },
@@ -115,7 +101,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           color: theme.primary 
         },
         { id: 'parts', label: 'Ricambi', icon: 'wrench', color: theme.success },
-        { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.accent },
+        { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.secondary },
       ] as MenuItem[]
     },
     account: {
@@ -241,8 +227,10 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
         style={styles.hamburgerButton}
         onPress={openDrawer}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Apri menu"
       >
-        <MaterialCommunityIcons
+        <MechanicIcon
           name="menu"
           size={24}
           color={theme.text}
@@ -260,18 +248,22 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
       
       <View style={styles.headerActions}>
         {/* Notification Bell */}
-        <TouchableOpacity style={styles.notificationButton}>
-          <MaterialCommunityIcons
+        <TouchableOpacity
+          style={styles.notificationButton}
+          accessibilityRole="button"
+          accessibilityLabel="Notifiche"
+        >
+          <MechanicIcon
             name="bell"
             size={22}
             color={theme.textSecondary}
           />
-          <View style={[styles.notificationDot, { backgroundColor: theme.danger }]} />
+          <View style={[styles.notificationDot, { backgroundColor: theme.error }]} />
         </TouchableOpacity>
         
         {/* User Avatar Small */}
         <View style={[styles.userAvatarSmall, { backgroundColor: theme.primary }]}>
-          <Text style={[styles.userAvatarSmallText, { color: '#ffffff' }]}>
+          <Text style={[styles.userAvatarSmallText, { color: theme.onPrimary }]}>
             M
           </Text>
         </View>
@@ -282,12 +274,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
   // Render del profilo utente nel drawer
   const renderUserProfile = () => (
     <View style={[styles.userProfile, { borderBottomColor: theme.border }]}>
-      <LinearGradient
-        colors={[theme.primary, theme.accent]}
-        style={styles.profileGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
+      <View style={[styles.profileGradient, { backgroundColor: theme.primary }]} />
       
       <View style={styles.profileContent}>
         <View style={[styles.userAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
@@ -300,10 +287,10 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
               meccanico g
             </Text>
             {user?.verified && (
-              <MaterialCommunityIcons 
+              <MechanicIcon 
                 name="check-decagram" 
                 size={16} 
-                color="#ffffff" 
+                color={theme.onPrimary} 
               />
             )}
           </View>
@@ -314,14 +301,14 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           
           <View style={styles.quickStats}>
             <View style={styles.quickStat}>
-              <MaterialCommunityIcons name="star" size={14} color="#fbbf24" />
+              <MechanicIcon name="star" size={14} color={theme.onPrimary} />
               <Text style={styles.quickStatText}>
                 {user?.rating?.toFixed(1) || '0.0'}
               </Text>
             </View>
             
             <View style={styles.quickStat}>
-              <MaterialCommunityIcons name="account-group" size={14} color="rgba(255,255,255,0.8)" />
+              <MechanicIcon name="account-group" size={14} color="rgba(255,255,255,0.8)" />
               <Text style={styles.quickStatText}>
                 {user?.reviewsCount || 0} recensioni
               </Text>
@@ -345,17 +332,17 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
     >
       <View style={styles.menuItemContent}>
         <View style={[styles.menuItemIcon, isActive && { backgroundColor: theme.primary }]}>
-          <MaterialCommunityIcons
+          <MechanicIcon
             name={item.icon as any}
             size={22}
-            color={isActive ? '#ffffff' : (item.color || theme.textSecondary)}
+            color={isActive ? theme.onPrimary : (item.color || theme.textSecondary)}
           />
         </View>
         
         <Text
           style={[
             styles.menuItemText,
-            { color: isActive ? theme.primary : theme.text }
+            { color: isActive ? theme.onPrimaryLight : theme.text }
           ]}
         >
           {item.label}
@@ -363,7 +350,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
       </View>
       
       {item.badge && item.badge > 0 && (
-        <View style={[styles.badge, { backgroundColor: theme.danger }]}>
+        <View style={[styles.badge, { backgroundColor: theme.error }]}>
           <Text style={styles.badgeText}>
             {item.badge > 99 ? '99+' : item.badge}
           </Text>
@@ -386,7 +373,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
             {section.title}
           </Text>
-          <MaterialCommunityIcons
+          <MechanicIcon
             name={isExpanded ? 'chevron-up' : 'chevron-down'}
             size={18}
             color={theme.textSecondary}
@@ -436,7 +423,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
             onPress={handleToggleDarkMode}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons
+            <MechanicIcon
               name={isDark ? 'weather-sunny' : 'weather-night'}
               size={20}
               color={theme.textSecondary}
@@ -451,12 +438,12 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
             onPress={handleLogout}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons
+            <MechanicIcon
               name="logout"
               size={20}
-              color={theme.danger}
+              color={theme.error}
             />
-            <Text style={[styles.footerButtonText, { color: theme.danger }]}>
+            <Text style={[styles.footerButtonText, { color: theme.error }]}>
               Esci
             </Text>
           </TouchableOpacity>
@@ -518,14 +505,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12, // Ridotto per rimuovere spazio extra
     borderBottomWidth: 1,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: mechanicStaticColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
   hamburgerButton: {
-    padding: 8,
-    marginRight: 12,
+    minWidth: MECHANIC_MIN_TOUCH,
+    minHeight: MECHANIC_MIN_TOUCH,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   headerTitle: {
     flex: 1,
@@ -544,16 +534,19 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   notificationButton: {
-    padding: 6,
+    minWidth: MECHANIC_MIN_TOUCH,
+    minHeight: MECHANIC_MIN_TOUCH,
+    alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
   },
   notificationDot: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 10,
+    right: 10,
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: 8,
   },
   userAvatarSmall: {
     width: 32,
@@ -582,7 +575,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: mechanicStaticColors.overlay,
   },
   overlayTouch: {
     flex: 1,
@@ -594,7 +587,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: DRAWER_WIDTH,
     elevation: 16,
-    shadowColor: '#000',
+    shadowColor: mechanicStaticColors.shadow,
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -630,7 +623,7 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   userAvatarText: {
-    color: '#ffffff',
+    color: mechanicStaticColors.onPrimary,
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -708,26 +701,26 @@ const styles = StyleSheet.create({
   menuItemIcon: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   menuItemText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
   },
   badge: {
     minWidth: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 6,
   },
   badgeText: {
-    color: '#ffffff',
-    fontSize: 10,
+    color: mechanicStaticColors.onPrimary,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   

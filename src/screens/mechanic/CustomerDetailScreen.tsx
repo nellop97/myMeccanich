@@ -12,7 +12,6 @@ import {
   Modal,
   Alert,
   Linking,
-  Dimensions,
   Platform
 } from 'react-native';
 import {
@@ -21,6 +20,7 @@ import {
   Mail,
   MapPin,
   Car,
+  Wrench,
   FileText,
   DollarSign,
   Calendar,
@@ -40,10 +40,10 @@ import {
 } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useStore } from '../../store';
-import { LinearGradient } from 'expo-linear-gradient';
 
-const { width: screenWidth } = Dimensions.get('window');
+import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
 
+import MechanicHeader from './MechanicHeader';
 interface Customer {
   id: string;
   name: string;
@@ -98,23 +98,12 @@ const CustomerDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { customerId } = route.params as { customerId: string };
-  const { darkMode } = useStore();
+  const theme = useMechanicTheme();
   
   const [activeTab, setActiveTab] = useState<'info' | 'vehicles' | 'invoices' | 'history'>('info');
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
 
   // Mock data - in produzione verrebbe dal database
   const customer: Customer = {
@@ -271,7 +260,7 @@ const CustomerDetailScreen = () => {
   const renderInfoTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       {/* Contact Info */}
-      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+      <View style={[styles.card, { backgroundColor: theme.surface }]}>
         <Text style={[styles.cardTitle, { color: theme.text }]}>
           Informazioni Contatto
         </Text>
@@ -317,7 +306,7 @@ const CustomerDetailScreen = () => {
 
       {/* Fiscal Info */}
       {(customer.vatNumber || customer.fiscalCode) && (
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>
             Dati Fiscali
           </Text>
@@ -354,7 +343,7 @@ const CustomerDetailScreen = () => {
 
       {/* Notes */}
       {customer.notes && (
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>
             Note
           </Text>
@@ -367,10 +356,10 @@ const CustomerDetailScreen = () => {
       {/* Quick Actions */}
       <View style={styles.quickActions}>
         <TouchableOpacity
-          style={[styles.quickActionButton, { backgroundColor: theme.accent }]}
+          style={[styles.quickActionButton, { backgroundColor: theme.primary }]}
           onPress={() => navigation.navigate('CreateInvoice', { customerId: customer.id })}
         >
-          <FileText size={20} color="#ffffff" />
+          <FileText size={20} color={theme.onPrimary} />
           <Text style={styles.quickActionText}>Nuova Fattura</Text>
         </TouchableOpacity>
         
@@ -378,7 +367,7 @@ const CustomerDetailScreen = () => {
           style={[styles.quickActionButton, { backgroundColor: theme.success }]}
           onPress={handleWhatsApp}
         >
-          <Phone size={20} color="#ffffff" />
+          <Phone size={20} color={theme.onPrimary} />
           <Text style={styles.quickActionText}>WhatsApp</Text>
         </TouchableOpacity>
       </View>
@@ -388,7 +377,7 @@ const CustomerDetailScreen = () => {
   const renderVehicleCard = (vehicle: Vehicle) => (
     <TouchableOpacity
       key={vehicle.id}
-      style={[styles.vehicleCard, { backgroundColor: theme.cardBackground }]}
+      style={[styles.vehicleCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
       onPress={() => navigation.navigate('CarDetail', { carId: vehicle.id })}
       activeOpacity={0.8}
     >
@@ -437,7 +426,7 @@ const CustomerDetailScreen = () => {
     return (
       <TouchableOpacity
         key={invoice.id}
-        style={[styles.invoiceCard, { backgroundColor: theme.cardBackground }]}
+        style={[styles.invoiceCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
         onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
         activeOpacity={0.8}
       >
@@ -473,7 +462,7 @@ const CustomerDetailScreen = () => {
     return (
       <View
         key={service.id}
-        style={[styles.serviceCard, { backgroundColor: theme.cardBackground }]}
+        style={[styles.serviceCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
       >
         <View style={styles.serviceHeader}>
           <View>
@@ -496,7 +485,7 @@ const CustomerDetailScreen = () => {
             <TouchableOpacity
               onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: service.invoiceId })}
             >
-              <Text style={[styles.invoiceLink, { color: theme.accent }]}>
+              <Text style={[styles.invoiceLink, { color: theme.primary }]}>
                 Vedi fattura →
               </Text>
             </TouchableOpacity>
@@ -509,40 +498,37 @@ const CustomerDetailScreen = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar
-        barStyle={darkMode ? 'light-content' : 'dark-content'}
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor={theme.background}
       />
 
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <View style={styles.headerLeft}>
-          <View style={[styles.avatar, { backgroundColor: theme.accent }]}>
+      <MechanicHeader
+        title={customer.name}
+        subtitle={`Cliente ${customer.type === 'business' ? 'Business' : 'Privato'}`}
+        onBack={() => navigation.goBack()}
+        leading={
+          <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
             <Text style={styles.avatarText}>
               {customer.name.split(' ').map(n => n[0]).join('')}
             </Text>
           </View>
-          <View>
-            <Text style={[styles.customerName, { color: theme.text }]}>
-              {customer.name}
-            </Text>
-            <Text style={[styles.customerType, { color: theme.textSecondary }]}>
-              Cliente {customer.type === 'business' ? 'Business' : 'Privato'}
-            </Text>
-          </View>
-        </View>
-        
-        <TouchableOpacity
-          style={styles.moreButton}
-          onPress={() => setShowOptionsMenu(true)}
-        >
-          <MoreVertical size={24} color={theme.text} />
-        </TouchableOpacity>
-      </View>
+        }
+        right={
+          <TouchableOpacity
+            style={styles.moreButton}
+            onPress={() => setShowOptionsMenu(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Altre opzioni"
+          >
+            <MoreVertical size={24} color={theme.text} />
+          </TouchableOpacity>
+        }
+      />
 
       {/* Stats */}
       <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.statValue, { color: theme.accent }]}>
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.statValue, { color: theme.primary }]}>
             {formatCurrency(customer.totalSpent)}
           </Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
@@ -550,7 +536,7 @@ const CustomerDetailScreen = () => {
           </Text>
         </View>
         
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground }]}>
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.statValue, { color: theme.success }]}>
             {customer.activeVehicles}
           </Text>
@@ -559,8 +545,8 @@ const CustomerDetailScreen = () => {
           </Text>
         </View>
         
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.statValue, { color: theme.info }]}>
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.statValue, { color: theme.primary }]}>
             {customer.completedServices}
           </Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
@@ -569,7 +555,7 @@ const CustomerDetailScreen = () => {
         </View>
         
         {customer.pendingInvoices > 0 && (
-          <View style={[styles.statCard, { backgroundColor: theme.warning + '10' }]}>
+          <View style={[styles.statCard, { backgroundColor: theme.warning + '10', borderColor: theme.border }]}>
             <Text style={[styles.statValue, { color: theme.warning }]}>
               {customer.pendingInvoices}
             </Text>
@@ -587,13 +573,13 @@ const CustomerDetailScreen = () => {
             key={tab}
             style={[
               styles.tab,
-              activeTab === tab && { borderBottomColor: theme.accent }
+              activeTab === tab && { borderBottomColor: theme.primary }
             ]}
             onPress={() => setActiveTab(tab)}
           >
             <Text style={[
               styles.tabText,
-              { color: activeTab === tab ? theme.accent : theme.textSecondary }
+              { color: activeTab === tab ? theme.primary : theme.textSecondary }
             ]}>
               {tab === 'info' ? 'Info' :
                tab === 'vehicles' ? 'Veicoli' :
@@ -616,11 +602,11 @@ const CustomerDetailScreen = () => {
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={
               <TouchableOpacity
-                style={[styles.addButton, { borderColor: theme.accent }]}
+                style={[styles.addButton, { borderColor: theme.primary }]}
                 onPress={() => navigation.navigate('AddCar', { customerId: customer.id })}
               >
-                <Plus size={20} color={theme.accent} />
-                <Text style={[styles.addButtonText, { color: theme.accent }]}>
+                <Plus size={20} color={theme.primary} />
+                <Text style={[styles.addButtonText, { color: theme.primary }]}>
                   Aggiungi Veicolo
                 </Text>
               </TouchableOpacity>
@@ -662,7 +648,7 @@ const CustomerDetailScreen = () => {
           onPress={() => setShowOptionsMenu(false)}
         >
           <View 
-            style={[styles.optionsMenu, { backgroundColor: theme.cardBackground }]}
+            style={[styles.optionsMenu, { backgroundColor: theme.surface }]}
             onStartShouldSetResponder={() => true}
           >
             <TouchableOpacity
@@ -729,19 +715,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   avatar: {
     width: 48,
     height: 48,
@@ -752,19 +725,9 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#ffffff',
+    color: mechanicStaticColors.onPrimary,
   },
-  customerName: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  customerType: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  moreButton: {
-    padding: 8,
-  },
+  moreButton: mechanicButton.icon,
   statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -772,15 +735,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statCard: {
+    ...mechanicCard,
     flex: 1,
     minWidth: '45%',
-    padding: 16,
-    borderRadius: 12,
     alignItems: 'center',
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   statValue: {
     fontSize: 20,
@@ -794,7 +752,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: mechanicStaticColors.divider,
   },
   tab: {
     flex: 1,
@@ -817,7 +775,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 16,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 20,
     elevation: 2,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -860,27 +818,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   quickActionButton: {
+    ...mechanicButton.primary,
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
   },
   quickActionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: mechanicStaticColors.onPrimary,
   },
   vehicleCard: {
+    ...mechanicCard,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   vehicleHeader: {
     flexDirection: 'row',
@@ -909,13 +857,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   invoiceCard: {
+    ...mechanicCard,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   invoiceHeader: {
     flexDirection: 'row',
@@ -950,13 +893,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   serviceCard: {
+    ...mechanicCard,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   serviceHeader: {
     flexDirection: 'row',
@@ -988,14 +926,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    ...mechanicButton.secondary,
     marginBottom: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderRadius: 12,
     borderStyle: 'dashed',
   },
   addButtonText: {
@@ -1004,7 +936,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: mechanicStaticColors.overlay,
     justifyContent: 'flex-end',
   },
   optionsMenu: {

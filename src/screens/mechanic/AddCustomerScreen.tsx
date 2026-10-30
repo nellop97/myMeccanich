@@ -5,19 +5,18 @@ import {
     Text,
     ScrollView,
     TouchableOpacity,
+    StatusBar,
     StyleSheet,
     SafeAreaView,
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
     Alert,
-    useWindowDimensions,
     Switch,
 } from 'react-native';
-import { TextInput, ProgressBar } from 'react-native-paper';
+import { ProgressBar } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
-    ArrowLeft,
     ArrowRight,
     Check,
     User,
@@ -46,6 +45,10 @@ import { db } from '../../services/firebase';
 import { useStore } from '../../store';
 import { useInvoicingStore } from '../../store/invoicingStore';
 
+import { mechanicButton, mechanicStaticColors, useMechanicTheme, useMechanicBreakpoints } from './mechanicTheme';
+import MechanicTextInput from './MechanicTextInput';
+import { MechanicEmptyState } from './MechanicStates';
+import MechanicHeader from './MechanicHeader';
 // ============================================================
 // INTERFACES
 // ============================================================
@@ -86,13 +89,11 @@ interface FormErrors {
 const AddCustomerScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
-    const { width, height } = useWindowDimensions();
-    const { user, darkMode } = useStore();
+    const { width, height, isDesktop, isTablet, isMobile } = useMechanicBreakpoints();
+    const { user } = useStore();
+    const theme = useMechanicTheme();
 
     // Responsive breakpoints
-    const isDesktop = width >= 1024;
-    const isTablet = width >= 768 && width < 1024;
-    const isMobile = width < 768;
     const isLargeScreen = width >= 1440;
 
     // Edit mode
@@ -126,34 +127,6 @@ const AddCustomerScreen = () => {
     });
 
     // Theme configuration
-    const theme = {
-        // Backgrounds
-        mainBg: darkMode ? '#0f1419' : '#f8f9fa',
-        cardBg: darkMode ? '#1a1f2e' : '#ffffff',
-        inputBg: darkMode ? '#232936' : '#f3f4f6',
-
-        // Text
-        text: darkMode ? '#ffffff' : '#1f2937',
-        textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-        textMuted: darkMode ? '#6b7280' : '#9ca3af',
-        placeholder: darkMode ? '#6b7280' : '#9ca3af',
-
-        // Borders
-        border: darkMode ? '#2d3748' : '#e5e7eb',
-        borderLight: darkMode ? '#374151' : '#f3f4f6',
-
-        // Colors
-        primary: '#2563eb',
-        primaryDark: '#1d4ed8',
-        success: '#10b981',
-        warning: '#f59e0b',
-        danger: '#ef4444',
-
-        // Interactive
-        hover: darkMode ? '#2d3748' : '#f9fafb',
-        focus: '#2563eb20',
-        disabled: darkMode ? '#374151' : '#e5e7eb',
-    };
 
     const totalSteps = 4; // Basic, Company, Address, Additional
 
@@ -374,9 +347,9 @@ const AddCustomerScreen = () => {
                                 },
                             ]}>
                                 {isCompleted ? (
-                                    <Check size={16} color="#fff" />
+                                    <Check size={16} color={theme.onPrimary} />
                                 ) : (
-                                    <Icon size={16} color={isActive ? '#fff' : theme.textMuted} />
+                                    <Icon size={16} color={isActive ? theme.onPrimary : theme.textMuted} />
                                 )}
                             </View>
                             <Text style={[
@@ -406,20 +379,12 @@ const AddCustomerScreen = () => {
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
                         Nome Completo *
                     </Text>
-                    <TextInput
-                        mode="outlined"
+                    <MechanicTextInput
                         value={formData.name}
                         onChangeText={(text) => setFormData({ ...formData, name: text })}
                         placeholder="Mario Rossi"
                         error={!!errors.name}
-                        outlineColor={theme.border}
-                        activeOutlineColor={theme.primary}
-                        textColor={theme.text}
-                        style={[
-                            styles.input,
-                            { backgroundColor: theme.inputBg },
-                        ]}
-                        left={<TextInput.Icon icon={() => <User size={20} color={theme.textMuted} />} />}
+                        left={<User size={20} color={theme.textMuted} />}
                     />
                     {errors.name && (
                         <Text style={styles.errorText}>{errors.name}</Text>
@@ -430,22 +395,14 @@ const AddCustomerScreen = () => {
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
                         Email *
                     </Text>
-                    <TextInput
-                        mode="outlined"
+                    <MechanicTextInput
                         value={formData.email}
                         onChangeText={(text) => setFormData({ ...formData, email: text })}
                         placeholder="mario.rossi@email.com"
                         keyboardType="email-address"
                         autoCapitalize="none"
                         error={!!errors.email}
-                        outlineColor={theme.border}
-                        activeOutlineColor={theme.primary}
-                        textColor={theme.text}
-                        style={[
-                            styles.input,
-                            { backgroundColor: theme.inputBg },
-                        ]}
-                        left={<TextInput.Icon icon={() => <Mail size={20} color={theme.textMuted} />} />}
+                        left={<Mail size={20} color={theme.textMuted} />}
                     />
                     {errors.email && (
                         <Text style={styles.errorText}>{errors.email}</Text>
@@ -456,28 +413,20 @@ const AddCustomerScreen = () => {
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
                         Telefono *
                     </Text>
-                    <TextInput
-                        mode="outlined"
+                    <MechanicTextInput
                         value={formData.phone}
                         onChangeText={(text) => setFormData({ ...formData, phone: text })}
                         placeholder="+39 333 1234567"
                         keyboardType="phone-pad"
                         error={!!errors.phone}
-                        outlineColor={theme.border}
-                        activeOutlineColor={theme.primary}
-                        textColor={theme.text}
-                        style={[
-                            styles.input,
-                            { backgroundColor: theme.inputBg },
-                        ]}
-                        left={<TextInput.Icon icon={() => <Phone size={20} color={theme.textMuted} />} />}
+                        left={<Phone size={20} color={theme.textMuted} />}
                     />
                     {errors.phone && (
                         <Text style={styles.errorText}>{errors.phone}</Text>
                     )}
                 </View>
 
-                <View style={[styles.switchWrapper, { backgroundColor: theme.cardBg }]}>
+                <View style={[styles.switchWrapper, { backgroundColor: theme.surface }]}>
                     <View style={styles.switchContent}>
                         <Building size={24} color={theme.primary} />
                         <View style={styles.switchTextContainer}>
@@ -493,7 +442,7 @@ const AddCustomerScreen = () => {
                         value={formData.isCompany}
                         onValueChange={(value) => setFormData({ ...formData, isCompany: value })}
                         trackColor={{ false: theme.border, true: theme.primary }}
-                        thumbColor={formData.isCompany ? '#fff' : '#f4f3f4'}
+                        thumbColor={formData.isCompany ? theme.onPrimary : theme.switchThumbOff}
                     />
                 </View>
             </View>
@@ -515,20 +464,12 @@ const AddCustomerScreen = () => {
                         <Text style={[styles.label, { color: theme.textSecondary }]}>
                             Ragione Sociale *
                         </Text>
-                        <TextInput
-                            mode="outlined"
+                        <MechanicTextInput
                             value={formData.companyName}
                             onChangeText={(text) => setFormData({ ...formData, companyName: text })}
                             placeholder="Rossi Auto S.r.l."
                             error={!!errors.companyName}
-                            outlineColor={theme.border}
-                            activeOutlineColor={theme.primary}
-                            textColor={theme.text}
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBg },
-                            ]}
-                            left={<TextInput.Icon icon={() => <Building size={20} color={theme.textMuted} />} />}
+                            left={<Building size={20} color={theme.textMuted} />}
                         />
                         {errors.companyName && (
                             <Text style={styles.errorText}>{errors.companyName}</Text>
@@ -540,21 +481,13 @@ const AddCustomerScreen = () => {
                             <Text style={[styles.label, { color: theme.textSecondary }]}>
                                 Partita IVA *
                             </Text>
-                            <TextInput
-                                mode="outlined"
+                            <MechanicTextInput
                                 value={formData.vatNumber}
                                 onChangeText={(text) => setFormData({ ...formData, vatNumber: text })}
                                 placeholder="12345678901"
                                 keyboardType="numeric"
                                 maxLength={11}
                                 error={!!errors.vatNumber}
-                                outlineColor={theme.border}
-                                activeOutlineColor={theme.primary}
-                                textColor={theme.text}
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: theme.inputBg },
-                                ]}
                             />
                             {errors.vatNumber && (
                                 <Text style={styles.errorText}>{errors.vatNumber}</Text>
@@ -565,20 +498,12 @@ const AddCustomerScreen = () => {
                             <Text style={[styles.label, { color: theme.textSecondary }]}>
                                 Codice Fiscale
                             </Text>
-                            <TextInput
-                                mode="outlined"
+                            <MechanicTextInput
                                 value={formData.fiscalCode}
                                 onChangeText={(text) => setFormData({ ...formData, fiscalCode: text })}
                                 placeholder="RSSMRA80A01H501Z"
                                 autoCapitalize="characters"
                                 maxLength={16}
-                                outlineColor={theme.border}
-                                activeOutlineColor={theme.primary}
-                                textColor={theme.text}
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: theme.inputBg },
-                                ]}
                             />
                         </View>
                     </View>
@@ -588,20 +513,12 @@ const AddCustomerScreen = () => {
                             <Text style={[styles.label, { color: theme.textSecondary }]}>
                                 Codice SDI
                             </Text>
-                            <TextInput
-                                mode="outlined"
+                            <MechanicTextInput
                                 value={formData.sdiCode}
                                 onChangeText={(text) => setFormData({ ...formData, sdiCode: text })}
                                 placeholder="ABC123D"
                                 autoCapitalize="characters"
                                 maxLength={7}
-                                outlineColor={theme.border}
-                                activeOutlineColor={theme.primary}
-                                textColor={theme.text}
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: theme.inputBg },
-                                ]}
                             />
                         </View>
 
@@ -609,31 +526,22 @@ const AddCustomerScreen = () => {
                             <Text style={[styles.label, { color: theme.textSecondary }]}>
                                 Email PEC
                             </Text>
-                            <TextInput
-                                mode="outlined"
+                            <MechanicTextInput
                                 value={formData.pecEmail}
                                 onChangeText={(text) => setFormData({ ...formData, pecEmail: text })}
                                 placeholder="amministrazione@pec.azienda.it"
                                 keyboardType="email-address"
                                 autoCapitalize="none"
-                                outlineColor={theme.border}
-                                activeOutlineColor={theme.primary}
-                                textColor={theme.text}
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: theme.inputBg },
-                                ]}
                             />
                         </View>
                     </View>
                 </View>
             ) : (
-                <View style={[styles.emptyStateCard, { backgroundColor: theme.cardBg }]}>
-                    <Building size={48} color={theme.border} />
-                    <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                        Cliente privato - nessun dato aziendale richiesto
-                    </Text>
-                </View>
+                <MechanicEmptyState
+                    icon={Building}
+                    title="Cliente privato"
+                    subtitle="Nessun dato aziendale richiesto"
+                />
             )}
         </View>
     );
@@ -652,20 +560,12 @@ const AddCustomerScreen = () => {
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
                         Indirizzo *
                     </Text>
-                    <TextInput
-                        mode="outlined"
+                    <MechanicTextInput
                         value={formData.address}
                         onChangeText={(text) => setFormData({ ...formData, address: text })}
                         placeholder="Via Roma, 1"
                         error={!!errors.address}
-                        outlineColor={theme.border}
-                        activeOutlineColor={theme.primary}
-                        textColor={theme.text}
-                        style={[
-                            styles.input,
-                            { backgroundColor: theme.inputBg },
-                        ]}
-                        left={<TextInput.Icon icon={() => <MapPin size={20} color={theme.textMuted} />} />}
+                        left={<MapPin size={20} color={theme.textMuted} />}
                     />
                     {errors.address && (
                         <Text style={styles.errorText}>{errors.address}</Text>
@@ -677,19 +577,11 @@ const AddCustomerScreen = () => {
                         <Text style={[styles.label, { color: theme.textSecondary }]}>
                             Città *
                         </Text>
-                        <TextInput
-                            mode="outlined"
+                        <MechanicTextInput
                             value={formData.city}
                             onChangeText={(text) => setFormData({ ...formData, city: text })}
                             placeholder="Milano"
                             error={!!errors.city}
-                            outlineColor={theme.border}
-                            activeOutlineColor={theme.primary}
-                            textColor={theme.text}
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBg },
-                            ]}
                         />
                         {errors.city && (
                             <Text style={styles.errorText}>{errors.city}</Text>
@@ -700,21 +592,13 @@ const AddCustomerScreen = () => {
                         <Text style={[styles.label, { color: theme.textSecondary }]}>
                             CAP *
                         </Text>
-                        <TextInput
-                            mode="outlined"
+                        <MechanicTextInput
                             value={formData.postalCode}
                             onChangeText={(text) => setFormData({ ...formData, postalCode: text })}
                             placeholder="20100"
                             keyboardType="numeric"
                             maxLength={5}
                             error={!!errors.postalCode}
-                            outlineColor={theme.border}
-                            activeOutlineColor={theme.primary}
-                            textColor={theme.text}
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBg },
-                            ]}
                         />
                         {errors.postalCode && (
                             <Text style={styles.errorText}>{errors.postalCode}</Text>
@@ -725,20 +609,12 @@ const AddCustomerScreen = () => {
                         <Text style={[styles.label, { color: theme.textSecondary }]}>
                             Provincia
                         </Text>
-                        <TextInput
-                            mode="outlined"
+                        <MechanicTextInput
                             value={formData.province}
                             onChangeText={(text) => setFormData({ ...formData, province: text })}
                             placeholder="MI"
                             autoCapitalize="characters"
                             maxLength={2}
-                            outlineColor={theme.border}
-                            activeOutlineColor={theme.primary}
-                            textColor={theme.text}
-                            style={[
-                                styles.input,
-                                { backgroundColor: theme.inputBg },
-                            ]}
                         />
                     </View>
                 </View>
@@ -747,18 +623,10 @@ const AddCustomerScreen = () => {
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
                         Paese
                     </Text>
-                    <TextInput
-                        mode="outlined"
+                    <MechanicTextInput
                         value={formData.country}
                         onChangeText={(text) => setFormData({ ...formData, country: text })}
                         placeholder="Italia"
-                        outlineColor={theme.border}
-                        activeOutlineColor={theme.primary}
-                        textColor={theme.text}
-                        style={[
-                            styles.input,
-                            { backgroundColor: theme.inputBg },
-                        ]}
                     />
                 </View>
             </View>
@@ -780,7 +648,7 @@ const AddCustomerScreen = () => {
                         <Text style={[styles.label, { color: theme.textSecondary }]}>
                             Metodo di Pagamento Preferito
                         </Text>
-                        <View style={[styles.radioGroup, { backgroundColor: theme.inputBg }]}>
+                        <View style={[styles.radioGroup, { backgroundColor: theme.inputBackground }]}>
                             {['bonifico', 'contanti', 'carta', 'assegno'].map((method) => (
                                 <TouchableOpacity
                                     key={method}
@@ -809,7 +677,7 @@ const AddCustomerScreen = () => {
                         <Text style={[styles.label, { color: theme.textSecondary }]}>
                             Termini di Pagamento
                         </Text>
-                        <View style={[styles.radioGroup, { backgroundColor: theme.inputBg }]}>
+                        <View style={[styles.radioGroup, { backgroundColor: theme.inputBackground }]}>
                             {['immediato', '30gg', '60gg', '90gg'].map((term) => (
                                 <TouchableOpacity
                                     key={term}
@@ -839,21 +707,13 @@ const AddCustomerScreen = () => {
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
                         Note
                     </Text>
-                    <TextInput
-                        mode="outlined"
+                    <MechanicTextInput
                         value={formData.notes}
                         onChangeText={(text) => setFormData({ ...formData, notes: text })}
                         placeholder="Aggiungi note o informazioni aggiuntive..."
                         multiline
                         numberOfLines={4}
-                        outlineColor={theme.border}
-                        activeOutlineColor={theme.primary}
-                        textColor={theme.text}
-                        style={[
-                            styles.input,
-                            styles.textArea,
-                            { backgroundColor: theme.inputBg },
-                        ]}
+                        style={styles.textArea}
                     />
                 </View>
             </View>
@@ -880,7 +740,7 @@ const AddCustomerScreen = () => {
     // ============================================================
     if (loadingData) {
         return (
-            <SafeAreaView style={[styles.container, { backgroundColor: theme.mainBg }]}>
+            <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={theme.primary} />
                     <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
@@ -892,44 +752,34 @@ const AddCustomerScreen = () => {
     }
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.mainBg }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar
-                barStyle={darkMode ? 'light-content' : 'dark-content'}
-                backgroundColor={theme.mainBg}
+                barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+                backgroundColor={theme.background}
             />
 
-            {/* Header */}
-            <View style={[
-                styles.header,
-                { backgroundColor: theme.cardBg },
-                isDesktop && styles.desktopHeader,
-            ]}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <ArrowLeft size={24} color={theme.text} />
-                </TouchableOpacity>
-
-                <Text style={[styles.headerTitle, { color: theme.text }]}>
-                    {isEditing ? 'Modifica Cliente' : 'Aggiungi Cliente'}
-                </Text>
-
-                <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: theme.primary }]}
-                    onPress={handleSubmit}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                        <>
-                            <Save size={20} color="#fff" />
-                            <Text style={styles.saveButtonText}>Salva</Text>
-                        </>
-                    )}
-                </TouchableOpacity>
-            </View>
+            <MechanicHeader
+                title={isEditing ? 'Modifica Cliente' : 'Aggiungi Cliente'}
+                onBack={() => navigation.goBack()}
+                right={
+                    <TouchableOpacity
+                        style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                        onPress={handleSubmit}
+                        disabled={loading}
+                        accessibilityRole="button"
+                        accessibilityLabel="Salva cliente"
+                    >
+                        {loading ? (
+                            <ActivityIndicator size="small" color={theme.onPrimary} />
+                        ) : (
+                            <>
+                                <Save size={20} color={theme.onPrimary} />
+                                <Text style={styles.saveButtonText}>Salva</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                }
+            />
 
             {/* Content */}
             <KeyboardAvoidingView
@@ -946,7 +796,7 @@ const AddCustomerScreen = () => {
                     {/* Main Card */}
                     <View style={[
                         styles.mainCard,
-                        { backgroundColor: theme.cardBg },
+                        { backgroundColor: theme.surface },
                         isDesktop && styles.desktopCard,
                         isLargeScreen && styles.largeScreenCard,
                     ]}>
@@ -966,7 +816,7 @@ const AddCustomerScreen = () => {
                                     styles.navButton,
                                     styles.backNavButton,
                                     {
-                                        backgroundColor: theme.cardBg,
+                                        backgroundColor: theme.surface,
                                         borderColor: theme.border,
                                     },
                                     currentStep === 0 && styles.disabledButton,
@@ -993,16 +843,16 @@ const AddCustomerScreen = () => {
                                 disabled={loading}
                             >
                                 {loading ? (
-                                    <ActivityIndicator size="small" color="#fff" />
+                                    <ActivityIndicator size="small" color={theme.onPrimary} />
                                 ) : (
                                     <>
                                         <Text style={styles.nextButtonText}>
                                             {currentStep === totalSteps - 1 ? 'Conferma' : 'Avanti'}
                                         </Text>
                                         {currentStep === totalSteps - 1 ? (
-                                            <Check size={20} color="#fff" />
+                                            <Check size={20} color={theme.onPrimary} />
                                         ) : (
-                                            <ChevronRight size={20} color="#fff" />
+                                            <ChevronRight size={20} color={theme.onPrimary} />
                                         )}
                                     </>
                                 )}
@@ -1035,38 +885,9 @@ const styles = StyleSheet.create({
     },
 
     // Header
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#2d3748',
-    },
-    desktopHeader: {
-        paddingHorizontal: 40,
-        paddingVertical: 20,
-    },
-    backButton: {
-        padding: 8,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        flex: 1,
-        marginLeft: 16,
-    },
-    saveButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 12,
-        gap: 8,
-    },
+    saveButton: mechanicButton.header,
     saveButtonText: {
-        color: '#fff',
+        color: mechanicStaticColors.onPrimary,
         fontSize: 16,
         fontWeight: '600',
     },
@@ -1113,7 +934,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         marginBottom: 32,
         borderBottomWidth: 1,
-        borderBottomColor: '#2d3748',
+        borderBottomColor: mechanicStaticColors.divider,
     },
     desktopSteps: {
         marginBottom: 40,
@@ -1186,17 +1007,11 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginBottom: 4,
     },
-    input: {
-        fontSize: 16,
-        borderRadius: 12,
-    },
     textArea: {
         minHeight: 120,
-        textAlignVertical: 'top',
-        paddingTop: 12,
     },
     errorText: {
-        color: '#ef4444',
+        color: mechanicStaticColors.error,
         fontSize: 12,
         marginTop: 4,
     },
@@ -1241,7 +1056,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#374151',
+        borderColor: mechanicStaticColors.divider,
     },
     radioText: {
         fontSize: 14,
@@ -1249,16 +1064,6 @@ const styles = StyleSheet.create({
     },
 
     // Empty State
-    emptyStateCard: {
-        padding: 40,
-        borderRadius: 16,
-        alignItems: 'center',
-        gap: 16,
-    },
-    emptyStateText: {
-        fontSize: 16,
-        textAlign: 'center',
-    },
 
     // Navigation
     navigationButtons: {
@@ -1271,13 +1076,8 @@ const styles = StyleSheet.create({
         marginTop: 40,
     },
     navButton: {
+        ...mechanicButton.primary,
         flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 12,
-        gap: 8,
     },
     backNavButton: {
         borderWidth: 1,
@@ -1290,7 +1090,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     nextButtonText: {
-        color: '#fff',
+        color: mechanicStaticColors.onPrimary,
         fontSize: 16,
         fontWeight: '600',
     },

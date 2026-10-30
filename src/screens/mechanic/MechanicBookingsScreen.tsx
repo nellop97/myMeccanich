@@ -6,12 +6,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Platform,
   RefreshControl,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Calendar,
   Clock,
@@ -29,6 +28,9 @@ import WorkshopService from '../../services/WorkshopService';
 import { BookingRequest, Workshop } from '../../types/database.types';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
+import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
+import MechanicHeader from './MechanicHeader';
 interface MechanicBookingsScreenProps {
   navigation: any;
 }
@@ -36,7 +38,8 @@ interface MechanicBookingsScreenProps {
 type FilterStatus = 'all' | 'pending' | 'confirmed' | 'in_progress';
 
 export default function MechanicBookingsScreen({ navigation }: MechanicBookingsScreenProps) {
-  const { darkMode, user } = useStore();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
@@ -46,17 +49,6 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   const [selectedBookingForProposal, setSelectedBookingForProposal] = useState<string | null>(null);
   const [proposedDate, setProposedDate] = useState(new Date());
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    primary: '#3b82f6',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
 
   useEffect(() => {
     loadWorkshop();
@@ -260,7 +252,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     return (
       <TouchableOpacity
         key={booking.id}
-        style={[styles.bookingCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+        style={[styles.bookingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
         onPress={() => navigation.navigate('MechanicBookingDetail', { bookingId: booking.id })}
       >
         {/* Header */}
@@ -336,7 +328,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
                 style={[styles.actionButton, { backgroundColor: theme.primary }]}
                 onPress={() => handleProposeDate(booking.id)}
               >
-                <Calendar size={16} color="#fff" />
+                <Calendar size={16} color={theme.onPrimary} />
                 <Text style={styles.actionButtonText}>Proponi Data</Text>
               </TouchableOpacity>
 
@@ -344,7 +336,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
                 style={[styles.actionButton, { backgroundColor: theme.success }]}
                 onPress={() => navigation.navigate('CreateQuote', { bookingId: booking.id })}
               >
-                <FileText size={16} color="#fff" />
+                <FileText size={16} color={theme.onPrimary} />
                 <Text style={styles.actionButtonText}>Preventivo</Text>
               </TouchableOpacity>
 
@@ -352,7 +344,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
                 style={[styles.actionButton, { backgroundColor: theme.error }]}
                 onPress={() => handleRejectBooking(booking.id)}
               >
-                <XCircle size={16} color="#fff" />
+                <XCircle size={16} color={theme.onPrimary} />
               </TouchableOpacity>
             </>
           )}
@@ -362,7 +354,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
               style={[styles.actionButton, styles.actionButtonFull, { backgroundColor: theme.primary }]}
               onPress={() => handleMarkInProgress(booking.id)}
             >
-              <Clock size={16} color="#fff" />
+              <Clock size={16} color={theme.onPrimary} />
               <Text style={styles.actionButtonText}>Inizia Lavori</Text>
             </TouchableOpacity>
           )}
@@ -372,7 +364,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
               style={[styles.actionButton, styles.actionButtonFull, { backgroundColor: theme.success }]}
               onPress={() => handleMarkCompleted(booking.id)}
             >
-              <CheckCircle size={16} color="#fff" />
+              <CheckCircle size={16} color={theme.onPrimary} />
               <Text style={styles.actionButtonText}>Completa Lavori</Text>
             </TouchableOpacity>
           )}
@@ -399,36 +391,24 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
 
   if (!workshop) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <LinearGradient
-          colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
-          style={styles.header}
-        >
-          <Text style={styles.headerTitle}>Prenotazioni</Text>
-        </LinearGradient>
-        <View style={styles.emptyContainer}>
-          <AlertCircle size={64} color={theme.textSecondary} />
-          <Text style={[styles.emptyText, { color: theme.text }]}>
-            Nessuna officina trovata
-          </Text>
-          <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Configura prima la tua officina nelle impostazioni
-          </Text>
-        </View>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <MechanicHeader title="Prenotazioni" onBack={() => navigation.goBack()} />
+        <MechanicEmptyState
+          icon={AlertCircle}
+          title="Nessuna officina trovata"
+          subtitle="Configura prima la tua officina nelle impostazioni"
+        />
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
-        style={styles.header}
-      >
-        <Text style={styles.headerTitle}>Richieste Prenotazione</Text>
-        <Text style={styles.headerSubtitle}>{workshop.name}</Text>
-      </LinearGradient>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <MechanicHeader
+        title="Richieste Prenotazione"
+        subtitle={workshop.name}
+        onBack={() => navigation.goBack()}
+      />
 
       {/* Filters */}
       <ScrollView
@@ -452,7 +432,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
             style={[
               styles.filterButton,
               {
-                backgroundColor: filter === filterOption.value ? theme.primary : theme.cardBackground,
+                backgroundColor: filter === filterOption.value ? theme.primary : theme.surface,
                 borderColor: theme.border,
               },
             ]}
@@ -461,7 +441,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
             <Text
               style={[
                 styles.filterText,
-                { color: filter === filterOption.value ? '#fff' : theme.text },
+                { color: filter === filterOption.value ? theme.onPrimary : theme.text },
               ]}
             >
               {filterOption.label}
@@ -471,14 +451,14 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
                 style={[
                   styles.filterBadge,
                   {
-                    backgroundColor: filter === filterOption.value ? '#fff' : theme.primary,
+                    backgroundColor: filter === filterOption.value ? theme.onPrimary : theme.primary,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.filterBadgeText,
-                    { color: filter === filterOption.value ? theme.primary : '#fff' },
+                    { color: filter === filterOption.value ? theme.primary : theme.onPrimary },
                   ]}
                 >
                   {filterOption.count}
@@ -491,9 +471,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
 
       {/* Bookings List */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-        </View>
+        <MechanicLoadingState text="Caricamento prenotazioni..." />
       ) : (
         <ScrollView
           style={styles.scrollView}
@@ -508,12 +486,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
           }
         >
           {getFilteredBookings().length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Calendar size={64} color={theme.textSecondary} />
-              <Text style={[styles.emptyText, { color: theme.text }]}>
-                Nessuna prenotazione
-              </Text>
-            </View>
+            <MechanicEmptyState icon={Calendar} title="Nessuna prenotazione" />
           ) : (
             getFilteredBookings().map(renderBookingCard)
           )}
@@ -523,7 +496,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
       {/* Date Picker Modal */}
       {showDatePicker && (
         <View style={styles.pickerModal}>
-          <View style={[styles.pickerContent, { backgroundColor: theme.cardBackground }]}>
+          <View style={[styles.pickerContent, { backgroundColor: theme.surface }]}>
             <Text style={[styles.pickerTitle, { color: theme.text }]}>
               Proponi una Data
             </Text>
@@ -562,7 +535,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
                   style={[styles.pickerButton, { backgroundColor: theme.primary }]}
                   onPress={handleConfirmProposal}
                 >
-                  <Text style={[styles.pickerButtonText, { color: '#fff' }]}>
+                  <Text style={[styles.pickerButtonText, { color: theme.onPrimary }]}>
                     Invia Proposta
                   </Text>
                 </TouchableOpacity>
@@ -571,27 +544,13 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
           </View>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#e0e7ff',
   },
   filtersContainer: {
     maxHeight: 60,
@@ -617,7 +576,7 @@ const styles = StyleSheet.create({
   filterBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 12,
     minWidth: 24,
     alignItems: 'center',
   },
@@ -632,25 +591,9 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   bookingCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    ...mechanicCard,
     marginBottom: 16,
     gap: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-      },
-    }),
   },
   cardHeader: {
     flexDirection: 'row',
@@ -668,7 +611,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   customerEmail: {
-    fontSize: 13,
+    fontSize: 14,
   },
   pendingBadge: {
     flexDirection: 'row',
@@ -679,7 +622,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   vehicleInfo: {
@@ -700,7 +643,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   problemDescription: {
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 18,
   },
   urgencyBadge: {
@@ -722,7 +665,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   messagesText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
   },
   actions: {
@@ -731,20 +674,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   actionButton: {
-    flexDirection: 'row',
+    ...mechanicButton.compact,
     flex: 1,
-    padding: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
   },
   actionButtonFull: {
     flex: 1,
   },
   actionButtonText: {
-    color: '#fff',
-    fontSize: 13,
+    color: mechanicStaticColors.onPrimary,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   dateInfo: {
@@ -753,28 +691,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   dateText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 64,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  emptySubtext: {
     fontSize: 14,
-    textAlign: 'center',
+    fontWeight: '600',
   },
   pickerModal: {
     position: 'absolute',
@@ -782,7 +700,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: mechanicStaticColors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },

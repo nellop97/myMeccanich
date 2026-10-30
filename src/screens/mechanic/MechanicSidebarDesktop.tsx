@@ -9,11 +9,12 @@ import {
   Platform,
   Pressable,
 } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuth } from "../../hooks/useAuth";
 import { Portal, Dialog, Button } from "react-native-paper";
 import { useAppThemeManager } from "../../hooks/useTheme";
 
+import { mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
+import MechanicIcon from './MechanicIcon';
 interface MechanicSidebarDesktopProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -74,7 +75,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
   activeTab,
   onTabChange,
 }) => {
-  const { colors, isDark, toggleTheme } = useAppThemeManager();
+  const { isDark, toggleTheme } = useAppThemeManager();
   const { user, signOut } = useAuth();
   const [expandedSections, setExpandedSections] = useState<string[]>([
     "main",
@@ -84,18 +85,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   // Tema dinamico
-  const theme = {
-    background: colors.background,
-    surface: colors.surface,
-    text: colors.onSurface,
-    textSecondary: colors.onSurfaceVariant,
-    border: colors.outline,
-    primary: colors.primary,
-    danger: colors.error,
-    hover: colors.surfaceVariant,
-    activeBackground: colors.primaryContainer,
-    activeText: colors.primary,
-  };
+  const theme = useMechanicTheme();
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections((prev) =>
@@ -181,7 +171,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: theme.border }]}>
           <View style={styles.logoContainer}>
-            <MaterialCommunityIcons
+            <MechanicIcon
               name="wrench"
               size={28}
               color={theme.primary}
@@ -208,7 +198,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
               Amministratore
             </Text>
           </View>
-          <MaterialCommunityIcons
+          <MechanicIcon
             name="chevron-right"
             size={20}
             color={theme.textSecondary}
@@ -231,7 +221,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
                 >
                   {section.title}
                 </Text>
-                <MaterialCommunityIcons
+                <MechanicIcon
                   name={
                     expandedSections.includes(section.id)
                       ? "chevron-up"
@@ -254,22 +244,22 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
                           styles.menuItem,
                           isActive && [
                             styles.menuItemActive,
-                            { backgroundColor: theme.activeBackground },
+                            { backgroundColor: theme.primaryLight },
                           ],
                         ]}
                         onPress={() => handleMenuNavigation(item.id)}
                       >
-                        <MaterialCommunityIcons
+                        <MechanicIcon
                           name={item.icon as any}
                           size={20}
                           color={
-                            isActive ? theme.activeText : theme.textSecondary
+                            isActive ? theme.onPrimaryLight : theme.textSecondary
                           }
                         />
                         <Text
                           style={[
                             styles.menuItemText,
-                            { color: isActive ? theme.activeText : theme.text },
+                            { color: isActive ? theme.onPrimaryLight : theme.text },
                           ]}
                         >
                           {item.label}
@@ -289,7 +279,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
             style={styles.footerButton}
             onPress={toggleTheme}
           >
-            <MaterialCommunityIcons
+            <MechanicIcon
               name={isDark ? "weather-sunny" : "weather-night"}
               size={20}
               color={theme.textSecondary}
@@ -309,12 +299,12 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
             ]}
             onPress={() => setShowLogoutDialog(true)}
           >
-            <MaterialCommunityIcons
+            <MechanicIcon
               name="logout"
               size={20}
-              color={theme.danger}
+              color={theme.error}
             />
-            <Text style={[styles.footerButtonText, { color: theme.danger }]}>
+            <Text style={[styles.footerButtonText, { color: theme.error }]}>
               Esci
             </Text>
           </Pressable>
@@ -341,7 +331,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
             >
               Annulla
             </Button>
-            <Button onPress={handleLogout} textColor={theme.danger}>
+            <Button onPress={handleLogout} textColor={theme.error}>
               Esci
             </Button>
           </Dialog.Actions>
@@ -396,7 +386,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   userAvatarText: {
-    color: "#ffffff",
+    color: mechanicStaticColors.onPrimary,
     fontSize: 16,
     fontWeight: "bold",
   },

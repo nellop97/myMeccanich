@@ -5,12 +5,10 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  Dimensions,
   Platform,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
 // Import hooks e store
@@ -23,9 +21,9 @@ import MechanicLayout from './MechanicLayout';
 // Import componenti
 import MechanicDashboardContent from './MechanicDashboardContent';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+import { useMechanicTheme } from './mechanicTheme';
 
+import MechanicIcon from './MechanicIcon';
 interface MechanicData {
   loginProvider: string;
   firstName: string;
@@ -49,7 +47,7 @@ interface MechanicData {
 const MechanicDashboard: React.FC = () => {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
-  const { darkMode } = useStore();
+  const theme = useMechanicTheme();
 
   // Stati locali
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -58,20 +56,6 @@ const MechanicDashboard: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   // Tema dinamico
-  const theme = {
-    background: darkMode ? '#0f172a' : '#f8fafc',
-    surface: darkMode ? '#1e293b' : '#ffffff',
-    card: darkMode ? '#334155' : '#ffffff',
-    primary: '#3b82f6',
-    primaryDark: '#1d4ed8',
-    text: darkMode ? '#f1f5f9' : '#0f172a',
-    textSecondary: darkMode ? '#94a3b8' : '#64748b',
-    border: darkMode ? '#334155' : '#e2e8f0',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    accent: darkMode ? '#7c3aed' : '#a855f7',
-  };
 
   // Caricamento dati del meccanico
   useEffect(() => {
@@ -142,7 +126,7 @@ const MechanicDashboard: React.FC = () => {
     if (isLoading && !mechanicData) {
       return (
         <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
-          <MaterialCommunityIcons 
+          <MechanicIcon 
             name="loading" 
             size={40} 
             color={theme.primary}
@@ -161,7 +145,7 @@ const MechanicDashboard: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} />
         }
       >
         {/* Contenuto della dashboard */}
