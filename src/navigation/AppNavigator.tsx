@@ -70,6 +70,7 @@ import CreateInvoiceScreen from '../screens/mechanic/CreateInvoiceScreen';
 // Clienti
 import CustomersListScreen from '../screens/mechanic/CustomersListScreen';
 import AddCustomerScreen from '../screens/mechanic/AddCustomerScreen';
+import CustomerDetailScreen from '../screens/mechanic/CustomerDetailScreen';
 
 // ============================================
 // COMMON SCREENS (Profile & Privacy)
@@ -466,7 +467,7 @@ export default function AppNavigator() {
 
                         <Stack.Screen
                             name="CustomerDetail"
-                            component={PlaceholderScreen}
+                            component={CustomerDetailScreen}
                             options={{
                                 title: 'Dettaglio Cliente',
                                 headerShown: false,

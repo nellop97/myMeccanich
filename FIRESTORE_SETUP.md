@@ -155,13 +155,6 @@ Quando vedi l'errore nell'app:
 firebase deploy --only firestore:indexes
 ```
 
-### Opzione 3: Deploy Manuale con Firebase CLI
-
-```bash
-# Se firebase.json non è configurato
-firebase deploy --only firestore:indexes --config firestore.indexes.json
-```
-
 ## Indici Necessari
 
 Il file `firestore.indexes.json` definisce i seguenti indici:
@@ -190,11 +183,40 @@ Fields: vehicleId (ASC), requesterEmail (ASC), status (ASC)
 **Usato da**: `VehicleViewRequestService.hasExistingRequest()`
 **Scopo**: Previene richieste duplicate per lo stesso veicolo
 
+### Altri indici
+
+Il file contiene anche gli indici per `users` e `reminders` e quelli delle query di clienti, fatture, veicoli in officina, prenotazioni e appuntamenti:
+
+```
+Collection: customers
+Fields: workshopId (ASC), name (ASC)
+
+Collection: invoices
+Fields: workshopId (ASC), issueDate (DESC), number (DESC)
+Fields: workshopId (ASC), issueDate (DESC)
+Fields: mechanicId (ASC), status (ASC), paidDate (ASC)
+Fields: mechanicId (ASC), createdAt (DESC)
+
+Collection: workshopCars
+Fields: workshopId (ASC), isActive (ASC), entryDate (DESC)
+Fields: workshopId (ASC), createdAt (DESC)
+
+Collection: booking_requests
+Fields: workshopId (ASC), createdAt (DESC)
+Fields: workshopId (ASC), mechanicId (ASC), createdAt (DESC)
+
+Collection: appointments
+Fields: mechanicId (ASC), status (ASC), createdAt (DESC)
+Fields: mechanicId (ASC), date (ASC), status (ASC)
+Fields: mechanicId (ASC), status (ASC), date (ASC)
+Fields: workshopId (ASC), scheduledDate (DESC)
+```
+
 ## Verifica Indici
 
 Dopo aver applicato gli indici, verifica nella Firebase Console:
 1. **Firestore Database** → **Indexes**
-2. Dovresti vedere 3 indici con stato **"Enabled"** (verde)
+2. Dovresti vedere tutti gli indici di `firestore.indexes.json` con stato **"Enabled"** (verde)
 3. Se vedi **"Building"** (arancione), attendi qualche minuto
 
 ## Troubleshooting Indici

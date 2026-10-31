@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   Timestamp,
   onSnapshot,
+  runTransaction,
   QuerySnapshot,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -23,6 +24,9 @@ import {
   MessageAttachment,
 } from '../types/database.types';
 import WorkshopService from './WorkshopService';
+
+// Messaggio dell'errore lanciato da acceptBooking quando la richiesta non è più accettabile
+export const BOOKING_NOT_PENDING = 'booking-not-pending';
 
 export class BookingService {
   private static instance: BookingService;
@@ -119,13 +123,16 @@ export class BookingService {
   }
 
   /**
-   * Ottiene tutte le prenotazioni dell'officina/meccanico
+   * Ottiene tutte le prenotazioni dell'officina/meccanico.
+   * mechanicId è il proprietario dell'officina: l'id officina può non essere il suo uid
+   * e senza questo filtro le regole Firestore rifiuterebbero la query
    */
-  async getWorkshopBookings(workshopId: string, status?: string[]): Promise<BookingRequest[]> {
+  async getWorkshopBookings(workshopId: string, mechanicId: string, status?: string[]): Promise<BookingRequest[]> {
     try {
       let q = query(
         collection(db, 'booking_requests'),
-        where('workshopId', '==', workshopId)
+        where('workshopId', '==', workshopId),
+        where('mechanicId', '==', mechanicId)
       );
 
       if (status && status.length > 0) {
@@ -167,6 +174,35 @@ export class BookingService {
       console.log('✅ Stato prenotazione aggiornato:', status);
     } catch (error) {
       console.error('❌ Errore aggiornamento stato prenotazione:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Conferma una richiesta solo se è ancora in attesa, così non si sovrascrive
+   * una cancellazione del cliente. Altrimenti lancia BOOKING_NOT_PENDING
+   */
+  async acceptBooking(bookingId: string, selectedDate: Date): Promise<void> {
+    try {
+      const bookingRef = doc(db, 'booking_requests', bookingId);
+
+      await runTransaction(db, async (transaction) => {
+        const bookingSnap = await transaction.get(bookingRef);
+
+        if (!bookingSnap.exists() || bookingSnap.data().status !== 'pending') {
+          throw new Error(BOOKING_NOT_PENDING);
+        }
+
+        transaction.update(bookingRef, {
+          status: 'confirmed',
+          selectedDate,
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      console.log('✅ Prenotazione accettata');
+    } catch (error) {
+      console.error('❌ Errore accettazione prenotazione:', error);
       throw error;
     }
   }
@@ -399,15 +435,21 @@ export class BookingService {
   }
 
   /**
-   * Ascolta le prenotazioni dell'officina in tempo reale
+   * Ascolta le prenotazioni dell'officina in tempo reale.
+   * mechanicId serve alle regole Firestore (vedi getWorkshopBookings).
+   * Con onError un errore non viene confuso con una lista vuota; dopo un errore
+   * il listener è chiuso e va ricreato
    */
   onWorkshopBookingsChange(
     workshopId: string,
-    callback: (bookings: BookingRequest[]) => void
+    mechanicId: string,
+    callback: (bookings: BookingRequest[]) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const q = query(
       collection(db, 'booking_requests'),
       where('workshopId', '==', workshopId),
+      where('mechanicId', '==', mechanicId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -422,7 +464,11 @@ export class BookingService {
       },
       (error) => {
         console.error('❌ Errore listener prenotazioni officina:', error);
-        callback([]);
+        if (onError) {
+          onError(error);
+        } else {
+          callback([]);
+        }
       }
     );
 

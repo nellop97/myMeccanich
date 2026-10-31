@@ -315,7 +315,7 @@ const CreateInvoiceScreen = () => {
         setIsLoading(true);
 
         try {
-            const invoiceId = addInvoice({
+            await addInvoice({
                 type: formData.type,
                 status: 'draft',
                 issueDate: formData.issueDate,

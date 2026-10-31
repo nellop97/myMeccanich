@@ -258,13 +258,21 @@ const AddCustomerScreen = () => {
     const handleSubmit = async () => {
         if (!validateStep()) return;
 
+        const ownerId = user?.id;
+        if (!isEditing && !ownerId) {
+            showAlert('Errore', 'Utente non autenticato');
+            return;
+        }
+
         setLoading(true);
         try {
+            // In modifica il proprietario resta quello già salvato
             const customerData = {
                 ...formData,
-                ownerId: user?.uid || user?.id,
                 updatedAt: serverTimestamp(),
-                ...(isEditing ? {} : { createdAt: serverTimestamp() }),
+                ...(isEditing
+                    ? {}
+                    : { mechanicId: ownerId, workshopId: ownerId, createdAt: serverTimestamp() }),
             };
 
             if (isEditing && customerId) {

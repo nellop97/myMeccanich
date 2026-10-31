@@ -30,6 +30,20 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == mechanicId && isMechanic();
     }
 
+    // Verifica se il documento è del meccanico autenticato tramite workshopId o mechanicId
+    // Usa get() per funzionare anche con documenti privi di uno dei due campi
+    function isWorkshopDocOwner(data) {
+      return isAuthenticated() && (
+        data.get('workshopId', '') == request.auth.uid ||
+        data.get('mechanicId', '') == request.auth.uid
+      );
+    }
+
+    // In creazione workshopId è facoltativo, ma se presente deve essere l'utente autenticato
+    function hasValidWorkshopId() {
+      return request.resource.data.get('workshopId', request.auth.uid) == request.auth.uid;
+    }
+
     // Verifica validità dei dati (evita injection e dati mancanti)
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
@@ -222,8 +236,13 @@ service cloud.firestore {
     // CUSTOMERS COLLECTION
     // ============================================
     match /customers/{customerId} {
-      // Lettura: meccanico proprietario o il cliente stesso
-      allow read: if isAuthenticated() && (
+      // Lettura singola: meccanico proprietario o il cliente stesso
+      allow get: if isWorkshopDocOwner(resource.data) ||
+                    (isAuthenticated() && resource.data.get('userId', '') == request.auth.uid);
+
+      // Lettura query: confronti diretti, così Firestore li verifica sui filtri della query
+      allow list: if isAuthenticated() && (
+        resource.data.workshopId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
         resource.data.userId == request.auth.uid
       );
@@ -231,13 +250,15 @@ service cloud.firestore {
       // Creazione: solo meccanici per i propri clienti
       allow create: if isMechanic() &&
                       request.resource.data.mechanicId == request.auth.uid &&
+                      hasValidWorkshopId() &&
                       hasRequiredFields(['name', 'email', 'mechanicId']);
 
-      // Aggiornamento: meccanico proprietario
-      allow update: if isMechanicOwner(resource.data.mechanicId);
+      // Aggiornamento: meccanico proprietario, senza poter cambiare i campi di proprietà
+      allow update: if isMechanic() && isWorkshopDocOwner(resource.data) &&
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workshopId', 'mechanicId']);
 
       // Cancellazione: meccanico proprietario
-      allow delete: if isMechanicOwner(resource.data.mechanicId);
+      allow delete: if isMechanic() && isWorkshopDocOwner(resource.data);
     }
 
     // ============================================
@@ -299,8 +320,13 @@ service cloud.firestore {
     // INVOICES COLLECTION
     // ============================================
     match /invoices/{invoiceId} {
-      // Lettura: meccanico o cliente coinvolto
-      allow read: if isAuthenticated() && (
+      // Lettura singola: meccanico o cliente coinvolto
+      allow get: if isWorkshopDocOwner(resource.data) ||
+                    (isAuthenticated() && resource.data.get('customerId', '') == request.auth.uid);
+
+      // Lettura query: confronti diretti, così Firestore li verifica sui filtri della query
+      allow list: if isAuthenticated() && (
+        resource.data.workshopId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
         resource.data.customerId == request.auth.uid
       );
@@ -308,13 +334,15 @@ service cloud.firestore {
       // Creazione: solo meccanici per i propri clienti
       allow create: if isMechanic() &&
                       request.resource.data.mechanicId == request.auth.uid &&
+                      hasValidWorkshopId() &&
                       hasRequiredFields(['customerId', 'totalAmount', 'items']);
 
-      // Aggiornamento: solo il meccanico proprietario
-      allow update: if isMechanicOwner(resource.data.mechanicId);
+      // Aggiornamento: solo il meccanico proprietario, senza poter cambiare i campi di proprietà
+      allow update: if isMechanic() && isWorkshopDocOwner(resource.data) &&
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workshopId', 'mechanicId']);
 
       // Cancellazione: solo il meccanico proprietario
-      allow delete: if isMechanicOwner(resource.data.mechanicId);
+      allow delete: if isMechanic() && isWorkshopDocOwner(resource.data);
     }
 
     // ============================================

@@ -128,19 +128,21 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
 
             // Crea il nuovo cliente
             const customerData = {
+                name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
                 email: formData.email.toLowerCase().trim(),
                 phone: formData.phone.trim() || null,
-                userType: 'user', // Cliente standard
-                registrationDate: serverTimestamp(),
+                isCompany: false,
+                mechanicId: currentUser.uid,
+                workshopId: currentUser.uid,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 createdBy: currentUser.uid, // ID del meccanico che ha creato il cliente
                 isActive: true,
             };
 
-            const docRef = await addDoc(collection(db, 'users'), customerData);
+            const docRef = await addDoc(collection(db, 'customers'), customerData);
 
             console.log('✅ Cliente aggiunto con ID:', docRef.id);
 

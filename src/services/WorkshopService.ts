@@ -224,7 +224,8 @@ export class WorkshopService {
     try {
       const q = query(
         collection(db, 'workshops'),
-        where('ownerId', '==', mechanicId)
+        where('ownerId', '==', mechanicId),
+        limit(100)
       );
 
       const snapshot = await getDocs(q);

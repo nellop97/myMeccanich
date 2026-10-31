@@ -22,7 +22,7 @@ import {
   MessageCircle,
 } from 'lucide-react-native';
 import { useStore } from '../../store';
-import BookingService from '../../services/BookingService';
+import BookingService, { BOOKING_NOT_PENDING } from '../../services/BookingService';
 import WorkshopService from '../../services/WorkshopService';
 import { BookingRequest, Workshop } from '../../types/database.types';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -37,6 +37,34 @@ interface MechanicBookingsScreenProps {
 
 type FilterStatus = 'all' | 'pending' | 'confirmed' | 'in_progress';
 
+const formatBookingDate = (date: Date) =>
+  date.toLocaleDateString('it-IT', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+/**
+ * Data con cui il meccanico può confermare subito la richiesta: la prima data
+ * preferita dal cliente non ancora passata. Senza una data futura, o con un
+ * preventivo in ballo, restituisce null e la conferma non è possibile.
+ */
+const getAcceptableDate = (booking: BookingRequest): Date | null => {
+  if (booking.status !== 'pending' || booking.quoteId || booking.quoteStatus) return null;
+
+  const now = Date.now();
+  for (const value of booking.preferredDates ?? []) {
+    // convertTimestamps di BookingService non converte i Timestamp dentro un
+    // array: qui arrivano come { seconds, nanoseconds } e non come Date
+    const raw = value as Date | { seconds: number };
+    const date = raw instanceof Date ? raw : new Date(raw.seconds * 1000);
+    if (date.getTime() > now) return date;
+  }
+  return null;
+};
+
 export default function MechanicBookingsScreen({ navigation }: MechanicBookingsScreenProps) {
   const { user } = useStore();
   const theme = useMechanicTheme();
@@ -48,7 +76,9 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedBookingForProposal, setSelectedBookingForProposal] = useState<string | null>(null);
   const [proposedDate, setProposedDate] = useState(new Date());
-
+  const [workshopFailed, setWorkshopFailed] = useState(false);
+  const [bookingsFailed, setBookingsFailed] = useState(false);
+  const [bookingsReload, setBookingsReload] = useState(0);
 
   useEffect(() => {
     loadWorkshop();
@@ -59,17 +89,24 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
       loadBookings();
 
       // Real-time listener
-      const unsubscribe = BookingService.onWorkshopBookingsChange(workshop.id, (updatedBookings) => {
-        setBookings(updatedBookings);
-      });
+      const unsubscribe = BookingService.onWorkshopBookingsChange(
+        workshop.id,
+        workshop.ownerId,
+        (updatedBookings) => {
+          setBookings(updatedBookings);
+          setBookingsFailed(false);
+        },
+        () => setBookingsFailed(true)
+      );
 
       return () => unsubscribe();
     }
-  }, [workshop]);
+  }, [workshop, bookingsReload]);
 
   const loadWorkshop = async () => {
     if (!user?.id) return;
 
+    setWorkshopFailed(false);
     try {
       const workshops = await WorkshopService.getWorkshopsByMechanic(user.id);
       if (workshops.length > 0) {
@@ -77,6 +114,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
       }
     } catch (error) {
       console.error('Errore caricamento officina:', error);
+      setWorkshopFailed(true);
     }
   };
 
@@ -85,10 +123,12 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
 
     try {
       setLoading(true);
-      const data = await BookingService.getWorkshopBookings(workshop.id);
+      setBookingsFailed(false);
+      const data = await BookingService.getWorkshopBookings(workshop.id, workshop.ownerId);
       setBookings(data);
     } catch (error) {
       console.error('Errore caricamento prenotazioni:', error);
+      setBookingsFailed(true);
     } finally {
       setLoading(false);
     }
@@ -138,10 +178,10 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     }
   };
 
-  const handleAcceptBooking = async (bookingId: string) => {
+  const handleAcceptBooking = async (bookingId: string, date: Date) => {
     showAlert(
       'Accetta Prenotazione',
-      'Vuoi accettare questa richiesta?',
+      `Confermi l'appuntamento di ${formatBookingDate(date)}? Per fissare un'altra data usa Proponi Data.`,
       [
         { text: 'Annulla', style: 'cancel' },
         {
@@ -149,11 +189,16 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
           onPress: async () => {
             try {
               setLoading(true);
-              await BookingService.updateBookingStatus(bookingId, 'confirmed');
+              await BookingService.acceptBooking(bookingId, date);
               showAlert('Successo', 'Prenotazione accettata!');
             } catch (error) {
               console.error('Errore:', error);
-              showAlert('Errore', 'Impossibile accettare la prenotazione');
+              showAlert(
+                'Errore',
+                error instanceof Error && error.message === BOOKING_NOT_PENDING
+                  ? 'Questa richiesta non è più in attesa: il cliente potrebbe averla annullata o potrebbe essere già stata gestita. Controlla lo stato aggiornato nella lista.'
+                  : 'Impossibile accettare la prenotazione'
+              );
             } finally {
               setLoading(false);
             }
@@ -248,6 +293,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     const isPending = ['pending', 'quote_requested', 'quote_sent', 'date_proposed'].includes(booking.status);
     const isConfirmed = booking.status === 'confirmed';
     const isInProgress = booking.status === 'in_progress';
+    const acceptableDate = getAcceptableDate(booking);
 
     return (
       <TouchableOpacity
@@ -321,6 +367,20 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
         )}
 
         {/* Actions */}
+        {acceptableDate && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonFull, { backgroundColor: theme.success }]}
+              onPress={() => handleAcceptBooking(booking.id, acceptableDate)}
+              accessibilityRole="button"
+              accessibilityLabel={`Accetta la prenotazione di ${booking.userName} per ${formatBookingDate(acceptableDate)}`}
+            >
+              <CheckCircle size={16} color={theme.onPrimary} />
+              <Text style={styles.actionButtonText}>Accetta</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.actions}>
           {isPending && (
             <>
@@ -375,13 +435,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
           <View style={styles.dateInfo}>
             <Calendar size={14} color={theme.success} />
             <Text style={[styles.dateText, { color: theme.success }]}>
-              {new Date(booking.selectedDate).toLocaleDateString('it-IT', {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatBookingDate(new Date(booking.selectedDate))}
             </Text>
           </View>
         )}
@@ -393,11 +447,21 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <MechanicHeader title="Prenotazioni" onBack={() => navigation.goBack()} />
-        <MechanicEmptyState
-          icon={AlertCircle}
-          title="Nessuna officina trovata"
-          subtitle="Configura prima la tua officina nelle impostazioni"
-        />
+        {workshopFailed ? (
+          <MechanicEmptyState
+            icon={AlertCircle}
+            title="Impossibile caricare l'officina"
+            subtitle="Controlla la connessione e riprova"
+            actionLabel="Riprova"
+            onAction={loadWorkshop}
+          />
+        ) : (
+          <MechanicEmptyState
+            icon={AlertCircle}
+            title="Nessuna officina trovata"
+            subtitle="Configura prima la tua officina nelle impostazioni"
+          />
+        )}
       </SafeAreaView>
     );
   }
@@ -472,6 +536,14 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
       {/* Bookings List */}
       {loading ? (
         <MechanicLoadingState text="Caricamento prenotazioni..." />
+      ) : bookingsFailed ? (
+        <MechanicEmptyState
+          icon={AlertCircle}
+          title="Impossibile caricare le prenotazioni"
+          subtitle="Controlla la connessione e riprova"
+          actionLabel="Riprova"
+          onAction={() => setBookingsReload((current) => current + 1)}
+        />
       ) : (
         <ScrollView
           style={styles.scrollView}

@@ -13,9 +13,44 @@ import {
   onSnapshot,
   serverTimestamp,
   limit,
-  Timestamp
+  runTransaction,
+  Timestamp,
+  Transaction
 } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { auth, db } from '../services/firebase';
+
+// Id del meccanico autenticato: le regole Firestore richiedono che coincida col proprietario
+const getCurrentUserId = (): string => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    throw new Error('Utente non autenticato');
+  }
+  return uid;
+};
+
+// Firestore rifiuta i campi undefined, che qui sono normali per i dati facoltativi
+const removeUndefined = <T extends object>(data: T): T =>
+  Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value !== undefined)
+  ) as T;
+
+// Numero più alto già usato nell'anno: inizializza il contatore al primo utilizzo.
+// Si cerca su entrambi i campi perché workshopId è facoltativo nelle regole di creazione.
+const findHighestInvoiceNumber = async (ownerId: string, year: number): Promise<number> => {
+  const prefix = `FAT-${year}-`;
+  const snapshots = await Promise.all(
+    ['workshopId', 'mechanicId'].map(field =>
+      getDocs(query(collection(db, 'invoices'), where(field, '==', ownerId)))
+    )
+  );
+
+  return snapshots.flatMap(snapshot => snapshot.docs).reduce((highest, item) => {
+    const number = item.data().number;
+    if (typeof number !== 'string' || !number.startsWith(prefix)) return highest;
+    const value = parseInt(number.slice(prefix.length), 10);
+    return Number.isNaN(value) ? highest : Math.max(highest, value);
+  }, 0);
+};
 
 // ====================================
 // INTERFACCE E TIPI
@@ -53,6 +88,7 @@ export interface Customer {
   sdiCode?: string; // Codice SDI per fatturazione elettronica
   notes?: string;
   workshopId: string;
+  mechanicId?: string; // Stesso id di workshopId, richiesto dalle regole Firestore
   createdAt?: any;
   updatedAt?: any;
 }
@@ -100,6 +136,7 @@ export interface Invoice {
   
   // Metadati
   workshopId: string;
+  mechanicId?: string; // Stesso id di workshopId, richiesto dalle regole Firestore
   createdBy?: string;
   createdAt?: any;
   updatedAt?: any;
@@ -126,7 +163,6 @@ interface InvoicingStore {
   invoices: Invoice[];
   customers: Customer[];
   templates: InvoiceTemplate[];
-  nextInvoiceNumber: number;
   isLoading: boolean;
   error: string | null;
   currentWorkshopId: string | null;
@@ -136,15 +172,15 @@ interface InvoicingStore {
   
   // === METODI PER FATTURE ===
   fetchInvoices: (workshopId: string, year?: number) => Promise<void>;
-  addInvoice: (invoice: Omit<Invoice, 'id' | 'number' | 'createdAt' | 'updatedAt'>) => Promise<string>;
-  updateInvoice: (invoiceId: string, updates: Partial<Invoice>) => Promise<void>;
+  addInvoice: (invoice: Omit<Invoice, 'id' | 'number' | 'workshopId' | 'mechanicId' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateInvoice: (invoiceId: string, updates: Partial<Omit<Invoice, 'workshopId' | 'mechanicId'>>) => Promise<void>;
   deleteInvoice: (invoiceId: string) => Promise<void>;
   subscribeToInvoices: (workshopId: string) => void;
   
   // === METODI PER CLIENTI ===
   fetchCustomers: (workshopId: string) => Promise<void>;
-  addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
-  updateCustomer: (customerId: string, updates: Partial<Customer>) => Promise<void>;
+  addCustomer: (customer: Omit<Customer, 'id' | 'workshopId' | 'mechanicId' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateCustomer: (customerId: string, updates: Partial<Omit<Customer, 'workshopId' | 'mechanicId'>>) => Promise<void>;
   deleteCustomer: (customerId: string) => Promise<void>;
   subscribeToCustomers: (workshopId: string) => void;
   
@@ -165,7 +201,7 @@ interface InvoicingStore {
     totalAmount: number;
     totalDiscount: number;
   };
-  generateNextInvoiceNumber: () => Promise<string>;
+  generateNextInvoiceNumber: (onNumberReserved?: (transaction: Transaction, invoiceNumber: string) => void) => Promise<string>;
   updateInvoiceStatus: (invoiceId: string, status: InvoiceStatus, paidDate?: string) => Promise<void>;
   
   // === STATISTICHE ===
@@ -194,7 +230,6 @@ export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
   invoices: [],
   customers: [],
   templates: [],
-  nextInvoiceNumber: 1,
   isLoading: false,
   error: null,
   currentWorkshopId: null,
@@ -223,12 +258,6 @@ export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
         ...doc.data()
       })) as Invoice[];
       
-      // Calcola il prossimo numero di fattura
-      if (invoices.length > 0) {
-        const lastNumber = parseInt(invoices[0].number.split('-').pop() || '0');
-        set({ nextInvoiceNumber: lastNumber + 1 });
-      }
-      
       set({ invoices, isLoading: false });
     } catch (error: any) {
       console.error('Errore recupero fatture:', error);
@@ -242,18 +271,28 @@ export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
   addInvoice: async (invoice) => {
     set({ isLoading: true, error: null });
     try {
-      const invoiceNumber = await get().generateNextInvoiceNumber();
-      
-      const docRef = await addDoc(collection(db, 'invoices'), {
+      const ownerId = getCurrentUserId();
+      const invoiceData = removeUndefined({
         ...invoice,
-        number: invoiceNumber,
-        status: invoice.status || 'draft',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        customerId: invoice.customerId || '', // Richiesto dalle regole Firestore
+        mechanicId: ownerId,
+        workshopId: ownerId
+      });
+      
+      // Fattura e contatore si scrivono insieme: se la scrittura fallisce il numero non va perso
+      const docRef = doc(collection(db, 'invoices'));
+      const invoiceNumber = await get().generateNextInvoiceNumber((transaction, number) => {
+        transaction.set(docRef, {
+          ...invoiceData,
+          number,
+          status: invoice.status || 'draft',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
       });
       
       const newInvoice: Invoice = {
-        ...invoice,
+        ...invoiceData,
         id: docRef.id,
         number: invoiceNumber,
         createdAt: new Date().toISOString(),
@@ -262,7 +301,6 @@ export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
       
       set(state => ({
         invoices: [newInvoice, ...state.invoices],
-        nextInvoiceNumber: state.nextInvoiceNumber + 1,
         isLoading: false
       }));
       
@@ -397,14 +435,22 @@ export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
   addCustomer: async (customer) => {
     set({ isLoading: true, error: null });
     try {
-      const docRef = await addDoc(collection(db, 'customers'), {
+      const ownerId = getCurrentUserId();
+      const customerData = removeUndefined({
         ...customer,
+        email: customer.email?.trim() || '', // Richiesta dalle regole Firestore
+        mechanicId: ownerId,
+        workshopId: ownerId
+      });
+      
+      const docRef = await addDoc(collection(db, 'customers'), {
+        ...customerData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       
       const newCustomer: Customer = {
-        ...customer,
+        ...customerData,
         id: docRef.id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -642,11 +688,28 @@ export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
     };
   },
   
-  generateNextInvoiceNumber: async () => {
+  generateNextInvoiceNumber: async (onNumberReserved) => {
+    const ownerId = getCurrentUserId();
     const year = new Date().getFullYear();
-    const number = get().nextInvoiceNumber;
-    const paddedNumber = number.toString().padStart(5, '0');
-    return `FAT-${year}-${paddedNumber}`;
+    const settingsRef = doc(db, 'workshop_settings', ownerId);
+    
+    return runTransaction(db, async (transaction) => {
+      const settingsSnap = await transaction.get(settingsRef);
+      const storedNumber = settingsSnap.data()?.invoiceCounters?.[year];
+      const lastNumber = typeof storedNumber === 'number'
+        ? storedNumber
+        : await findHighestInvoiceNumber(ownerId, year);
+      
+      const nextNumber = lastNumber + 1;
+      const paddedNumber = nextNumber.toString().padStart(5, '0');
+      const invoiceNumber = `FAT-${year}-${paddedNumber}`;
+      
+      // merge conserva i contatori degli altri anni e le altre impostazioni dell'officina
+      transaction.set(settingsRef, { invoiceCounters: { [year]: nextNumber } }, { merge: true });
+      onNumberReserved?.(transaction, invoiceNumber);
+      
+      return invoiceNumber;
+    });
   },
   
   updateInvoiceStatus: async (invoiceId, status, paidDate) => {
@@ -726,7 +789,6 @@ export const useInvoicingStore = create<InvoicingStore>((set, get) => ({
       invoices: [],
       customers: [],
       templates: [],
-      nextInvoiceNumber: 1,
       isLoading: false,
       error: null,
       currentWorkshopId: null,
