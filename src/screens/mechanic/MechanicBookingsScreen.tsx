@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Platform,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -31,6 +30,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
 import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
 import MechanicHeader from './MechanicHeader';
+import { showAlert, showPrompt } from '../../utils/platformHelpers';
 interface MechanicBookingsScreenProps {
   navigation: any;
 }
@@ -68,10 +68,10 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   }, [workshop]);
 
   const loadWorkshop = async () => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
 
     try {
-      const workshops = await WorkshopService.getWorkshopsByMechanic(user.uid);
+      const workshops = await WorkshopService.getWorkshopsByMechanic(user.id);
       if (workshops.length > 0) {
         setWorkshop(workshops[0]); // Usa la prima officina
       }
@@ -129,17 +129,17 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
 
       setShowDatePicker(false);
       setSelectedBookingForProposal(null);
-      Alert.alert('Successo', 'Proposta inviata al cliente');
+      showAlert('Successo', 'Proposta inviata al cliente');
     } catch (error) {
       console.error('Errore invio proposta:', error);
-      Alert.alert('Errore', 'Impossibile inviare la proposta');
+      showAlert('Errore', 'Impossibile inviare la proposta');
     } finally {
       setLoading(false);
     }
   };
 
   const handleAcceptBooking = async (bookingId: string) => {
-    Alert.alert(
+    showAlert(
       'Accetta Prenotazione',
       'Vuoi accettare questa richiesta?',
       [
@@ -150,10 +150,10 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
             try {
               setLoading(true);
               await BookingService.updateBookingStatus(bookingId, 'confirmed');
-              Alert.alert('Successo', 'Prenotazione accettata!');
+              showAlert('Successo', 'Prenotazione accettata!');
             } catch (error) {
               console.error('Errore:', error);
-              Alert.alert('Errore', 'Impossibile accettare la prenotazione');
+              showAlert('Errore', 'Impossibile accettare la prenotazione');
             } finally {
               setLoading(false);
             }
@@ -164,7 +164,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   };
 
   const handleRejectBooking = async (bookingId: string) => {
-    Alert.prompt(
+    showPrompt(
       'Rifiuta Prenotazione',
       'Indica il motivo (opzionale)',
       async (reason) => {
@@ -173,7 +173,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
           await BookingService.updateBookingStatus(bookingId, 'rejected', {
             mechanicNotes: reason || 'Prenotazione rifiutata',
           });
-          Alert.alert('Prenotazione Rifiutata', 'Il cliente verrà notificato.');
+          showAlert('Prenotazione Rifiutata', 'Il cliente verrà notificato.');
         } catch (error) {
           console.error('Errore:', error);
         } finally {
@@ -187,17 +187,17 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     try {
       setLoading(true);
       await BookingService.updateBookingStatus(bookingId, 'in_progress');
-      Alert.alert('Successo', 'Lavori iniziati!');
+      showAlert('Successo', 'Lavori iniziati!');
     } catch (error) {
       console.error('Errore:', error);
-      Alert.alert('Errore', 'Impossibile aggiornare lo stato');
+      showAlert('Errore', 'Impossibile aggiornare lo stato');
     } finally {
       setLoading(false);
     }
   };
 
   const handleMarkCompleted = async (bookingId: string) => {
-    Alert.alert(
+    showAlert(
       'Completa Lavori',
       'Confermi che i lavori sono stati completati? Il cliente riceverà una notifica.',
       [
@@ -225,10 +225,10 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
                 });
               }
 
-              Alert.alert('Successo', 'Lavori completati! Il cliente è stato notificato.');
+              showAlert('Successo', 'Lavori completati! Il cliente è stato notificato.');
             } catch (error) {
               console.error('Errore:', error);
-              Alert.alert('Errore', 'Impossibile completare i lavori');
+              showAlert('Errore', 'Impossibile completare i lavori');
             } finally {
               setLoading(false);
             }
@@ -239,8 +239,8 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   };
 
   const getUnreadCount = (booking: BookingRequest) => {
-    if (!user?.uid) return 0;
-    return BookingService.getUnreadMessageCount(booking, user.uid);
+    if (!user?.id) return 0;
+    return BookingService.getUnreadMessageCount(booking, user.id);
   };
 
   const renderBookingCard = (booking: BookingRequest) => {

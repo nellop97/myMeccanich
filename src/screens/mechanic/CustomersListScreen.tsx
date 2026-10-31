@@ -13,7 +13,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import {
-  Alert,
   FlatList,
   Platform,
   SafeAreaView,
@@ -31,6 +30,7 @@ import MechanicTextInput from './MechanicTextInput';
 import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
 
 import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
 const CustomersListScreen = () => {
   const navigation = useNavigation();
   const theme = useMechanicTheme();
@@ -74,7 +74,7 @@ const CustomersListScreen = () => {
     const customerInvoices = getInvoicesByCustomer(customerId);
 
     if (customerInvoices.length > 0) {
-      Alert.alert(
+      showAlert(
         'Impossibile eliminare',
         `Il cliente ${customerName} ha ${customerInvoices.length} fatture associate. Elimina prima le fatture.`,
         [{ text: 'OK' }]
@@ -82,7 +82,7 @@ const CustomersListScreen = () => {
       return;
     }
 
-    Alert.alert(
+    showAlert(
       'Conferma eliminazione',
       `Sei sicuro di voler eliminare il cliente ${customerName}?`,
       [

@@ -51,6 +51,20 @@ export const buildUserDisplayName = (authUser: AuthUser | null | undefined): str
 };
 
 /**
+ * Costruisce le iniziali dell'utente (massimo due) dal nome visualizzato
+ * @param authUser - L'oggetto utente autenticato
+ * @returns Le iniziali in maiuscolo
+ */
+export const buildUserInitials = (authUser: AuthUser | null | undefined): string =>
+  buildUserDisplayName(authUser)
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+/**
  * Estrae un nome leggibile dall'email
  * @param email - L'indirizzo email
  * @returns Un nome formattato

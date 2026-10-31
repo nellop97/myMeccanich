@@ -10,7 +10,6 @@ import {
   StatusBar,
   FlatList,
   Modal,
-  Alert,
   Linking,
   Platform
 } from 'react-native';
@@ -44,6 +43,7 @@ import { useStore } from '../../store';
 import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
 
 import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
 interface Customer {
   id: string;
   name: string;
@@ -209,7 +209,7 @@ const CustomerDetailScreen = () => {
   };
 
   const handleDelete = () => {
-    Alert.alert(
+    showAlert(
       'Elimina Cliente',
       `Sei sicuro di voler eliminare ${customer.name}? Questa azione eliminerà anche tutti i dati associati.`,
       [

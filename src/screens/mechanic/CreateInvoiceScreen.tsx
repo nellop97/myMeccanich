@@ -16,7 +16,6 @@ import {
 } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
 import {
-    Alert,
     FlatList,
     KeyboardAvoidingView,
     Modal,
@@ -44,6 +43,7 @@ import MechanicTextInput from './MechanicTextInput';
 import { MechanicEmptyState } from './MechanicStates';
 
 import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
 interface RouteParams {
     carId?: string;
     repairId?: string;
@@ -248,7 +248,7 @@ const CreateInvoiceScreen = () => {
     };
 
     const removeItem = (index: number) => {
-        Alert.alert(
+        showAlert(
             'Rimuovi Elemento',
             'Sei sicuro di voler rimuovere questo elemento?',
             [
@@ -308,7 +308,7 @@ const CreateInvoiceScreen = () => {
 
     const handleSubmit = async () => {
         if (!validateForm()) {
-            Alert.alert('Errore', 'Controlla i campi obbligatori');
+            showAlert('Errore', 'Controlla i campi obbligatori');
             return;
         }
 
@@ -338,7 +338,7 @@ const CreateInvoiceScreen = () => {
                 totalDiscount: totals.totalDiscount,
             });
 
-            Alert.alert('Successo', 'Fattura creata con successo', [
+            showAlert('Successo', 'Fattura creata con successo', [
                 {
                     text: 'OK',
                     onPress: () => navigation.goBack(),
@@ -346,7 +346,7 @@ const CreateInvoiceScreen = () => {
             ]);
         } catch (error) {
             console.error('Error creating invoice:', error);
-            Alert.alert('Errore', 'Errore durante la creazione della fattura');
+            showAlert('Errore', 'Errore durante la creazione della fattura');
         } finally {
             setIsLoading(false);
         }

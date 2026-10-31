@@ -61,17 +61,18 @@ const MechanicDashboard: React.FC = () => {
   useEffect(() => {
     if (user) {
       setMechanicData({
-        firstName: user.firstName || 'meccanico',
-        lastName: user.lastName || 'g',
-        workshopName: user.workshopName || 'officina 1',
-        phone: '3333146760',
-        address: 'via genaoc 1',
-        vatNumber: 'P.IVA: 18427',
-        rating: 0.0,
-        reviewsCount: 0,
-        verified: true,
-        ...user
-      } as MechanicData);
+        ...user,
+        // Un dato mancante resta vuoto: lo spread sopra lascerebbe undefined
+        rating: user.rating ?? 0,
+        reviewsCount: user.reviewsCount ?? 0,
+        verified: user.verified ?? false,
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        workshopName: user.workshopName || '',
+        phone: user.phoneNumber || '',
+        address: user.address || '',
+        vatNumber: user.vatNumber || '',
+      } as unknown as MechanicData);
     }
   }, [user]);
 
@@ -99,14 +100,21 @@ const MechanicDashboard: React.FC = () => {
       case 'calendar':
         navigation.navigate('MechanicCalendar' as never);
         break;
+      case 'newAppointment':
+        navigation.navigate('NewAppointment' as never);
+        break;
       case 'invoices':
         navigation.navigate('InvoicingDashboard' as never);
+        break;
+      case 'createInvoice':
+        navigation.navigate('CreateInvoice' as never);
         break;
       case 'customers':
         navigation.navigate('CustomersList' as never);
         break;
       case 'parts':
-        navigation.navigate('RepairPartsManagement' as never, { carId: '', repairId: '' } as never);
+        // Gestione Intervento richiede un intervento: si sceglie dalla lista delle auto
+        navigation.navigate('AllCarsInWorkshop' as never);
         break;
       case 'mechanicProfile':
         navigation.navigate('MechanicProfile' as never);
@@ -114,6 +122,9 @@ const MechanicDashboard: React.FC = () => {
       case 'profile':
         // Fallback per compatibilità
         navigation.navigate('MechanicProfile' as never);
+        break;
+      case 'settings':
+        navigation.navigate('Settings' as never);
         break;
       // Dashboard è il default, non naviga
       default:

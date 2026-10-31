@@ -11,7 +11,6 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
-    Alert,
     Switch,
 } from 'react-native';
 import { ProgressBar } from 'react-native-paper';
@@ -49,6 +48,7 @@ import { mechanicButton, mechanicStaticColors, useMechanicTheme, useMechanicBrea
 import MechanicTextInput from './MechanicTextInput';
 import { MechanicEmptyState } from './MechanicStates';
 import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
 // ============================================================
 // INTERFACES
 // ============================================================
@@ -91,6 +91,7 @@ const AddCustomerScreen = () => {
     const route = useRoute();
     const { width, height, isDesktop, isTablet, isMobile } = useMechanicBreakpoints();
     const { user } = useStore();
+    const { fetchCustomers } = useInvoicingStore();
     const theme = useMechanicTheme();
 
     // Responsive breakpoints
@@ -171,7 +172,7 @@ const AddCustomerScreen = () => {
             }
         } catch (error) {
             console.error('Error loading customer:', error);
-            Alert.alert('Errore', 'Impossibile caricare i dati del cliente');
+            showAlert('Errore', 'Impossibile caricare i dati del cliente');
         } finally {
             setLoadingData(false);
         }
@@ -270,17 +271,21 @@ const AddCustomerScreen = () => {
                 // Update existing customer
                 const docRef = doc(db, 'customers', customerId);
                 await updateDoc(docRef, customerData);
-                Alert.alert('Successo', 'Cliente aggiornato con successo!');
+                showAlert('Successo', 'Cliente aggiornato con successo!');
             } else {
                 // Create new customer
                 await addDoc(collection(db, 'customers'), customerData);
-                Alert.alert('Successo', 'Cliente aggiunto con successo!');
+                showAlert('Successo', 'Cliente aggiunto con successo!');
             }
 
-            navigation.navigate('CustomersList' as never);
+            // La lista resta montata sotto il modal: va aggiornata prima di tornarci
+            if (user?.id) {
+                await fetchCustomers(user.id);
+            }
+            navigation.goBack();
         } catch (error) {
             console.error('Error saving customer:', error);
-            Alert.alert('Errore', 'Impossibile salvare il cliente');
+            showAlert('Errore', 'Impossibile salvare il cliente');
         } finally {
             setLoading(false);
         }

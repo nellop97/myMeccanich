@@ -14,11 +14,11 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
-    Alert,
 } from 'react-native';
 import { X, User, Mail, Phone, Save } from 'lucide-react-native';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
+import { showAlert } from '../utils/platformHelpers';
 
 interface QuickAddCustomerModalProps {
     visible: boolean;
@@ -82,7 +82,7 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
             const snapshot = await getDocs(q);
 
             if (!snapshot.empty) {
-                Alert.alert(
+                showAlert(
                     'Cliente Esistente',
                     `Esiste già un cliente con l'email ${formData.email}. Vuoi cercarlo invece?`,
                     [
@@ -166,10 +166,10 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
             // Chiama il callback con il nuovo cliente
             onCustomerAdded(newCustomer);
 
-            Alert.alert('Successo', 'Cliente aggiunto con successo!');
+            showAlert('Successo', 'Cliente aggiunto con successo!');
         } catch (error: any) {
             console.error('❌ Errore salvataggio cliente:', error);
-            Alert.alert('Errore', error.message || 'Impossibile salvare il cliente');
+            showAlert('Errore', error.message || 'Impossibile salvare il cliente');
         } finally {
             setIsSubmitting(false);
         }

@@ -9,11 +9,11 @@ import {
   Modal,
   ActivityIndicator,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { showAlert } from '../utils/platformHelpers';
 import QuickAddCustomerModal from './QuickAddCustomerModal';
 
 interface User {
@@ -58,7 +58,7 @@ const UserSearchModal: React.FC<UserSearchModalProps> = ({
 
   const searchUsers = async () => {
     if (searchQuery.trim().length < 2) {
-      Alert.alert('Attenzione', 'Inserisci almeno 2 caratteri per la ricerca');
+      showAlert('Attenzione', 'Inserisci almeno 2 caratteri per la ricerca');
       return;
     }
 
@@ -125,7 +125,7 @@ const UserSearchModal: React.FC<UserSearchModalProps> = ({
       setUsers(foundUsers);
     } catch (error) {
       console.error('Errore nella ricerca utenti:', error);
-      Alert.alert('Errore', 'Errore durante la ricerca degli utenti');
+      showAlert('Errore', 'Errore durante la ricerca degli utenti');
     } finally {
       setLoading(false);
     }

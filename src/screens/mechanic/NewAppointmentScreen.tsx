@@ -9,7 +9,6 @@ import {
     TouchableOpacity,
     StyleSheet,
     SafeAreaView,
-    Alert,
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
@@ -44,6 +43,7 @@ import MechanicTextInput from './MechanicTextInput';
 import { MechanicEmptyState } from './MechanicStates';
 
 import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
 interface SelectedCustomer {
     id: string;
     firstName: string;
@@ -230,7 +230,7 @@ const NewAppointmentScreen = () => {
 
     const handleSubmit = async () => {
         if (!validateStep(4) || !user?.id || !selectedCustomer) {
-            Alert.alert('Errore', 'Completa tutti i campi obbligatori');
+            showAlert('Errore', 'Completa tutti i campi obbligatori');
             return;
         }
 
@@ -282,14 +282,14 @@ const NewAppointmentScreen = () => {
 
             await fetchCars(user.id);
 
-            Alert.alert(
+            showAlert(
                 'Successo!',
                 `${vehicleData.make} ${vehicleData.model} aggiunto all'officina`,
-                [{ text: 'OK', onPress: () => navigation.navigate('MechanicDashboard' as never) }]
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
         } catch (error: any) {
             console.error('❌ Errore salvataggio:', error);
-            Alert.alert('Errore', error.message || 'Impossibile salvare il veicolo');
+            showAlert('Errore', error.message || 'Impossibile salvare il veicolo');
         } finally {
             setIsSubmitting(false);
         }

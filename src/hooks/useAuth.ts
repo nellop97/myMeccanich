@@ -1,7 +1,7 @@
 // src/hooks/useAuth.ts - CON LETTURA FIRESTORE PER USERTYPE
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, type DocumentData } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
 export interface AuthUser {
@@ -25,14 +25,80 @@ export interface AuthUser {
     };
     address?: string;
     vatNumber?: string;
+    rating?: number;
+    reviewsCount?: number;
+    verified?: boolean;
     createdAt?: any;
     lastLoginAt?: any;
 }
+
+// Combina dati Firebase Auth con il documento Firestore dell'utente
+const buildAuthUser = (firebaseUser: FirebaseUser, userData: DocumentData): AuthUser => ({
+    uid: firebaseUser.uid,
+    email: firebaseUser.email,
+    // Il profilo salva il nome solo su Firestore: Firebase Auth resta come riserva
+    displayName: userData.displayName || firebaseUser.displayName,
+    photoURL: firebaseUser.photoURL,
+    phoneNumber: firebaseUser.phoneNumber,
+    emailVerified: firebaseUser.emailVerified,
+    // Dati da Firestore
+    name: userData.name || firebaseUser.displayName,
+    firstName: userData.firstName,
+    lastName: userData.lastName,
+    userType: userData.userType, // 'user' o 'mechanic'
+    role: userData.role, // 'owner' o 'mechanic'
+    isMechanic: userData.userType === 'mechanic' || userData.role === 'mechanic',
+    workshopName: userData.workshopName,
+    address: userData.address,
+    vatNumber: userData.vatNumber,
+    workshopInfo: userData.workshopName ? {
+        name: userData.workshopName,
+        address: userData.address,
+        vatNumber: userData.vatNumber,
+    } : undefined,
+    rating: userData.rating,
+    reviewsCount: userData.reviewsCount,
+    verified: userData.verified,
+    createdAt: userData.createdAt,
+    lastLoginAt: userData.lastLoginAt,
+});
+
+// Ogni istanza di useAuth ha il proprio stato: qui si registra per ricevere gli aggiornamenti
+const authUserListeners = new Set<(user: AuthUser) => void>();
+
+/**
+ * Rilegge il documento utente e aggiorna tutte le istanze di useAuth.
+ * Da chiamare dopo aver modificato users/{uid}. Un errore di lettura non
+ * tocca i dati in memoria: il salvataggio che l'ha preceduta resta valido.
+ */
+export const refreshAuthUser = async (): Promise<void> => {
+    const firebaseUser = auth?.currentUser;
+    if (!firebaseUser) return;
+
+    try {
+        const userDocSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+
+        // L'utente puo aver fatto logout durante la lettura
+        if (!userDocSnap.exists() || auth.currentUser?.uid !== firebaseUser.uid) return;
+
+        const updatedUser = buildAuthUser(firebaseUser, userDocSnap.data());
+        authUserListeners.forEach((listener) => listener(updatedUser));
+    } catch (error) {
+        console.error('❌ Errore aggiornamento dati utente:', error);
+    }
+};
 
 export function useAuth() {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [initializing, setInitializing] = useState(true);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        authUserListeners.add(setUser);
+        return () => {
+            authUserListeners.delete(setUser);
+        };
+    }, []);
 
     useEffect(() => {
         if (!auth) {
@@ -61,31 +127,7 @@ export function useAuth() {
                         });
 
                         // Combina dati Firebase Auth con Firestore
-                        const authUserData: AuthUser = {
-                            uid: firebaseUser.uid,
-                            email: firebaseUser.email,
-                            displayName: firebaseUser.displayName,
-                            photoURL: firebaseUser.photoURL,
-                            phoneNumber: firebaseUser.phoneNumber,
-                            emailVerified: firebaseUser.emailVerified,
-                            // Dati da Firestore
-                            name: userData.name || firebaseUser.displayName,
-                            firstName: userData.firstName,
-                            lastName: userData.lastName,
-                            userType: userData.userType, // 'user' o 'mechanic'
-                            role: userData.role, // 'owner' o 'mechanic'
-                            isMechanic: userData.userType === 'mechanic' || userData.role === 'mechanic',
-                            workshopName: userData.workshopName,
-                            address: userData.address,
-                            vatNumber: userData.vatNumber,
-                            workshopInfo: userData.workshopName ? {
-                                name: userData.workshopName,
-                                address: userData.address,
-                                vatNumber: userData.vatNumber,
-                            } : undefined,
-                            createdAt: userData.createdAt,
-                            lastLoginAt: userData.lastLoginAt,
-                        };
+                        const authUserData = buildAuthUser(firebaseUser, userData);
 
                         console.log('✅ User data completo:', {
                             uid: authUserData.uid,

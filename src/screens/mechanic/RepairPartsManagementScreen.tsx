@@ -3,6 +3,7 @@
 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
+  AlertCircle,
   Box,
   Calendar,
   DollarSign,
@@ -18,7 +19,6 @@ import {
 } from 'lucide-react-native';
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
-  Alert,
   Animated,
   FlatList,
   KeyboardAvoidingView,
@@ -31,19 +31,19 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
-  ActivityIndicator,
 } from 'react-native';
 import { useStore } from '../../store';
 import { Part, useWorkshopStore } from '../../store/workshopStore';
+import { confirmAction, showAlert } from '../../utils/platformHelpers';
 
 import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme, useMechanicBreakpoints } from './mechanicTheme';
 import MechanicTextInput from './MechanicTextInput';
-import { MechanicEmptyState } from './MechanicStates';
+import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
 
 import MechanicHeader from './MechanicHeader';
 interface RouteParams {
-  carId: string;
-  repairId: string;
+  carId?: string;
+  repairId?: string;
 }
 
 interface PartFormData {
@@ -66,7 +66,7 @@ const PartFormSheet = ({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSave: (data: PartFormData) => void;
+  onSave: (data: PartFormData) => Promise<void>;
   editingPart: Part | null;
   theme: any;
 }) => {
@@ -79,6 +79,7 @@ const PartFormSheet = ({
     partNumber: '',
     supplier: '',
   });
+  const [saving, setSaving] = useState(false);
 
   const { isDesktop, height: windowHeight } = useMechanicBreakpoints();
   const slideAnimation = React.useRef(new Animated.Value(windowHeight)).current;
@@ -124,20 +125,27 @@ const PartFormSheet = ({
     }
   }, [visible]);
 
-  const handleSave = () => {
+  // La chiusura spetta a onSave: il form resta aperto se la scrittura fallisce
+  const handleSave = async () => {
+    if (saving) return;
     if (!formData.name.trim()) {
-      Alert.alert('Errore', 'Il nome del pezzo è obbligatorio');
+      showAlert('Errore', 'Il nome del pezzo è obbligatorio');
       return;
     }
-    onSave(formData);
-    onClose();
+    setSaving(true);
+    await onSave(formData);
+    setSaving(false);
+  };
+
+  const handleClose = () => {
+    if (!saving) onClose();
   };
 
   if (!visible) return null;
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <TouchableWithoutFeedback onPress={onClose}>
+      <TouchableWithoutFeedback onPress={handleClose}>
         <View style={styles.sheetOverlay} />
       </TouchableWithoutFeedback>
 
@@ -261,18 +269,20 @@ const PartFormSheet = ({
             <View style={styles.formButtons}>
               <TouchableOpacity
                 style={[styles.cancelButton, { borderColor: theme.border }]}
-                onPress={onClose}
+                onPress={handleClose}
+                disabled={saving}
               >
                 <Text style={[styles.cancelButtonText, { color: theme.text }]}>Annulla</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                style={[styles.saveButton, { backgroundColor: theme.primary }, saving && styles.buttonDisabled]}
                 onPress={handleSave}
+                disabled={saving}
               >
                 <Save size={20} color={theme.onPrimary} />
                 <Text style={styles.saveButtonText}>
-                  {editingPart ? 'Aggiorna' : 'Aggiungi'}
+                  {saving ? 'Salvataggio...' : editingPart ? 'Aggiorna' : 'Aggiungi'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -286,7 +296,7 @@ const PartFormSheet = ({
 const RepairPartsManagementScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { carId, repairId } = route.params as RouteParams;
+  const { carId = '', repairId = '' } = (route.params ?? {}) as RouteParams;
 
   const { user } = useStore();
   const { isDesktop, isMobile } = useMechanicBreakpoints();
@@ -300,7 +310,6 @@ const RepairPartsManagementScreen = () => {
     deleteRepairPart,
     updateRepair,
     fetchCars,
-    isLoading
   } = useWorkshopStore();
 
   const [showAddSheet, setShowAddSheet] = useState(false);
@@ -309,18 +318,30 @@ const RepairPartsManagementScreen = () => {
   const [estimatedHours, setEstimatedHours] = useState('');
   const [notes, setNotes] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const car = getCarById(carId);
   const repair = getRepairDetails(carId, repairId);
 
 
   // Carica i dati al mount e quando cambia carId/repairId
-  useEffect(() => {
-    if (user?.id) {
-      console.log('🔧 Caricamento dati riparazione...');
-      fetchCars(user.id);
+  const loadRepairData = useCallback(async () => {
+    if (!user?.id || !carId || !repairId) {
+      setInitialLoading(false);
+      return;
     }
-  }, [user?.id, carId, repairId]);
+    console.log('🔧 Caricamento dati riparazione...');
+    setInitialLoading(true);
+    await fetchCars(user.id);
+    setLoadFailed(!!useWorkshopStore.getState().error);
+    setInitialLoading(false);
+  }, [user?.id, carId, repairId, fetchCars]);
+
+  useEffect(() => {
+    loadRepairData();
+  }, [loadRepairData]);
 
   // Inizializza form quando repair è caricato
   useEffect(() => {
@@ -339,20 +360,7 @@ const RepairPartsManagementScreen = () => {
     }
   }, [user?.id, fetchCars]);
 
-  if (!car || !repair) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-            Caricamento dati riparazione...
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const handleSavePart = useCallback((formData: PartFormData) => {
+  const handleSavePart = useCallback(async (formData: PartFormData) => {
     const partData = {
       name: formData.name,
       quantity: parseInt(formData.quantity) || 1,
@@ -365,14 +373,19 @@ const RepairPartsManagementScreen = () => {
       supplier: formData.supplier,
     };
 
-    if (editingPart) {
-      updateRepairPart(carId, repairId, editingPart.id, partData);
-    } else {
-      addPartToRepair(carId, repairId, partData);
-    }
+    try {
+      if (editingPart) {
+        await updateRepairPart(carId, repairId, editingPart.id, partData);
+      } else {
+        await addPartToRepair(carId, repairId, partData);
+      }
 
-    setEditingPart(null);
-    setShowAddSheet(false);
+      setEditingPart(null);
+      setShowAddSheet(false);
+    } catch (error) {
+      console.error('Errore salvataggio pezzo:', error);
+      showAlert('Errore', 'Impossibile salvare il pezzo. Riprova.');
+    }
   }, [editingPart, carId, repairId, updateRepairPart, addPartToRepair]);
 
   const handleEditPart = useCallback((part: Part) => {
@@ -381,27 +394,36 @@ const RepairPartsManagementScreen = () => {
   }, []);
 
   const handleDeletePart = useCallback((partId: string) => {
-    Alert.alert(
+    confirmAction(
       'Conferma eliminazione',
       'Sei sicuro di voler eliminare questo pezzo?',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina',
-          style: 'destructive',
-          onPress: () => deleteRepairPart(carId, repairId, partId)
+      'Elimina',
+      async () => {
+        try {
+          await deleteRepairPart(carId, repairId, partId);
+        } catch (error) {
+          console.error('Errore eliminazione pezzo:', error);
+          showAlert('Errore', 'Impossibile eliminare il pezzo. Riprova.');
         }
-      ]
+      }
     );
   }, [carId, repairId, deleteRepairPart]);
 
-  const handleSaveRepairDetails = useCallback(() => {
-    updateRepair(carId, repairId, {
-      laborCost: parseFloat(laborCost) || 0,
-      estimatedHours: parseFloat(estimatedHours) || 0,
-      notes: notes,
-    });
-    Alert.alert('Successo', 'Dettagli riparazione salvati');
+  const handleSaveRepairDetails = useCallback(async () => {
+    setSavingDetails(true);
+    try {
+      await updateRepair(carId, repairId, {
+        laborCost: parseFloat(laborCost) || 0,
+        estimatedHours: parseFloat(estimatedHours) || 0,
+        notes: notes,
+      });
+      showAlert('Successo', 'Dettagli riparazione salvati');
+    } catch (error) {
+      console.error('Errore salvataggio dettagli riparazione:', error);
+      showAlert('Errore', 'Impossibile salvare i dettagli della riparazione. Riprova.');
+    } finally {
+      setSavingDetails(false);
+    }
   }, [carId, repairId, laborCost, estimatedHours, notes, updateRepair]);
 
   const getCategoryIcon = (category: string) => {
@@ -433,6 +455,37 @@ const RepairPartsManagementScreen = () => {
     (repair?.laborCost || 0) + partsCost,
     [repair?.laborCost, partsCost]
   );
+
+  // Il return anticipato deve restare dopo tutti gli hook
+  if (!car || !repair) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} />
+
+        <MechanicHeader title="Gestione Intervento" onBack={() => navigation.goBack()} />
+
+        {initialLoading ? (
+          <MechanicLoadingState text="Caricamento dati riparazione..." />
+        ) : loadFailed ? (
+          <MechanicEmptyState
+            icon={AlertCircle}
+            title="Impossibile caricare l'intervento"
+            subtitle="Controlla la connessione e riprova."
+            actionLabel="Riprova"
+            onAction={loadRepairData}
+            style={styles.stateContainer}
+          />
+        ) : (
+          <MechanicEmptyState
+            icon={Wrench}
+            title="Intervento non trovato"
+            subtitle="L'intervento non è stato selezionato oppure non è più disponibile."
+            style={styles.stateContainer}
+          />
+        )}
+      </SafeAreaView>
+    );
+  }
 
   const renderPartItem = ({ item: part }: { item: Part }) => (
     <View style={[
@@ -613,11 +666,14 @@ const RepairPartsManagementScreen = () => {
                   </View>
 
                   <TouchableOpacity
-                    style={[styles.saveDetailsButton, { backgroundColor: theme.success }]}
+                    style={[styles.saveDetailsButton, { backgroundColor: theme.success }, savingDetails && styles.buttonDisabled]}
                     onPress={handleSaveRepairDetails}
+                    disabled={savingDetails}
                   >
                     <Save size={16} color={theme.onPrimary} />
-                    <Text style={styles.saveDetailsButtonText}>Salva Dettagli</Text>
+                    <Text style={styles.saveDetailsButtonText}>
+                      {savingDetails ? 'Salvataggio...' : 'Salva Dettagli'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -702,15 +758,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  loadingContainer: {
+  stateContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  loadingText: {
-    fontSize: 16,
-    marginTop: 12,
+  buttonDisabled: {
+    opacity: 0.6,
   },
   headerActions: {
     flexDirection: 'row',

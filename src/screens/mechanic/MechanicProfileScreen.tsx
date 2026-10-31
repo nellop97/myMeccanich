@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,7 +30,7 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../../hooks/useAuth';
+import { refreshAuthUser, useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -40,6 +39,7 @@ import { useMechanicTheme, mechanicButton, mechanicRadius, useMechanicBreakpoint
 import MechanicTextInput from './MechanicTextInput';
 import { MechanicLoadingState } from './MechanicStates';
 import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
 const ProfileCard = ({ children, style }: any) => {
   const theme = useMechanicTheme();
 
@@ -84,7 +84,7 @@ interface MechanicProfile {
 const MechanicProfileScreen = () => {
   const navigation = useNavigation();
   const { isMobile } = useMechanicBreakpoints();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const theme = useMechanicTheme();
 
   const [loading, setLoading] = useState(true);
@@ -112,7 +112,7 @@ const MechanicProfileScreen = () => {
 
   useEffect(() => {
     loadProfile();
-  }, [user]);
+  }, [user?.uid]);
 
   const loadProfile = async () => {
     if (!user?.uid) return;
@@ -141,7 +141,7 @@ const MechanicProfileScreen = () => {
       }
     } catch (error) {
       console.error('Errore caricamento profilo:', error);
-      Alert.alert('Errore', 'Impossibile caricare il profilo');
+      showAlert('Errore', 'Impossibile caricare il profilo');
     } finally {
       setLoading(false);
     }
@@ -151,12 +151,12 @@ const MechanicProfileScreen = () => {
     if (!user?.uid) return;
 
     if (!workshopName.trim()) {
-      Alert.alert('Errore', 'Inserisci il nome dell\'officina');
+      showAlert('Errore', 'Inserisci il nome dell\'officina');
       return;
     }
 
     if (!address.trim() || !city.trim()) {
-      Alert.alert('Errore', 'Inserisci indirizzo e città dell\'officina');
+      showAlert('Errore', 'Inserisci indirizzo e città dell\'officina');
       return;
     }
 
@@ -182,6 +182,8 @@ const MechanicProfileScreen = () => {
       // Aggiorna displayName se nome e cognome sono presenti
       if (firstName.trim() && lastName.trim()) {
         updateData.displayName = `${firstName.trim()} ${lastName.trim()}`;
+        // name ha la precedenza su displayName in buildUserDisplayName
+        updateData.name = updateData.displayName;
       }
 
       await updateDoc(userDocRef, updateData);
@@ -205,19 +207,22 @@ const MechanicProfileScreen = () => {
         console.log('Workshop non trovato o errore aggiornamento:', workshopError);
       }
 
-      Alert.alert('Successo', 'Profilo aggiornato con successo');
+      // Sidebar e dashboard leggono da useAuth, non da questa schermata
+      await refreshAuthUser();
+
+      showAlert('Successo', 'Profilo aggiornato con successo');
       setEditMode(false);
       await loadProfile();
     } catch (error) {
       console.error('Errore salvataggio:', error);
-      Alert.alert('Errore', 'Impossibile salvare le modifiche');
+      showAlert('Errore', 'Impossibile salvare le modifiche');
     } finally {
       setSaving(false);
     }
   };
 
   const handleLogout = () => {
-    Alert.alert(
+    showAlert(
       'Disconnetti',
       'Sei sicuro di voler uscire?',
       [
@@ -227,10 +232,10 @@ const MechanicProfileScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await logout();
+              await signOut();
             } catch (error) {
               console.error('Errore logout:', error);
-              Alert.alert('Errore', 'Impossibile disconnettersi');
+              showAlert('Errore', 'Impossibile disconnettersi');
             }
           },
         },

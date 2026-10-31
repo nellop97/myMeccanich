@@ -280,19 +280,6 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
           Attività Recente
         </Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('ActivityLog')}
-          style={styles.seeAllButton}
-        >
-          <Text style={[styles.seeAllText, { color: theme.primary }]}>
-            Vedi tutto
-          </Text>
-          <MechanicIcon
-            name="arrow-right"
-            size={16}
-            color={theme.primary}
-          />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.activityList}>
@@ -636,15 +623,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  seeAllText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
 
   // Performance Metrics

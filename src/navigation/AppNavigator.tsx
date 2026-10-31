@@ -61,6 +61,7 @@ import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManageme
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
 import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
 import MechanicBookingsScreen from '../screens/mechanic/MechanicBookingsScreen';
+import MechanicProfileScreen from '../screens/mechanic/MechanicProfileScreen';
 
 // Fatturazione
 import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScreen';
@@ -144,6 +145,7 @@ export type RootStackParamList = {
     RepairPartsManagement: { carId: string; repairId: string };
     NewAppointment: undefined;
     MechanicCalendar: undefined;
+    MechanicProfile: undefined;
 
     // Invoicing
     InvoicingDashboard: undefined;
@@ -327,6 +329,16 @@ export default function AppNavigator() {
                             component={MechanicCalendarScreen}
                             options={{
                                 title: 'Calendario',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="MechanicProfile"
+                            component={MechanicProfileScreen}
+                            options={{
+                                title: 'Profilo Meccanico',
                                 headerShown: false,
                                 animation: 'slide_from_right',
                             }}

@@ -9,7 +9,6 @@ import {
   Animated,
   Dimensions,
   Modal,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
@@ -18,6 +17,8 @@ import { useAppThemeManager } from '../../hooks/useTheme';
 
 import { MECHANIC_MIN_TOUCH, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
 import MechanicIcon from './MechanicIcon';
+import { showAlert } from '../../utils/platformHelpers';
+import { buildUserDisplayName, buildUserInitials } from '../../utils/authUtils';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(screenWidth * 0.85, 320);
 
@@ -60,6 +61,11 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
 
   // Importa useMechanicStats per ottenere dati reali
   const { stats } = useMechanicStats();
+
+  // Dati mostrati nel profilo: se manca l'officina resta un'etichetta neutra
+  const userDisplayName = buildUserDisplayName(user);
+  const userInitials = buildUserInitials(user);
+  const workshopLabel = user?.workshopName || 'Officina';
 
   // Menu items con badge dinamici basati sui dati reali
   const menuSections = {
@@ -162,7 +168,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
   };
 
   const handleLogout = () => {
-    Alert.alert(
+    showAlert(
       'Logout',
       'Sei sicuro di voler uscire?',
       [
@@ -194,7 +200,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
                 closeDrawer();
                 window.location.reload();
               } else {
-                Alert.alert(
+                showAlert(
                   'Errore Logout',
                   'Si è verificato un errore durante il logout. L\'app verrà riavviata.',
                   [{ 
@@ -242,7 +248,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           MyMeccanic
         </Text>
         <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-          {user?.workshopName || 'officina 1'}
+          {workshopLabel}
         </Text>
       </View>
       
@@ -264,7 +270,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
         {/* User Avatar Small */}
         <View style={[styles.userAvatarSmall, { backgroundColor: theme.primary }]}>
           <Text style={[styles.userAvatarSmallText, { color: theme.onPrimary }]}>
-            M
+            {userInitials.charAt(0)}
           </Text>
         </View>
       </View>
@@ -278,13 +284,13 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
       
       <View style={styles.profileContent}>
         <View style={[styles.userAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-          <Text style={styles.userAvatarText}>MG</Text>
+          <Text style={styles.userAvatarText}>{userInitials}</Text>
         </View>
         
         <View style={styles.userInfo}>
           <View style={styles.userNameRow}>
             <Text style={[styles.userName, { color: 'rgba(255,255,255,0.9)' }]}>
-              meccanico g
+              {userDisplayName}
             </Text>
             {user?.verified && (
               <MechanicIcon 
@@ -296,9 +302,9 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           </View>
           
           <Text style={[styles.workshopName, { color: 'rgba(255,255,255,0.9)' }]}>
-            {user?.workshopName || 'officina 1'}
+            {workshopLabel}
           </Text>
-          
+
           <View style={styles.quickStats}>
             <View style={styles.quickStat}>
               <MechanicIcon name="star" size={14} color={theme.onPrimary} />

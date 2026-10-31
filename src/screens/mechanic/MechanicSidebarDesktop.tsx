@@ -10,6 +10,7 @@ import {
   Pressable,
 } from "react-native";
 import { useAuth } from "../../hooks/useAuth";
+import { buildUserDisplayName, buildUserInitials } from "../../utils/authUtils";
 import { Portal, Dialog, Button } from "react-native-paper";
 import { useAppThemeManager } from "../../hooks/useTheme";
 
@@ -106,9 +107,13 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
         onTabChange("calendar");
         break;
       case "NewAppointment":
+        onTabChange("newAppointment");
         break;
       case "InvoicingDashboard":
         onTabChange("invoices");
+        break;
+      case "CreateInvoice":
+        onTabChange("createInvoice");
         break;
       case "CustomersList":
         onTabChange("customers");
@@ -146,20 +151,6 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
     }
   };
 
-  const getUserInitials = () => {
-    if (user?.displayName) {
-      return user.displayName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase();
-    }
-    if (user?.email) {
-      return user.email[0].toUpperCase();
-    }
-    return "U";
-  };
-
   return (
     <>
       <View
@@ -188,11 +179,11 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
           onPress={() => handleMenuNavigation("MechanicProfile")}
         >
           <View style={[styles.userAvatar, { backgroundColor: theme.primary }]}>
-            <Text style={styles.userAvatarText}>{getUserInitials()}</Text>
+            <Text style={styles.userAvatarText}>{buildUserInitials(user)}</Text>
           </View>
           <View style={styles.userInfo}>
             <Text style={[styles.userName, { color: theme.text }]}>
-              {user?.displayName || "Meccanico"}
+              {buildUserDisplayName(user)}
             </Text>
             <Text style={[styles.userRole, { color: theme.textSecondary }]}>
               Amministratore
