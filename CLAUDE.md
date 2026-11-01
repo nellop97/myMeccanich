@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-MyMechanic: an Expo SDK 54 / React Native 0.81 / React 19 app for iOS, Android and web, backed directly by Firebase (Auth, Firestore, Storage) with no server of its own. It serves two roles: vehicle owners and mechanics. UI strings, comments and log messages are in Italian, and there is no i18n layer.
+MyMechanic: an Expo SDK 54 / React Native 0.81 / React 19 app for iOS, Android and web, backed directly by Firebase (Auth, Firestore, Storage). The only server code is a Cloud Function in `functions/`, not active yet. It serves two roles: vehicle owners and mechanics. UI strings, comments and log messages are in Italian, and there is no i18n layer.
 
 `README.md` is unmodified create-expo-app boilerplate: this project does not use Expo Router or an `app/` directory, and `npm run reset-project` does not exist. `replit.md` is a useful overview but partly dated; trust the code over it.
 
@@ -22,11 +22,12 @@ npx tsc --noEmit               # Type check
 npx eslint <path>              # Lint (no npm script exists)
 
 npm run firebase:deploy:rules  # Deploy Firestore rules (firebase CLI is not a project dependency)
+cd functions && npm run build  # Build the Cloud Function
 ```
 
 There is no test runner or test suite, so a change can only be verified through type checking, linting and running the app.
 
-`tsc` currently reports about 330 existing errors, so compare errors in the files you touched rather than expecting a clean run.
+`tsc` and ESLint are clean on `src`, so any new error comes from your change. `scripts/` type-checks through the `firebase-admin` dev dependency.
 
 ## Architecture
 
@@ -79,6 +80,20 @@ The work lifecycle is `pending` → `confirmed` → `in_progress` → `ready` �
 Records with `verifiedByWorkshop` are the vehicle's proof of work for resale: the rules let the owner change only `isVisible`, and delete only through a transfer. A prospective buyer reads the history only through `vehicle_history_access/{vehicleId}_{email}`: only the vehicle's owner can write it, on approval, and the rules check its `expiresAt`. Never gate this on `vehicle_view_requests`, because anyone can create those with any status. Rules cannot hide single fields, so the `maintenanceDetails` flag hides costs only in the app. Owners always see their own costs; `privacySettings.showCosts` applies to other viewers.
 
 The mechanic dashboard derives its numbers from `workshopCars` and `invoices` (`utils/invoiceStats.ts`), not from the `appointments` collection. Drafts count as pending invoices; revenue counts paid customer invoices by `paidDate`.
+
+### Workshop inventory
+
+`inventory_items` holds the stock and `inventory_movements` is an append-only log, both private to the mechanic. `InventoryService` is the only writer. Items are archived, never deleted, and a unique part such as an engine is one item with a `serialNumber` and quantity 1.
+
+- Committed stock is derived on the device from the parts of `pending` and `in_progress` repairs (`utils/inventoryStock.ts`), not stored: customers can cancel but cannot write inventory, so a saved counter would drift.
+- Stock leaves only in `completeIntervention`: every read comes before any write, `applyConsumptionInTransaction` uses the fixed movement id `{repairId}_{partId}`, and a repair that is `ready`, `completed` or `cancelled` cannot be closed.
+- Parts with `source` `bought_for_job` or `customer_supplied` never touch stock.
+- `workshopCars` and `maintenance_records` are readable by the customer, so `purchaseCost` and the supplier stay in `inventory_items`. `RepairPart.unitCost` is an alias of the sale price, not a purchase cost.
+- A mounted part needs a code and an origin, plus a photo unless `requiresMountedPhoto` says otherwise. This is the workshop's declaration, not a verification of authenticity, and the customer UI says so.
+
+`functions/` holds `analyzePartPhoto`, currently switched off: `AI_PART_ANALYSIS_ENABLED` in `src/config/features.ts` is false, so the button only opens an explanatory popup, and `firebase.json` has no `functions` block, so nothing is deployed. It is a callable in `europe-west1` that reads a part photo with the Claude API. The key lives in Secret Manager and must never reach the app. Its result only prefills a form: the mechanic confirms, and the manual flow must keep working when the function is unavailable. `PartAnalysis` is duplicated in `functions/src/index.ts` because that folder compiles separately. See `functions/README.md`.
+
+Planned AI features are listed in `src/config/aiFeatures.ts` and shown by `AiComingSoonButton`, which only opens an explanatory popup.
 
 ### Vehicle transfers
 
