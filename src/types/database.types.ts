@@ -3,6 +3,8 @@
 // =====================================================
 // src/types/database.types.ts
 
+import type { PartOrigin, PartSource } from './inventory.types';
+
 export interface Vehicle {
   id: string;
   ownerId: string;
@@ -135,6 +137,10 @@ export interface MaintenancePart {
   unitPrice?: number;
   brand?: string;
   cost?: number; // Total cost for this part
+  source?: PartSource;
+  origin?: PartOrigin;
+  photoUrl?: string;
+  serialNumber?: string;
 }
 
 export interface MaintenanceDocument {

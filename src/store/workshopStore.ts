@@ -17,6 +17,8 @@ import {
     Timestamp,
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import type { PartOrigin, PartSource } from '../types/inventory.types';
+import { toStoredPart, toStoredRepair } from '../utils/firestoreData';
 
 export interface WorkshopCar {
     id: string;
@@ -49,6 +51,7 @@ export interface Repair {
     totalCost: number;
     laborCost: number;
     estimatedHours: number;
+    actualHours?: number;
     status: 'pending' | 'in_progress' | 'ready' | 'completed' | 'cancelled';
     parts: RepairPart[];
     subtotal?: number;
@@ -73,6 +76,12 @@ export interface RepairPart {
     partNumber?: string;
     brand?: string;
     category?: 'ricambio' | 'fluido' | 'consumabile' | 'accessorio';
+    // workshopCars è leggibile dal cliente: mai aggiungere qui costo d'acquisto o fornitore di magazzino
+    inventoryItemId?: string;
+    source?: PartSource;
+    origin?: PartOrigin;
+    photoUrl?: string;
+    serialNumber?: string;
 }
 
 // Alias per compatibilità
@@ -385,7 +394,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
             const updatedRepairs = car.repairs.map(repair =>
                 repair.id === repairId
-                    ? { ...repair, ...updates, updatedAt: now } // ✅ ISO string
+                    ? toStoredRepair({ ...repair, ...updates, updatedAt: now }) // ✅ ISO string
                     : repair
             );
 
@@ -445,10 +454,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             const car = carDoc.data() as WorkshopCar;
             const now = new Date().toISOString();
 
-            const newPart: RepairPart = {
+            const newPart = toStoredPart({
                 ...part,
                 id: `part_${Date.now()}`,
-            };
+            });
 
             const updatedRepairs = car.repairs.map(repair => {
                 if (repair.id === repairId) {
@@ -494,7 +503,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     return {
                         ...repair,
                         parts: repair.parts.map(part =>
-                            part.id === partId ? { ...part, ...updates } : part
+                            part.id === partId ? toStoredPart({ ...part, ...updates }) : part
                         ),
                         updatedAt: now, // ✅ ISO string
                     };
