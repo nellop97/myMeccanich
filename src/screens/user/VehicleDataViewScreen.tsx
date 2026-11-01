@@ -42,6 +42,7 @@ import {
   User,
   UserCheck
 } from 'lucide-react-native';
+import { getDisplayableParts, InstalledPartsList } from '../../components/InstalledPartRow';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
 import { auth } from '../../services/firebase';
@@ -214,6 +215,9 @@ export default function VehicleDataViewScreen() {
       return null;
     }
 
+    // Il servizio toglie i totali ma non i costi dentro parts: senza il flag restano nascosti
+    const showCosts = requestData?.visibleData?.maintenanceDetails === true;
+
     return (
       <Card style={[styles.card, { backgroundColor: colors.surface }]}>
         <Card.Content>
@@ -286,15 +290,15 @@ export default function VehicleDataViewScreen() {
 
                 {record.verifiedByWorkshop && (
                   <Text style={{ color: colors.onSurfaceVariant, marginTop: 4 }}>
-                    Eseguita da officina, dati non modificabili{record.parts?.length ? ` · ${record.parts.length} ricambi` : ''}{record.photos?.length ? ` · ${record.photos.length} foto` : ''}
+                    Eseguita da officina, dati non modificabili{getDisplayableParts(record.parts).length ? ` · ${getDisplayableParts(record.parts).length} ricambi` : ''}{record.photos?.length ? ` · ${record.photos.length} foto` : ''}
                   </Text>
                 )}
 
-                {record.parts?.length > 0 && (
-                  <Text style={{ color: colors.onSurface, marginTop: 4 }}>
-                    Ricambi: {record.parts.map((part: any) => part.name).join(', ')}
-                  </Text>
-                )}
+                <InstalledPartsList
+                  parts={record.parts}
+                  showCosts={showCosts}
+                  verifiedByWorkshop={record.verifiedByWorkshop}
+                />
 
                 {record.photos?.length > 0 && (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
