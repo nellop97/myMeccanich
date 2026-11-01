@@ -466,10 +466,8 @@ const CarDetailScreen = () => {
         copyToCacheDirectory: true,
       });
 
-      if (result.type === 'success' || !result.canceled) {
-        // @ts-ignore
-        const file = result.assets ? result.assets[0] : result;
-        await uploadDocument(file);
+      if (!result.canceled) {
+        await uploadDocument(result.assets[0]);
       }
     } catch (error) {
       console.error('Error picking document:', error);

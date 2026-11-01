@@ -1,4 +1,5 @@
 // src/hooks/useTheme.ts
+import React from 'react';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useStore } from '../store';
 

@@ -102,13 +102,13 @@ export const UniversalDocumentPicker: React.FC<UniversalDocumentPickerProps> = (
                 copyToCacheDirectory: true,
             });
 
-            if (result.type === 'success') {
-                const docs = result.uri ? [{
-                    uri: result.uri,
-                    name: result.name,
-                    size: result.size,
-                    type: result.mimeType,
-                }] : [];
+            if (!result.canceled) {
+                const docs = result.assets.map((asset) => ({
+                    uri: asset.uri,
+                    name: asset.name,
+                    size: asset.size,
+                    type: asset.mimeType,
+                }));
 
                 // Valida i file
                 const validDocs: DocumentAsset[] = [];
@@ -171,7 +171,7 @@ export const UniversalDocumentPicker: React.FC<UniversalDocumentPickerProps> = (
         input.multiple = multiple;
 
         input.onchange = (e: any) => {
-            const files = Array.from(e.target.files);
+            const files = Array.from(e.target.files as FileList);
             processWebFiles(files);
         };
 
@@ -242,10 +242,12 @@ export const UniversalDocumentPicker: React.FC<UniversalDocumentPickerProps> = (
                             borderColor: isDragging ? colors.primary : colors.outline,
                         }
                     ]}
-                    onDragOver={handleDragOver as any}
-                    onDragLeave={handleDragLeave as any}
-                    onDrop={handleDrop as any}
-                    onClick={handleWebFileSelect}
+                    {...({
+                        onDragOver: handleDragOver,
+                        onDragLeave: handleDragLeave,
+                        onDrop: handleDrop,
+                        onClick: handleWebFileSelect,
+                    } as object)}
                 >
                     {isLoading ? (
                         <ActivityIndicator size="large" color={colors.primary} />
@@ -340,7 +342,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
-        transition: 'all 0.3s ease',
     },
     dropText: {
         fontSize: 16,
