@@ -4,6 +4,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
+import { getFunctions, Functions } from 'firebase/functions';
 
 // Configurazione Firebase
 const firebaseConfig = {
@@ -20,6 +21,7 @@ let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 let storage: FirebaseStorage;
+let functions: Functions;
 
 // Inizializzazione
 try {
@@ -39,6 +41,7 @@ try {
     // Inizializza Firestore e Storage
     db = getFirestore(app);
     storage = getStorage(app);
+    functions = getFunctions(app, 'europe-west1');
 
     console.log(`✅ Firebase completamente inizializzato per ${Platform.OS}`);
 } catch (error) {
@@ -69,8 +72,8 @@ export const handleAuthError = (error: any): string => {
 };
 
 // Export
-export { app, auth, db, storage };
+export { app, auth, db, storage, functions };
 export const isWeb = Platform.OS === 'web';
 export const isMobile = Platform.OS !== 'web';
 
-export default { app, auth, db, storage, isFirebaseReady, handleAuthError, isWeb, isMobile };
+export default { app, auth, db, storage, functions, isFirebaseReady, handleAuthError, isWeb, isMobile };
