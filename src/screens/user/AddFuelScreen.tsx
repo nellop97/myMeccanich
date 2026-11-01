@@ -27,6 +27,7 @@ import { db, auth } from '../../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useStore } from '../../store';
 import { useAppThemeManager } from '../../hooks/useTheme';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 
 interface RouteParams {
     carId: string;
@@ -163,6 +164,8 @@ const AddFuelScreen = () => {
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
                 <ScrollView contentContainerStyle={styles.content}>
+                    <AiComingSoonButton feature="receipt" style={styles.aiButton} />
+
                     {/* Data */}
                     <TouchableOpacity
                         style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.outline }]}
@@ -314,7 +317,6 @@ const AddFuelScreen = () => {
                         updateField('date', date);
                         setShowDatePicker(false);
                     }}
-                    onClose={() => setShowDatePicker(false)}
                 />
             )}
         </SafeAreaView>
@@ -322,6 +324,9 @@ const AddFuelScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    aiButton: {
+        marginBottom: 16,
+    },
     container: {
         flex: 1,
     },

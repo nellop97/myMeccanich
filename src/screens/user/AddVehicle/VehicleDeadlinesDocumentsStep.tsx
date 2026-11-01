@@ -15,6 +15,7 @@ import {
 import { FileText, Upload, X } from 'lucide-react-native';
 import UniversalDatePicker from '../../../components/UniversalDatePicker';
 import { VehicleFormData } from '../../../types/addVehicle.types';
+import { AiComingSoonButton } from '../../../components/AiComingSoonButton';
 
 interface Props {
     formData: VehicleFormData;
@@ -64,6 +65,8 @@ const VehicleDeadlinesDocumentsStep: React.FC<Props> = ({
                 ]}
                 showsVerticalScrollIndicator={false}
             >
+                <AiComingSoonButton feature="deadlineDocument" style={styles.aiButton} />
+
                 <Text style={styles.subtitle}>
                     Inserisci le date di scadenza e carica i documenti relativi al tuo
                     veicolo.
@@ -198,6 +201,9 @@ const VehicleDeadlinesDocumentsStep: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
+    aiButton: {
+        marginBottom: 16,
+    },
     container: {
         flex: 1,
     },

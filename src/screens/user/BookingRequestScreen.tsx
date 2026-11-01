@@ -22,6 +22,7 @@ import { VehicleService } from '../../services/VehicleService';
 import { Workshop, Vehicle, WorkshopService as WorkshopServiceType } from '../../types/database.types';
 import UniversalDatePicker from '../../components/UniversalDatePicker';
 import { showAlert } from '../../utils/platformHelpers';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 
 interface BookingRequestScreenProps {
   navigation: any;
@@ -239,7 +240,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         <Car size={32} color={theme.primary} />
         <Text style={[styles.stepTitle, { color: theme.text }]}>Seleziona Veicolo</Text>
         <Text style={[styles.stepDescription, { color: theme.textSecondary }]}>
-          Scegli il veicolo per cui richiedere l'intervento
+          Scegli il veicolo per cui richiedere l&apos;intervento
         </Text>
       </View>
 
@@ -420,6 +421,8 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
           Fornisci più dettagli possibili
         </Text>
       </View>
+
+      <AiComingSoonButton feature="ownerProblem" style={styles.aiButton} />
 
       <TextInput
         style={[
@@ -638,6 +641,9 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
 }
 
 const styles = StyleSheet.create({
+  aiButton: {
+    marginBottom: 16,
+  },
   characterHint: {
     fontSize: 13,
     marginTop: 6,

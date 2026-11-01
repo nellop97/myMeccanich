@@ -15,6 +15,7 @@ import {
     FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 import {
     Car,
     User,
@@ -548,7 +549,7 @@ const NewAppointmentScreen = () => {
                     <View style={[styles.infoBar, { backgroundColor: theme.primaryLight }]}>
                         <CheckCircle size={16} color={theme.success} />
                         <Text style={[styles.infoBarText, { color: theme.text }]}>
-                            Auto caricata dall'archivio. Puoi modificare i dati se necessario.
+                            Auto caricata dall&apos;archivio. Puoi modificare i dati se necessario.
                         </Text>
                     </View>
                 )}
@@ -657,6 +658,7 @@ const NewAppointmentScreen = () => {
                 <View style={styles.formGrid}>
                     <View style={styles.formGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>Descrizione Intervento *</Text>
+                        <AiComingSoonButton feature="mechanicProblem" style={styles.aiButton} />
                         <MechanicTextInput
                             error={!!errors.description}
                             style={styles.textArea}
@@ -823,6 +825,9 @@ const NewAppointmentScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    aiButton: {
+        marginBottom: 8,
+    },
     container: { flex: 1 },
     stepIndicatorContainer: {
         flexDirection: 'row',

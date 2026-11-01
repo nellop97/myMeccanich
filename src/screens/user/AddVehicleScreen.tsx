@@ -31,6 +31,7 @@ import { VehicleFormData, AddVehicleStep } from '../../types/addVehicle.types';
 import { collection, addDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 import { showAlert } from '../../utils/platformHelpers';
 import { db } from '../../services/firebase';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 
 const AddVehicleScreen = () => {
     const navigation = useNavigation();
@@ -294,7 +295,12 @@ const AddVehicleScreen = () => {
 
         switch (currentStep) {
             case 1:
-                return <VehicleBasicInfoStep {...stepProps} />;
+                return (
+                    <>
+                        <AiComingSoonButton feature="vehicleRegistration" style={styles.aiButton} />
+                        <VehicleBasicInfoStep {...stepProps} />
+                    </>
+                );
             case 2:
                 return <VehicleTechnicalDetailsStep {...stepProps} />;
             case 3: // NUOVO
@@ -304,7 +310,7 @@ const AddVehicleScreen = () => {
                         updateFormData={updateFormData}
                         onNext={handleNext}
                         onBack={handleBack}
-                        userId={user.id}
+                        userId={user?.id ?? ''}
                     />
                 );
             case 4:
@@ -415,6 +421,9 @@ const AddVehicleScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    aiButton: {
+        margin: 16,
+    },
     container: {
         flex: 1,
         backgroundColor: '#f8fafc',

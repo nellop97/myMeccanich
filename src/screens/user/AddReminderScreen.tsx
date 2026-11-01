@@ -41,6 +41,7 @@ import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
 import ReminderService from '../../services/ReminderService';
 import { ReminderType } from '../../types/database.types';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 
 // ============================================
 // GLASS CARD COMPONENT
@@ -330,6 +331,8 @@ const AddReminderScreen = () => {
             ]}
             showsVerticalScrollIndicator={false}
           >
+            <AiComingSoonButton feature="deadlineDocument" style={styles.aiButton} />
+
             {/* Veicolo */}
             <GlassCard style={styles.card}>
               <View style={styles.cardHeader}>
@@ -667,6 +670,9 @@ const AddReminderScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  aiButton: {
+    marginBottom: 16,
+  },
   container: {
     flex: 1,
   },
