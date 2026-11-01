@@ -534,50 +534,28 @@ const AddDocumentScreen = () => {
 
                         <View style={styles.attachmentButtons}>
                             <UniversalImagePicker
-                                onImageSelected={(image) => {
-                                    setAttachments(prev => [...prev, {
+                                label="Foto"
+                                onImagesSelected={(images) => {
+                                    setAttachments(prev => [...prev, ...images.map((image) => ({
                                         uri: image.uri,
                                         type: 'image',
                                         name: image.fileName || 'image.jpg',
                                         size: image.fileSize,
-                                    }]);
+                                    }))]);
                                 }}
-                            >
-                                <TouchableOpacity
-                                    style={[styles.attachmentButton, {
-                                        backgroundColor: colors.primaryContainer,
-                                        borderColor: colors.primary,
-                                    }]}
-                                >
-                                    <Camera size={20} color={colors.primary} />
-                                    <Text style={[styles.attachmentButtonText, { color: colors.primary }]}>
-                                        Foto
-                                    </Text>
-                                </TouchableOpacity>
-                            </UniversalImagePicker>
+                            />
 
                             <UniversalDocumentPicker
-                                onDocumentSelected={(doc) => {
-                                    setAttachments(prev => [...prev, {
+                                label="File"
+                                onDocumentsSelected={(documents) => {
+                                    setAttachments(prev => [...prev, ...documents.map((doc) => ({
                                         uri: doc.uri,
                                         type: 'document',
                                         name: doc.name,
                                         size: doc.size,
-                                    }]);
+                                    }))]);
                                 }}
-                            >
-                                <TouchableOpacity
-                                    style={[styles.attachmentButton, {
-                                        backgroundColor: colors.secondaryContainer,
-                                        borderColor: colors.secondary,
-                                    }]}
-                                >
-                                    <Upload size={20} color={colors.secondary} />
-                                    <Text style={[styles.attachmentButtonText, { color: colors.secondary }]}>
-                                        File
-                                    </Text>
-                                </TouchableOpacity>
-                            </UniversalDocumentPicker>
+                            />
                         </View>
 
                         {/* Attachment List */}

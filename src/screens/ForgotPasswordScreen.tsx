@@ -107,7 +107,7 @@ const ForgotPasswordScreen = () => {
                         <Text style={styles.successTitle}>Email Inviata!</Text>
 
                         <Text style={styles.successMessage}>
-                            Ti abbiamo inviato un'email con le istruzioni per reimpostare la tua password.
+                            Ti abbiamo inviato un&apos;email con le istruzioni per reimpostare la tua password.
                         </Text>
 
                         <View style={styles.successInfo}>
@@ -118,9 +118,9 @@ const ForgotPasswordScreen = () => {
                         </View>
 
                         <View style={styles.successTips}>
-                            <Text style={styles.successTipsTitle}>Non trovi l'email?</Text>
+                            <Text style={styles.successTipsTitle}>Non trovi l&apos;email?</Text>
                             <Text style={styles.successTip}>• Controlla la cartella spam</Text>
-                            <Text style={styles.successTip}>• Verifica di aver inserito l'email corretta</Text>
+                            <Text style={styles.successTip}>• Verifica di aver inserito l&apos;email corretta</Text>
                             <Text style={styles.successTip}>• Attendi qualche minuto</Text>
                         </View>
 
@@ -140,7 +140,7 @@ const ForgotPasswordScreen = () => {
                             }}
                         >
                             <Text style={styles.resendButtonText}>
-                                Invia di nuovo l'email
+                                Invia di nuovo l&apos;email
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -236,7 +236,7 @@ const ForgotPasswordScreen = () => {
                     {/* Info Box */}
                     <View style={styles.infoBox}>
                         <Text style={styles.infoText}>
-                            💡 Riceverai un'email con un link per reimpostare la password.
+                            💡 Riceverai un&apos;email con un link per reimpostare la password.
                             Il link sarà valido per 1 ora.
                         </Text>
                     </View>

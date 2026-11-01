@@ -96,7 +96,7 @@ export class ImageService {
                     height: asset.height,
                     type: asset.type,
                     fileName: asset.fileName || `image_${Date.now()}.jpg`,
-                    base64: asset.base64,
+                    base64: asset.base64 ?? undefined,
                 };
             }
 
@@ -152,7 +152,7 @@ export class ImageService {
                     height: asset.height,
                     type: asset.type,
                     fileName: `photo_${Date.now()}.jpg`,
-                    base64: asset.base64,
+                    base64: asset.base64 ?? undefined,
                 };
             }
 

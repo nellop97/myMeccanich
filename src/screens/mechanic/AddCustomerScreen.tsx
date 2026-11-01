@@ -98,7 +98,7 @@ const AddCustomerScreen = () => {
     const isLargeScreen = width >= 1440;
 
     // Edit mode
-    const customerId = route.params?.customerId;
+    const customerId = (route.params as { customerId?: string } | undefined)?.customerId;
     const isEditing = !!customerId;
 
     // Form state
@@ -565,7 +565,7 @@ const AddCustomerScreen = () => {
                 Indirizzo
             </Text>
             <Text style={[styles.stepDescription, { color: theme.textSecondary }]}>
-                Inserisci l'indirizzo completo del cliente
+                Inserisci l&apos;indirizzo completo del cliente
             </Text>
 
             <View style={[styles.inputGroup, isDesktop && styles.desktopInputGroup]}>

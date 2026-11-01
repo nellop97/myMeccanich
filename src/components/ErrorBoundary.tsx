@@ -2,10 +2,10 @@
 import React from 'react';
 import { View, Text, Button } from 'react-native';
 
-export class ErrorBoundary extends React.Component {
+export class ErrorBoundary extends React.Component<React.PropsWithChildren> {
     state = { hasError: false, error: null };
 
-    static getDerivedStateFromError(error) {
+    static getDerivedStateFromError(error: unknown) {
         return { hasError: true, error };
     }
 

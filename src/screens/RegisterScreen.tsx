@@ -202,7 +202,7 @@ const RegisterScreen = () => {
                 lastName: formData.lastName.trim(),
                 name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
                 userType: firestoreUserType,
-                role: userType,
+                role: userType ?? undefined,
                 phone: formData.phone?.trim() || null,
                 emailVerified: false,
                 loginProvider: 'email',
@@ -226,12 +226,11 @@ const RegisterScreen = () => {
             console.log('✅ Dati salvati su Firestore');
 
             // 6. Analytics
-            logRegistration(userType || 'owner');
+            logRegistration(userType === 'mechanic' ? 'mechanic' : 'user');
 
             // 7. Aggiorna Store
             setUser({
                 id: userId,
-                uid: userId,
                 name: userData.name,
                 email: userData.email,
                 firstName: userData.firstName,
@@ -239,7 +238,7 @@ const RegisterScreen = () => {
                 isLoggedIn: true,
                 isMechanic: userType === 'mechanic',
                 userType: firestoreUserType,
-                role: userType,
+                role: userType ?? undefined,
                 phoneNumber: userData.phone || undefined,
                 emailVerified: false,
                 profileComplete: true,

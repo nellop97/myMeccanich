@@ -202,7 +202,7 @@ export class VehicleViewRequestService {
       const request = docSnap.data() as VehicleViewRequest;
 
       // Verifica che non sia scaduta
-      if (request.expiresAt.toDate() < new Date()) {
+      if ((request.expiresAt as unknown as Timestamp).toDate() < new Date()) {
         throw new Error('Richiesta scaduta');
       }
 
@@ -331,7 +331,7 @@ export class VehicleViewRequestService {
       }
 
       // Verifica scadenza
-      if (request.expiresAt.toDate() < new Date()) {
+      if ((request.expiresAt as unknown as Timestamp).toDate() < new Date()) {
         await updateDoc(docRef, { status: 'expired' });
         throw new Error('Richiesta scaduta');
       }

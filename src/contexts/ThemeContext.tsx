@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
 import { MD3LightTheme, MD3DarkTheme, PaperProvider, configureFonts } from 'react-native-paper';
+import type { MD3Type } from 'react-native-paper/lib/typescript/types';
 import { useStore } from '../store';
 
 // Definizione dei colori personalizzati per l'app
@@ -80,7 +81,7 @@ const darkColors = {
 };
 
 // Font configuration
-const fontConfig = {
+const fontConfig: Record<string, MD3Type> = {
   displayLarge: {
     fontFamily: 'System',
     fontSize: 57,

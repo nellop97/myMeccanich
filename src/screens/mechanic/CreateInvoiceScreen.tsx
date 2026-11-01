@@ -225,10 +225,7 @@ const CreateInvoiceScreen = () => {
     const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
         setItems(prev => {
             const newItems = [...prev];
-            const item = { ...newItems[index] };
-
-            // Update field
-            item[field] = value;
+            const item: InvoiceItem = { ...newItems[index], [field]: value };
 
             // Recalculate totals
             const quantity = parseFloat(item.quantity as any) || 0;

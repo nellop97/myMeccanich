@@ -125,7 +125,7 @@ export class TransferService {
       const transfer = docSnap.data() as VehicleTransfer;
 
       // Controlla se scaduto
-      if (transfer.expiresAt.toDate() < new Date()) {
+      if ((transfer.expiresAt as unknown as Timestamp).toDate() < new Date()) {
         await this.cancelTransfer(transferId, 'expired');
         return { success: false };
       }

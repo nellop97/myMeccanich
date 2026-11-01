@@ -457,7 +457,7 @@ const ReportsScreen = () => {
               <TrendingUp size={16} color={theme.warning} />
             </View>
             <Text style={[styles.insightText, { color: theme.textSecondary }]}>
-              Le spese di manutenzione sono aumentate dell'8.7%
+              Le spese di manutenzione sono aumentate dell&apos;8.7%
             </Text>
           </View>
           

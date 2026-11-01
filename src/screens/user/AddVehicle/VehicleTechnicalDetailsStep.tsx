@@ -195,6 +195,13 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
+    optionalLabel: {
+        fontWeight: '400',
+        color: '#64748b',
+    },
+    helperTextContainer: {
+        marginTop: 4,
+    },
     container: {
         flex: 1,
     },

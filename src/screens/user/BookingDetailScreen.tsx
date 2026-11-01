@@ -327,7 +327,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
             accessibilityRole="button"
           >
             <Check size={20} color={theme.onPrimary} />
-            <Text style={styles.proposalButtonText}>Ho ritirato l'auto</Text>
+            <Text style={styles.proposalButtonText}>Ho ritirato l&apos;auto</Text>
           </TouchableOpacity>
         )}
       </View>

@@ -275,7 +275,7 @@ const TransferRequestsScreen = () => {
         {request.message && (
           <View style={[styles.messageSection, { backgroundColor: theme.background + '50' }]}>
             <Text style={[styles.messageText, { color: theme.text }]}>
-              "{request.message}"
+              &quot;{request.message}&quot;
             </Text>
           </View>
         )}

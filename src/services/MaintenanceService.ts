@@ -177,8 +177,8 @@ export class MaintenanceService {
       // Gestisci Timestamp di Firebase (lascialo com'è)
       else if (value && typeof value === 'object' &&
                (value.constructor?.name === 'Timestamp' ||
-                value.toDate !== undefined ||
-                value.seconds !== undefined)) {
+                'toDate' in value ||
+                'seconds' in value)) {
         sanitized[key] = value;
       }
       // Gestisci oggetti nested

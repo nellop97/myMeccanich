@@ -50,7 +50,7 @@ const VehicleSummaryStep: React.FC<Props> = ({
             >
                 <Text style={styles.title}>Riepilogo Veicolo</Text>
                 <Text style={styles.subtitle}>
-                    Controlla i dati inseriti prima di confermare l'aggiunta del veicolo.
+                    Controlla i dati inseriti prima di confermare l&apos;aggiunta del veicolo.
                 </Text>
 
                 {/* Dati di Base */}

@@ -19,6 +19,7 @@ export interface AuthUser {
     isMechanic: boolean;
     workshopName?: string;
     workshopInfo?: {
+        phone?: string;
         name?: string;
         address?: string;
         vatNumber?: string;

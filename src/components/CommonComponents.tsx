@@ -154,7 +154,7 @@ export const GradientButton: React.FC<GradientButtonProps> = ({
     const { colors, isDark } = useAppThemeManager();
     const [pressed, setPressed] = useState(false);
 
-    const getGradientColors = () => {
+    const getGradientColors = (): [string, string] => {
         if (disabled || loading) {
             return isDark
                 ? ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.1)']

@@ -363,7 +363,7 @@ const VehicleImagesStep: React.FC<VehicleImagesStepProps> = ({
             {/* Info */}
             <View style={styles.infoBox}>
                 <Text style={styles.infoText}>
-                    💡 Le foto aiutano a identificare meglio il veicolo. Tocca un'immagine per impostarla come principale.
+                    💡 Le foto aiutano a identificare meglio il veicolo. Tocca un&apos;immagine per impostarla come principale.
                 </Text>
             </View>
 

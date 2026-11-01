@@ -276,7 +276,7 @@ const UserSearchModal: React.FC<UserSearchModalProps> = ({
                 Cerca un cliente
               </Text>
               <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-                Inserisci nome, email o numero di telefono{'\n'}per trovare il proprietario dell'auto
+                Inserisci nome, email o numero di telefono{'\n'}per trovare il proprietario dell&apos;auto
               </Text>
             </View>
           )}

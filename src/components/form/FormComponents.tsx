@@ -48,7 +48,7 @@ export const DateInput: React.FC<DateInputProps> = ({
 // ============================================
 // NUMBER INPUT CON UNITÀ
 // ============================================
-interface NumberInputProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
+interface NumberInputProps extends Omit<TextInputProps, 'value' | 'onChangeText' | 'onChange'> {
     label: string;
     value?: number;
     onChange: (value?: number) => void;
@@ -106,7 +106,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
                             outline: 'none',
                             backgroundColor: 'transparent',
                         }}
-                        {...textInputProps}
+                        {...(textInputProps as object)}
                     />
                     {unit && <Text style={styles.unitText}>{unit}</Text>}
                 </View>
@@ -175,7 +175,7 @@ export const StandardInput: React.FC<StandardInputProps> = ({
                             outline: 'none',
                             backgroundColor: 'transparent',
                         }}
-                        {...textInputProps}
+                        {...(textInputProps as object)}
                     />
                     {rightElement}
                 </View>

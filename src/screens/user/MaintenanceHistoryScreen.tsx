@@ -466,7 +466,7 @@ export default function MaintenanceHistoryScreen() {
             </Text>
             {vehicle && (
               <Text style={[styles.headerSubtitle, { color: isDark ? '#999' : '#666' }]}>
-                {vehicle.brand} {vehicle.model}
+                {vehicle.make} {vehicle.model}
               </Text>
             )}
           </View>

@@ -342,7 +342,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
                 Nessuna officina trovata
               </Text>
               <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                Prova a cercare in un'altra città
+                Prova a cercare in un&apos;altra città
               </Text>
             </View>
           ) : (

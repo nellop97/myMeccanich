@@ -322,7 +322,7 @@ export default function ViewRequestsScreen() {
               <View style={[styles.messageBox, { backgroundColor: colors.surfaceVariant }]}>
                 <MessageSquare size={16} color={colors.onSurfaceVariant} />
                 <Text style={[styles.messageText, { color: colors.onSurface }]}>
-                  "{request.message}"
+                  &quot;{request.message}&quot;
                 </Text>
               </View>
             </>
@@ -480,7 +480,7 @@ export default function ViewRequestsScreen() {
           <View style={[styles.warningBox, { backgroundColor: colors.errorContainer }]}>
             <Eye size={16} color={colors.error} />
             <Text style={[styles.warningText, { color: colors.onErrorContainer }]}>
-              L'utente potrà visualizzare questi dati per 7 giorni (max 10 volte)
+              L&apos;utente potrà visualizzare questi dati per 7 giorni (max 10 volte)
             </Text>
           </View>
 
@@ -645,6 +645,9 @@ const DataOption = ({ title, description, value, onToggle, required, disabled, c
 );
 
 const styles = StyleSheet.create({
+  buttonContent: {
+    minHeight: 44,
+  },
   container: {
     flex: 1,
   },

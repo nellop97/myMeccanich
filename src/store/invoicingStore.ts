@@ -56,7 +56,7 @@ const findHighestInvoiceNumber = async (ownerId: string, year: number): Promise<
 // INTERFACCE E TIPI
 // ====================================
 
-export type InvoiceType = 'customer' | 'supplier' | 'expense' | 'credit_note';
+export type InvoiceType = 'customer' | 'supplier' | 'expense' | 'credit_note' | 'proforma' | 'receipt';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
 export type PaymentMethod = 'cash' | 'card' | 'bank_transfer' | 'check' | 'other';
 

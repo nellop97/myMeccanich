@@ -355,7 +355,7 @@ export class BookingService {
    */
   async addProposal(
     bookingId: string,
-    proposal: Omit<BookingProposal, 'id' | 'createdAt'>
+    proposal: Omit<BookingProposal, 'id' | 'createdAt' | 'status'>
   ): Promise<void> {
     try {
       const booking = await this.getBookingRequest(bookingId);

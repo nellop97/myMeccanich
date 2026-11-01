@@ -31,7 +31,7 @@ const CarMaintenanceScreen = () => {
   const route = useRoute();
   const { colors } = useAppThemeManager();
   const { vehicles, recentMaintenance, stats } = useUserData();
-  const carId = route.params?.carId;
+  const carId = (route.params as { carId: string }).carId;
 
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all'); // all, completed, pending

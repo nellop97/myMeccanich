@@ -313,7 +313,7 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
 
                             <View style={[styles.infoBox, { backgroundColor: theme.primary + '10', borderColor: theme.primary }]}>
                                 <Text style={[styles.infoText, { color: theme.primary }]}>
-                                    💡 Il cliente riceverà un'email per completare la registrazione e potrà accedere all'app per visualizzare
+                                    💡 Il cliente riceverà un&apos;email per completare la registrazione e potrà accedere all&apos;app per visualizzare
                                     lo stato dei suoi veicoli.
                                 </Text>
                             </View>

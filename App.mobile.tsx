@@ -75,7 +75,7 @@ export default function App() {
                 <Text style={styles.errorText}>⚠️ Errore di Inizializzazione</Text>
                 <Text style={styles.errorDetails}>{error}</Text>
                 <Text style={styles.errorHint}>
-                    Riavvia l'app per riprovare
+                    Riavvia l&apos;app per riprovare
                 </Text>
             </View>
         );

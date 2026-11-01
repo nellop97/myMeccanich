@@ -22,6 +22,11 @@ export interface User {
     email: string;
     isLoggedIn: boolean;
     photoURL?: string;
+    firstName?: string;
+    lastName?: string;
+    userType?: string;
+    role?: string;
+    profileComplete?: boolean;
     isMechanic?: boolean;
     phoneNumber?: string;
     emailVerified?: boolean;
@@ -125,7 +130,7 @@ const defaultAppSettings: AppSettings = {
 // CREAZIONE DELLO STORE (ZUSTAND 4.x)
 // ====================================
 
-export const useStore = create<StoreState>(
+export const useStore = create<StoreState>()(
     persist(
         (set, get) => ({
             // === STATO INIZIALE ===
