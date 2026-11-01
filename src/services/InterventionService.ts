@@ -1,11 +1,15 @@
 // src/services/InterventionService.ts - Chiusura di un intervento: costi, foto, storico e ritiro
-import { doc, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, DocumentSnapshot, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import UploadService from './UploadService';
 import BookingService from './BookingService';
+import { applyConsumptionInTransaction, inventoryItemRef } from './InventoryService';
 import { Repair, RepairPart, WorkshopCar } from '../store/workshopStore';
+import { toStoredPart, withoutUndefined } from '../utils/firestoreData';
 import { calculateInterventionTotals, VAT_RATE } from '../utils/interventionTotals';
 import { toDayString } from '../utils/calendarGrid';
+import { isStockPart } from '../utils/inventoryStock';
+import { guessMaintenanceType } from '../utils/maintenanceType';
 
 export type InterventionPhotoKind = 'work' | 'part';
 
@@ -21,6 +25,22 @@ export interface LocalPhoto {
   kind: InterventionPhotoKind;
 }
 
+export type LocalPartPhoto = Omit<LocalPhoto, 'kind'>;
+
+// Uri locale -> url già caricato: un nuovo tentativo di chiusura non ricarica le foto
+export type UploadedPhotos = Map<string, string>;
+
+export class InterventionAlreadyClosedError extends Error {
+  constructor(cancelled = false) {
+    super(
+      cancelled
+        ? 'Questo intervento è stato annullato: i lavori non sono stati chiusi e la giacenza non è cambiata.'
+        : 'Questo intervento è già stato chiuso: la giacenza non è stata scaricata di nuovo.'
+    );
+    this.name = 'InterventionAlreadyClosedError';
+  }
+}
+
 interface CompleteInterventionInput {
   car: WorkshopCar;
   repair: Repair;
@@ -33,28 +53,84 @@ interface CompleteInterventionInput {
   mechanicName: string;
 }
 
-const MAINTENANCE_TYPES = ['tagliando', 'gomme', 'freni', 'carrozzeria', 'motore', 'elettronica'];
-
-const guessMaintenanceType = (description: string) =>
-  MAINTENANCE_TYPES.find((type) => description.toLowerCase().includes(type)) ?? 'altro';
+// Elenco chiuso di campi: fornitore e costo d'acquisto non devono mai finire nello storico
+const toHistoryPart = (part: RepairPart) =>
+  withoutUndefined({
+    name: part.name,
+    partNumber: part.partNumber ?? '',
+    brand: part.brand ?? '',
+    quantity: part.quantity,
+    unitPrice: part.unitPrice,
+    cost: part.totalPrice,
+    source: part.source,
+    origin: part.origin,
+    photoUrl: part.photoUrl,
+    serialNumber: part.serialNumber || undefined,
+  });
 
 class InterventionService {
-  async uploadPhotos(photos: LocalPhoto[], mechanicId: string, repairId: string): Promise<InterventionPhoto[]> {
+  async uploadPhotos(
+    photos: LocalPhoto[],
+    mechanicId: string,
+    repairId: string,
+    uploaded: UploadedPhotos = new Map()
+  ): Promise<InterventionPhoto[]> {
     return Promise.all(
       photos.map(async ({ uri, fileName, kind }, index) => {
         const name = fileName || `foto-${index + 1}.jpg`;
-        const result = await UploadService.uploadImage(uri, {
-          path: `vehicles/${mechanicId}/interventions/${repairId}/${kind}-${index}-${name}`,
-        });
-        return { url: result.url, kind, name };
+        const url = await this.uploadOnce(
+          uri,
+          `vehicles/${mechanicId}/interventions/${repairId}/${kind}-${index}-${name}`,
+          uploaded
+        );
+        return { url, kind, name };
       })
     );
   }
 
+  // Le righe senza foto locale restano com'erano, con l'eventuale photoUrl già salvato
+  async uploadPartPhotos(
+    parts: RepairPart[],
+    photos: Record<string, LocalPartPhoto>,
+    mechanicId: string,
+    repairId: string,
+    uploaded: UploadedPhotos = new Map()
+  ): Promise<RepairPart[]> {
+    return Promise.all(
+      parts.map(async (part) => {
+        const photo = photos[part.id];
+        if (!photo) {
+          return part;
+        }
+
+        const photoUrl = await this.uploadOnce(
+          photo.uri,
+          `vehicles/${mechanicId}/interventions/${repairId}/part-${part.id}-${photo.fileName || 'foto.jpg'}`,
+          uploaded
+        );
+        return { ...part, photoUrl };
+      })
+    );
+  }
+
+  private async uploadOnce(uri: string, path: string, uploaded: UploadedPhotos): Promise<string> {
+    const existing = uploaded.get(uri);
+    if (existing) {
+      return existing;
+    }
+
+    const { url } = await UploadService.uploadImage(uri, { path });
+    uploaded.set(uri, url);
+    return url;
+  }
+
   /**
    * Chiude i lavori in un'unica transazione: intervento, prenotazione e storico del
-   * veicolo restano allineati. Lo stato diventa ready: il lavoro è finito ma l'auto
-   * aspetta il ritiro
+   * veicolo restano allineati, e i pezzi di magazzino vengono scaricati insieme a loro.
+   * Lo stato diventa ready: il lavoro è finito ma l'auto aspetta il ritiro.
+   *
+   * Firestore vuole tutte le letture prima di tutte le scritture. Una giacenza che non
+   * basta (InsufficientStockError) annulla l'intera transazione.
    */
   async completeIntervention(input: CompleteInterventionInput) {
     const { car, repair, parts, laborCost, notes, mileage, photos, mechanicId, mechanicName } = input;
@@ -69,8 +145,40 @@ class InterventionService {
         throw new Error('Intervento non trovato');
       }
 
+      const savedRepairs: Repair[] = carSnap.data().repairs ?? [];
+      const savedRepair = savedRepairs.find((item) => item.id === repair.id);
+      if (!savedRepair) {
+        throw new Error('Intervento non trovato');
+      }
+      if (savedRepair.status === 'ready' || savedRepair.status === 'completed') {
+        throw new InterventionAlreadyClosedError();
+      }
+
       const bookingSnap = bookingRef ? await transaction.get(bookingRef) : null;
       const booking = bookingSnap?.exists() ? bookingSnap.data() : null;
+
+      // Il cliente può annullare mentre il meccanico ha la schermata aperta
+      if (savedRepair.status === 'cancelled' || booking?.status === 'cancelled') {
+        throw new InterventionAlreadyClosedError(true);
+      }
+
+      const stockParts = parts.filter(isStockPart);
+      const itemSnaps = new Map<string, DocumentSnapshot>();
+      for (const itemId of new Set(stockParts.map((part) => part.inventoryItemId as string))) {
+        itemSnaps.set(itemId, await transaction.get(inventoryItemRef(itemId)));
+      }
+
+      // Da qui in poi solo scritture
+      stockParts.forEach((part) => {
+        applyConsumptionInTransaction(transaction, itemSnaps.get(part.inventoryItemId as string)!, part, {
+          workshopId: mechanicId,
+          carId: car.id,
+          repairId: repair.id,
+          licensePlate: car.licensePlate ?? '',
+          createdBy: mechanicId,
+        });
+      });
+
       let maintenanceRecordId: string | null = null;
 
       if (booking?.vehicleId) {
@@ -96,14 +204,7 @@ class InterventionService {
           mechanicName,
           addedByType: 'mechanic',
           verifiedByWorkshop: true,
-          parts: parts.map((part) => ({
-            name: part.name,
-            partNumber: part.partNumber ?? '',
-            brand: part.brand ?? '',
-            quantity: part.quantity,
-            unitPrice: part.unitPrice,
-            cost: part.totalPrice,
-          })),
+          parts: parts.map(toHistoryPart),
           photos,
           notes,
           warranty: false,
@@ -116,11 +217,11 @@ class InterventionService {
 
       const updatedAt = now.toISOString();
       transaction.update(carRef, {
-        repairs: (carSnap.data().repairs ?? []).map((item: Repair) =>
+        repairs: savedRepairs.map((item) =>
           item.id === repair.id
             ? {
                 ...item,
-                parts,
+                parts: parts.map(toStoredPart),
                 laborCost: totals.laborCost,
                 subtotal: totals.subtotal,
                 vatAmount: totals.vatAmount,

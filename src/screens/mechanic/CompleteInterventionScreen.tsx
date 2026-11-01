@@ -1,8 +1,8 @@
 // src/screens/mechanic/CompleteInterventionScreen.tsx
 // Chiusura dei lavori: pezzi usati, costi e foto che finiscono nello storico del veicolo
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { AlertCircle, Check, Plus, Trash2 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, AlertTriangle, Box, Check, Plus, Trash2, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,23 +16,235 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PartPhotoScanButton } from '../../components/PartPhotoScanButton';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 import UniversalImagePicker from '../../components/UniversalImagePicker';
-import InterventionService, { InterventionPhotoKind, LocalPhoto } from '../../services/InterventionService';
+import { useInventory } from '../../hooks/useInventory';
+import InterventionService, {
+  InterventionAlreadyClosedError,
+  InterventionPhotoKind,
+  LocalPartPhoto,
+  LocalPhoto,
+  UploadedPhotos,
+} from '../../services/InterventionService';
+import inventoryService, { InsufficientStockError } from '../../services/InventoryService';
 import { useStore } from '../../store';
 import { useInvoicingStore } from '../../store/invoicingStore';
 import { RepairPart, useWorkshopStore } from '../../store/workshopStore';
+import {
+  InventoryCategory,
+  PART_SOURCE_LABELS,
+  PartAnalysis,
+  PartOrigin,
+  PartSource,
+  requiresMountedPhoto,
+} from '../../types/inventory.types';
 import { toDayString } from '../../utils/calendarGrid';
+import { isStockPart } from '../../utils/inventoryStock';
 import { VAT_RATE, calculateInterventionTotals, getPartTotal, parseAmount } from '../../utils/interventionTotals';
 import { showAlert } from '../../utils/platformHelpers';
+import InventoryPartPicker, { ChoiceChips, formatQuantity, newPartId, ORIGIN_OPTIONS, toPartCategory } from './InventoryPartPicker';
 import MechanicHeader from './MechanicHeader';
 import { MechanicEmptyState } from './MechanicStates';
 import MechanicTextInput from './MechanicTextInput';
-import { MECHANIC_MIN_TOUCH, mechanicCard, mechanicRadius, useMechanicBreakpoints, useMechanicTheme } from './mechanicTheme';
+import {
+  MECHANIC_MIN_TOUCH,
+  MechanicTheme,
+  mechanicButton,
+  mechanicButtonText,
+  mechanicCard,
+  mechanicRadius,
+  useMechanicBreakpoints,
+  useMechanicTheme,
+} from './mechanicTheme';
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
 
-const emptyPart = { name: '', brand: '', partNumber: '', quantity: '1', unitPrice: '' };
+const MISSING_CODE = 'Manca il codice';
+const MISSING_ORIGIN = 'Manca la provenienza';
+const MISSING_PHOTO = 'Manca la foto';
+const NO_ISSUES: string[] = [];
+
+type ManualPartSource = Exclude<PartSource, 'stock'>;
+type ManualPartKind = 'ricambio' | 'fluido' | 'consumabile';
+
+interface DraftPart {
+  name: string;
+  brand: string;
+  partNumber: string;
+  serialNumber: string;
+  quantity: string;
+  unitPrice: string;
+  source: ManualPartSource;
+  kind: ManualPartKind;
+  origin?: PartOrigin;
+}
+
+const emptyPart: DraftPart = {
+  name: '',
+  brand: '',
+  partNumber: '',
+  serialNumber: '',
+  quantity: '1',
+  unitPrice: '',
+  source: 'bought_for_job',
+  kind: 'ricambio',
+};
+
+const SOURCE_OPTIONS: { value: ManualPartSource; label: string }[] = [
+  { value: 'bought_for_job', label: PART_SOURCE_LABELS.bought_for_job },
+  { value: 'customer_supplied', label: PART_SOURCE_LABELS.customer_supplied },
+];
+
+const KIND_OPTIONS: { value: ManualPartKind; label: string }[] = [
+  { value: 'ricambio', label: 'Ricambio' },
+  { value: 'fluido', label: 'Fluido' },
+  { value: 'consumabile', label: 'Consumabile' },
+];
+
+// Senza scheda vale la scelta sulla riga: se manca, requiresMountedPhoto chiede la foto
+const partPhotoCategory = (
+  part: RepairPart,
+  itemCategories: Map<string, InventoryCategory>
+): InventoryCategory | undefined => {
+  const itemCategory = part.inventoryItemId ? itemCategories.get(part.inventoryItemId) : undefined;
+  if (itemCategory) return itemCategory;
+  if (part.category === 'fluido') return 'fluidi';
+  if (part.category === 'consumabile') return 'consumabili';
+  return undefined;
+};
+
+interface PartEditorProps {
+  part: RepairPart;
+  photo?: LocalPartPhoto;
+  photoRequired: boolean;
+  issues: string[];
+  disabled: boolean;
+  theme: MechanicTheme;
+  onChange: (partId: string, changes: Partial<RepairPart>) => void;
+  onPhoto: (partId: string, photo: LocalPartPhoto | null) => void;
+  onRemove: (partId: string) => void;
+}
+
+const PartEditor = React.memo(({
+  part,
+  photo,
+  photoRequired,
+  issues,
+  disabled,
+  theme,
+  onChange,
+  onPhoto,
+  onRemove,
+}: PartEditorProps) => {
+  const stock = isStockPart(part);
+  const photoUri = photo?.uri ?? part.photoUrl;
+  const details = [
+    `${formatQuantity(part.quantity)} × ${formatCurrency(part.unitPrice)}`,
+    stock ? PART_SOURCE_LABELS.stock : '',
+    part.serialNumber ? `Matricola ${part.serialNumber}` : '',
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <View style={[styles.partRow, { borderColor: theme.border }]}>
+      <View style={styles.partHeader}>
+        <View style={styles.partBody}>
+          <Text style={[styles.partName, { color: theme.text }]}>{part.name}</Text>
+          <Text style={[styles.small, { color: theme.textSecondary }]}>{details}</Text>
+        </View>
+        <Text style={[styles.partName, { color: theme.text }]}>{formatCurrency(part.totalPrice)}</Text>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => onRemove(part.id)}
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel={`Rimuovi ${part.name}`}
+        >
+          <Trash2 size={18} color={theme.error} strokeWidth={2} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.row}>
+        <View style={styles.flex}>
+          <MechanicTextInput
+            value={part.partNumber ?? ''}
+            onChangeText={(partNumber) => onChange(part.id, { partNumber })}
+            placeholder="Codice"
+            accessibilityLabel={`Codice di ${part.name}`}
+            error={issues.includes(MISSING_CODE)}
+          />
+        </View>
+        <View style={styles.flex}>
+          <MechanicTextInput
+            value={part.brand ?? ''}
+            onChangeText={(brand) => onChange(part.id, { brand })}
+            placeholder="Marca"
+            accessibilityLabel={`Marca di ${part.name}`}
+          />
+        </View>
+      </View>
+
+      <ChoiceChips
+        label="Provenienza"
+        options={ORIGIN_OPTIONS}
+        value={part.origin}
+        onChange={(origin) => onChange(part.id, { origin })}
+      />
+
+      {!stock && (
+        <ChoiceChips
+          label="Sorgente"
+          options={SOURCE_OPTIONS}
+          value={part.source === 'stock' ? undefined : part.source}
+          onChange={(source) => onChange(part.id, { source })}
+        />
+      )}
+
+      {!part.inventoryItemId && (
+        <ChoiceChips
+          label="Tipo di pezzo"
+          options={KIND_OPTIONS}
+          value={part.category === 'accessorio' ? undefined : part.category}
+          onChange={(category) => onChange(part.id, { category })}
+        />
+      )}
+
+      {photoUri ? (
+        <View style={styles.partPhotoRow}>
+          <Image source={{ uri: photoUri }} style={styles.photo} accessibilityLabel={`Foto di ${part.name}`} />
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => onPhoto(part.id, null)}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={`Rimuovi la foto di ${part.name}`}
+          >
+            <X size={18} color={theme.error} strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <UniversalImagePicker
+          label={photoRequired ? 'Foto del pezzo montato (obbligatoria)' : 'Foto del pezzo montato (facoltativa)'}
+          disabled={disabled}
+          onImagesSelected={(images) => {
+            if (images[0]) {
+              onPhoto(part.id, { uri: images[0].uri, fileName: images[0].fileName });
+            }
+          }}
+        />
+      )}
+
+      {issues.length > 0 && (
+        <Text style={[styles.small, { color: theme.error }]} accessibilityRole="alert">
+          {issues.join(' · ')}
+        </Text>
+      )}
+    </View>
+  );
+});
+
+PartEditor.displayName = 'PartEditor';
 
 const CompleteInterventionScreen = () => {
   const navigation = useNavigation<any>();
@@ -43,12 +255,23 @@ const CompleteInterventionScreen = () => {
   const { isMobile } = useMechanicBreakpoints();
   const { cars, fetchCars } = useWorkshopStore();
   const { addInvoice } = useInvoicingStore();
+  const inventory = useInventory(user?.id);
 
   const car = cars.find((item) => item.id === carId);
   const repair = car?.repairs.find((item) => item.id === repairId);
 
   const [parts, setParts] = useState<RepairPart[]>([]);
-  const [draftPart, setDraftPart] = useState(emptyPart);
+  const [draftPart, setDraftPart] = useState<DraftPart>(emptyPart);
+  const [draftPhoto, setDraftPhoto] = useState<LocalPartPhoto | null>(null);
+  const [partPhotos, setPartPhotos] = useState<Record<string, LocalPartPhoto>>({});
+  const [showPartIssues, setShowPartIssues] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [stockIssue, setStockIssue] = useState<InsufficientStockError | null>(null);
+  const [correctingStock, setCorrectingStock] = useState(false);
+  const [countedStock, setCountedStock] = useState('');
+  const [stockError, setStockError] = useState<string | null>(null);
+  const [stockNotice, setStockNotice] = useState<string | null>(null);
+  const [savingStock, setSavingStock] = useState(false);
   const [noParts, setNoParts] = useState(false);
   const [laborCost, setLaborCost] = useState('');
   const [mileage, setMileage] = useState('');
@@ -57,6 +280,8 @@ const CompleteInterventionScreen = () => {
   const [createInvoice, setCreateInvoice] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  // Sopravvive ai tentativi falliti: le foto già caricate non ripartono
+  const uploadedPhotos = useRef<UploadedPhotos>(new Map());
 
   useEffect(() => {
     if (!car && user?.id) {
@@ -76,6 +301,75 @@ const CompleteInterventionScreen = () => {
   const labor = parseAmount(laborCost);
   const totals = useMemo(() => calculateInterventionTotals(parts, labor ?? 0), [parts, labor]);
 
+  const itemCategories = useMemo(
+    () => new Map(inventory.items.map((item) => [item.id, item.category])),
+    [inventory.items]
+  );
+
+  const unsavedParts = useMemo(() => {
+    const saved = new Set((repair?.parts ?? []).map((part) => part.id));
+    return parts.filter((part) => !saved.has(part.id));
+  }, [parts, repair?.parts]);
+
+  const partIssues = useMemo(() => {
+    const issues = new Map<string, string[]>();
+    parts.forEach((part) => {
+      const missing = [
+        !part.partNumber?.trim() && MISSING_CODE,
+        !part.origin && MISSING_ORIGIN,
+        requiresMountedPhoto(partPhotoCategory(part, itemCategories)) &&
+          !partPhotos[part.id] &&
+          !part.photoUrl &&
+          MISSING_PHOTO,
+      ].filter((issue): issue is string => !!issue);
+      if (missing.length) {
+        issues.set(part.id, missing);
+      }
+    });
+    return issues;
+  }, [parts, partPhotos, itemCategories]);
+
+  const changePart = useCallback((partId: string, changes: Partial<RepairPart>) => {
+    setParts((current) => current.map((part) => (part.id === partId ? { ...part, ...changes } : part)));
+  }, []);
+
+  const removePart = useCallback((partId: string) => {
+    setParts((current) => current.filter((part) => part.id !== partId));
+    setPartPhotos(({ [partId]: _removed, ...others }) => others);
+  }, []);
+
+  const setPartPhoto = useCallback((partId: string, photo: LocalPartPhoto | null) => {
+    setPartPhotos(({ [partId]: _previous, ...others }) => (photo ? { ...others, [partId]: photo } : others));
+    if (!photo) {
+      setParts((current) =>
+        current.map((part) => {
+          if (part.id !== partId) return part;
+          const { photoUrl: _photoUrl, ...rest } = part;
+          return rest;
+        })
+      );
+    }
+  }, []);
+
+  const applyScan = (analysis: PartAnalysis, photo: LocalPartPhoto) => {
+    setDraftPart((current) => ({
+      ...current,
+      name: analysis.name ?? current.name,
+      brand: analysis.brand ?? current.brand,
+      partNumber: analysis.partNumber ?? current.partNumber,
+      serialNumber: analysis.serialNumber ?? current.serialNumber,
+      origin: analysis.origin ?? current.origin,
+      kind: analysis.category ? (toPartCategory(analysis.category) as ManualPartKind) : current.kind,
+    }));
+    setDraftPhoto(photo);
+  };
+
+  const addStockPart = (part: RepairPart) => {
+    setParts((current) => [...current, part]);
+    setNoParts(false);
+    setShowPicker(false);
+  };
+
   const addPart = () => {
     const quantity = parseAmount(draftPart.quantity);
     const unitPrice = parseAmount(draftPart.unitPrice);
@@ -89,19 +383,29 @@ const CompleteInterventionScreen = () => {
       return;
     }
 
+    const id = newPartId();
     const part = { name: draftPart.name.trim(), quantity, unitPrice };
+    const serialNumber = draftPart.serialNumber.trim();
     setParts((current) => [
       ...current,
       {
         ...part,
-        id: `part_${Date.now()}`,
+        id,
         unitCost: unitPrice,
         totalPrice: getPartTotal(part),
         brand: draftPart.brand.trim(),
         partNumber: draftPart.partNumber.trim(),
+        category: draftPart.kind,
+        source: draftPart.source,
+        ...(draftPart.origin ? { origin: draftPart.origin } : {}),
+        ...(serialNumber ? { serialNumber } : {}),
       },
     ]);
+    if (draftPhoto) {
+      setPartPhoto(id, draftPhoto);
+    }
     setDraftPart(emptyPart);
+    setDraftPhoto(null);
     setNoParts(false);
   };
 
@@ -128,14 +432,32 @@ const CompleteInterventionScreen = () => {
       return;
     }
 
+    setShowPartIssues(true);
+    if (partIssues.size > 0) {
+      showAlert(
+        'Dati dei pezzi mancanti',
+        `Completa ${partIssues.size === 1 ? 'la riga segnata' : `le ${partIssues.size} righe segnate`} in rosso nell'elenco dei pezzi.`
+      );
+      return;
+    }
+
     try {
       setSubmitting(true);
-      const uploaded = await InterventionService.uploadPhotos(photos, user.id, repair.id);
+      setStockIssue(null);
+      setStockNotice(null);
+      const partsWithPhotos = await InterventionService.uploadPartPhotos(
+        parts,
+        partPhotos,
+        user.id,
+        repair.id,
+        uploadedPhotos.current
+      );
+      const uploaded = await InterventionService.uploadPhotos(photos, user.id, repair.id, uploadedPhotos.current);
 
       await InterventionService.completeIntervention({
         car,
         repair,
-        parts,
+        parts: partsWithPhotos,
         laborCost: labor,
         notes: notes.trim(),
         mileage: parseAmount(mileage) ?? undefined,
@@ -213,9 +535,55 @@ const CompleteInterventionScreen = () => {
       );
     } catch (error) {
       console.error('Errore completamento intervento:', error);
+      if (error instanceof InsufficientStockError) {
+        setStockIssue(error);
+        setCorrectingStock(false);
+        setCountedStock('');
+        setStockError(null);
+        return;
+      }
+      if (error instanceof InterventionAlreadyClosedError) {
+        fetchCars(user.id);
+        showAlert('Intervento non più aperto', error.message, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        return;
+      }
       showAlert('Errore', 'Impossibile completare i lavori. Nessun dato è stato perso: riprova.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const correctStock = async () => {
+    if (!stockIssue || !car || !repair || !user?.id || savingStock) return;
+
+    const counted = parseAmount(countedStock);
+    if (counted === null) {
+      setStockError('Inserisci la quantità contata. Scrivi 0 se non ce n\'è.');
+      return;
+    }
+
+    try {
+      setSavingStock(true);
+      setStockError(null);
+      await inventoryService.adjustStock(
+        stockIssue.itemId,
+        {
+          quantity: counted,
+          reason: 'Rettifica alla chiusura lavori',
+          carId: car.id,
+          repairId: repair.id,
+          licensePlate: car.licensePlate,
+        },
+        user.id
+      );
+      setStockNotice(`Giacenza di ${stockIssue.itemName} aggiornata a ${formatQuantity(counted)}. Puoi riprovare.`);
+      setStockIssue(null);
+      inventory.reload();
+    } catch (error) {
+      console.error('Errore rettifica giacenza:', error);
+      setStockError('Impossibile aggiornare la giacenza. Riprova.');
+    } finally {
+      setSavingStock(false);
     }
   };
 
@@ -247,26 +615,55 @@ const CompleteInterventionScreen = () => {
             <Text style={[styles.title, { color: theme.text }]} accessibilityRole="header">Pezzi usati</Text>
 
             {parts.map((part) => (
-              <View key={part.id} style={[styles.partRow, { borderColor: theme.border }]}>
-                <View style={styles.partBody}>
-                  <Text style={[styles.partName, { color: theme.text }]}>{part.name}</Text>
-                  <Text style={[styles.small, { color: theme.textSecondary }]}>
-                    {part.quantity} × {formatCurrency(part.unitPrice)}
-                    {part.brand ? ` · ${part.brand}` : ''}
-                    {part.partNumber ? ` · ${part.partNumber}` : ''}
-                  </Text>
-                </View>
-                <Text style={[styles.partName, { color: theme.text }]}>{formatCurrency(part.totalPrice)}</Text>
+              <PartEditor
+                key={part.id}
+                part={part}
+                photo={partPhotos[part.id]}
+                photoRequired={requiresMountedPhoto(partPhotoCategory(part, itemCategories))}
+                issues={showPartIssues ? partIssues.get(part.id) ?? NO_ISSUES : NO_ISSUES}
+                disabled={submitting}
+                theme={theme}
+                onChange={changePart}
+                onPhoto={setPartPhoto}
+                onRemove={removePart}
+              />
+            ))}
+
+            <TouchableOpacity
+              style={[styles.outlineButton, { borderColor: theme.primary }]}
+              onPress={() => setShowPicker(true)}
+              accessibilityRole="button"
+            >
+              <Box size={18} color={theme.primary} strokeWidth={2} />
+              <Text style={[styles.buttonText, { color: theme.primary }]}>Dal magazzino</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.small, { color: theme.textSecondary }]}>Oppure aggiungi un pezzo fuori scheda</Text>
+
+            <PartPhotoScanButton onResult={applyScan} onPhotoOnly={setDraftPhoto} disabled={submitting} />
+            {draftPhoto ? (
+              <View style={styles.partPhotoRow}>
+                <Image source={{ uri: draftPhoto.uri }} style={styles.photo} accessibilityLabel="Foto del nuovo pezzo" />
                 <TouchableOpacity
                   style={styles.iconButton}
-                  onPress={() => setParts((current) => current.filter((item) => item.id !== part.id))}
+                  onPress={() => setDraftPhoto(null)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Rimuovi ${part.name}`}
+                  accessibilityLabel="Rimuovi la foto del nuovo pezzo"
                 >
-                  <Trash2 size={18} color={theme.error} strokeWidth={2} />
+                  <X size={18} color={theme.error} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
-            ))}
+            ) : (
+              <UniversalImagePicker
+                label="Oppure allega una foto"
+                disabled={submitting}
+                onImagesSelected={(images) => {
+                  if (images[0]) {
+                    setDraftPhoto({ uri: images[0].uri, fileName: images[0].fileName });
+                  }
+                }}
+              />
+            )}
 
             <MechanicTextInput
               value={draftPart.name}
@@ -292,6 +689,12 @@ const CompleteInterventionScreen = () => {
                 />
               </View>
             </View>
+            <MechanicTextInput
+              value={draftPart.serialNumber}
+              onChangeText={(serialNumber) => setDraftPart((current) => ({ ...current, serialNumber }))}
+              placeholder="Matricola (solo pezzi unici)"
+              accessibilityLabel="Matricola"
+            />
             <View style={styles.row}>
               <View style={styles.flex}>
                 <MechanicTextInput
@@ -312,6 +715,24 @@ const CompleteInterventionScreen = () => {
                 />
               </View>
             </View>
+            <ChoiceChips
+              label="Provenienza"
+              options={ORIGIN_OPTIONS}
+              value={draftPart.origin}
+              onChange={(origin) => setDraftPart((current) => ({ ...current, origin }))}
+            />
+            <ChoiceChips
+              label="Sorgente"
+              options={SOURCE_OPTIONS}
+              value={draftPart.source}
+              onChange={(source) => setDraftPart((current) => ({ ...current, source }))}
+            />
+            <ChoiceChips
+              label="Tipo di pezzo"
+              options={KIND_OPTIONS}
+              value={draftPart.kind}
+              onChange={(kind) => setDraftPart((current) => ({ ...current, kind }))}
+            />
             <TouchableOpacity
               style={[styles.outlineButton, { borderColor: theme.primary }]}
               onPress={addPart}
@@ -353,6 +774,7 @@ const CompleteInterventionScreen = () => {
               multiline
               accessibilityLabel="Note sul lavoro"
             />
+            <AiComingSoonButton feature="workSummary" />
           </View>
 
           <View style={cardStyle}>
@@ -366,12 +788,6 @@ const CompleteInterventionScreen = () => {
               maxImages={6}
               onImagesSelected={(images) => addPhotos(images, 'work')}
             />
-            <UniversalImagePicker
-              label="Foto dei ricambi usati"
-              multiple
-              maxImages={6}
-              onImagesSelected={(images) => addPhotos(images, 'part')}
-            />
             {photos.length > 0 && (
               <View style={styles.photoGrid}>
                 {photos.map((photo) => (
@@ -379,7 +795,7 @@ const CompleteInterventionScreen = () => {
                     key={photo.uri}
                     source={{ uri: photo.uri }}
                     style={styles.photo}
-                    accessibilityLabel={photo.kind === 'part' ? 'Foto ricambio' : 'Foto manutenzione'}
+                    accessibilityLabel="Foto manutenzione"
                   />
                 ))}
               </View>
@@ -407,11 +823,68 @@ const CompleteInterventionScreen = () => {
             </View>
           </View>
 
+          {stockIssue && (
+            <View
+              style={[styles.stockPanel, { backgroundColor: theme.warningLight }]}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              <View style={styles.row}>
+                <AlertTriangle size={20} color={theme.warning} strokeWidth={2} />
+                <Text style={[styles.body, styles.flex, { color: theme.text }]}>
+                  {`Giacenza insufficiente per ${stockIssue.itemName}: disponibili ${formatQuantity(stockIssue.available)}. I lavori non sono stati chiusi e il magazzino non è cambiato.`}
+                </Text>
+              </View>
+
+              {correctingStock ? (
+                <>
+                  <MechanicTextInput
+                    value={countedStock}
+                    onChangeText={setCountedStock}
+                    placeholder="Quantità reale contata"
+                    keyboardType="decimal-pad"
+                    accessibilityLabel="Quantità reale contata"
+                    error={!!stockError}
+                  />
+                  {stockError && (
+                    <Text style={[styles.small, { color: theme.error }]} accessibilityRole="alert">{stockError}</Text>
+                  )}
+                  <TouchableOpacity
+                    style={[mechanicButton.primary, { backgroundColor: theme.primary }]}
+                    onPress={correctStock}
+                    disabled={savingStock}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: savingStock, busy: savingStock }}
+                  >
+                    {savingStock ? (
+                      <ActivityIndicator size="small" color={theme.onPrimary} />
+                    ) : (
+                      <Text style={[mechanicButtonText.primary, { color: theme.onPrimary }]}>Salva giacenza</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.outlineButton, { borderColor: theme.primary }]}
+                  onPress={() => setCorrectingStock(true)}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.buttonText, { color: theme.primary }]}>Correggi giacenza</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {stockNotice && (
+            <Text style={[styles.body, { color: theme.success }]} accessibilityRole="alert">{stockNotice}</Text>
+          )}
+
           <TouchableOpacity
-            style={[styles.submit, { backgroundColor: theme.primary }]}
+            style={[styles.submit, { backgroundColor: theme.primary }, savingStock && styles.disabled]}
             onPress={submit}
-            disabled={submitting}
+            disabled={submitting || savingStock}
             accessibilityRole="button"
+            accessibilityState={{ disabled: submitting || savingStock, busy: submitting }}
           >
             {submitting ? (
               <ActivityIndicator size="small" color={theme.onPrimary} />
@@ -424,6 +897,21 @@ const CompleteInterventionScreen = () => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <InventoryPartPicker
+        visible={showPicker}
+        onClose={() => setShowPicker(false)}
+        onSelect={addStockPart}
+        items={inventory.items}
+        cars={inventory.cars}
+        loading={inventory.loading}
+        error={inventory.error}
+        onRetry={inventory.reload}
+        description={repair.description}
+        make={car.make}
+        model={car.model}
+        pendingParts={unsavedParts}
+      />
     </SafeAreaView>
   );
 };
@@ -464,11 +952,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   partRow: {
+    gap: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  partHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
+  },
+  partPhotoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stockPanel: {
+    gap: 12,
+    padding: 16,
+    borderRadius: mechanicRadius.lg,
+  },
+  disabled: {
+    opacity: 0.6,
   },
   partBody: {
     flex: 1,

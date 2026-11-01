@@ -23,6 +23,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -33,8 +34,16 @@ import {
   View,
 } from 'react-native';
 import { useStore } from '../../store';
-import { Part, useWorkshopStore } from '../../store/workshopStore';
+import { Part, RepairPart, useWorkshopStore } from '../../store/workshopStore';
+import { useInventory } from '../../hooks/useInventory';
+import { PartPhotoScanButton } from '../../components/PartPhotoScanButton';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
+import { PART_ORIGIN_LABELS, PART_SOURCE_LABELS, PartAnalysis, PartOrigin, PartSource } from '../../types/inventory.types';
+import { calculateInterventionTotals, getPartTotal, parseAmount } from '../../utils/interventionTotals';
+import { isStockPart } from '../../utils/inventoryStock';
 import { confirmAction, showAlert } from '../../utils/platformHelpers';
+
+import InventoryPartPicker, { ChoiceChips, formatQuantity, ORIGIN_OPTIONS, toPartCategory } from './InventoryPartPicker';
 
 import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme, useMechanicBreakpoints } from './mechanicTheme';
 import MechanicTextInput from './MechanicTextInput';
@@ -54,8 +63,29 @@ interface PartFormData {
   category: 'ricambio' | 'fluido' | 'consumabile' | 'accessorio';
   brand: string;
   partNumber: string;
-  supplier: string;
+  source: ManualPartSource;
+  origin?: PartOrigin;
+  serialNumber: string;
 }
+
+type ManualPartSource = Exclude<PartSource, 'stock'>;
+
+const MANUAL_SOURCE_OPTIONS: { value: ManualPartSource; label: string }[] = [
+  { value: 'bought_for_job', label: 'Da acquistare per il lavoro' },
+  { value: 'customer_supplied', label: PART_SOURCE_LABELS.customer_supplied },
+];
+
+const toFormData = (part: Part | null): PartFormData => ({
+  name: part?.name ?? '',
+  quantity: part ? String(part.quantity).replace('.', ',') : '1',
+  unitCost: part ? String(part.unitCost ?? part.unitPrice ?? 0).replace('.', ',') : '0,00',
+  category: part?.category || 'ricambio',
+  brand: part?.brand || '',
+  partNumber: part?.partNumber || '',
+  source: part?.source === 'customer_supplied' ? 'customer_supplied' : 'bought_for_job',
+  origin: part?.origin,
+  serialNumber: part?.serialNumber || '',
+});
 
 // Componente separato per il form di aggiunta/modifica parti
 const PartFormSheet = ({
@@ -71,43 +101,18 @@ const PartFormSheet = ({
   editingPart: Part | null;
   theme: any;
 }) => {
-  const [formData, setFormData] = useState<PartFormData>({
-    name: '',
-    quantity: '1',
-    unitCost: '0.00',
-    category: 'ricambio',
-    brand: '',
-    partNumber: '',
-    supplier: '',
-  });
+  const [formData, setFormData] = useState<PartFormData>(() => toFormData(editingPart));
   const [saving, setSaving] = useState(false);
 
   const { isDesktop, height: windowHeight } = useMechanicBreakpoints();
   const slideAnimation = React.useRef(new Animated.Value(windowHeight)).current;
 
+  // Il form resta montato tra un'apertura e l'altra: ogni apertura riparte dai dati giusti
   React.useEffect(() => {
-    if (editingPart) {
-      setFormData({
-        name: editingPart.name,
-        quantity: editingPart.quantity.toString(),
-        unitCost: editingPart.unitCost.toString(),
-        category: editingPart.category || 'ricambio',
-        brand: editingPart.brand || '',
-        partNumber: editingPart.partNumber || '',
-        supplier: editingPart.supplier || '',
-      });
-    } else {
-      setFormData({
-        name: '',
-        quantity: '1',
-        unitCost: '0.00',
-        category: 'ricambio',
-        brand: '',
-        partNumber: '',
-        supplier: '',
-      });
+    if (visible) {
+      setFormData(toFormData(editingPart));
     }
-  }, [editingPart]);
+  }, [visible, editingPart]);
 
   React.useEffect(() => {
     if (visible) {
@@ -133,6 +138,14 @@ const PartFormSheet = ({
       showAlert('Errore', 'Il nome del pezzo è obbligatorio');
       return;
     }
+    if (!parseAmount(formData.quantity)) {
+      showAlert('Errore', 'Inserisci una quantità maggiore di zero');
+      return;
+    }
+    if (parseAmount(formData.unitCost) === null) {
+      showAlert('Errore', 'Inserisci il prezzo unitario');
+      return;
+    }
     setSaving(true);
     await onSave(formData);
     setSaving(false);
@@ -141,6 +154,21 @@ const PartFormSheet = ({
   const handleClose = () => {
     if (!saving) onClose();
   };
+
+  // Precompila soltanto: i campi non leggibili lasciano quanto già scritto
+  const applyScan = (analysis: PartAnalysis) => {
+    setFormData((current) => ({
+      ...current,
+      name: analysis.name ?? current.name,
+      brand: analysis.brand ?? current.brand,
+      partNumber: analysis.partNumber ?? current.partNumber,
+      serialNumber: analysis.serialNumber ?? current.serialNumber,
+      origin: analysis.origin ?? current.origin,
+      category: analysis.category ? toPartCategory(analysis.category) ?? current.category : current.category,
+    }));
+  };
+
+  const isStock = !!editingPart && isStockPart(editingPart);
 
   if (!visible) return null;
 
@@ -175,6 +203,10 @@ const PartFormSheet = ({
 
           <ScrollView style={styles.sheetForm} showsVerticalScrollIndicator={false}>
             <View style={styles.formGroup}>
+              <PartPhotoScanButton onResult={applyScan} disabled={saving} />
+            </View>
+
+            <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: theme.text }]}>Nome Pezzo *</Text>
               <MechanicTextInput
                 value={formData.name}
@@ -189,7 +221,7 @@ const PartFormSheet = ({
                 <MechanicTextInput
                   value={formData.quantity}
                   onChangeText={(text) => setFormData({ ...formData, quantity: text })}
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
                   placeholder="1"
                 />
               </View>
@@ -259,13 +291,37 @@ const PartFormSheet = ({
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: theme.text }]}>Fornitore</Text>
+              <Text style={[styles.formLabel, { color: theme.text }]}>Matricola</Text>
               <MechanicTextInput
-                value={formData.supplier}
-                onChangeText={(text) => setFormData({ ...formData, supplier: text })}
-                placeholder="Es. Ricambi Auto SpA"
+                value={formData.serialNumber}
+                onChangeText={(text) => setFormData({ ...formData, serialNumber: text })}
+                placeholder="Solo per i pezzi unici"
               />
             </View>
+
+            <View style={styles.formGroup}>
+              <ChoiceChips
+                label="Provenienza"
+                options={ORIGIN_OPTIONS}
+                value={formData.origin}
+                onChange={(origin) => setFormData({ ...formData, origin })}
+              />
+            </View>
+
+            {isStock ? (
+              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>
+                Sorgente: {PART_SOURCE_LABELS.stock}
+              </Text>
+            ) : (
+              <View style={styles.formGroup}>
+                <ChoiceChips
+                  label="Sorgente"
+                  options={MANUAL_SOURCE_OPTIONS}
+                  value={formData.source}
+                  onChange={(source) => setFormData({ ...formData, source })}
+                />
+              </View>
+            )}
 
             <View style={styles.formButtons}>
               <TouchableOpacity
@@ -303,6 +359,7 @@ const RepairPartsManagementScreen = () => {
   const { isDesktop, isMobile } = useMechanicBreakpoints();
 
   const theme = useMechanicTheme();
+  const inventory = useInventory(user?.id);
   const {
     getCarById,
     getRepairDetails,
@@ -314,6 +371,7 @@ const RepairPartsManagementScreen = () => {
   } = useWorkshopStore();
 
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
   const [editingPart, setEditingPart] = useState<Part | null>(null);
   const [laborCost, setLaborCost] = useState('');
   const [estimatedHours, setEstimatedHours] = useState('');
@@ -362,16 +420,26 @@ const RepairPartsManagementScreen = () => {
   }, [user?.id, fetchCars]);
 
   const handleSavePart = useCallback(async (formData: PartFormData) => {
+    // handleSave ha già controllato quantità e prezzo
+    const quantity = parseAmount(formData.quantity) as number;
+    const unitPrice = parseAmount(formData.unitCost) as number;
+    const name = formData.name.trim();
+    const serialNumber = formData.serialNumber.trim();
+    const isStock = !!editingPart && isStockPart(editingPart);
+
+    // Firestore rifiuta undefined: i campi non scelti non vanno nemmeno elencati
     const partData = {
-      name: formData.name,
-      quantity: parseInt(formData.quantity) || 1,
-      unitCost: parseFloat(formData.unitCost) || 0,
-      unitPrice: parseFloat(formData.unitCost) || 0,
-      totalPrice: (parseInt(formData.quantity) || 1) * (parseFloat(formData.unitCost) || 0),
+      name,
+      quantity,
+      unitCost: unitPrice,
+      unitPrice,
+      totalPrice: getPartTotal({ name, quantity, unitPrice }),
       category: formData.category,
       brand: formData.brand,
       partNumber: formData.partNumber,
-      supplier: formData.supplier,
+      ...(isStock ? {} : { source: formData.source }),
+      ...(formData.origin ? { origin: formData.origin } : {}),
+      ...(serialNumber || editingPart?.serialNumber ? { serialNumber } : {}),
     };
 
     try {
@@ -388,6 +456,16 @@ const RepairPartsManagementScreen = () => {
       showAlert('Errore', 'Impossibile salvare il pezzo. Riprova.');
     }
   }, [editingPart, carId, repairId, updateRepairPart, addPartToRepair]);
+
+  const handleStockPart = useCallback(async ({ id: _id, ...part }: RepairPart) => {
+    try {
+      await addPartToRepair(carId, repairId, part);
+      setShowPicker(false);
+    } catch (error) {
+      console.error('Errore aggiunta pezzo di magazzino:', error);
+      showAlert('Errore', 'Impossibile aggiungere il pezzo. Riprova.');
+    }
+  }, [carId, repairId, addPartToRepair]);
 
   const handleEditPart = useCallback((part: Part) => {
     setEditingPart(part);
@@ -427,7 +505,7 @@ const RepairPartsManagementScreen = () => {
     }
   }, [carId, repairId, laborCost, estimatedHours, notes, updateRepair]);
 
-  const getCategoryIcon = (category: string) => {
+  const getCategoryIcon = (category?: string) => {
     switch (category) {
       case 'ricambio': return <Settings size={16} color={theme.primary} />;
       case 'fluido': return <Box size={16} color={theme.warning} />;
@@ -437,7 +515,7 @@ const RepairPartsManagementScreen = () => {
     }
   };
 
-  const getCategoryColor = (category: string) => {
+  const getCategoryColor = (category?: string) => {
     switch (category) {
       case 'ricambio': return theme.primary;
       case 'fluido': return theme.warning;
@@ -448,7 +526,7 @@ const RepairPartsManagementScreen = () => {
   };
 
   const partsCost = useMemo(() =>
-    repair?.parts.reduce((sum, part) => sum + (part.quantity * part.unitCost), 0) || 0,
+    calculateInterventionTotals(repair?.parts ?? [], 0).partsCost,
     [repair?.parts]
   );
 
@@ -488,6 +566,9 @@ const RepairPartsManagementScreen = () => {
     );
   }
 
+  // Un intervento chiuso ha già scaricato la giacenza: un nuovo pezzo non verrebbe mai scaricato
+  const isClosed = repair.status === 'ready' || repair.status === 'completed';
+
   const renderPartItem = ({ item: part }: { item: Part }) => (
     <View style={[
       styles.partCard,
@@ -499,33 +580,49 @@ const RepairPartsManagementScreen = () => {
             {getCategoryIcon(part.category)}
             <Text style={[styles.partName, { color: theme.text }]}>{part.name}</Text>
           </View>
-          {part.brand && (
+          {!!(part.brand || part.partNumber) && (
             <Text style={[styles.partBrand, { color: theme.textSecondary }]}>
-              {part.brand} {part.partNumber && `• ${part.partNumber}`}
+              {[part.brand, part.partNumber].filter(Boolean).join(' • ')}
             </Text>
           )}
+          <Text style={[styles.partBrand, { color: theme.textSecondary }]}>
+            {part.origin ? PART_ORIGIN_LABELS[part.origin] : 'Provenienza da indicare'}
+            {' • '}
+            {isStockPart(part)
+              ? PART_SOURCE_LABELS.stock
+              : part.source
+                ? PART_SOURCE_LABELS[part.source]
+                : 'Sorgente da indicare'}
+          </Text>
         </View>
 
-        <View style={styles.partActions}>
-          <TouchableOpacity
-            style={[styles.actionIconButton, { backgroundColor: theme.primary + '20' }]}
-            onPress={() => handleEditPart(part)}
-          >
-            <Edit3 size={16} color={theme.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionIconButton, { backgroundColor: theme.error + '20' }]}
-            onPress={() => handleDeletePart(part.id)}
-          >
-            <Trash2 size={16} color={theme.error} />
-          </TouchableOpacity>
-        </View>
+        {/* Dopo la chiusura la riga di magazzino è già scaricata: cambiarla qui smentirebbe i movimenti */}
+        {!(isClosed && isStockPart(part)) && (
+          <View style={styles.partActions}>
+            <TouchableOpacity
+              style={[styles.actionIconButton, { backgroundColor: theme.primary + '20' }]}
+              onPress={() => handleEditPart(part)}
+              accessibilityRole="button"
+              accessibilityLabel={`Modifica ${part.name}`}
+            >
+              <Edit3 size={16} color={theme.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionIconButton, { backgroundColor: theme.error + '20' }]}
+              onPress={() => handleDeletePart(part.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Elimina ${part.name}`}
+            >
+              <Trash2 size={16} color={theme.error} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <View style={styles.partDetails}>
         <View style={styles.partDetailRow}>
           <Text style={[styles.partDetailLabel, { color: theme.textSecondary }]}>Quantità:</Text>
-          <Text style={[styles.partDetailValue, { color: theme.text }]}>{part.quantity}</Text>
+          <Text style={[styles.partDetailValue, { color: theme.text }]}>{formatQuantity(part.quantity)}</Text>
         </View>
         <View style={styles.partDetailRow}>
           <Text style={[styles.partDetailLabel, { color: theme.textSecondary }]}>Prezzo unitario:</Text>
@@ -534,10 +631,10 @@ const RepairPartsManagementScreen = () => {
         <View style={styles.partDetailRow}>
           <Text style={[styles.partDetailLabel, { color: theme.textSecondary }]}>Totale:</Text>
           <Text style={[styles.partTotalPrice, { color: theme.primary }]}>
-            €{(part.quantity * part.unitCost).toFixed(2)}
+            €{getPartTotal(part).toFixed(2)}
           </Text>
         </View>
-        {part.supplier && (
+        {!!part.supplier && (
           <View style={styles.partDetailRow}>
             <Text style={[styles.partDetailLabel, { color: theme.textSecondary }]}>Fornitore:</Text>
             <Text style={[styles.partDetailValue, { color: theme.textSecondary }]}>{part.supplier}</Text>
@@ -591,8 +688,7 @@ const RepairPartsManagementScreen = () => {
         style={styles.content}
         contentContainerStyle={[styles.contentContainer, isDesktop && styles.contentContainerDesktop]}
         showsVerticalScrollIndicator={false}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
         {/* Layout responsive: 2 colonne su desktop, 1 su mobile */}
         <View style={isMobile ? styles.singleColumnLayout : styles.twoColumnLayout}>
@@ -718,11 +814,36 @@ const RepairPartsManagementScreen = () => {
               </View>
 
               <View style={styles.sectionContent}>
+                <AiComingSoonButton feature="plannedParts" style={styles.aiButton} />
+                <View style={styles.partAddButtons}>
+                  <TouchableOpacity
+                    style={[styles.partAddButton, { borderColor: theme.primary }, isClosed && styles.buttonDisabled]}
+                    onPress={() => setShowPicker(true)}
+                    disabled={isClosed}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isClosed }}
+                  >
+                    <Box size={18} color={theme.primary} />
+                    <Text style={[styles.partAddButtonText, { color: theme.primary }]}>Dal magazzino</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.partAddButton, { borderColor: theme.primary }]}
+                    onPress={() => {
+                      setEditingPart(null);
+                      setShowAddSheet(true);
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <Plus size={18} color={theme.primary} />
+                    <Text style={[styles.partAddButtonText, { color: theme.primary }]}>Fuori scheda</Text>
+                  </TouchableOpacity>
+                </View>
+
                 {repair.parts.length === 0 ? (
                   <MechanicEmptyState
                     icon={Package}
                     title="Nessun pezzo aggiunto"
-                    subtitle="Tocca il pulsante + per aggiungere pezzi e materiali"
+                    subtitle="Scegli un pezzo dal magazzino o inseriscine uno fuori scheda"
                   />
                 ) : (
                   <FlatList
@@ -751,11 +872,28 @@ const RepairPartsManagementScreen = () => {
         editingPart={editingPart}
         theme={theme}
       />
+
+      <InventoryPartPicker
+        visible={showPicker}
+        onClose={() => setShowPicker(false)}
+        onSelect={handleStockPart}
+        items={inventory.items}
+        cars={inventory.cars}
+        loading={inventory.loading}
+        error={inventory.error}
+        onRetry={inventory.reload}
+        description={repair.description}
+        make={car.make}
+        model={car.model}
+      />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  aiButton: {
+    marginBottom: 12,
+  },
   container: {
     flex: 1,
   },
@@ -903,6 +1041,20 @@ const styles = StyleSheet.create({
   totalCostValue: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  partAddButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  partAddButton: {
+    ...mechanicButton.secondary,
+    flex: 1,
+    paddingHorizontal: 12,
+  },
+  partAddButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   partCard: {
     ...mechanicCard,
