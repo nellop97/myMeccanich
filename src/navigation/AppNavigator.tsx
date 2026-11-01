@@ -63,6 +63,10 @@ import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
 import CompleteInterventionScreen from '../screens/mechanic/CompleteInterventionScreen';
 import MechanicBookingsScreen from '../screens/mechanic/MechanicBookingsScreen';
 import MechanicProfileScreen from '../screens/mechanic/MechanicProfileScreen';
+import InventoryScreen from '../screens/mechanic/InventoryScreen';
+import InventoryItemFormScreen from '../screens/mechanic/InventoryItemFormScreen';
+import InventoryItemDetailScreen from '../screens/mechanic/InventoryItemDetailScreen';
+import PurchaseListScreen from '../screens/mechanic/PurchaseListScreen';
 
 // Fatturazione
 import InvoicingDashboardScreen from '../screens/mechanic/InvoicingDashboardScreen';
@@ -111,7 +115,12 @@ export type RootStackParamList = {
 
     // Maintenance
     MaintenanceHistory: { carId: string };
-    AddMaintenance: { carId: string; vehicleId?: string };
+    AddMaintenance: { carId: string; vehicleId?: string; category?: string };
+    EditMaintenance: { maintenanceId: string; carId: string };
+    AddReminder: { carId?: string; reminderId?: string } | undefined;
+    ReminderDetail: { reminderId: string; carId?: string };
+    ExpenseDetail: { expenseId: string };
+    ExpenseAnalytics: { carId: string };
     MaintenanceDetail: { maintenanceId: string; carId: string };
 
     // Fuel & Expenses
@@ -152,6 +161,14 @@ export type RootStackParamList = {
     MechanicCalendar: undefined;
     MechanicProfile: undefined;
 
+    // Inventory
+    Inventory: undefined;
+    InventoryItemForm:
+        | { itemId?: string; name?: string; partNumber?: string; brand?: string }
+        | undefined;
+    InventoryItemDetail: { itemId: string; action?: 'load'; presetQuantity?: number };
+    PurchaseList: undefined;
+
     // Invoicing
     InvoicingDashboard: undefined;
     CreateInvoice: {
@@ -159,7 +176,7 @@ export type RootStackParamList = {
         repairId?: string;
         customerId?: string;
         type?: 'customer' | 'supplier' | 'expense' | 'other';
-    };
+    } | undefined;
     InvoiceDetail: { invoiceId: string };
     InvoicesList: undefined;
     InvoiceTemplates: undefined;
@@ -171,6 +188,14 @@ export type RootStackParamList = {
     EditCustomer: { customerId: string };
     CustomerDetail: { customerId: string };
 };
+
+declare global {
+    // eslint-disable-next-line @typescript-eslint/no-namespace
+    namespace ReactNavigation {
+        // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+        interface RootParamList extends RootStackParamList {}
+    }
+}
 
 export type AuthStackParamList = {
     Login: undefined;
@@ -318,6 +343,46 @@ export default function AppNavigator() {
                             component={RepairPartsManagementScreen}
                             options={{
                                 title: 'Gestione Ricambi',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="Inventory"
+                            component={InventoryScreen}
+                            options={{
+                                title: 'Magazzino',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="InventoryItemForm"
+                            component={InventoryItemFormScreen}
+                            options={{
+                                title: 'Scheda pezzo',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="InventoryItemDetail"
+                            component={InventoryItemDetailScreen}
+                            options={{
+                                title: 'Dettaglio pezzo',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="PurchaseList"
+                            component={PurchaseListScreen}
+                            options={{
+                                title: 'Da comprare',
                                 headerShown: false,
                                 animation: 'slide_from_right',
                             }}
@@ -722,6 +787,11 @@ export default function AppNavigator() {
                             animation: 'slide_from_right',
                         }}
                     />
+
+                    {/* Voci che aprono una funzione non ancora costruita */}
+                    <Stack.Screen name="EditMaintenance" component={PlaceholderScreen} options={{ title: 'Modifica Manutenzione', headerShown: false }} />
+                    <Stack.Screen name="ExpenseDetail" component={PlaceholderScreen} options={{ title: 'Dettaglio Spesa', headerShown: false }} />
+                    <Stack.Screen name="ExpenseAnalytics" component={PlaceholderScreen} options={{ title: 'Analisi Spese', headerShown: false }} />
 
                     {/* Vehicle View Requests */}
                     <Stack.Screen

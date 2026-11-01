@@ -115,7 +115,8 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           color: theme.primary 
         },
         { id: 'bookings', label: 'Prenotazioni', icon: 'calendar-clock', color: theme.secondary },
-        { id: 'parts', label: 'Ricambi', icon: 'wrench', color: theme.success },
+        { id: 'inventory', label: 'Magazzino', icon: 'package', color: theme.success },
+        { id: 'purchaseList', label: 'Da comprare', icon: 'cart', color: theme.warning },
         { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.secondary },
       ] as MenuItem[]
     },

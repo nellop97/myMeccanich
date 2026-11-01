@@ -46,7 +46,7 @@ interface MechanicData {
 
 const MechanicDashboard: React.FC = () => {
   const navigation = useNavigation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const theme = useMechanicTheme();
 
   // Stati locali
@@ -115,9 +115,11 @@ const MechanicDashboard: React.FC = () => {
       case 'bookings':
         navigation.navigate('MechanicBookings' as never);
         break;
-      case 'parts':
-        // Gestione Intervento richiede un intervento: si sceglie dalla lista delle auto
-        navigation.navigate('AllCarsInWorkshop' as never);
+      case 'inventory':
+        navigation.navigate('Inventory' as never);
+        break;
+      case 'purchaseList':
+        navigation.navigate('PurchaseList' as never);
         break;
       case 'mechanicProfile':
         navigation.navigate('MechanicProfile' as never);

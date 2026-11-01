@@ -44,6 +44,8 @@ const menuSections = [
         label: "Nuovo Appuntamento",
         icon: "calendar-plus",
       },
+      { id: "Inventory", label: "Magazzino", icon: "package" },
+      { id: "PurchaseList", label: "Da comprare", icon: "cart" },
     ],
   },
   {
@@ -112,6 +114,12 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
         break;
       case "NewAppointment":
         onTabChange("newAppointment");
+        break;
+      case "Inventory":
+        onTabChange("inventory");
+        break;
+      case "PurchaseList":
+        onTabChange("purchaseList");
         break;
       case "InvoicingDashboard":
         onTabChange("invoices");
@@ -316,7 +324,7 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
           <Dialog.Title>Conferma Logout</Dialog.Title>
           <Dialog.Content>
             <Text style={{ color: theme.text }}>
-              Sei sicuro di voler uscire dall'applicazione?
+              Sei sicuro di voler uscire dall&apos;applicazione?
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
