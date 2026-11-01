@@ -1,7 +1,6 @@
 // src/screens/mechanic/CreateInvoiceScreen.tsx
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
-    ArrowLeft,
     Calendar,
     ChevronDown,
     FileText,
@@ -17,8 +16,6 @@ import {
 } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
 import {
-    Alert,
-    Dimensions,
     FlatList,
     KeyboardAvoidingView,
     Modal,
@@ -28,12 +25,10 @@ import {
     StatusBar,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
     ActivityIndicator,
 } from 'react-native';
-import { useAppThemeManager } from '../../hooks/useTheme';
 import { useWorkshopStore } from '../../store/workshopStore';
 import {
     useInvoicingStore,
@@ -43,8 +38,14 @@ import {
     PaymentMethod,
 } from '../../store/invoicingStore';
 
-const { width: screenWidth } = Dimensions.get('window');
+import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
+import MechanicTextInput from './MechanicTextInput';
+import { MechanicEmptyState } from './MechanicStates';
 
+import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
+import UniversalDatePicker from '../../components/UniversalDatePicker';
+import { parseDayString, toDayString } from '../../utils/calendarGrid';
 interface RouteParams {
     carId?: string;
     repairId?: string;
@@ -70,7 +71,7 @@ const CreateInvoiceScreen = () => {
     const route = useRoute();
     const params = route.params as RouteParams | undefined;
 
-    const { colors, isDark } = useAppThemeManager();
+    const theme = useMechanicTheme();
     const { cars, getCarById, getRepairDetails } = useWorkshopStore();
     const {
         addInvoice,
@@ -224,10 +225,7 @@ const CreateInvoiceScreen = () => {
     const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
         setItems(prev => {
             const newItems = [...prev];
-            const item = { ...newItems[index] };
-
-            // Update field
-            item[field] = value;
+            const item: InvoiceItem = { ...newItems[index], [field]: value };
 
             // Recalculate totals
             const quantity = parseFloat(item.quantity as any) || 0;
@@ -249,7 +247,7 @@ const CreateInvoiceScreen = () => {
     };
 
     const removeItem = (index: number) => {
-        Alert.alert(
+        showAlert(
             'Rimuovi Elemento',
             'Sei sicuro di voler rimuovere questo elemento?',
             [
@@ -309,14 +307,14 @@ const CreateInvoiceScreen = () => {
 
     const handleSubmit = async () => {
         if (!validateForm()) {
-            Alert.alert('Errore', 'Controlla i campi obbligatori');
+            showAlert('Errore', 'Controlla i campi obbligatori');
             return;
         }
 
         setIsLoading(true);
 
         try {
-            const invoiceId = addInvoice({
+            await addInvoice({
                 type: formData.type,
                 status: 'draft',
                 issueDate: formData.issueDate,
@@ -339,7 +337,7 @@ const CreateInvoiceScreen = () => {
                 totalDiscount: totals.totalDiscount,
             });
 
-            Alert.alert('Successo', 'Fattura creata con successo', [
+            showAlert('Successo', 'Fattura creata con successo', [
                 {
                     text: 'OK',
                     onPress: () => navigation.goBack(),
@@ -347,7 +345,7 @@ const CreateInvoiceScreen = () => {
             ]);
         } catch (error) {
             console.error('Error creating invoice:', error);
-            Alert.alert('Errore', 'Errore durante la creazione della fattura');
+            showAlert('Errore', 'Errore durante la creazione della fattura');
         } finally {
             setIsLoading(false);
         }
@@ -361,13 +359,13 @@ const CreateInvoiceScreen = () => {
             onRequestClose={() => setShowCustomerModal(false)}
         >
             <View style={styles.modalOverlay}>
-                <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
                     <View style={styles.modalHeader}>
-                        <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                        <Text style={[styles.modalTitle, { color: theme.text }]}>
                             Seleziona Cliente
                         </Text>
                         <TouchableOpacity onPress={() => setShowCustomerModal(false)}>
-                            <X size={24} color={colors.onSurface} />
+                            <X size={24} color={theme.text} />
                         </TouchableOpacity>
                     </View>
 
@@ -379,43 +377,43 @@ const CreateInvoiceScreen = () => {
                                     styles.customerOption,
                                     {
                                         backgroundColor: selectedCustomer?.id === customer.id
-                                            ? colors.primaryContainer
-                                            : colors.surfaceVariant,
+                                            ? theme.primaryLight
+                                            : theme.surfaceVariant,
                                         borderColor: selectedCustomer?.id === customer.id
-                                            ? colors.primary
-                                            : colors.outline,
+                                            ? theme.primary
+                                            : theme.border,
                                     },
                                 ]}
                                 onPress={() => selectCustomer(customer)}
                             >
-                                <View style={[styles.customerAvatar, { backgroundColor: colors.primary }]}>
-                                    <User size={24} color="#FFF" />
+                                <View style={[styles.customerAvatar, { backgroundColor: theme.primary }]}>
+                                    <User size={24} color={theme.onPrimary} />
                                 </View>
                                 <View style={styles.customerInfo}>
-                                    <Text style={[styles.customerName, { color: colors.onSurface }]}>
+                                    <Text style={[styles.customerName, { color: theme.text }]}>
                                         {customer.name}
                                     </Text>
                                     {customer.email && (
-                                        <Text style={[styles.customerEmail, { color: colors.onSurfaceVariant }]}>
+                                        <Text style={[styles.customerEmail, { color: theme.textSecondary }]}>
                                             {customer.email}
                                         </Text>
                                     )}
                                 </View>
                                 {selectedCustomer?.id === customer.id && (
-                                    <Check size={20} color={colors.primary} />
+                                    <Check size={20} color={theme.primary} />
                                 )}
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
 
                     <TouchableOpacity
-                        style={[styles.addCustomerButton, { backgroundColor: colors.primary }]}
+                        style={[styles.addCustomerButton, { backgroundColor: theme.primary }]}
                         onPress={() => {
                             setShowCustomerModal(false);
                             navigation.navigate('AddCustomer');
                         }}
                     >
-                        <Plus size={20} color="#FFF" />
+                        <Plus size={20} color={theme.onPrimary} />
                         <Text style={styles.addCustomerButtonText}>Nuovo Cliente</Text>
                     </TouchableOpacity>
                 </View>
@@ -435,7 +433,7 @@ const CreateInvoiceScreen = () => {
                 activeOpacity={1}
                 onPress={() => setShowTypeModal(false)}
             >
-                <View style={[styles.pickerModal, { backgroundColor: colors.surface }]}>
+                <View style={[styles.pickerModal, { backgroundColor: theme.surface }]}>
                     {INVOICE_TYPES.map((type) => (
                         <TouchableOpacity
                             key={type.id}
@@ -443,7 +441,7 @@ const CreateInvoiceScreen = () => {
                                 styles.pickerOption,
                                 {
                                     backgroundColor: formData.type === type.id
-                                        ? colors.primaryContainer
+                                        ? theme.primaryLight
                                         : 'transparent',
                                 },
                             ]}
@@ -452,11 +450,11 @@ const CreateInvoiceScreen = () => {
                                 setShowTypeModal(false);
                             }}
                         >
-                            <Text style={[styles.pickerOptionText, { color: colors.onSurface }]}>
+                            <Text style={[styles.pickerOptionText, { color: theme.text }]}>
                                 {type.label}
                             </Text>
                             {formData.type === type.id && (
-                                <Check size={20} color={colors.primary} />
+                                <Check size={20} color={theme.primary} />
                             )}
                         </TouchableOpacity>
                     ))}
@@ -477,7 +475,7 @@ const CreateInvoiceScreen = () => {
                 activeOpacity={1}
                 onPress={() => setShowPaymentModal(false)}
             >
-                <View style={[styles.pickerModal, { backgroundColor: colors.surface }]}>
+                <View style={[styles.pickerModal, { backgroundColor: theme.surface }]}>
                     {PAYMENT_METHODS.map((method) => (
                         <TouchableOpacity
                             key={method.id}
@@ -485,7 +483,7 @@ const CreateInvoiceScreen = () => {
                                 styles.pickerOption,
                                 {
                                     backgroundColor: formData.paymentMethod === method.id
-                                        ? colors.primaryContainer
+                                        ? theme.primaryLight
                                         : 'transparent',
                                 },
                             ]}
@@ -494,11 +492,11 @@ const CreateInvoiceScreen = () => {
                                 setShowPaymentModal(false);
                             }}
                         >
-                            <Text style={[styles.pickerOptionText, { color: colors.onSurface }]}>
+                            <Text style={[styles.pickerOptionText, { color: theme.text }]}>
                                 {method.label}
                             </Text>
                             {formData.paymentMethod === method.id && (
-                                <Check size={20} color={colors.primary} />
+                                <Check size={20} color={theme.primary} />
                             )}
                         </TouchableOpacity>
                     ))}
@@ -509,30 +507,26 @@ const CreateInvoiceScreen = () => {
 
     const renderItem = (item: InvoiceItem, index: number) => (
         <View style={[styles.itemCard, {
-            backgroundColor: colors.surfaceVariant,
-            borderColor: colors.outline,
+            backgroundColor: theme.surfaceVariant,
+            borderColor: theme.border,
         }]}>
             <View style={styles.itemHeader}>
-                <Text style={[styles.itemNumber, { color: colors.onSurfaceVariant }]}>
+                <Text style={[styles.itemNumber, { color: theme.textSecondary }]}>
                     #{index + 1}
                 </Text>
                 <TouchableOpacity
                     onPress={() => removeItem(index)}
                     style={styles.removeItemButton}
                 >
-                    <Trash2 size={18} color={colors.error} />
+                    <Trash2 size={18} color={theme.error} />
                 </TouchableOpacity>
             </View>
 
             {/* Description */}
-            <TextInput
-                style={[styles.itemInput, {
-                    color: colors.onSurface,
-                    backgroundColor: colors.surface,
-                    borderColor: errors[`item_${index}_description`] ? colors.error : colors.outline,
-                }]}
+            <MechanicTextInput
+                error={!!errors[`item_${index}_description`]}
+                containerStyle={styles.itemInput}
                 placeholder="Descrizione *"
-                placeholderTextColor={colors.onSurfaceVariant}
                 value={item.description}
                 onChangeText={(text) => updateItem(index, 'description', text)}
                 multiline
@@ -541,17 +535,12 @@ const CreateInvoiceScreen = () => {
             <View style={styles.itemRow}>
                 {/* Quantity */}
                 <View style={styles.itemInputGroup}>
-                    <Text style={[styles.itemLabel, { color: colors.onSurfaceVariant }]}>
+                    <Text style={[styles.itemLabel, { color: theme.textSecondary }]}>
                         Quantità
                     </Text>
-                    <TextInput
-                        style={[styles.itemInputSmall, {
-                            color: colors.onSurface,
-                            backgroundColor: colors.surface,
-                            borderColor: errors[`item_${index}_quantity`] ? colors.error : colors.outline,
-                        }]}
+                    <MechanicTextInput
+                        error={!!errors[`item_${index}_quantity`]}
                         placeholder="1"
-                        placeholderTextColor={colors.onSurfaceVariant}
                         value={item.quantity.toString()}
                         onChangeText={(text) => updateItem(index, 'quantity', text)}
                         keyboardType="numeric"
@@ -560,17 +549,12 @@ const CreateInvoiceScreen = () => {
 
                 {/* Unit Price */}
                 <View style={styles.itemInputGroup}>
-                    <Text style={[styles.itemLabel, { color: colors.onSurfaceVariant }]}>
+                    <Text style={[styles.itemLabel, { color: theme.textSecondary }]}>
                         Prezzo Unit.
                     </Text>
-                    <TextInput
-                        style={[styles.itemInputSmall, {
-                            color: colors.onSurface,
-                            backgroundColor: colors.surface,
-                            borderColor: errors[`item_${index}_unitPrice`] ? colors.error : colors.outline,
-                        }]}
+                    <MechanicTextInput
+                        error={!!errors[`item_${index}_unitPrice`]}
                         placeholder="0.00"
-                        placeholderTextColor={colors.onSurfaceVariant}
                         value={item.unitPrice.toString()}
                         onChangeText={(text) => updateItem(index, 'unitPrice', text)}
                         keyboardType="decimal-pad"
@@ -579,17 +563,11 @@ const CreateInvoiceScreen = () => {
 
                 {/* VAT Rate */}
                 <View style={styles.itemInputGroup}>
-                    <Text style={[styles.itemLabel, { color: colors.onSurfaceVariant }]}>
+                    <Text style={[styles.itemLabel, { color: theme.textSecondary }]}>
                         IVA %
                     </Text>
-                    <TextInput
-                        style={[styles.itemInputSmall, {
-                            color: colors.onSurface,
-                            backgroundColor: colors.surface,
-                            borderColor: colors.outline,
-                        }]}
+                    <MechanicTextInput
                         placeholder="22"
-                        placeholderTextColor={colors.onSurfaceVariant}
                         value={item.vatRate.toString()}
                         onChangeText={(text) => updateItem(index, 'vatRate', text)}
                         keyboardType="numeric"
@@ -599,10 +577,10 @@ const CreateInvoiceScreen = () => {
 
             {/* Total */}
             <View style={styles.itemTotal}>
-                <Text style={[styles.itemTotalLabel, { color: colors.onSurfaceVariant }]}>
+                <Text style={[styles.itemTotalLabel, { color: theme.textSecondary }]}>
                     Totale:
                 </Text>
-                <Text style={[styles.itemTotalValue, { color: colors.primary }]}>
+                <Text style={[styles.itemTotalValue, { color: theme.primary }]}>
                     €{(item.total + item.vatAmount).toFixed(2)}
                 </Text>
             </View>
@@ -610,37 +588,31 @@ const CreateInvoiceScreen = () => {
     );
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
             <StatusBar
-                barStyle={isDark ? 'light-content' : 'dark-content'}
-                backgroundColor={colors.surface}
+                barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+                backgroundColor={theme.surface}
             />
 
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <ArrowLeft size={24} color={colors.onSurface} />
-                </TouchableOpacity>
-
-                <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
-                    Crea Fattura
-                </Text>
-
-                <TouchableOpacity
-                    style={styles.saveButton}
-                    onPress={handleSubmit}
-                    disabled={isLoading}
-                >
-                    {isLoading ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                        <Save size={24} color={colors.primary} />
-                    )}
-                </TouchableOpacity>
-            </View>
+            <MechanicHeader
+                title="Crea Fattura"
+                onBack={() => navigation.goBack()}
+                right={
+                    <TouchableOpacity
+                        style={styles.saveButton}
+                        onPress={handleSubmit}
+                        disabled={isLoading}
+                        accessibilityRole="button"
+                        accessibilityLabel="Salva fattura"
+                    >
+                        {isLoading ? (
+                            <ActivityIndicator size="small" color={theme.primary} />
+                        ) : (
+                            <Save size={24} color={theme.primary} />
+                        )}
+                    </TouchableOpacity>
+                }
+            />
 
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
@@ -654,47 +626,47 @@ const CreateInvoiceScreen = () => {
                 >
                     {/* Invoice Type */}
                     <View style={styles.section}>
-                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>
                             Tipo Documento
                         </Text>
                         <TouchableOpacity
                             style={[styles.selectButton, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: colors.outline,
+                                backgroundColor: theme.surfaceVariant,
+                                borderColor: theme.border,
                             }]}
                             onPress={() => setShowTypeModal(true)}
                         >
-                            <FileText size={20} color={colors.primary} />
-                            <Text style={[styles.selectButtonText, { color: colors.onSurface }]}>
+                            <FileText size={20} color={theme.primary} />
+                            <Text style={[styles.selectButtonText, { color: theme.text }]}>
                                 {INVOICE_TYPES.find(t => t.id === formData.type)?.label}
                             </Text>
-                            <ChevronDown size={20} color={colors.onSurfaceVariant} />
+                            <ChevronDown size={20} color={theme.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
                     {/* Customer */}
                     <View style={styles.section}>
-                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>
                             Cliente *
                         </Text>
                         <TouchableOpacity
                             style={[styles.selectButton, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: errors.customer ? colors.error : colors.outline,
+                                backgroundColor: theme.surfaceVariant,
+                                borderColor: errors.customer ? theme.error : theme.border,
                             }]}
                             onPress={() => setShowCustomerModal(true)}
                         >
-                            <User size={20} color={colors.primary} />
+                            <User size={20} color={theme.primary} />
                             <Text style={[
                                 styles.selectButtonText,
-                                { color: selectedCustomer ? colors.onSurface : colors.onSurfaceVariant }
+                                { color: selectedCustomer ? theme.text : theme.textSecondary }
                             ]}>
                                 {selectedCustomer ? selectedCustomer.name : 'Seleziona cliente'}
                             </Text>
-                            <ChevronDown size={20} color={colors.onSurfaceVariant} />
+                            <ChevronDown size={20} color={theme.textSecondary} />
                         </TouchableOpacity>
                         {errors.customer && (
-                            <Text style={[styles.errorText, { color: colors.error }]}>
+                            <Text style={[styles.errorText, { color: theme.error }]}>
                                 {errors.customer}
                             </Text>
                         )}
@@ -703,69 +675,50 @@ const CreateInvoiceScreen = () => {
                     {/* Dates */}
                     <View style={styles.dateRow}>
                         <View style={[styles.dateField, { flex: 1 }]}>
-                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>
                                 Data Emissione
                             </Text>
-                            <View style={[styles.inputContainer, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: colors.outline,
-                            }]}>
-                                <Calendar size={20} color={colors.primary} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    value={formData.issueDate}
-                                    onChangeText={(text) => updateFormData('issueDate', text)}
-                                    placeholder="YYYY-MM-DD"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                />
-                            </View>
+                            <UniversalDatePicker
+                                value={parseDayString(formData.issueDate)}
+                                onChange={(date) => updateFormData('issueDate', toDayString(date))}
+                                format="medium"
+                            />
                         </View>
 
                         <View style={[styles.dateField, { flex: 1 }]}>
-                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>
                                 Scadenza
                             </Text>
-                            <View style={[styles.inputContainer, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: colors.outline,
-                            }]}>
-                                <Calendar size={20} color={colors.primary} />
-                                <TextInput
-                                    style={[styles.input, { color: colors.onSurface }]}
-                                    value={formData.dueDate}
-                                    onChangeText={(text) => updateFormData('dueDate', text)}
-                                    placeholder="YYYY-MM-DD"
-                                    placeholderTextColor={colors.onSurfaceVariant}
-                                />
-                            </View>
+                            <UniversalDatePicker
+                                value={parseDayString(formData.dueDate)}
+                                onChange={(date) => updateFormData('dueDate', toDayString(date))}
+                                format="medium"
+                            />
                         </View>
                     </View>
 
                     {/* Items */}
                     <View style={styles.section}>
                         <View style={styles.itemsHeader}>
-                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                            <Text style={[styles.sectionTitle, { color: theme.text }]}>
                                 Elementi Fattura
                             </Text>
                             <TouchableOpacity
-                                style={[styles.addItemButton, { backgroundColor: colors.primary }]}
+                                style={[styles.addItemButton, { backgroundColor: theme.primary }]}
                                 onPress={addNewItem}
                             >
-                                <Plus size={18} color="#FFF" />
+                                <Plus size={18} color={theme.onPrimary} />
                                 <Text style={styles.addItemButtonText}>Aggiungi</Text>
                             </TouchableOpacity>
                         </View>
 
                         {items.length === 0 ? (
-                            <View style={[styles.emptyItems, { backgroundColor: colors.surfaceVariant }]}>
-                                <FileText size={48} color={colors.onSurfaceVariant} />
-                                <Text style={[styles.emptyItemsText, { color: colors.onSurfaceVariant }]}>
-                                    Nessun elemento aggiunto
-                                </Text>
-                                <Text style={[styles.emptyItemsSubtext, { color: colors.onSurfaceVariant }]}>
-                                    Tocca "Aggiungi" per inserire prodotti o servizi
-                                </Text>
-                            </View>
+                            <MechanicEmptyState
+                                icon={FileText}
+                                title="Nessun elemento aggiunto"
+                                subtitle={'Tocca "Aggiungi" per inserire prodotti o servizi'}
+                                style={[styles.emptyItems, { backgroundColor: theme.surfaceVariant }]}
+                            />
                         ) : (
                             items.map((item, index) => (
                                 <View key={item.id}>
@@ -774,7 +727,7 @@ const CreateInvoiceScreen = () => {
                             ))
                         )}
                         {errors.items && (
-                            <Text style={[styles.errorText, { color: colors.error }]}>
+                            <Text style={[styles.errorText, { color: theme.error }]}>
                                 {errors.items}
                             </Text>
                         )}
@@ -783,41 +736,41 @@ const CreateInvoiceScreen = () => {
                     {/* Totals */}
                     {items.length > 0 && (
                         <View style={[styles.totalsCard, {
-                            backgroundColor: colors.surfaceVariant,
-                            borderColor: colors.outline,
+                            backgroundColor: theme.surfaceVariant,
+                            borderColor: theme.border,
                         }]}>
                             <View style={styles.totalRow}>
-                                <Text style={[styles.totalLabel, { color: colors.onSurfaceVariant }]}>
+                                <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>
                                     Subtotale:
                                 </Text>
-                                <Text style={[styles.totalValue, { color: colors.onSurface }]}>
+                                <Text style={[styles.totalValue, { color: theme.text }]}>
                                     €{totals.subtotal.toFixed(2)}
                                 </Text>
                             </View>
                             {totals.totalDiscount > 0 && (
                                 <View style={styles.totalRow}>
-                                    <Text style={[styles.totalLabel, { color: colors.onSurfaceVariant }]}>
+                                    <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>
                                         Sconto:
                                     </Text>
-                                    <Text style={[styles.totalValue, { color: colors.error }]}>
+                                    <Text style={[styles.totalValue, { color: theme.error }]}>
                                         -€{totals.totalDiscount.toFixed(2)}
                                     </Text>
                                 </View>
                             )}
                             <View style={styles.totalRow}>
-                                <Text style={[styles.totalLabel, { color: colors.onSurfaceVariant }]}>
+                                <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>
                                     IVA:
                                 </Text>
-                                <Text style={[styles.totalValue, { color: colors.onSurface }]}>
+                                <Text style={[styles.totalValue, { color: theme.text }]}>
                                     €{totals.totalVat.toFixed(2)}
                                 </Text>
                             </View>
-                            <View style={[styles.divider, { backgroundColor: colors.outline }]} />
+                            <View style={[styles.divider, { backgroundColor: theme.border }]} />
                             <View style={styles.totalRow}>
-                                <Text style={[styles.grandTotalLabel, { color: colors.onSurface }]}>
+                                <Text style={[styles.grandTotalLabel, { color: theme.text }]}>
                                     TOTALE:
                                 </Text>
-                                <Text style={[styles.grandTotalValue, { color: colors.primary }]}>
+                                <Text style={[styles.grandTotalValue, { color: theme.primary }]}>
                                     €{totals.totalAmount.toFixed(2)}
                                 </Text>
                             </View>
@@ -826,64 +779,50 @@ const CreateInvoiceScreen = () => {
 
                     {/* Payment Method */}
                     <View style={styles.section}>
-                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>
                             Metodo di Pagamento
                         </Text>
                         <TouchableOpacity
                             style={[styles.selectButton, {
-                                backgroundColor: colors.surfaceVariant,
-                                borderColor: colors.outline,
+                                backgroundColor: theme.surfaceVariant,
+                                borderColor: theme.border,
                             }]}
                             onPress={() => setShowPaymentModal(true)}
                         >
-                            <DollarSign size={20} color={colors.primary} />
-                            <Text style={[styles.selectButtonText, { color: colors.onSurface }]}>
+                            <DollarSign size={20} color={theme.primary} />
+                            <Text style={[styles.selectButtonText, { color: theme.text }]}>
                                 {PAYMENT_METHODS.find(m => m.id === formData.paymentMethod)?.label}
                             </Text>
-                            <ChevronDown size={20} color={colors.onSurfaceVariant} />
+                            <ChevronDown size={20} color={theme.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
                     {/* Payment Terms */}
                     <View style={styles.section}>
-                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>
                             Termini di Pagamento
                         </Text>
-                        <View style={[styles.inputContainer, {
-                            backgroundColor: colors.surfaceVariant,
-                            borderColor: colors.outline,
-                        }]}>
-                            <FileText size={20} color={colors.primary} />
-                            <TextInput
-                                style={[styles.input, { color: colors.onSurface }]}
-                                placeholder="es. 30 giorni"
-                                placeholderTextColor={colors.onSurfaceVariant}
-                                value={formData.paymentTerms}
-                                onChangeText={(text) => updateFormData('paymentTerms', text)}
-                            />
-                        </View>
+                        <MechanicTextInput
+                            left={<FileText size={20} color={theme.primary} />}
+                            placeholder="es. 30 giorni"
+                            value={formData.paymentTerms}
+                            onChangeText={(text) => updateFormData('paymentTerms', text)}
+                        />
                     </View>
 
                     {/* Notes */}
                     <View style={styles.section}>
-                        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>
                             Note
                         </Text>
-                        <View style={[styles.textAreaContainer, {
-                            backgroundColor: colors.surfaceVariant,
-                            borderColor: colors.outline,
-                        }]}>
-                            <TextInput
-                                style={[styles.textArea, { color: colors.onSurface }]}
-                                placeholder="Note aggiuntive per la fattura..."
-                                placeholderTextColor={colors.onSurfaceVariant}
-                                value={formData.notes}
-                                onChangeText={(text) => updateFormData('notes', text)}
-                                multiline
-                                numberOfLines={4}
-                                textAlignVertical="top"
-                            />
-                        </View>
+                        <MechanicTextInput
+                            style={styles.textArea}
+                            placeholder="Note aggiuntive per la fattura..."
+                            value={formData.notes}
+                            onChangeText={(text) => updateFormData('notes', text)}
+                            multiline
+                            numberOfLines={4}
+                        />
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -899,26 +838,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
-    },
-    backButton: {
-        padding: 8,
-    },
-    headerTitle: {
-        flex: 1,
-        fontSize: 18,
-        fontWeight: '600',
-        marginLeft: 12,
-    },
-    saveButton: {
-        padding: 8,
-    },
+    saveButton: mechanicButton.icon,
     content: {
         flex: 1,
     },
@@ -945,19 +865,6 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 16,
     },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        gap: 12,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-    },
     dateRow: {
         flexDirection: 'row',
         gap: 12,
@@ -972,38 +879,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 12,
     },
-    addItemButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        gap: 6,
-    },
+    addItemButton: mechanicButton.compact,
     addItemButtonText: {
-        color: '#FFF',
+        color: mechanicStaticColors.onPrimary,
         fontSize: 14,
         fontWeight: '600',
     },
     emptyItems: {
-        padding: 40,
         borderRadius: 12,
-        alignItems: 'center',
-    },
-    emptyItemsText: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginTop: 16,
-    },
-    emptyItemsSubtext: {
-        fontSize: 14,
-        marginTop: 8,
-        textAlign: 'center',
     },
     itemCard: {
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
+        ...mechanicCard,
         marginBottom: 12,
     },
     itemHeader: {
@@ -1020,10 +906,6 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     itemInput: {
-        padding: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        fontSize: 16,
         marginBottom: 12,
         minHeight: 60,
     },
@@ -1039,19 +921,13 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginBottom: 4,
     },
-    itemInputSmall: {
-        padding: 10,
-        borderRadius: 8,
-        borderWidth: 1,
-        fontSize: 14,
-    },
     itemTotal: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingTop: 12,
         borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.1)',
+        borderTopColor: mechanicStaticColors.divider,
     },
     itemTotalLabel: {
         fontSize: 14,
@@ -1062,9 +938,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     totalsCard: {
-        padding: 20,
-        borderRadius: 12,
-        borderWidth: 1,
+        ...mechanicCard,
         marginBottom: 24,
     },
     totalRow: {
@@ -1092,13 +966,7 @@ const styles = StyleSheet.create({
         height: 1,
         marginVertical: 12,
     },
-    textAreaContainer: {
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
     textArea: {
-        fontSize: 16,
         minHeight: 100,
     },
     errorText: {
@@ -1108,12 +976,13 @@ const styles = StyleSheet.create({
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: mechanicStaticColors.overlay,
         justifyContent: 'center',
         alignItems: 'center',
     },
     modalContent: {
-        width: screenWidth - 40,
+        width: '90%',
+        maxWidth: 480,
         maxHeight: '80%',
         borderRadius: 20,
         overflow: 'hidden',
@@ -1124,7 +993,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 20,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
+        borderBottomColor: mechanicStaticColors.divider,
     },
     modalTitle: {
         fontSize: 20,
@@ -1168,12 +1037,13 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     addCustomerButtonText: {
-        color: '#FFF',
+        color: mechanicStaticColors.onPrimary,
         fontSize: 16,
         fontWeight: '600',
     },
     pickerModal: {
-        width: screenWidth - 80,
+        width: '80%',
+        maxWidth: 400,
         borderRadius: 20,
         padding: 8,
     },

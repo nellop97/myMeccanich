@@ -5,19 +5,16 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   Platform,
   ScrollView,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useMechanicStats } from '../../hooks/useMechanicStats';
 
-const { width: screenWidth } = Dimensions.get('window');
-const isDesktop = Platform.OS === 'web' && screenWidth > 768;
 
+import MechanicIcon from './MechanicIcon';
+import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicBreakpoints } from './mechanicTheme';
 interface MechanicData {
   loginProvider: string;
   firstName: string;
@@ -52,6 +49,7 @@ interface StatCardData {
   color: string;
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
+  onPress?: () => void;
 }
 
 interface QuickAction {
@@ -60,11 +58,12 @@ interface QuickAction {
   subtitle: string;
   icon: string;
   color: string;
-  gradient: string[];
   onPress: () => void;
 }
 
 const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, navigation }) => {
+  const { isDesktop, isMobile } = useMechanicBreakpoints();
+
   // Usa l'hook per le statistiche reali
   const { stats: dashboardStats, recentActivity, isLoading, error, refreshStats } = useMechanicStats();
 
@@ -84,13 +83,14 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       color: theme.primary,
       trend: dashboardStats.carsInWorkshop > 0 ? 'up' : 'neutral',
       trendValue: dashboardStats.carsInWorkshop > 0 ? `${dashboardStats.carsInWorkshop} auto` : 'Nessuna auto',
+      onPress: goToWorkshopCars,
     },
     {
       title: 'Appuntamenti Oggi',
       value: dashboardStats.appointmentsToday,
       subtitle: `${dashboardStats.appointmentsWeek} questa settimana`,
       icon: 'calendar-today',
-      color: theme.accent,
+      color: theme.secondary,
       trend: dashboardStats.appointmentsToday > 0 ? 'up' : 'neutral',
       trendValue: dashboardStats.appointmentsToday > 0 ? 'In programma' : 'Nessuno',
     },
@@ -121,8 +121,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       title: 'Prenotazioni',
       subtitle: 'Gestisci richieste clienti',
       icon: 'calendar-clock',
-      color: '#8b5cf6',
-      gradient: ['#8b5cf6', '#7c3aed'],
+      color: theme.secondary,
       onPress: () => navigation.navigate('MechanicBookings'),
     },
     {
@@ -131,7 +130,6 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       subtitle: 'Aggiungi veicolo in officina',
       icon: 'car',
       color: theme.success,
-      gradient: ['#10b981', '#059669'],
       onPress: () => navigation.navigate('NewAppointment'),
     },
     {
@@ -140,7 +138,6 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       subtitle: 'Programma nuovo intervento',
       icon: 'calendar-plus',
       color: theme.primary,
-      gradient: ['#3b82f6', '#1d4ed8'],
       onPress: () => navigation.navigate('MechanicCalendar'),
     },
     {
@@ -149,7 +146,6 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       subtitle: 'Crea nuova fattura',
       icon: 'receipt',
       color: theme.warning,
-      gradient: ['#f59e0b', '#d97706'],
       onPress: () => navigation.navigate('CreateInvoice'),
     },
     {
@@ -157,70 +153,86 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       title: 'Cliente',
       subtitle: 'Aggiungi nuovo cliente',
       icon: 'account-plus',
-      color: theme.accent,
-      gradient: ['#7c3aed', '#5b21b6'],
+      color: theme.secondary,
       onPress: () => navigation.navigate('AddCustomer'),
     },
   ];
 
   // Render di una stat card
-  const renderStatCard = (stat: StatCardData, index: number) => (
-    <View
-      key={index}
-      style={[
-        styles.statCard,
-        { backgroundColor: theme.surface },
-        isDesktop ? styles.statCardDesktop : styles.statCardMobile
-      ]}
-    >
-      <View style={styles.statCardHeader}>
-        <View style={[styles.statIcon, { backgroundColor: `${stat.color}15` }]}>
-          <MaterialCommunityIcons
-            name={stat.icon as any}
-            size={24}
-            color={stat.color}
-          />
+  const renderStatCard = (stat: StatCardData, index: number) => {
+    const cardStyle = [
+      styles.statCard,
+      { backgroundColor: theme.surface, borderColor: theme.border },
+      isMobile ? styles.statCardMobile : styles.statCardDesktop,
+    ];
+    const cardContent = (
+      <>
+        <View style={styles.statCardHeader}>
+          <View style={[styles.statIcon, { backgroundColor: `${stat.color}15` }]}>
+            <MechanicIcon
+              name={stat.icon as any}
+              size={24}
+              color={stat.color}
+            />
+          </View>
+
+          <View style={styles.statTrend}>
+            <MechanicIcon
+              name={
+                stat.trend === 'up' ? 'trending-up' :
+                stat.trend === 'down' ? 'trending-down' :
+                'minus'
+              }
+              size={16}
+              color={
+                stat.trend === 'up' ? theme.success :
+                stat.trend === 'down' ? theme.error :
+                theme.textSecondary
+              }
+            />
+          </View>
         </View>
 
-        <View style={styles.statTrend}>
-          <MaterialCommunityIcons
-            name={
-              stat.trend === 'up' ? 'trending-up' :
-              stat.trend === 'down' ? 'trending-down' :
-              'minus'
-            }
-            size={16}
-            color={
-              stat.trend === 'up' ? theme.success :
-              stat.trend === 'down' ? theme.danger :
-              theme.textSecondary
-            }
-          />
-        </View>
-      </View>
-
-      <View style={styles.statContent}>
-        <Text style={[styles.statValue, { color: theme.text }]}>
-          {stat.value}
-        </Text>
-        <Text style={[styles.statTitle, { color: theme.textSecondary }]}>
-          {stat.title}
-        </Text>
-        <Text style={[styles.statSubtitle, { color: theme.textSecondary }]}>
-          {stat.subtitle}
-        </Text>
-
-        {stat.trendValue && (
-          <Text style={[
-            styles.statTrendValue,
-            { color: stat.trend === 'up' ? theme.success : stat.trend === 'down' ? theme.danger : theme.textSecondary }
-          ]}>
-            {stat.trendValue}
+        <View style={styles.statContent}>
+          <Text style={[styles.statValue, { color: theme.text }]}>
+            {stat.value}
           </Text>
-        )}
-      </View>
-    </View>
-  );
+          <Text style={[styles.statTitle, { color: theme.textSecondary }]}>
+            {stat.title}
+          </Text>
+          <Text style={[styles.statSubtitle, { color: theme.textSecondary }]}>
+            {stat.subtitle}
+          </Text>
+
+          {stat.trendValue && (
+            <Text style={[
+              styles.statTrendValue,
+              { color: stat.trend === 'up' ? theme.success : stat.trend === 'down' ? theme.error : theme.textSecondary }
+            ]}>
+              {stat.trendValue}
+            </Text>
+          )}
+        </View>
+      </>
+    );
+
+    // Solo le card con un'azione sono controlli: le altre restano informative
+    if (stat.onPress) {
+      return (
+        <TouchableOpacity
+          key={index}
+          style={cardStyle}
+          onPress={stat.onPress}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+        >
+          {cardContent}
+        </TouchableOpacity>
+      );
+    }
+
+    return <View key={index} style={cardStyle}>{cardContent}</View>;
+  };
 
   // Render di una quick action
   const renderQuickAction = (action: QuickAction, index: number) => (
@@ -228,38 +240,36 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
       key={action.id}
       style={[
         styles.quickAction,
-        isDesktop ? styles.quickActionDesktop : styles.quickActionMobile
+        { backgroundColor: theme.surface, borderColor: theme.border },
+        isMobile ? styles.quickActionMobile : styles.quickActionDesktop
       ]}
       onPress={action.onPress}
       activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={action.title.trim()}
     >
-      <LinearGradient
-        colors={action.gradient}
-        style={styles.quickActionGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View style={styles.quickActionContent}>
-          <MaterialCommunityIcons
+      <View style={styles.quickActionContent}>
+        <View style={[styles.statIcon, { backgroundColor: `${action.color}15` }]}>
+          <MechanicIcon
             name={action.icon as any}
-            size={28}
-            color="#ffffff"
-          />
-          <View style={styles.quickActionText}>
-            <Text style={styles.quickActionTitle}>
-              {action.title}
-            </Text>
-            <Text style={styles.quickActionSubtitle}>
-              {action.subtitle}
-            </Text>
-          </View>
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={20}
-            color="rgba(255,255,255,0.8)"
+            size={24}
+            color={action.color}
           />
         </View>
-      </LinearGradient>
+        <View style={styles.quickActionText}>
+          <Text style={[styles.quickActionTitle, { color: theme.text }]}>
+            {action.title}
+          </Text>
+          <Text style={[styles.quickActionSubtitle, { color: theme.textSecondary }]}>
+            {action.subtitle}
+          </Text>
+        </View>
+        <MechanicIcon
+          name="arrow-right"
+          size={20}
+          color={theme.textSecondary}
+        />
+      </View>
     </TouchableOpacity>
   );
 
@@ -270,26 +280,13 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
           Attività Recente
         </Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('ActivityLog')}
-          style={styles.seeAllButton}
-        >
-          <Text style={[styles.seeAllText, { color: theme.primary }]}>
-            Vedi tutto
-          </Text>
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={16}
-            color={theme.primary}
-          />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.activityList}>
         {recentActivity.map((activity, index) => (
           <View key={activity.id} style={styles.activityItem}>
             <View style={[styles.activityIcon, { backgroundColor: `${activity.color}15` }]}>
-              <MaterialCommunityIcons
+              <MechanicIcon
                 name={activity.icon as any}
                 size={18}
                 color={activity.color}
@@ -377,15 +374,15 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
   if (error) {
     return (
       <View style={[styles.errorContainer, { backgroundColor: theme.background }]}>
-        <MaterialCommunityIcons name="alert-circle" size={48} color={theme.danger} />
-        <Text style={[styles.errorText, { color: theme.danger, marginTop: 16 }]}>
+        <MechanicIcon name="alert-circle" size={48} color={theme.error} />
+        <Text style={[styles.errorText, { color: theme.error, marginTop: 16 }]}>
           {error}
         </Text>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: theme.primary }]}
           onPress={refreshStats}
         >
-          <Text style={[styles.retryButtonText, { color: '#ffffff' }]}>
+          <Text style={[styles.retryButtonText, { color: theme.onPrimary }]}>
             Riprova
           </Text>
         </TouchableOpacity>
@@ -401,7 +398,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
     <ScrollView
       style={styles.container}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { padding: isDesktop ? 24 : 16 }]}
       refreshControl={
         <RefreshControl
           refreshing={isLoading}
@@ -425,77 +422,14 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
           style={styles.refreshButton}
           onPress={refreshStats}
         >
-          <MaterialCommunityIcons name="refresh" size={20} color={theme.primary} />
+          <MechanicIcon name="refresh" size={20} color={theme.primary} />
         </TouchableOpacity>
       </View>
 
       {/* Statistiche Principali */}
       <View style={styles.statsContainer}>
-        <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
-          {statCards.map((stat, index) => {
-            if (stat.title === 'Auto in Officina') {
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.statCard,
-                    { backgroundColor: theme.surface },
-                    isDesktop ? styles.statCardDesktop : styles.statCardMobile
-                  ]}
-                  onPress={goToWorkshopCars} // Naviga alla schermata delle auto in officina
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.statCardHeader}>
-                    <View style={[styles.statIcon, { backgroundColor: `${stat.color}15` }]}>
-                      <MaterialCommunityIcons
-                        name={stat.icon as any}
-                        size={24}
-                        color={stat.color}
-                      />
-                    </View>
-
-                    <View style={styles.statTrend}>
-                      <MaterialCommunityIcons
-                        name={
-                          stat.trend === 'up' ? 'trending-up' :
-                          stat.trend === 'down' ? 'trending-down' :
-                          'minus'
-                        }
-                        size={16}
-                        color={
-                          stat.trend === 'up' ? theme.success :
-                          stat.trend === 'down' ? theme.danger :
-                          theme.textSecondary
-                        }
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.statContent}>
-                    <Text style={[styles.statValue, { color: theme.text }]}>
-                      {stat.value}
-                    </Text>
-                    <Text style={[styles.statTitle, { color: theme.textSecondary }]}>
-                      {stat.title}
-                    </Text>
-                    <Text style={[styles.statSubtitle, { color: theme.textSecondary }]}>
-                      {stat.subtitle}
-                    </Text>
-
-                    {stat.trendValue && (
-                      <Text style={[
-                        styles.statTrendValue,
-                        { color: stat.trend === 'up' ? theme.success : stat.trend === 'down' ? theme.danger : theme.textSecondary }
-                      ]}>
-                        {stat.trendValue}
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            }
-            return renderStatCard(stat, index);
-          })}
+        <View style={[styles.statsGrid, isMobile ? styles.statsGridMobile : styles.statsGridDesktop]}>
+          {statCards.map(renderStatCard)}
         </View>
       </View>
 
@@ -504,7 +438,7 @@ const MechanicDashboardContent: React.FC<Props> = ({ mechanicData, theme, naviga
         <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 16 }]}>
           Azioni Rapide
         </Text>
-        <View style={[styles.quickActionsGrid, isDesktop && styles.quickActionsGridDesktop]}>
+        <View style={[styles.quickActionsGrid, !isMobile && styles.quickActionsGridDesktop]}>
           {quickActions.map((action, index) => renderQuickAction(action, index))}
         </View>
       </View>
@@ -523,7 +457,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: isDesktop ? 24 : 16,
     paddingBottom: 40,
   },
 
@@ -571,31 +504,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
   },
-  refreshButton: {
-    padding: 8,
-    borderRadius: 8,
-  },
+  refreshButton: mechanicButton.icon,
 
   // Stats Section
   statsContainer: {
     marginBottom: 32,
   },
   statsGrid: {
-    flexDirection: isDesktop ? 'row' : 'column',
     gap: 16,
   },
+  statsGridMobile: {
+    flexDirection: 'column',
+  },
   statsGridDesktop: {
+    flexDirection: 'row',
     flexWrap: 'wrap',
   },
-  statCard: {
-    padding: 20,
-    borderRadius: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
+  statCard: mechanicCard,
   statCardDesktop: {
     flex: 1,
     minWidth: 280,
@@ -634,7 +559,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   statTrendValue: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     marginTop: 4,
   },
@@ -651,13 +576,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   quickAction: {
-    borderRadius: 16,
+    ...mechanicCard,
     overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
   },
   quickActionDesktop: {
     flex: 1,
@@ -665,9 +585,6 @@ const styles = StyleSheet.create({
   },
   quickActionMobile: {
     width: '100%',
-  },
-  quickActionGradient: {
-    padding: 20,
   },
   quickActionContent: {
     flexDirection: 'row',
@@ -678,13 +595,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   quickActionTitle: {
-    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 2,
   },
   quickActionSubtitle: {
-    color: 'rgba(255,255,255,0.8)',
     fontSize: 12,
   },
 
@@ -692,9 +607,9 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 20,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: mechanicStaticColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -708,15 +623,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  seeAllText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
 
   // Performance Metrics
@@ -769,7 +675,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   activityTime: {
-    fontSize: 11,
+    fontSize: 12,
     minWidth: 70,
     textAlign: 'right',
   },

@@ -47,6 +47,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>L'app ha bisogno di accedere alla fotocamera per scattare foto dei veicoli e documenti.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>L'app ha bisogno di accedere alla libreria foto per selezionare immagini dei veicoli.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 </dict>

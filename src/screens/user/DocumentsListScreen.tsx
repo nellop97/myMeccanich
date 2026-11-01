@@ -196,9 +196,9 @@ const DocumentsListScreen = () => {
   };
 
   useEffect(() => {
-    const unsubscribe = loadDocuments();
+    const subscription = loadDocuments();
     return () => {
-      if (unsubscribe) unsubscribe();
+      subscription.then((unsubscribe) => unsubscribe?.());
     };
   }, [selectedVehicle]);
 
@@ -248,7 +248,7 @@ const DocumentsListScreen = () => {
               vehicleId: selectedVehicle === 'all' ? 
                 (vehicles && vehicles[0] ? vehicles[0].id : selectedVehicle) : 
                 selectedVehicle,
-              type: type,
+              type: 'other',
               title: file.name,
               fileName: file.name,
               fileUrl: downloadURL,
@@ -390,7 +390,7 @@ const DocumentsListScreen = () => {
               {document.title}
             </Text>
             <Text style={[styles.documentType, { color: colors.onSurfaceVariant }]}>
-              {docType?.label} • {vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Tutte le auto'}
+              {docType?.label} • {vehicle ? `${vehicle.make} ${vehicle.model}` : 'Tutte le auto'}
             </Text>
           </View>
           <View style={[styles.statusChip, { backgroundColor: status.color + '20' }]}>
@@ -498,7 +498,7 @@ const DocumentsListScreen = () => {
               styles.vehicleChipText,
               { color: selectedVehicle === vehicle.id ? colors.onPrimary : colors.onSurface }
             ]}>
-              {vehicle.brand} {vehicle.model}
+              {vehicle.make} {vehicle.model}
             </Text>
           </TouchableOpacity>
         ))}

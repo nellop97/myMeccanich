@@ -1,459 +1,270 @@
 // src/screens/mechanic/AllCarsInWorkshopScreen.tsx
+// Interventi aperti dell'officina, con le azioni per farli avanzare
 import { useNavigation } from '@react-navigation/native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { AlertCircle, Calendar, Car, Phone, Plus, Search, User, Wrench } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
 import {
-  Calendar,
-  Car,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  DollarSign,
-  Filter,
-  Phone,
-  Search,
-  User,
-  Wrench,
-} from 'lucide-react-native';
-import React, { useState } from 'react';
-import {
-  Dimensions,
+  ActivityIndicator,
   FlatList,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
-import { useWorkshopStore } from '../../store/workshopStore';
+import { parseDayString } from '../../utils/calendarGrid';
+import { showAlert } from '../../utils/platformHelpers';
+import MechanicHeader from './MechanicHeader';
+import { MechanicEmptyState } from './MechanicStates';
+import { Intervention, getInterventionStatus, isOpenIntervention, useInterventions } from './interventions';
+import {
+  MECHANIC_MIN_TOUCH,
+  mechanicCard,
+  mechanicRadius,
+  useMechanicBreakpoints,
+  useMechanicTheme,
+} from './mechanicTheme';
 
-const { width: screenWidth } = Dimensions.get('window');
+type Filter = 'all' | 'pending' | 'in_progress' | 'ready';
 
-interface ExtendedCar {
-  id: string;
-  model: string;
-  vin: string;
-  licensePlate?: string;
-  owner?: string;
-  ownerPhone?: string; // Campo aggiuntivo
-  color?: string; // Campo aggiuntivo
-  year?: string; // Campo aggiuntivo
-  entryDate?: string; // Campo aggiuntivo
-  estimatedExit?: string; // Campo aggiuntivo
-  repairs: any[];
-  currentRepair?: any;
-  totalCost?: number;
-  daysInShop?: number;
-  priority?: 'low' | 'medium' | 'high';
-}
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'all', label: 'Tutti' },
+  { key: 'in_progress', label: 'In lavorazione' },
+  { key: 'pending', label: 'Programmati' },
+  { key: 'ready', label: 'Da ritirare' },
+];
+
+const formatSchedule = ({ repair }: Intervention) => {
+  const date = parseDayString(repair.scheduledDate);
+  if (!date) return 'Data da definire';
+  const day = date.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
+  return repair.scheduledTime ? `${day}, ${repair.scheduledTime}` : day;
+};
 
 const AllCarsInWorkshopScreen = () => {
-  const navigation = useNavigation();
-  const { user, darkMode } = useStore();
-  const { cars, updateRepairStatus } = useWorkshopStore();
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterBy, setFilterBy] = useState('all'); // all, in-progress, pending, priority
-  const [sortBy, setSortBy] = useState('entry'); // entry, priority, cost, model
-  const [showFilters, setShowFilters] = useState(false);
-  
-  const isDesktop = Platform.OS === 'web' && screenWidth > 768;
+  const navigation = useNavigation<any>();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
+  const { isDesktop } = useMechanicBreakpoints();
+  const { interventions, loading, failed, reload, startWork, collect } = useInterventions(user?.id);
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-  };
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Estendi i dati delle auto con informazioni aggiuntive per la demo
-  const extendedCars: ExtendedCar[] = cars
-    .filter(car => car.repairs.some(repair => repair.status === 'in-progress' || repair.status === 'pending'))
-    .map((car, index) => {
-      const activeRepairs = car.repairs.filter(repair => repair.status === 'in-progress' || repair.status === 'pending');
-      const currentRepair = activeRepairs[0];
-      
-      // Dati fittizi aggiuntivi per la demo
-      const mockData = {
-        ownerPhone: ['+39 334 1234567', '+39 347 8901234', '+39 328 5678901'][index % 3],
-        color: ['Bianco', 'Nero', 'Grigio', 'Rosso', 'Blu'][index % 5],
-        year: ['2020', '2019', '2021', '2018', '2022'][index % 5],
-        entryDate: ['2025-05-28', '2025-05-29', '2025-05-30'][index % 3],
-        estimatedExit: ['2025-06-02', '2025-06-03', '2025-06-05'][index % 3],
-        priority: (['low', 'medium', 'high'] as const)[index % 3],
-      };
+  const openItems = useMemo(() => interventions.filter(isOpenIntervention), [interventions]);
 
-      const totalCost = activeRepairs.reduce((sum, repair) => sum + repair.totalCost, 0);
-      const entryDate = new Date(mockData.entryDate);
-      const today = new Date();
-      const daysInShop = Math.floor((today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+  const visibleItems = useMemo(() => {
+    const term = search.trim().toLowerCase();
 
-      return {
-        ...car,
-        ...mockData,
-        currentRepair,
-        totalCost,
-        daysInShop,
-      };
-    });
+    return openItems
+      .filter(({ status }) => filter === 'all' || status === filter)
+      .filter(({ car }) =>
+        !term ||
+        [car.make, car.model, car.licensePlate, car.owner, car.vin]
+          .some((value) => value?.toLowerCase().includes(term))
+      )
+      .sort((a, b) =>
+        `${a.repair.scheduledDate}${a.repair.scheduledTime ?? ''}`
+          .localeCompare(`${b.repair.scheduledDate}${b.repair.scheduledTime ?? ''}`)
+      );
+  }, [openItems, filter, search]);
 
-  // Filtri e ricerca
-  const filteredCars = extendedCars.filter(car => {
-    const matchesSearch = 
-      car.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      car.licensePlate?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      car.owner?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      car.vin.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesFilter = 
-      filterBy === 'all' ||
-      (filterBy === 'in-progress' && car.currentRepair?.status === 'in-progress') ||
-      (filterBy === 'pending' && car.currentRepair?.status === 'pending') ||
-      (filterBy === 'priority' && car.priority === 'high');
-
-    return matchesSearch && matchesFilter;
-  });
-
-  // Ordinamento
-  const sortedCars = [...filteredCars].sort((a, b) => {
-    switch (sortBy) {
-      case 'entry':
-        return new Date(b.entryDate!).getTime() - new Date(a.entryDate!).getTime();
-      case 'priority':
-        const priorityOrder = { high: 3, medium: 2, low: 1 };
-        return priorityOrder[b.priority!] - priorityOrder[a.priority!];
-      case 'cost':
-        return (b.totalCost || 0) - (a.totalCost || 0);
-      case 'model':
-        return a.model.localeCompare(b.model);
-      default:
-        return 0;
-    }
-  });
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return '#ef4444';
-      case 'medium': return '#f59e0b';
-      case 'low': return '#10b981';
-      default: return theme.textSecondary;
+  const run = async (item: Intervention, action: () => Promise<void>) => {
+    try {
+      setUpdatingId(item.repair.id);
+      await action();
+    } catch (error) {
+      console.error('Errore aggiornamento intervento:', error);
+      showAlert('Errore', "Impossibile aggiornare l'intervento. Riprova.");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'in-progress': return darkMode ? '#3b82f6' : '#2563eb';
-      case 'pending': return darkMode ? '#f59e0b' : '#d97706';
-      case 'completed': return darkMode ? '#10b981' : '#059669';
-      default: return theme.textSecondary;
+  const handleAdvance = (item: Intervention) => {
+    const { car, repair, status } = item;
+
+    if (status === 'pending') {
+      run(item, () => startWork(item));
+    } else if (status === 'in_progress') {
+      navigation.navigate('CompleteIntervention', { carId: car.id, repairId: repair.id });
+    } else {
+      showAlert('Ritiro auto', `${car.make} ${car.model} è stata ritirata. Il cliente ha pagato?`, [
+        { text: 'Annulla', style: 'cancel' },
+        { text: 'Da pagare', onPress: () => run(item, () => collect(item, false)) },
+        { text: 'Pagato', onPress: () => run(item, () => collect(item, true)) },
+      ]);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('it-IT', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
+  const renderItem = ({ item }: { item: Intervention }) => {
+    const { car, repair, status } = item;
+    const statusStyle = getInterventionStatus(status, theme);
+    const isUpdating = updatingId === repair.id;
 
-  const renderCarCard = ({ item: car }: { item: ExtendedCar }) => (
-    <TouchableOpacity
-      style={[styles.carCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-      onPress={() => console.log('Dettagli auto:', car.id)}
-      activeOpacity={0.7}
-    >
-      {/* Header della card */}
-      <View style={styles.carCardHeader}>
-        <View style={styles.carMainInfo}>
-          <View style={styles.plateContainer}>
-            <Text style={[styles.licensePlate, { color: theme.text }]}>
-              {car.licensePlate || 'N/A'}
+    return (
+      <View style={[styles.card, isDesktop && styles.cardDesktop, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={styles.cardTop}>
+          <View style={styles.cardTitle}>
+            <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>{car.make} {car.model}</Text>
+            <Text style={[styles.plate, { color: theme.textSecondary }]}>
+              {car.licensePlate}{car.year ? ` · ${car.year}` : ''}
             </Text>
-            <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(car.priority!) + '20' }]}>
-              <Text style={[styles.priorityText, { color: getPriorityColor(car.priority!) }]}>
-                {car.priority?.toUpperCase()}
-              </Text>
+          </View>
+          <View style={[styles.badge, { backgroundColor: statusStyle.background }]}>
+            <Text style={[styles.badgeText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
+          </View>
+        </View>
+
+        <Text style={[styles.description, { color: theme.text }]} numberOfLines={3}>{repair.description}</Text>
+
+        <View style={styles.details}>
+          <View style={styles.detail}>
+            <Calendar size={16} color={theme.textSecondary} strokeWidth={2} />
+            <Text style={[styles.detailText, { color: theme.textSecondary }]}>{formatSchedule(item)}</Text>
+          </View>
+          {car.owner ? (
+            <View style={styles.detail}>
+              <User size={16} color={theme.textSecondary} strokeWidth={2} />
+              <Text style={[styles.detailText, { color: theme.textSecondary }]} numberOfLines={1}>{car.owner}</Text>
             </View>
-          </View>
-          <Text style={[styles.carModel, { color: theme.text }]}>
-            {car.model} • {car.year} • {car.color}
-          </Text>
-          <Text style={[styles.carVin, { color: theme.textSecondary }]}>
-            VIN: {car.vin}
-          </Text>
+          ) : null}
+          {car.ownerPhone ? (
+            <View style={styles.detail}>
+              <Phone size={16} color={theme.textSecondary} strokeWidth={2} />
+              <Text style={[styles.detailText, { color: theme.textSecondary }]}>{car.ownerPhone}</Text>
+            </View>
+          ) : null}
         </View>
-        
-        <View style={styles.statusContainer}>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(car.currentRepair?.status) + '20' }
-          ]}>
-            <Text style={[
-              styles.statusText,
-              { color: getStatusColor(car.currentRepair?.status) }
-            ]}>
-              {car.currentRepair?.status === 'in-progress' ? 'In Lavorazione' : 'In Attesa'}
-            </Text>
-          </View>
-          <Text style={[styles.daysInShop, { color: theme.textSecondary }]}>
-            {car.daysInShop} giorni in officina
-          </Text>
-        </View>
-      </View>
 
-      {/* Informazioni cliente */}
-      <View style={[styles.customerInfo, { borderColor: theme.border }]}>
-        <View style={styles.customerRow}>
-          <User size={16} color={theme.textSecondary} />
-          <Text style={[styles.customerText, { color: theme.text }]}>
-            {car.owner || 'N/A'}
-          </Text>
-        </View>
-        <View style={styles.customerRow}>
-          <Phone size={16} color={theme.textSecondary} />
-          <Text style={[styles.customerText, { color: theme.textSecondary }]}>
-            {car.ownerPhone}
-          </Text>
-        </View>
-      </View>
-
-      {/* Dettagli riparazione corrente */}
-      <View style={[styles.repairInfo, { borderColor: theme.border }]}>
-        <View style={styles.repairHeader}>
-          <Wrench size={16} color={theme.accent} />
-          <Text style={[styles.repairTitle, { color: theme.text }]}>
-            Intervento Corrente
-          </Text>
-        </View>
-        <Text style={[styles.repairDescription, { color: theme.textSecondary }]}>
-          {car.currentRepair?.description}
-        </Text>
-        
-        <View style={styles.repairDetails}>
-          <View style={styles.repairDetailItem}>
-            <Calendar size={14} color={theme.textSecondary} />
-            <Text style={[styles.repairDetailText, { color: theme.textSecondary }]}>
-              Ingresso: {formatDate(car.entryDate!)}
-            </Text>
-          </View>
-          <View style={styles.repairDetailItem}>
-            <Clock size={14} color={theme.textSecondary} />
-            <Text style={[styles.repairDetailText, { color: theme.textSecondary }]}>
-              Consegna prevista: {formatDate(car.estimatedExit!)}
-            </Text>
-          </View>
-          <View style={styles.repairDetailItem}>
-            <DollarSign size={14} color={theme.textSecondary} />
-            <Text style={[styles.repairDetailText, { color: theme.text }]}>
-              Costo: €{car.totalCost?.toFixed(2) || '0.00'}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Azioni */}
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.primaryAction]}
-          onPress={() => updateRepairStatus(
-            car.id,
-            car.currentRepair?.id,
-            car.currentRepair?.status === 'in-progress' ? 'completed' : 'in-progress'
-          )}
-        >
-          <Text style={styles.actionButtonText}>
-            {car.currentRepair?.status === 'in-progress' ? 'Completa' : 'Inizia Lavoro'}
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryAction, { borderColor: theme.border }]}
-            onPress={() => {
-                // Naviga alla gestione prodotti del primo intervento attivo
-                if (car.currentRepair) {
-                navigation.navigate('RepairPartsManagement', {
-                    carId: car.id,
-                    repairId: car.currentRepair.id
-                });
-                } else {
-                console.log('Nessun intervento attivo per questa auto');
-                }
-            }}
-            >
-            <Text style={[styles.secondaryActionText, { color: theme.accent }]}>
-                Dettagli
-            </Text>
-            <ChevronRight size={16} color={theme.accent} />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderHeader = () => (
-    <View style={styles.headerContainer}>
-      {/* Statistiche rapide */}
-      <View style={styles.statsContainer}>
-        <View style={[styles.statItem, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Car size={20} color={theme.accent} />
-          <Text style={[styles.statNumber, { color: theme.text }]}>{sortedCars.length}</Text>
-          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Auto Totali</Text>
-        </View>
-        
-        <View style={[styles.statItem, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Wrench size={20} color="#f59e0b" />
-          <Text style={[styles.statNumber, { color: theme.text }]}>
-            {sortedCars.filter(car => car.currentRepair?.status === 'in-progress').length}
-          </Text>
-          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>In Lavorazione</Text>
-        </View>
-        
-        <View style={[styles.statItem, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Clock size={20} color="#10b981" />
-          <Text style={[styles.statNumber, { color: theme.text }]}>
-            {sortedCars.filter(car => car.currentRepair?.status === 'pending').length}
-          </Text>
-          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>In Attesa</Text>
-        </View>
-      </View>
-
-      {/* Barra di ricerca */}
-      <View style={[styles.searchContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-        <Search size={20} color={theme.textSecondary} />
-        <TextInput
-          style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Cerca per targa, modello, proprietario o VIN..."
-          placeholderTextColor={theme.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Filtri e ordinamento */}
-      <View style={styles.controlsContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-          onPress={() => setShowFilters(!showFilters)}
-        >
-          <Filter size={16} color={theme.text} />
-          <Text style={[styles.filterButtonText, { color: theme.text }]}>Filtri</Text>
-          <ChevronDown 
-            size={16} 
-            color={theme.text}
-            style={[
-              styles.chevron,
-              showFilters && styles.chevronRotated
-            ]}
-          />
-        </TouchableOpacity>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sortContainer}>
-          {[
-            { key: 'entry', label: 'Data Ingresso' },
-            { key: 'priority', label: 'Priorità' },
-            { key: 'cost', label: 'Costo' },
-            { key: 'model', label: 'Modello' },
-          ].map((sort) => (
-            <TouchableOpacity
-              key={sort.key}
-              style={[
-                styles.sortButton,
-                { backgroundColor: theme.cardBackground, borderColor: theme.border },
-                sortBy === sort.key && { backgroundColor: theme.accent }
-              ]}
-              onPress={() => setSortBy(sort.key)}
-            >
-              <Text style={[
-                styles.sortButtonText,
-                { color: sortBy === sort.key ? '#ffffff' : theme.text }
-              ]}>
-                {sort.label}
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.action, { backgroundColor: theme.primary }]}
+            onPress={() => handleAdvance(item)}
+            disabled={isUpdating}
+            accessibilityRole="button"
+          >
+            {isUpdating ? (
+              <ActivityIndicator size="small" color={theme.onPrimary} />
+            ) : (
+              <Text style={[styles.actionText, { color: theme.onPrimary }]}>
+                {status === 'pending' ? 'Inizia lavori' : status === 'in_progress' ? 'Completa' : 'Segna ritirata'}
               </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Pannello filtri espandibile */}
-      {showFilters && (
-        <View style={[styles.filtersPanel, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <Text style={[styles.filtersPanelTitle, { color: theme.text }]}>Filtra per:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {[
-              { key: 'all', label: 'Tutte' },
-              { key: 'in-progress', label: 'In Lavorazione' },
-              { key: 'pending', label: 'In Attesa' },
-              { key: 'priority', label: 'Alta Priorità' },
-            ].map((filter) => (
-              <TouchableOpacity
-                key={filter.key}
-                style={[
-                  styles.filterChip,
-                  { borderColor: theme.border },
-                  filterBy === filter.key && { backgroundColor: theme.accent }
-                ]}
-                onPress={() => setFilterBy(filter.key)}
-              >
-                <Text style={[
-                  styles.filterChipText,
-                  { color: filterBy === filter.key ? '#ffffff' : theme.text }
-                ]}>
-                  {filter.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.action, styles.secondary, { borderColor: theme.border }]}
+            onPress={() => navigation.navigate('RepairPartsManagement', { carId: car.id, repairId: repair.id })}
+            accessibilityRole="button"
+          >
+            <Wrench size={16} color={theme.text} strokeWidth={2} />
+            <Text style={[styles.actionText, { color: theme.text }]}>Gestisci</Text>
+          </TouchableOpacity>
         </View>
-      )}
-    </View>
-  );
+      </View>
+    );
+  };
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      );
+    }
+
+    if (failed) {
+      return (
+        <MechanicEmptyState
+          icon={AlertCircle}
+          title="Impossibile caricare gli interventi"
+          subtitle="Riprova tra poco"
+          actionLabel="Riprova"
+          onAction={reload}
+        />
+      );
+    }
+
+    return (
+      <FlatList
+        data={visibleItems}
+        key={isDesktop ? 'columns' : 'list'}
+        numColumns={isDesktop ? 2 : 1}
+        keyExtractor={({ car, repair }) => `${car.id}-${repair.id}`}
+        renderItem={renderItem}
+        columnWrapperStyle={isDesktop ? styles.row : undefined}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <MechanicEmptyState
+            icon={Car}
+            title={openItems.length === 0 ? 'Nessun intervento aperto' : 'Nessun risultato'}
+            subtitle={
+              openItems.length === 0
+                ? 'Gli interventi compaiono qui quando confermi una prenotazione'
+                : 'Prova a cambiare ricerca o filtro'
+            }
+          />
+        }
+      />
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={darkMode ? 'light-content' : 'dark-content'} />
-      
-      {/* Header con pulsante indietro */}
-      <View style={[styles.titleContainer, { borderBottomColor: theme.border }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.text} />
-        </TouchableOpacity>
-        
-        <Text style={[styles.screenTitle, { color: theme.text }]}>
-          Auto in Officina
-        </Text>
-        
-        <View style={styles.placeholder} />
-      </View>
-
-      <FlatList
-        data={sortedCars}
-        renderItem={renderCarCard}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Car size={48} color={theme.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>
-              Nessuna auto trovata
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-              {searchQuery ? 'Prova a modificare i criteri di ricerca' : 'Non ci sono auto in officina al momento'}
-            </Text>
-          </View>
+      <MechanicHeader
+        title="Interventi"
+        subtitle={`${openItems.length} ${openItems.length === 1 ? 'aperto' : 'aperti'}`}
+        onBack={() => navigation.goBack()}
+        right={
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: theme.primary }]}
+            onPress={() => navigation.navigate('NewAppointment')}
+            accessibilityRole="button"
+            accessibilityLabel="Nuovo intervento"
+          >
+            <Plus size={20} color={theme.onPrimary} strokeWidth={2} />
+          </TouchableOpacity>
         }
       />
+
+      <View style={styles.tools}>
+        <View style={[styles.search, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Search size={20} color={theme.textSecondary} strokeWidth={2} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Cerca per targa, auto o cliente"
+            placeholderTextColor={theme.placeholder}
+            value={search}
+            onChangeText={setSearch}
+            accessibilityLabel="Cerca interventi"
+          />
+        </View>
+        <View style={styles.filters}>
+          {FILTERS.map(({ key, label }) => {
+            const selected = filter === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.filter,
+                  { backgroundColor: selected ? theme.primary : theme.surface, borderColor: selected ? theme.primary : theme.border },
+                ]}
+                onPress={() => setFilter(key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+              >
+                <Text style={[styles.filterText, { color: selected ? theme.onPrimary : theme.text }]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {renderContent()}
     </SafeAreaView>
   );
 };
@@ -462,276 +273,130 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  screenTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  placeholder: {
-    width: 40,
-  },
-  headerContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  statItem: {
+  centered: {
     flex: 1,
     alignItems: 'center',
-    padding: 12,
-    marginHorizontal: 4,
-    borderRadius: 12,
-    borderWidth: 1,
+    justifyContent: 'center',
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  searchContainer: {
-    flexDirection: 'row',
+  addButton: {
+    width: MECHANIC_MIN_TOUCH,
+    height: MECHANIC_MIN_TOUCH,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
+    justifyContent: 'center',
+    borderRadius: mechanicRadius.md,
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-  },
-  controlsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginRight: 12,
-  },
-  filterButtonText: {
-    marginLeft: 4,
-    marginRight: 4,
-    fontSize: 14,
-  },
-  chevron: {
-    transform: [{ rotate: '0deg' }],
-  },
-  chevronRotated: {
-    transform: [{ rotate: '180deg' }],
-  },
-  sortContainer: {
-    flex: 1,
-  },
-  sortButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginRight: 8,
-  },
-  sortButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  filtersPanel: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  filtersPanelTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginRight: 8,
-  },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  carCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  carCardHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  carMainInfo: {
-    marginBottom: 12,
-  },
-  plateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  licensePlate: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  carModel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  carVin: {
-    fontSize: 12,
-  },
-  statusContainer: {
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  daysInShop: {
-    fontSize: 11,
-  },
-  customerInfo: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  customerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  customerText: {
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  repairInfo: {
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  repairHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  repairTitle: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  repairDescription: {
-    fontSize: 14,
-    marginBottom: 12,
-    fontStyle: 'italic',
-  },
-  repairDetails: {
-    gap: 6,
-  },
-  repairDetailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  repairDetailText: {
-    marginLeft: 6,
-    fontSize: 12,
-  },
-  actionsContainer: {
-    flexDirection: 'row',
+  tools: {
     padding: 16,
     gap: 12,
   },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryAction: {
-    backgroundColor: '#2563eb',
-  },
-  secondaryAction: {
-    borderWidth: 1,
+  search: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: MECHANIC_MIN_TOUCH,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: mechanicRadius.md,
   },
-  actionButtonText: {
-    color: '#ffffff',
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    minHeight: MECHANIC_MIN_TOUCH,
+  },
+  filters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filter: {
+    minHeight: MECHANIC_MIN_TOUCH,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderRadius: mechanicRadius.full,
+  },
+  filterText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  secondaryActionText: {
+  list: {
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+    gap: 12,
+    flexGrow: 1,
+  },
+  row: {
+    gap: 12,
+  },
+  card: {
+    ...mechanicCard,
+    gap: 10,
+  },
+  cardDesktop: {
+    flex: 1,
+    maxWidth: '50%',
+  },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  cardTitle: {
+    flex: 1,
+    minWidth: 0,
+  },
+  name: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  plate: {
     fontSize: 14,
-    fontWeight: '500',
-    marginRight: 4,
+    fontWeight: '600',
+    letterSpacing: 1,
   },
-  emptyContainer: {
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: mechanicRadius.full,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  description: {
+    fontSize: 14,
+  },
+  details: {
+    gap: 6,
+  },
+  detail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  action: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    gap: 6,
+    minHeight: MECHANIC_MIN_TOUCH,
+    borderRadius: mechanicRadius.md,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 16,
+  secondary: {
+    borderWidth: 1,
   },
-  emptySubtitle: {
+  actionText: {
     fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 32,
+    fontWeight: '600',
   },
 });
 

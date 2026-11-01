@@ -156,6 +156,7 @@ async function createSampleData() {
   const sampleCustomer = {
     id: 'customer_sample_001',
     mechanicId: 'mechanic_sample_456',
+    workshopId: 'mechanic_sample_456',
     name: 'Marco Verdi',
     email: 'marco.verdi@email.com',
     phone: '+39 339 9876543',

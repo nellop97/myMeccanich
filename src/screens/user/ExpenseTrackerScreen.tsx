@@ -1,5 +1,5 @@
 // src/screens/user/ExpenseTrackerScreen.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -36,7 +36,9 @@ import {
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useStore } from '../../store';
-import { useUserCarsStore } from '../../store/useCarsStore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { useUserVehicles } from '../../hooks/useUserData';
+import { db } from '../../services/firebase';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -53,7 +55,8 @@ interface ExpenseCategory {
 const ExpenseTrackerScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
-  const { cars, getAllCarsStats } = useUserCarsStore();
+  const { vehicles: cars } = useUserVehicles();
+  const [storedExpenses, setStoredExpenses] = useState<any[]>([]);
   
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'year' | 'all'>('month');
   const [selectedCar, setSelectedCar] = useState<string | null>(null);
@@ -79,6 +82,28 @@ const ExpenseTrackerScreen = () => {
     other: '#6b7280',
   };
 
+  useEffect(() => {
+    let active = true;
+
+    Promise.all(
+      cars.map(async (car) => {
+        const snapshot = await getDocs(query(collection(db, 'expenses'), where('vehicleId', '==', car.id)));
+        return snapshot.docs.map((item) => {
+          const data = item.data();
+          return { id: item.id, ...data, date: data.date?.toDate?.() ?? data.date, vehicleId: car.id };
+        });
+      })
+    )
+      .then((results) => {
+        if (active) setStoredExpenses(results.flat());
+      })
+      .catch((error) => console.error('Errore caricamento spese:', error));
+
+    return () => {
+      active = false;
+    };
+  }, [cars]);
+
   // Calcola le statistiche delle spese
   const expenseStats = useMemo(() => {
     let allExpenses: any[] = [];
@@ -89,13 +114,15 @@ const ExpenseTrackerScreen = () => {
       : cars;
     
     filteredCars.forEach(car => {
-      car.expenses.forEach(expense => {
-        allExpenses.push({
-          ...expense,
-          carId: car.id,
-          carName: `${car.make} ${car.model}`
+      storedExpenses
+        .filter(expense => expense.vehicleId === car.id)
+        .forEach(expense => {
+          allExpenses.push({
+            ...expense,
+            carId: car.id,
+            carName: `${car.make} ${car.model}`
+          });
         });
-      });
     });
 
     // Filtra per periodo
@@ -208,7 +235,7 @@ const ExpenseTrackerScreen = () => {
       variation,
       averagePerCar: filteredCars.length > 0 ? totalExpenses / filteredCars.length : 0
     };
-  }, [cars, selectedCar, selectedPeriod]);
+  }, [cars, storedExpenses, selectedCar, selectedPeriod]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('it-IT', {
@@ -315,7 +342,10 @@ const ExpenseTrackerScreen = () => {
         </View>
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: theme.accent }]}
-          onPress={() => navigation.navigate('AddExpense', {})}
+          onPress={() => {
+            const carId = selectedCar ?? cars[0]?.id;
+            if (carId) navigation.navigate('AddExpense', { carId });
+          }}
         >
           <Plus size={24} color="#ffffff" />
         </TouchableOpacity>

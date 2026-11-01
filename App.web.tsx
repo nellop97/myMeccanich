@@ -11,6 +11,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 // Import Navigation
 import AppNavigator from './src/navigation/AppNavigator';
 
+// Finestre di showAlert e showPrompt
+import WebAlertHost from './src/components/WebAlertHost';
+
 // Import Theme Provider
 import { ThemeProvider } from './src/contexts/ThemeContext';
 
@@ -92,6 +95,7 @@ export default function App() {
                 <NavigationContainer>
                     <AppNavigator />
                 </NavigationContainer>
+                <WebAlertHost />
             </ThemeProvider>
         </SafeAreaProvider>
     );

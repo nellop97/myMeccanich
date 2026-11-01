@@ -8,10 +8,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Switch,
-  Alert,
   RefreshControl
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Bell,
   Calendar,
@@ -27,6 +27,8 @@ import {
 } from 'lucide-react-native';
 import { useStore } from '../../store';
 import { NotificationService } from '../../services/NotificationService';
+import { RootStackParamList } from '../../navigation/AppNavigator';
+import { showAlert } from '../../utils/platformHelpers';
 
 interface Notification {
   id: string;
@@ -42,7 +44,7 @@ interface Notification {
 }
 
 const NotificationsScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { darkMode } = useStore();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -151,18 +153,24 @@ const NotificationsScreen = () => {
   };
 
   const updateSetting = async (key: string, value: boolean) => {
-    const newSettings = { ...settings, [key]: value };
+    let newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     
     try {
-      await NotificationService.updateNotificationSettings(newSettings);
-      
       if (key === 'pushNotifications' && value) {
-        await NotificationService.requestPermissions();
+        const granted = await NotificationService.requestPermissions();
+        if (!granted) {
+          // Senza permesso il sistema non recapita le push: l'interruttore deve dirlo
+          newSettings = { ...newSettings, pushNotifications: false };
+          setSettings(newSettings);
+          showAlert('Permesso negato', 'Abilita le notifiche dalle impostazioni del dispositivo per riceverle.');
+        }
       }
+
+      await NotificationService.updateNotificationSettings(newSettings);
     } catch (error) {
       console.error('Error updating settings:', error);
-      Alert.alert('Errore', 'Impossibile aggiornare le impostazioni');
+      showAlert('Errore', 'Impossibile aggiornare le impostazioni');
     }
   };
 
@@ -262,8 +270,8 @@ const NotificationsScreen = () => {
               onPress={() => {
                 // Naviga alla schermata appropriata
                 if (notification.type === 'reminder') {
-                  navigation.navigate('RemindersList');
-                } else if (notification.type === 'maintenance') {
+                  navigation.navigate('Reminders');
+                } else if (notification.type === 'maintenance' && notification.carId) {
                   navigation.navigate('AddMaintenance', { carId: notification.carId });
                 }
               }}

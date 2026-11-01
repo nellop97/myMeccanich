@@ -85,15 +85,29 @@ export class VehicleService {
     try {
       const q = query(
         collection(db, this.vehiclesCollection),
-        where('ownerId', '==', userId),
-        orderBy('updatedAt', 'desc')
+        where('ownerId', '==', userId)
       );
 
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Vehicle));
+      const toTime = (value: any) => value?.toMillis?.() ?? 0;
+      // Ordinamento sul dispositivo: così la lista non dipende da un indice composito
+      const vehicles = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Vehicle))
+        .sort((a, b) => toTime((b as any).updatedAt) - toTime((a as any).updatedAt));
+
+      // I veicoli eliminati restano salvati come non attivi; a parità di targa
+      // vale il più recente, così i doppi salvataggi non compaiono due volte
+      const seenPlates = new Set<string>();
+      return vehicles.filter(vehicle => {
+        if ((vehicle as any).isActive === false) return false;
+
+        const plate = vehicle.licensePlate?.trim().toUpperCase();
+        if (!plate) return true;
+        if (seenPlates.has(plate)) return false;
+
+        seenPlates.add(plate);
+        return true;
+      });
     } catch (error) {
       console.error('Error getting user vehicles:', error);
       throw error;

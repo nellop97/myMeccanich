@@ -204,7 +204,7 @@ const VehicleListScreen = () => {
                   Prossime scadenze
                 </Text>
                 <TouchableOpacity
-                  onPress={() => (navigation as any).navigate("RemindersList")}
+                  onPress={() => (navigation as any).navigate("Reminders")}
                 >
                   <Text style={[styles.seeAllText, { color: colors.primary }]}>
                     Vedi tutto
@@ -246,7 +246,7 @@ const VehicleListScreen = () => {
                       },
                     ]}
                     onPress={() =>
-                      (navigation as any).navigate("RemindersList")
+                      (navigation as any).navigate("Reminders")
                     }
                   >
                     <View

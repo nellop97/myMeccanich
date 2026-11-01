@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-  Alert,
   Modal
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -30,6 +29,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStore } from '../../store';
 import { useUserCarsStore } from '../../store/useCarsStore';
+import { showAlert } from '../../utils/platformHelpers';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -52,7 +52,7 @@ interface Report {
 const ReportsScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
-  const { cars } = useUserCarsStore();
+  const { vehicles } = useUserCarsStore();
 
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
   const [selectedCar, setSelectedCar] = useState<string>('all');
@@ -112,7 +112,7 @@ const ReportsScreen = () => {
   };
 
   const exportReport = () => {
-    Alert.alert(
+    showAlert(
       'Esporta Report',
       'Scegli il formato di esportazione:',
       [
@@ -124,15 +124,15 @@ const ReportsScreen = () => {
   };
 
   const exportToPDF = async () => {
-    Alert.alert('Info', 'Funzione di esportazione PDF in sviluppo');
+    showAlert('Info', 'Funzione di esportazione PDF in sviluppo');
   };
 
   const exportToCSV = async () => {
-    Alert.alert('Info', 'Funzione di esportazione CSV in sviluppo');
+    showAlert('Info', 'Funzione di esportazione CSV in sviluppo');
   };
 
   const shareReport = () => {
-    Alert.alert('Info', 'Funzione di condivisione in sviluppo');
+    showAlert('Info', 'Funzione di condivisione in sviluppo');
   };
 
   const renderSummaryCard = (title: string, value: string, trend: number, icon: any) => (
@@ -263,7 +263,7 @@ const ReportsScreen = () => {
 
           <View style={styles.filterSection}>
             <Text style={[styles.filterLabel, { color: theme.text }]}>Veicolo:</Text>
-            <View style={styles.filterOptions}>
+            <ScrollView style={styles.vehicleFilterList} contentContainerStyle={styles.filterOptions}>
               <TouchableOpacity
                 style={[
                   styles.filterOption,
@@ -279,7 +279,7 @@ const ReportsScreen = () => {
                 </Text>
               </TouchableOpacity>
               
-              {cars.slice(0, 3).map((car) => (
+              {vehicles.map((car) => (
                 <TouchableOpacity
                   key={car.id}
                   style={[
@@ -296,7 +296,7 @@ const ReportsScreen = () => {
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           </View>
 
           <TouchableOpacity
@@ -457,7 +457,7 @@ const ReportsScreen = () => {
               <TrendingUp size={16} color={theme.warning} />
             </View>
             <Text style={[styles.insightText, { color: theme.textSecondary }]}>
-              Le spese di manutenzione sono aumentate dell'8.7%
+              Le spese di manutenzione sono aumentate dell&apos;8.7%
             </Text>
           </View>
           
@@ -728,6 +728,9 @@ const styles = StyleSheet.create({
   },
   filterOptions: {
     gap: 8,
+  },
+  vehicleFilterList: {
+    maxHeight: 200,
   },
   filterOption: {
     paddingVertical: 12,

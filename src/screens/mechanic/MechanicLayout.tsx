@@ -1,7 +1,6 @@
 // src/screens/mechanic/MechanicLayout.tsx - CON MENU LATERALE RIPRISTINATO
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
-  Dimensions,
   Platform,
   StyleSheet,
   View,
@@ -15,10 +14,10 @@ import { useAuth } from '../../hooks/useAuth';
 import MechanicSidebarDesktop from './MechanicSidebarDesktop';
 import MechanicSidebarMobile from './MechanicSidebarMobile';
 
-const { width: screenWidth } = Dimensions.get('window');
+import { mechanicStaticColors, useMechanicTheme, useMechanicBreakpoints, MECHANIC_BREAKPOINTS } from './mechanicTheme';
 const SIDEBAR_WIDTH_DESKTOP = 280;
-const BREAKPOINT_TABLET = 768;
-const BREAKPOINT_DESKTOP = 1024;
+const BREAKPOINT_TABLET = MECHANIC_BREAKPOINTS.tablet;
+const BREAKPOINT_DESKTOP = MECHANIC_BREAKPOINTS.desktop;
 
 interface MechanicLayoutProps {
   children: React.ReactNode;
@@ -31,49 +30,19 @@ const MechanicLayout: React.FC<MechanicLayoutProps> = ({
   activeTab, 
   onTabChange 
 }) => {
-  const { darkMode } = useStore();
+  const theme = useMechanicTheme();
   const { user } = useAuth();
-  const [dimensions, setDimensions] = useState(Dimensions.get('window'));
-  
-  // Determina il tipo di layout in base alle dimensioni
-  const isDesktop = Platform.OS === 'web' && dimensions.width >= BREAKPOINT_DESKTOP;
-  const isTablet = Platform.OS === 'web' && dimensions.width >= BREAKPOINT_TABLET && dimensions.width < BREAKPOINT_DESKTOP;
-  const isMobile = dimensions.width < BREAKPOINT_TABLET;
-
-  // Tema dinamico basato su dark mode
-  const theme = {
-    background: darkMode ? '#0f172a' : '#f8fafc',
-    surface: darkMode ? '#1e293b' : '#ffffff',
-    card: darkMode ? '#334155' : '#ffffff',
-    primary: '#3b82f6',
-    primaryDark: '#1d4ed8',
-    text: darkMode ? '#f1f5f9' : '#0f172a',
-    textSecondary: darkMode ? '#94a3b8' : '#64748b',
-    border: darkMode ? '#334155' : '#e2e8f0',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    accent: darkMode ? '#7c3aed' : '#a855f7',
-  };
-
-  // Listener per i cambiamenti delle dimensioni
-  useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setDimensions(window);
-    });
-
-    return () => subscription?.remove();
-  }, []);
+  const { isDesktop, isTablet } = useMechanicBreakpoints();
 
   // Configurazione della status bar
   useEffect(() => {
     if (Platform.OS !== 'web') {
-      StatusBar.setBarStyle(darkMode ? 'light-content' : 'dark-content', true);
+      StatusBar.setBarStyle(theme.isDark ? 'light-content' : 'dark-content', true);
       if (Platform.OS === 'android') {
         StatusBar.setBackgroundColor(theme.surface, true);
       }
     }
-  }, [darkMode, theme.surface]);
+  }, [theme.isDark, theme.surface]);
 
   // Render per Desktop - CON SIDEBAR FISSA
   const renderDesktopLayout = () => (
@@ -132,7 +101,7 @@ const MechanicLayout: React.FC<MechanicLayoutProps> = ({
   // Render del layout appropriato
   if (isDesktop) {
     return renderDesktopLayout();
-  } else if (isTablet) {
+  } else if (isTablet && Platform.OS === 'web') {
     return renderTabletLayout();
   } else {
     return renderMobileLayout();
@@ -214,7 +183,7 @@ export const getResponsiveStyle = (dimensions: any) => {
     
     // Card con ombra responsive
     cardShadow: {
-      shadowColor: '#000',
+      shadowColor: mechanicStaticColors.shadow,
       shadowOffset: {
         width: 0,
         height: Platform.select({

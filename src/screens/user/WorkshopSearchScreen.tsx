@@ -11,7 +11,9 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useMechanicTheme } from '../mechanic/mechanicTheme';
+import MechanicHeader from '../mechanic/MechanicHeader';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, Star, Phone, Clock, Heart, Navigation, Search, X } from 'lucide-react-native';
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
@@ -25,25 +27,15 @@ interface WorkshopSearchScreenProps {
 }
 
 export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScreenProps) {
-  const { darkMode, user } = useStore();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
   const [loading, setLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [allWorkshops, setAllWorkshops] = useState<Workshop[]>([]);
   const [trustedWorkshops, setTrustedWorkshops] = useState<Workshop[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'trusted' | 'nearby'>('all');
-
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    primary: '#3b82f6',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
 
   useEffect(() => {
     loadWorkshops();
@@ -53,6 +45,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
   const loadWorkshops = async () => {
     try {
       setLoading(true);
+      setLoadFailed(false);
       const data = await WorkshopService.searchWorkshops({
         minRating: 0,
       });
@@ -60,15 +53,16 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
       setWorkshops(data);
     } catch (error) {
       console.error('Errore caricamento officine:', error);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
   };
 
   const loadTrustedWorkshops = async () => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
     try {
-      const data = await WorkshopService.getTrustedWorkshops(user.uid);
+      const data = await WorkshopService.getTrustedWorkshops(user.id);
       setTrustedWorkshops(data);
     } catch (error) {
       console.error('Errore caricamento officine di fiducia:', error);
@@ -114,16 +108,15 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
   };
 
   const toggleTrusted = async (workshopId: string, isTrusted: boolean) => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
 
     try {
       if (isTrusted) {
-        await WorkshopService.removeFromTrustedWorkshops(user.uid, workshopId);
+        await WorkshopService.removeFromTrustedWorkshops(user.id, workshopId);
       } else {
-        await WorkshopService.addToTrustedWorkshops(user.uid, workshopId);
+        await WorkshopService.addToTrustedWorkshops(user.id, workshopId);
       }
       await loadTrustedWorkshops();
-      await loadWorkshops();
     } catch (error) {
       console.error('Errore gestione preferiti:', error);
     }
@@ -151,8 +144,8 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
     return (
       <TouchableOpacity
         key={workshop.id}
-        style={[styles.workshopCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-        onPress={() => navigation.navigate('WorkshopDetail', { workshopId: workshop.id })}
+        style={[styles.workshopCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        onPress={() => navigation.navigate('BookingRequest', { workshopId: workshop.id })}
       >
         {/* Header con logo e nome */}
         <View style={styles.workshopHeader}>
@@ -161,7 +154,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
               {workshop.name || 'Officina'}
             </Text>
             <View style={styles.ratingContainer}>
-              <Star size={16} color="#fbbf24" fill={rating > 0 ? "#fbbf24" : "none"} />
+              <Star size={16} color={theme.warning} fill={rating > 0 ? theme.warning : "none"} />
               <Text style={[styles.rating, { color: theme.text }]}>
                 {rating.toFixed(1)}
               </Text>
@@ -240,20 +233,17 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Header con gradiente */}
-      <LinearGradient
-        colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
-        style={styles.header}
-      >
-        <Text style={styles.headerTitle}>Cerca Officina</Text>
-        <Text style={styles.headerSubtitle}>
-          Trova l'officina perfetta per le tue esigenze
-        </Text>
-      </LinearGradient>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.surface }}>
+        <MechanicHeader
+          title="Cerca Officina"
+          subtitle="Trova l'officina per il tuo intervento"
+          onBack={() => navigation.goBack()}
+        />
+      </SafeAreaView>
 
       {/* Barra di ricerca */}
       <View style={styles.searchContainer}>
-        <View style={[styles.searchBar, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+        <View style={[styles.searchBar, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Search size={20} color={theme.textSecondary} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
@@ -283,11 +273,11 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
         <TouchableOpacity
           style={[
             styles.filterButton,
-            { backgroundColor: selectedFilter === 'all' ? theme.primary : theme.cardBackground, borderColor: theme.border }
+            { backgroundColor: selectedFilter === 'all' ? theme.primary : theme.surface, borderColor: theme.border }
           ]}
           onPress={() => setSelectedFilter('all')}
         >
-          <Text style={[styles.filterText, { color: selectedFilter === 'all' ? '#fff' : theme.text }]}>
+          <Text style={[styles.filterText, { color: selectedFilter === 'all' ? theme.onPrimary : theme.text }]}>
             Tutte
           </Text>
         </TouchableOpacity>
@@ -295,12 +285,12 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
         <TouchableOpacity
           style={[
             styles.filterButton,
-            { backgroundColor: selectedFilter === 'trusted' ? theme.primary : theme.cardBackground, borderColor: theme.border }
+            { backgroundColor: selectedFilter === 'trusted' ? theme.primary : theme.surface, borderColor: theme.border }
           ]}
           onPress={() => setSelectedFilter('trusted')}
         >
-          <Heart size={16} color={selectedFilter === 'trusted' ? '#fff' : theme.text} />
-          <Text style={[styles.filterText, { color: selectedFilter === 'trusted' ? '#fff' : theme.text }]}>
+          <Heart size={16} color={selectedFilter === 'trusted' ? theme.onPrimary : theme.text} />
+          <Text style={[styles.filterText, { color: selectedFilter === 'trusted' ? theme.onPrimary : theme.text }]}>
             Fiducia ({trustedWorkshops.length})
           </Text>
         </TouchableOpacity>
@@ -308,12 +298,12 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
         <TouchableOpacity
           style={[
             styles.filterButton,
-            { backgroundColor: selectedFilter === 'nearby' ? theme.primary : theme.cardBackground, borderColor: theme.border }
+            { backgroundColor: selectedFilter === 'nearby' ? theme.primary : theme.surface, borderColor: theme.border }
           ]}
           onPress={() => setSelectedFilter('nearby')}
         >
-          <Navigation size={16} color={selectedFilter === 'nearby' ? '#fff' : theme.text} />
-          <Text style={[styles.filterText, { color: selectedFilter === 'nearby' ? '#fff' : theme.text }]}>
+          <Navigation size={16} color={selectedFilter === 'nearby' ? theme.onPrimary : theme.text} />
+          <Text style={[styles.filterText, { color: selectedFilter === 'nearby' ? theme.onPrimary : theme.text }]}>
             Vicine
           </Text>
         </TouchableOpacity>
@@ -326,6 +316,18 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Caricamento officine...
           </Text>
+        </View>
+      ) : loadFailed ? (
+        <View style={styles.emptyContainer}>
+          <MapPin size={64} color={theme.textSecondary} />
+          <Text style={[styles.emptyText, { color: theme.text }]}>Impossibile caricare le officine</Text>
+          <TouchableOpacity
+            style={[styles.bookButton, { backgroundColor: theme.primary }]}
+            onPress={loadWorkshops}
+            accessibilityRole="button"
+          >
+            <Text style={styles.bookButtonText}>Riprova</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <ScrollView
@@ -340,7 +342,7 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
                 Nessuna officina trovata
               </Text>
               <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                Prova a cercare in un'altra città
+                Prova a cercare in un&apos;altra città
               </Text>
             </View>
           ) : (
@@ -355,20 +357,6 @@ export default function WorkshopSearchScreen({ navigation }: WorkshopSearchScree
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#e0e7ff',
   },
   searchContainer: {
     padding: 16,

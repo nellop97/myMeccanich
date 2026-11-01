@@ -274,7 +274,7 @@ export default function RequestVehicleViewScreen() {
           <View style={[styles.infoBox, { backgroundColor: colors.primaryContainer }]}>
             <AlertCircle size={16} color={colors.primary} />
             <Text style={[styles.infoText, { color: colors.onPrimaryContainer }]}>
-              La ricerca è disponibile solo per veicoli registrati nell'app
+              La ricerca è disponibile solo per veicoli registrati nell&apos;app
             </Text>
           </View>
         </Card.Content>

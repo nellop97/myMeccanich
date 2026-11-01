@@ -81,7 +81,7 @@ const FuelTrackingScreen = () => {
   const { colors, isDark } = useAppThemeManager();
   const { vehicles, refreshData } = useUserData();
 
-  const carId = route.params?.carId;
+  const carId = (route.params as { carId?: string } | undefined)?.carId;
   const [selectedVehicle, setSelectedVehicle] = useState<string>(carId || vehicles[0]?.id || '');
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -482,7 +482,7 @@ const FuelTrackingScreen = () => {
               styles.vehicleChipText,
               { color: selectedVehicle === vehicle.id ? colors.onPrimary : colors.onSurface }
             ]}>
-              {vehicle.brand} {vehicle.model}
+              {vehicle.make} {vehicle.model}
             </Text>
           </TouchableOpacity>
         ))}

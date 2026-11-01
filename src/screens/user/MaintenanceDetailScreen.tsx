@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
+  Image,
   StyleSheet,
   TouchableOpacity,
   Alert,
@@ -24,6 +25,7 @@ import {
   MapPin,
   User,
   Package,
+  ShieldCheck,
   FileText,
   Shield,
   Clock,
@@ -39,6 +41,7 @@ import {
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { getDisplayableParts, InstalledPartsList } from '../../components/InstalledPartRow';
 import { MaintenanceService } from '../../services/MaintenanceService';
 import { VehicleService } from '../../services/VehicleService';
 import { useAppThemeManager } from '../../hooks/useTheme';
@@ -348,7 +351,8 @@ export default function MaintenanceDetailScreen() {
 
   const typeColors = getTypeColor(maintenance.type);
   const canEdit = isOwner;
-  const showCosts = vehicle.privacySettings?.showCosts !== false;
+  // Il filtro privacy riguarda chi guarda l'auto da fuori, non il suo proprietario
+  const showCosts = isOwner || vehicle.privacySettings?.showCosts !== false;
   const showWorkshop = vehicle.privacySettings?.showMechanics !== false;
 
   return (
@@ -377,17 +381,14 @@ export default function MaintenanceDetailScreen() {
             Dettaglio Manutenzione
           </Text>
           <Text style={[styles.headerSubtitle, { color: isDark ? '#999' : '#666' }]}>
-            {vehicle.brand} {vehicle.model}
+            {vehicle.make} {vehicle.model}
           </Text>
         </View>
 
-        {canEdit && (
+        {canEdit && !maintenance.verifiedByWorkshop && (
           <View style={styles.headerActions}>
             <TouchableOpacity
-              onPress={() => navigation.navigate('EditMaintenance' as never, {
-                maintenanceId,
-                carId
-              } as never)}
+              onPress={() => navigation.navigate('EditMaintenance', { maintenanceId, carId })}
               style={[styles.headerButton, {
                 backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                 marginRight: 8
@@ -627,8 +628,44 @@ export default function MaintenanceDetailScreen() {
           </GlassCard>
         )}
 
+        {maintenance.verifiedByWorkshop && (
+          <GlassCard style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <ShieldCheck size={20} color={isDark ? '#fff' : '#000'} />
+              <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>
+                Eseguita da officina
+              </Text>
+            </View>
+            <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)' }}>
+              {maintenance.workshopName ? `${maintenance.workshopName}. ` : ''}
+              Dati, costi e foto sono stati inseriti dall&apos;officina e non si possono modificare.
+            </Text>
+          </GlassCard>
+        )}
+
+        {maintenance.photos && maintenance.photos.length > 0 && (
+          <GlassCard style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Package size={20} color={isDark ? '#fff' : '#000'} />
+              <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>
+                Foto del lavoro
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {maintenance.photos.map((photo) => (
+                <Image
+                  key={photo.url}
+                  source={{ uri: photo.url }}
+                  style={{ width: 104, height: 104, borderRadius: 12 }}
+                  accessibilityLabel={photo.kind === 'part' ? 'Foto ricambio usato' : 'Foto della manutenzione'}
+                />
+              ))}
+            </View>
+          </GlassCard>
+        )}
+
         {/* Parts Section */}
-        {maintenance.parts && maintenance.parts.length > 0 && (
+        {getDisplayableParts(maintenance.parts).length > 0 && (
           <GlassCard style={styles.section}>
             <View style={styles.sectionHeader}>
               <Package size={20} color={isDark ? '#fff' : '#000'} />
@@ -637,38 +674,11 @@ export default function MaintenanceDetailScreen() {
               </Text>
             </View>
 
-            {maintenance.parts.map((part, index) => (
-              <View key={index}>
-                {index > 0 && <View style={styles.infoDivider} />}
-                <View style={styles.partItem}>
-                  <View style={styles.partHeader}>
-                    <Text style={[styles.partName, { color: isDark ? '#fff' : '#000' }]}>
-                      {part.name}
-                    </Text>
-                    {part.cost && showCosts && (
-                      <Text style={[styles.partCost, { color: isDark ? '#4CAF50' : '#45A049' }]}>
-                        {formatCurrency(part.cost)}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.partDetails}>
-                    <Text style={[styles.partDetail, { color: isDark ? '#999' : '#666' }]}>
-                      Quantità: {part.quantity}
-                    </Text>
-                    {part.brand && (
-                      <Text style={[styles.partDetail, { color: isDark ? '#999' : '#666' }]}>
-                        • {part.brand}
-                      </Text>
-                    )}
-                    {part.partNumber && (
-                      <Text style={[styles.partDetail, { color: isDark ? '#999' : '#666' }]}>
-                        • Cod: {part.partNumber}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-            ))}
+            <InstalledPartsList
+              parts={maintenance.parts}
+              showCosts={showCosts}
+              verifiedByWorkshop={maintenance.verifiedByWorkshop}
+            />
           </GlassCard>
         )}
 
@@ -1027,37 +1037,6 @@ const styles = StyleSheet.create({
   costSubValue: {
     fontSize: 15,
     fontWeight: '600',
-  },
-
-  // Parts
-  partItem: {
-    paddingVertical: 4,
-  },
-  partHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  partName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  partCost: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginLeft: 12,
-  },
-  partDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  partDetail: {
-    fontSize: 13,
-    fontWeight: '500',
   },
 
   // Warranty

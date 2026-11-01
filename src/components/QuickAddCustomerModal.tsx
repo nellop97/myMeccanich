@@ -14,11 +14,11 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
-    Alert,
 } from 'react-native';
 import { X, User, Mail, Phone, Save } from 'lucide-react-native';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
+import { showAlert } from '../utils/platformHelpers';
 
 interface QuickAddCustomerModalProps {
     visible: boolean;
@@ -82,7 +82,7 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
             const snapshot = await getDocs(q);
 
             if (!snapshot.empty) {
-                Alert.alert(
+                showAlert(
                     'Cliente Esistente',
                     `Esiste già un cliente con l'email ${formData.email}. Vuoi cercarlo invece?`,
                     [
@@ -128,19 +128,21 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
 
             // Crea il nuovo cliente
             const customerData = {
+                name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
                 firstName: formData.firstName.trim(),
                 lastName: formData.lastName.trim(),
                 email: formData.email.toLowerCase().trim(),
                 phone: formData.phone.trim() || null,
-                userType: 'user', // Cliente standard
-                registrationDate: serverTimestamp(),
+                isCompany: false,
+                mechanicId: currentUser.uid,
+                workshopId: currentUser.uid,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 createdBy: currentUser.uid, // ID del meccanico che ha creato il cliente
                 isActive: true,
             };
 
-            const docRef = await addDoc(collection(db, 'users'), customerData);
+            const docRef = await addDoc(collection(db, 'customers'), customerData);
 
             console.log('✅ Cliente aggiunto con ID:', docRef.id);
 
@@ -166,10 +168,10 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
             // Chiama il callback con il nuovo cliente
             onCustomerAdded(newCustomer);
 
-            Alert.alert('Successo', 'Cliente aggiunto con successo!');
+            showAlert('Successo', 'Cliente aggiunto con successo!');
         } catch (error: any) {
             console.error('❌ Errore salvataggio cliente:', error);
-            Alert.alert('Errore', error.message || 'Impossibile salvare il cliente');
+            showAlert('Errore', error.message || 'Impossibile salvare il cliente');
         } finally {
             setIsSubmitting(false);
         }
@@ -311,7 +313,7 @@ const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
 
                             <View style={[styles.infoBox, { backgroundColor: theme.primary + '10', borderColor: theme.primary }]}>
                                 <Text style={[styles.infoText, { color: theme.primary }]}>
-                                    💡 Il cliente riceverà un'email per completare la registrazione e potrà accedere all'app per visualizzare
+                                    💡 Il cliente riceverà un&apos;email per completare la registrazione e potrà accedere all&apos;app per visualizzare
                                     lo stato dei suoi veicoli.
                                 </Text>
                             </View>

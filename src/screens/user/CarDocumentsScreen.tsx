@@ -45,7 +45,7 @@ const CarDocumentsScreen = () => {
     }
   ];
 
-  const getDocumentIcon = (type) => {
+  const getDocumentIcon = (type: string) => {
     switch (type) {
       case 'insurance': return '🛡️';
       case 'registration': return '🚗';
@@ -54,7 +54,7 @@ const CarDocumentsScreen = () => {
     }
   };
 
-  const getDocumentColor = (type) => {
+  const getDocumentColor = (type: string) => {
     switch (type) {
       case 'insurance': return '#10B981';
       case 'registration': return '#3B82F6';
@@ -63,18 +63,18 @@ const CarDocumentsScreen = () => {
     }
   };
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT');
   };
 
-  const formatFileSize = (bytes) => {
+  const formatFileSize = (bytes: number) => {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const DocumentCard = ({ document }) => (
+  const DocumentCard = ({ document }: { document: any }) => (
     <TouchableOpacity style={styles.documentCard}>
       <View style={styles.documentHeader}>
         <View style={styles.documentIconContainer}>

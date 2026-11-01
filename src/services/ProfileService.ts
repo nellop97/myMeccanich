@@ -24,7 +24,7 @@ import {
     reauthenticateWithCredential,
 } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { db, auth, storage } from '../config/firebase';
+import { db, auth, storage } from './firebase';
 
 export interface ProfileData {
     firstName: string;

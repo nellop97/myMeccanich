@@ -8,7 +8,6 @@ import {
     StyleSheet,
     TouchableOpacity,
     ScrollView,
-    Dimensions,
 } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import {
@@ -22,6 +21,8 @@ import {
 } from 'lucide-react-native';
 import { useWorkshopStore } from '../../store/workshopStore';
 
+import { mechanicStaticColors } from './mechanicTheme';
+import { useMechanicTheme } from './mechanicTheme';
 // Configurazione italiana per il calendario
 LocaleConfig.locales['it'] = {
     monthNames: [
@@ -42,32 +43,19 @@ interface CalendarAppointmentPickerProps {
     startDate: string | null;
     endDate: string | null;
     onPeriodChange: (startDate: string | null, endDate: string | null) => void;
-    theme?: any; // ⚠️ Ora è opzionale con fallback
 }
 
 // 🔧 DEFAULT THEME - Fallback se non passato
-const DEFAULT_THEME = {
-    text: '#000000',
-    textSecondary: '#6b7280',
-    accent: '#2563eb',
-    cardBackground: '#ffffff',
-    border: '#e5e7eb',
-    error: '#ef4444',
-    warning: '#f59e0b',
-    primary: '#2563eb',
-};
 
 const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
                                                                                  startDate,
                                                                                  endDate,
                                                                                  onPeriodChange,
-                                                                                 theme: propTheme // Rinominiamo per evitare conflitti
                                                                              }) => {
     const { cars } = useWorkshopStore();
     const [currentMonth, setCurrentMonth] = useState(new Date());
 
-    // 🔧 FIX: Usa il theme passato o il fallback
-    const theme = propTheme || DEFAULT_THEME;
+    const theme = useMechanicTheme();
 
     // Calcola tutti gli appuntamenti esistenti
     const existingAppointments = useMemo(() => {
@@ -105,7 +93,7 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
             const appointmentCount = existingAppointments[date].length;
             marks[date] = {
                 marked: true,
-                dotColor: appointmentCount > 2 ? '#ef4444' : appointmentCount > 1 ? '#f59e0b' : '#10b981',
+                dotColor: appointmentCount > 2 ? theme.error : appointmentCount > 1 ? theme.warning : theme.success,
                 customStyles: {
                     container: {
                         backgroundColor: 'transparent',
@@ -133,15 +121,15 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
                         ...marks[dateString],
                         customStyles: {
                             container: {
-                                backgroundColor: isStart || isEnd ? theme.accent : theme.accent + '40',
+                                backgroundColor: isStart || isEnd ? theme.primary : theme.primary + '40',
                                 borderRadius: isStart && isEnd ? 8 : isStart ? '8px 0 0 8px' : isEnd ? '0 8px 8px 0' : 0,
                             },
                             text: {
-                                color: '#ffffff',
+                                color: isStart || isEnd ? theme.onPrimary : theme.text,
                                 fontWeight: isStart || isEnd ? 'bold' : 'normal',
                             },
                             dot: {
-                                backgroundColor: '#ffffff',
+                                backgroundColor: theme.onPrimary,
                             }
                         }
                     };
@@ -149,11 +137,11 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
                     marks[dateString] = {
                         customStyles: {
                             container: {
-                                backgroundColor: isStart || isEnd ? theme.accent : theme.accent + '40',
+                                backgroundColor: isStart || isEnd ? theme.primary : theme.primary + '40',
                                 borderRadius: isStart && isEnd ? 8 : isStart ? '8px 0 0 8px' : isEnd ? '0 8px 8px 0' : 0,
                             },
                             text: {
-                                color: '#ffffff',
+                                color: isStart || isEnd ? theme.onPrimary : theme.text,
                                 fontWeight: isStart || isEnd ? 'bold' : 'normal',
                             },
                         }
@@ -169,29 +157,29 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
                     ...marks[startDate],
                     customStyles: {
                         container: {
-                            backgroundColor: theme.accent,
+                            backgroundColor: theme.primary,
                             borderRadius: 8,
                         },
                         text: {
-                            color: '#ffffff',
+                            color: theme.onPrimary,
                             fontWeight: 'bold',
                         },
                         dot: {
-                            backgroundColor: '#ffffff',
+                            backgroundColor: theme.onPrimary,
                         }
                     }
                 };
             } else {
                 marks[startDate] = {
                     selected: true,
-                    selectedColor: theme.accent,
+                    selectedColor: theme.primary,
                     customStyles: {
                         container: {
-                            backgroundColor: theme.accent,
+                            backgroundColor: theme.primary,
                             borderRadius: 8,
                         },
                         text: {
-                            color: '#ffffff',
+                            color: theme.onPrimary,
                             fontWeight: 'bold',
                         },
                     }
@@ -238,9 +226,9 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
 
     const getWorkloadColor = (status: string) => {
         switch (status) {
-            case 'libero': return '#10b981';
-            case 'normale': return '#f59e0b';
-            case 'pieno': return '#ef4444';
+            case 'libero': return theme.success;
+            case 'normale': return theme.warning;
+            case 'pieno': return theme.error;
             default: return theme.textSecondary;
         }
     };
@@ -359,10 +347,10 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
             Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 : 1;
 
         return (
-            <View style={[styles.selectedDatesContainer, { backgroundColor: theme.accent + '20', borderColor: theme.accent }]}>
+            <View style={[styles.selectedDatesContainer, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
                 <View style={styles.selectedDatesHeader}>
-                    <CheckCircle size={20} color={theme.accent} />
-                    <Text style={[styles.selectedDatesTitle, { color: theme.accent }]}>
+                    <CheckCircle size={20} color={theme.primary} />
+                    <Text style={[styles.selectedDatesTitle, { color: theme.primary }]}>
                         Periodo Selezionato ({days} {days === 1 ? 'giorno' : 'giorni'})
                     </Text>
                 </View>
@@ -423,7 +411,7 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
         if (relevantDates.length === 0) return null;
 
         return (
-            <View style={[styles.appointmentsContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={[styles.appointmentsContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.appointmentsHeader}>
                     <AlertCircle size={20} color={theme.warning} />
                     <Text style={[styles.appointmentsTitle, { color: theme.text }]}>
@@ -460,19 +448,19 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
             <Text style={[styles.legendTitle, { color: theme.text }]}>Legenda:</Text>
             <View style={styles.legendItems}>
                 <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
+                    <View style={[styles.legendDot, { backgroundColor: theme.success }]} />
                     <Text style={[styles.legendText, { color: theme.textSecondary }]}>Disponibile</Text>
                 </View>
                 <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
+                    <View style={[styles.legendDot, { backgroundColor: theme.warning }]} />
                     <Text style={[styles.legendText, { color: theme.textSecondary }]}>2-3 appuntamenti</Text>
                 </View>
                 <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+                    <View style={[styles.legendDot, { backgroundColor: theme.error }]} />
                     <Text style={[styles.legendText, { color: theme.textSecondary }]}>Giorno pieno (4+)</Text>
                 </View>
                 <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: theme.accent }]} />
+                    <View style={[styles.legendDot, { backgroundColor: theme.primary }]} />
                     <Text style={[styles.legendText, { color: theme.textSecondary }]}>Selezionato</Text>
                 </View>
             </View>
@@ -483,9 +471,9 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
         <View style={styles.container}>
             {renderQuickSelection()}
 
-            <View style={[styles.calendarContainer, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={[styles.calendarContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.calendarHeader}>
-                    <CalendarIcon size={20} color={theme.accent} />
+                    <CalendarIcon size={20} color={theme.primary} />
                     <Text style={[styles.calendarTitle, { color: theme.text }]}>
                         Seleziona il periodo di lavorazione
                     </Text>
@@ -498,19 +486,19 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
                     onMonthChange={(month) => setCurrentMonth(new Date(month.timestamp))}
                     minDate={new Date().toISOString().split('T')[0]}
                     theme={{
-                        backgroundColor: theme.cardBackground,
-                        calendarBackground: theme.cardBackground,
+                        backgroundColor: theme.surface,
+                        calendarBackground: theme.surface,
                         textSectionTitleColor: theme.text,
-                        selectedDayBackgroundColor: theme.accent,
-                        selectedDayTextColor: '#ffffff',
-                        todayTextColor: theme.accent,
+                        selectedDayBackgroundColor: theme.primary,
+                        selectedDayTextColor: theme.onPrimary,
+                        todayTextColor: theme.primary,
                         dayTextColor: theme.text,
                         textDisabledColor: theme.textSecondary,
-                        dotColor: theme.accent,
-                        selectedDotColor: '#ffffff',
-                        arrowColor: theme.accent,
+                        dotColor: theme.primary,
+                        selectedDotColor: theme.onPrimary,
+                        arrowColor: theme.primary,
                         monthTextColor: theme.text,
-                        indicatorColor: theme.accent,
+                        indicatorColor: theme.primary,
                         textDayFontSize: 16,
                         textMonthFontSize: 18,
                         textDayHeaderFontSize: 14,
@@ -518,8 +506,8 @@ const CalendarAppointmentPicker: React.FC<CalendarAppointmentPickerProps> = ({
                     markingType={'custom'}
                     renderArrow={(direction) => (
                         direction === 'left' ?
-                            <ChevronLeft size={20} color={theme.accent} /> :
-                            <ChevronRight size={20} color={theme.accent} />
+                            <ChevronLeft size={20} color={theme.primary} /> :
+                            <ChevronRight size={20} color={theme.primary} />
                     )}
                     hideExtraDays={true}
                     firstDay={1} // Lunedì come primo giorno
@@ -568,7 +556,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        borderBottomColor: mechanicStaticColors.divider,
     },
     calendarTitle: {
         fontSize: 16,
@@ -596,7 +584,7 @@ const styles = StyleSheet.create({
     legendDot: {
         width: 8,
         height: 8,
-        borderRadius: 4,
+        borderRadius: 8,
         marginRight: 6,
     },
     legendText: {
@@ -653,7 +641,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
+        borderBottomColor: mechanicStaticColors.divider,
     },
     appointmentsTitle: {
         fontSize: 16,

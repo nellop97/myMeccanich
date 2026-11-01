@@ -12,6 +12,7 @@ import {
     TextInputProps,
 } from 'react-native';
 import { LucideIcon } from 'lucide-react-native';
+import UniversalDatePicker from '../UniversalDatePicker';
 
 // ============================================
 // DATE INPUT MULTIPIATTAFORMA
@@ -30,62 +31,24 @@ export const DateInput: React.FC<DateInputProps> = ({
                                                         value,
                                                         onChange,
                                                         placeholder = 'GG/MM/AAAA',
-                                                        icon: Icon,
                                                         error,
                                                     }) => {
-    if (Platform.OS === 'web') {
-        return (
-            <View style={styles.fieldContainer}>
-                <Text style={styles.label}>{label}</Text>
-                <View style={[styles.inputWrapper, error && styles.inputError]}>
-                    {Icon && <Icon size={20} color="#64748b" />}
-                    <input
-                        type="date"
-                        value={value ? value.toISOString().split('T')[0] : ''}
-                        onChange={(e) =>
-                            onChange(e.target.value ? new Date(e.target.value) : undefined)
-                        }
-                        placeholder={placeholder}
-                        style={{
-                            flex: 1,
-                            fontSize: 16,
-                            color: '#1e293b',
-                            border: 'none',
-                            outline: 'none',
-                            backgroundColor: 'transparent',
-                        }}
-                    />
-                </View>
-                {error && <Text style={styles.errorText}>{error}</Text>}
-            </View>
-        );
-    }
-
-    // Mobile: usa TextInput con DateTimePicker nativo
     return (
-        <View style={styles.fieldContainer}>
-            <Text style={styles.label}>{label}</Text>
-            <TouchableOpacity
-                style={[styles.inputWrapper, error && styles.inputError]}
-                onPress={() => {
-                    // TODO: Aprire DateTimePicker mobile
-                    console.log('Open date picker');
-                }}
-            >
-                {Icon && <Icon size={20} color="#64748b" />}
-                <Text style={styles.inputText}>
-                    {value ? value.toLocaleDateString('it-IT') : placeholder}
-                </Text>
-            </TouchableOpacity>
-            {error && <Text style={styles.errorText}>{error}</Text>}
-        </View>
+        <UniversalDatePicker
+            label={label}
+            placeholder={placeholder}
+            value={value}
+            onChange={onChange}
+            onClear={() => onChange(undefined)}
+            error={error}
+        />
     );
 };
 
 // ============================================
 // NUMBER INPUT CON UNITÀ
 // ============================================
-interface NumberInputProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
+interface NumberInputProps extends Omit<TextInputProps, 'value' | 'onChangeText' | 'onChange'> {
     label: string;
     value?: number;
     onChange: (value?: number) => void;
@@ -143,7 +106,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
                             outline: 'none',
                             backgroundColor: 'transparent',
                         }}
-                        {...textInputProps}
+                        {...(textInputProps as object)}
                     />
                     {unit && <Text style={styles.unitText}>{unit}</Text>}
                 </View>
@@ -212,7 +175,7 @@ export const StandardInput: React.FC<StandardInputProps> = ({
                             outline: 'none',
                             backgroundColor: 'transparent',
                         }}
-                        {...textInputProps}
+                        {...(textInputProps as object)}
                     />
                     {rightElement}
                 </View>

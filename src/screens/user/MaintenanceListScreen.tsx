@@ -17,7 +17,7 @@ const MaintenanceListScreen = () => {
     documents: false
   });
 
-  const toggleSection = (section) => {
+  const toggleSection = (section: keyof typeof expandedSections) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedSections(prev => ({...prev, [section]: !prev[section]}));
   };

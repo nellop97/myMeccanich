@@ -30,6 +30,20 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == mechanicId && isMechanic();
     }
 
+    // Verifica se il documento è del meccanico autenticato tramite workshopId o mechanicId
+    // Usa get() per funzionare anche con documenti privi di uno dei due campi
+    function isWorkshopDocOwner(data) {
+      return isAuthenticated() && (
+        data.get('workshopId', '') == request.auth.uid ||
+        data.get('mechanicId', '') == request.auth.uid
+      );
+    }
+
+    // In creazione workshopId è facoltativo, ma se presente deve essere l'utente autenticato
+    function hasValidWorkshopId() {
+      return request.resource.data.get('workshopId', request.auth.uid) == request.auth.uid;
+    }
+
     // Verifica validità dei dati (evita injection e dati mancanti)
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
@@ -77,6 +91,11 @@ service cloud.firestore {
     // VEHICLES COLLECTION (veicoli utenti)
     // ============================================
     match /vehicles/{vehicleId} {
+      // Helper: verifica se esiste un trasferimento accettato per questo veicolo
+      function hasAcceptedTransfer() {
+        return exists(/databases/$(database)/documents/vehicle_transfers/$(vehicleId + '_transfer'));
+      }
+
       // Lettura: chiunque autenticato può leggere (necessario per ricerca veicoli)
       // In alternativa, solo proprietario o condiviso:
       // allow read: if isAuthenticated() && (
@@ -92,10 +111,14 @@ service cloud.firestore {
         request.resource.data.ownerId == request.auth.uid
       );
 
-      // Aggiornamento: solo il proprietario
+      // Aggiornamento: proprietario o buyer durante trasferimento accettato
       allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid
+        resource.data.ownerId == request.auth.uid ||
+        // Permetti aggiornamento durante trasferimento al nuovo proprietario
+        (resource.data.get('transferPending', false) == true &&
+         request.resource.data.get('ownerId', '') != '' &&
+         request.resource.data.get('transferPending', true) == false)
       );
 
       // Cancellazione: solo il proprietario
@@ -213,8 +236,13 @@ service cloud.firestore {
     // CUSTOMERS COLLECTION
     // ============================================
     match /customers/{customerId} {
-      // Lettura: meccanico proprietario o il cliente stesso
-      allow read: if isAuthenticated() && (
+      // Lettura singola: meccanico proprietario o il cliente stesso
+      allow get: if isWorkshopDocOwner(resource.data) ||
+                    (isAuthenticated() && resource.data.get('userId', '') == request.auth.uid);
+
+      // Lettura query: confronti diretti, così Firestore li verifica sui filtri della query
+      allow list: if isAuthenticated() && (
+        resource.data.workshopId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
         resource.data.userId == request.auth.uid
       );
@@ -222,13 +250,15 @@ service cloud.firestore {
       // Creazione: solo meccanici per i propri clienti
       allow create: if isMechanic() &&
                       request.resource.data.mechanicId == request.auth.uid &&
+                      hasValidWorkshopId() &&
                       hasRequiredFields(['name', 'email', 'mechanicId']);
 
-      // Aggiornamento: meccanico proprietario
-      allow update: if isMechanicOwner(resource.data.mechanicId);
+      // Aggiornamento: meccanico proprietario, senza poter cambiare i campi di proprietà
+      allow update: if isMechanic() && isWorkshopDocOwner(resource.data) &&
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workshopId', 'mechanicId']);
 
       // Cancellazione: meccanico proprietario
-      allow delete: if isMechanicOwner(resource.data.mechanicId);
+      allow delete: if isMechanic() && isWorkshopDocOwner(resource.data);
     }
 
     // ============================================
@@ -243,12 +273,28 @@ service cloud.firestore {
         );
       }
 
-      // Lettura: proprietario diretto, meccanico, o proprietario del veicolo
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
+      }
+
+      // Helper: il proprietario ha autorizzato questo utente a vedere lo storico.
+      // L'accesso è un documento che può scrivere solo il proprietario, e scade da solo
+      function hasHistoryAccess(vehicleId) {
+        let accessPath = /databases/$(database)/documents/vehicle_history_access/$(vehicleId + '_' + request.auth.token.email.lower());
+        return exists(accessPath) && get(accessPath).data.expiresAt > request.time;
+      }
+
+      // Lettura: proprietario diretto, meccanico, proprietario del veicolo
+      // o acquirente approvato, solo per le manutenzioni visibili
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId)
+        ownsVehicle(resource.data.vehicleId) ||
+        (resource.data.isVisible == true && hasHistoryAccess(resource.data.vehicleId))
       );
 
       // Creazione: utenti per i propri veicoli o meccanici
@@ -259,19 +305,37 @@ service cloud.firestore {
         ownsVehicle(request.resource.data.vehicleId)
       );
 
-      // Aggiornamento: proprietario o meccanico che ha creato il record
+      // Aggiornamento: proprietario, meccanico, o buyer durante trasferimento
+      // Un intervento chiuso dall'officina è la prova del lavoro svolto: il proprietario
+      // può solo decidere se mostrarlo, non modificarlo
+      function isWorkshopRecord() {
+        return resource.data.get('verifiedByWorkshop', false) == true;
+      }
+
+      function onlyChangesVisibility() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isVisible', 'updatedAt']);
+      }
+
       allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId)
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId) ||
+        ((!isWorkshopRecord() || onlyChangesVisibility()) && (
+          resource.data.userId == request.auth.uid ||
+          resource.data.ownerId == request.auth.uid ||
+          ownsVehicle(resource.data.vehicleId)
+        ))
       );
 
-      // Cancellazione: solo il proprietario
+      // Cancellazione: proprietario o buyer durante trasferimento
       allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId)
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId) ||
+        (!isWorkshopRecord() && (
+          resource.data.userId == request.auth.uid ||
+          resource.data.ownerId == request.auth.uid ||
+          ownsVehicle(resource.data.vehicleId)
+        ))
       );
     }
 
@@ -279,8 +343,13 @@ service cloud.firestore {
     // INVOICES COLLECTION
     // ============================================
     match /invoices/{invoiceId} {
-      // Lettura: meccanico o cliente coinvolto
-      allow read: if isAuthenticated() && (
+      // Lettura singola: meccanico o cliente coinvolto
+      allow get: if isWorkshopDocOwner(resource.data) ||
+                    (isAuthenticated() && resource.data.get('customerId', '') == request.auth.uid);
+
+      // Lettura query: confronti diretti, così Firestore li verifica sui filtri della query
+      allow list: if isAuthenticated() && (
+        resource.data.workshopId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
         resource.data.customerId == request.auth.uid
       );
@@ -288,13 +357,15 @@ service cloud.firestore {
       // Creazione: solo meccanici per i propri clienti
       allow create: if isMechanic() &&
                       request.resource.data.mechanicId == request.auth.uid &&
+                      hasValidWorkshopId() &&
                       hasRequiredFields(['customerId', 'totalAmount', 'items']);
 
-      // Aggiornamento: solo il meccanico proprietario
-      allow update: if isMechanicOwner(resource.data.mechanicId);
+      // Aggiornamento: solo il meccanico proprietario, senza poter cambiare i campi di proprietà
+      allow update: if isMechanic() && isWorkshopDocOwner(resource.data) &&
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workshopId', 'mechanicId']);
 
       // Cancellazione: solo il meccanico proprietario
-      allow delete: if isMechanicOwner(resource.data.mechanicId);
+      allow delete: if isMechanic() && isWorkshopDocOwner(resource.data);
     }
 
     // ============================================
@@ -403,6 +474,13 @@ service cloud.firestore {
     // DOCUMENTS COLLECTION
     // ============================================
     match /documents/{documentId} {
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
+      }
+
       // Lettura: proprietario o meccanico condiviso
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -413,17 +491,32 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
                       request.resource.data.userId == request.auth.uid;
 
-      // Aggiornamento: solo il proprietario
-      allow update: if isOwner(resource.data.userId);
+      // Aggiornamento: proprietario o buyer durante trasferimento
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.userId) ||
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
+      );
 
-      // Cancellazione: solo il proprietario
-      allow delete: if isOwner(resource.data.userId);
+      // Cancellazione: proprietario o buyer durante trasferimento
+      allow delete: if isAuthenticated() && (
+        isOwner(resource.data.userId) ||
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
+      );
     }
 
     // ============================================
     // VEHICLE PHOTOS COLLECTION
     // ============================================
     match /vehicle_photos/{photoId} {
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
+      }
+
       // Lettura: proprietario della foto
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
 
@@ -432,11 +525,19 @@ service cloud.firestore {
                       request.resource.data.userId == request.auth.uid &&
                       request.resource.data.keys().hasAll(['userId', 'vehicleId', 'base64', 'mimeType']);
 
-      // Aggiornamento: solo il proprietario della foto
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Aggiornamento: proprietario o buyer durante trasferimento
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId)
+      );
 
-      // Cancellazione: solo il proprietario della foto
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Cancellazione: proprietario o buyer durante trasferimento
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        isTransferBuyer(resource.data.vehicleId)
+      );
     }
 
     // ============================================
@@ -449,6 +550,13 @@ service cloud.firestore {
           get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid
         );
+      }
+
+      // Helper: verifica se il veicolo è in trasferimento e l'utente è il buyer
+      function isTransferBuyer(vehicleId) {
+        return exists(/databases/$(database)/documents/vehicles/$(vehicleId)) &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferPending', false) == true &&
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
       }
 
       // Lettura: proprietario diretto o proprietario del veicolo
@@ -465,18 +573,22 @@ service cloud.firestore {
         (request.resource.data.get('vehicleId', null) != null && ownsVehicle(request.resource.data.vehicleId))
       );
 
-      // Aggiornamento: solo il proprietario
+      // Aggiornamento: proprietario o buyer durante trasferimento
       allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
-        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId)) ||
+        // Permetti aggiornamento al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
       );
 
-      // Cancellazione: solo il proprietario
+      // Cancellazione: proprietario o buyer durante trasferimento
       allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
-        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId))
+        (resource.data.get('vehicleId', null) != null && ownsVehicle(resource.data.vehicleId)) ||
+        // Permetti cancellazione al buyer durante trasferimento veicolo
+        (resource.data.get('vehicleId', null) != null && isTransferBuyer(resource.data.vehicleId))
       );
     }
 
@@ -647,6 +759,25 @@ service cloud.firestore {
     // ============================================
     // VEHICLE VIEW REQUESTS COLLECTION
     // ============================================
+    // Autorizzazione a leggere lo storico di un veicolo, scritta all'approvazione
+    match /vehicle_history_access/{accessId} {
+      function ownsAccessVehicle(vehicleId) {
+        return get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+      }
+
+      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+
+      // Solo il proprietario del veicolo, con l'id legato a veicolo e richiedente
+      allow create, update: if isAuthenticated() &&
+                              request.resource.data.ownerId == request.auth.uid &&
+                              ownsAccessVehicle(request.resource.data.vehicleId) &&
+                              accessId == request.resource.data.vehicleId + '_' + request.resource.data.requesterEmail;
+
+      // La revoca può riguardare richieste senza accesso allo storico
+      allow delete: if isAuthenticated() && (resource == null || resource.data.ownerId == request.auth.uid);
+    }
+
     match /vehicle_view_requests/{requestId} {
       // Lettura: proprietario del veicolo o richiedente
       allow read: if isAuthenticated() && (
@@ -836,6 +967,45 @@ service cloud.firestore {
 
       // Cancellazione: solo il destinatario
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ============================================
+    // INVENTORY ITEMS COLLECTION
+    // ============================================
+    // Costi e fornitori: il cliente non legge nulla del magazzino
+    match /inventory_items/{itemId} {
+      allow read: if isMechanicOwner(resource.data.workshopId);
+
+      allow create: if isMechanicOwner(request.resource.data.workshopId);
+
+      // workshopId non cambia mai
+      allow update: if isMechanicOwner(resource.data.workshopId) &&
+                      request.resource.data.workshopId == resource.data.workshopId;
+
+      // Le schede si archiviano: i movimenti devono restare collegati
+      allow delete: if false;
+    }
+
+    // ============================================
+    // INVENTORY MOVEMENTS COLLECTION
+    // ============================================
+    // Registro di sola aggiunta: l'update vietato blocca anche il doppio scarico,
+    // perché il consumo ha id fisso {repairId}_{partId}
+    match /inventory_movements/{movementId} {
+      allow read: if isMechanicOwner(resource.data.workshopId);
+
+      allow create: if isMechanicOwner(request.resource.data.workshopId) &&
+                      request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    // ============================================
+    // AI USAGE COLLECTION
+    // ============================================
+    // Contatori dell'analisi foto: li scrive solo la Cloud Function con l'admin SDK
+    match /ai_usage/{usageId} {
+      allow read, write: if false;
     }
 
     // ============================================

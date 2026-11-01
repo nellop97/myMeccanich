@@ -32,6 +32,7 @@ import {
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStore } from '../../store';
+import { useUserVehicles } from '../../hooks/useUserData';
 import { useUserCarsStore } from '../../store/useCarsStore';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -39,7 +40,8 @@ const { width: screenWidth } = Dimensions.get('window');
 const CarsListScreen = () => {
   const navigation = useNavigation();
   const { darkMode } = useStore();
-  const { cars, loading, refreshCars, deleteCar } = useUserCarsStore();
+  const { vehicles: cars, loading, refreshVehicles: refreshCars } = useUserVehicles();
+  const { deleteVehicle } = useUserCarsStore();
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,8 +77,7 @@ const CarsListScreen = () => {
                          car.licensePlate.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesFilter = selectedFilter === 'all' || 
-                         (selectedFilter === 'active' && car.status === 'active') ||
-                         (selectedFilter === 'maintenance' && car.status === 'maintenance');
+                         (selectedFilter === 'active' && car.isActive);
     
     return matchesSearch && matchesFilter;
   });
@@ -104,13 +105,16 @@ const CarsListScreen = () => {
         { 
           text: 'Elimina', 
           style: 'destructive',
-          onPress: () => deleteCar(carId)
+          onPress: async () => {
+            await deleteVehicle(carId);
+            await refreshCars();
+          }
         }
       ]
     );
   };
 
-  const renderCarCard = ({ item: car }) => {
+  const renderCarCard = ({ item: car }: { item: (typeof cars)[number] }) => {
     if (viewMode === 'list') {
       return (
         <TouchableOpacity
@@ -130,7 +134,7 @@ const CarsListScreen = () => {
                 {car.year} • {car.licensePlate}
               </Text>
               <Text style={[styles.carMileage, { color: theme.textSecondary }]}>
-                {car.mileage?.toLocaleString()} km
+                {car.currentMileage?.toLocaleString()} km
               </Text>
             </View>
 
@@ -238,7 +242,7 @@ const CarsListScreen = () => {
         <View style={[styles.filterModal, { backgroundColor: theme.cardBackground }]}>
           <Text style={[styles.modalTitle, { color: theme.text }]}>Filtra Veicoli</Text>
           
-          {['all', 'active', 'maintenance'].map((filter) => (
+          {['all', 'active'].map((filter) => (
             <TouchableOpacity
               key={filter}
               style={[

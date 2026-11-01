@@ -33,6 +33,7 @@ import {
 import { db, auth } from '../../services/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAppThemeManager } from '../../hooks/useTheme';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 
 interface RouteParams {
     carId: string;
@@ -249,6 +250,8 @@ const AddExpenseScreen = () => {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
+                    <AiComingSoonButton feature="receipt" style={styles.aiButton} />
+
                     {/* Date */}
                     <View style={styles.section}>
                         <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
@@ -426,6 +429,9 @@ const AddExpenseScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    aiButton: {
+        marginBottom: 16,
+    },
     container: {
         flex: 1,
     },

@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { useStore } from '../store';
 import { useWorkshopStore } from '../store/workshopStore';
+import { useInvoicingStore } from '../store/invoicingStore';
 import { buildUserDisplayName } from '../utils/authUtils';
 
 /**
@@ -64,6 +65,8 @@ export const useAuthSync = () => {
             } else {
                 console.log('❌ Auth Sync - No auth user, clearing store');
                 setUser(null);
+                // Le schermate meccanico escono con signOut di useAuth, senza passare da useLogout
+                useInvoicingStore.getState().resetStore();
             }
 
             setLoading(authLoading);
@@ -81,7 +84,7 @@ export const useAuthSync = () => {
 
 /**
  * Hook per gestire il logout completo
- * Pulisce Firebase, store principale e workshopStore
+ * Pulisce Firebase, store principale, workshopStore e invoicingStore
  */
 export const useLogout = () => {
     const { signOut: firebaseSignOut } = useAuth();
@@ -102,6 +105,10 @@ export const useLogout = () => {
             // 3. Pulisci workshopStore
             console.log('🗑️ Clearing workshop store...');
             resetWorkshopStore();
+
+            // 4. Pulisci invoicingStore
+            console.log('🗑️ Clearing invoicing store...');
+            useInvoicingStore.getState().resetStore();
 
             console.log('✅ Logout completed successfully');
             return true;

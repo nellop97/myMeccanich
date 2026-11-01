@@ -13,16 +13,22 @@ import {
   serverTimestamp,
   Timestamp,
   onSnapshot,
+  runTransaction,
+  arrayUnion,
+  Transaction,
   QuerySnapshot,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { toDayString } from '../utils/calendarGrid';
 import {
   BookingRequest,
   BookingProposal,
   BookingMessage,
   MessageAttachment,
 } from '../types/database.types';
-import WorkshopService from './WorkshopService';
+
+// Messaggio dell'errore lanciato da acceptBooking quando la richiesta non è più accettabile
+export const BOOKING_NOT_PENDING = 'booking-not-pending';
 
 export class BookingService {
   private static instance: BookingService;
@@ -44,8 +50,13 @@ export class BookingService {
       const id = doc(collection(db, 'booking_requests')).id;
       const bookingRef = doc(db, 'booking_requests', id);
 
+      // Firestore rifiuta i campi undefined, come telefono o servizio non indicati
+      const definedData = Object.fromEntries(
+        Object.entries(bookingData).filter(([, value]) => value !== undefined)
+      );
+
       const data: Partial<BookingRequest> = {
-        ...bookingData,
+        ...definedData,
         id,
         status: 'pending',
         proposals: [],
@@ -60,11 +71,6 @@ export class BookingService {
       };
 
       await setDoc(bookingRef, data);
-
-      // Incrementa il contatore di prenotazioni dell'officina
-      if (bookingData.workshopId) {
-        await WorkshopService.incrementBookingCount(bookingData.workshopId);
-      }
 
       console.log('✅ Richiesta di prenotazione creata:', id);
       return id;
@@ -108,10 +114,10 @@ export class BookingService {
         q = query(q, where('status', 'in', status));
       }
 
-      q = query(q, orderBy('createdAt', 'desc'), limit(100));
+      q = query(q, limit(100));
 
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => this.convertTimestamps(doc.data()) as BookingRequest);
+      return this.sortByNewest(snapshot.docs.map(doc => this.convertTimestamps(doc.data()) as BookingRequest));
     } catch (error) {
       console.error('❌ Errore recupero prenotazioni utente:', error);
       throw error;
@@ -119,13 +125,16 @@ export class BookingService {
   }
 
   /**
-   * Ottiene tutte le prenotazioni dell'officina/meccanico
+   * Ottiene tutte le prenotazioni dell'officina/meccanico.
+   * mechanicId è il proprietario dell'officina: l'id officina può non essere il suo uid
+   * e senza questo filtro le regole Firestore rifiuterebbero la query
    */
-  async getWorkshopBookings(workshopId: string, status?: string[]): Promise<BookingRequest[]> {
+  async getWorkshopBookings(workshopId: string, mechanicId: string, status?: string[]): Promise<BookingRequest[]> {
     try {
       let q = query(
         collection(db, 'booking_requests'),
-        where('workshopId', '==', workshopId)
+        where('workshopId', '==', workshopId),
+        where('mechanicId', '==', mechanicId)
       );
 
       if (status && status.length > 0) {
@@ -172,11 +181,181 @@ export class BookingService {
   }
 
   /**
+   * Conferma una richiesta solo se è ancora in attesa, così non si sovrascrive
+   * una cancellazione del cliente. Altrimenti lancia BOOKING_NOT_PENDING
+   */
+  async acceptBooking(bookingId: string, selectedDate: Date): Promise<void> {
+    try {
+      const bookingRef = doc(db, 'booking_requests', bookingId);
+
+      await runTransaction(db, async (transaction) => {
+        const bookingSnap = await transaction.get(bookingRef);
+
+        if (!bookingSnap.exists() || bookingSnap.data().status !== 'pending') {
+          throw new Error(BOOKING_NOT_PENDING);
+        }
+
+        const booking = this.convertTimestamps(bookingSnap.data()) as BookingRequest;
+
+        transaction.update(bookingRef, {
+          status: 'confirmed',
+          selectedDate,
+          ...this.writeIntervention(transaction, { ...booking, id: bookingId }, selectedDate),
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      console.log('✅ Prenotazione accettata');
+    } catch (error) {
+      console.error('❌ Errore accettazione prenotazione:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Scrive l'intervento nella transazione della conferma, così la data del calendario
+   * è per costruzione quella concordata col cliente. L'auto si scrive senza leggerla:
+   * le regole di workshopCars negano la lettura di un documento che non esiste ancora.
+   * Restituisce i campi che collegano la prenotazione all'intervento
+   */
+  private writeIntervention(
+    transaction: Transaction,
+    booking: BookingRequest,
+    date: Date,
+    status: 'pending' | 'in_progress' = 'pending'
+  ) {
+    const plate = (booking.vehicleLicensePlate || booking.id).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const carId = `${booking.mechanicId}_${booking.userId}_${plate}`;
+    const repairId = `booking_${booking.id}`;
+    const now = new Date().toISOString();
+    const scheduledDate = toDayString(date);
+    const scheduledTime = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+    const repair = {
+      id: repairId,
+      bookingId: booking.id,
+      description: booking.problemDescription
+        ? `${booking.serviceName}: ${booking.problemDescription}`
+        : booking.serviceName,
+      scheduledDate,
+      scheduledTime,
+      deliveryDate: scheduledDate,
+      totalCost: booking.quotedPrice ?? 0,
+      laborCost: 0,
+      estimatedHours: booking.estimatedDuration ? booking.estimatedDuration / 60 : 0,
+      status,
+      parts: [],
+      mechanicId: booking.mechanicId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    transaction.set(
+      doc(db, 'workshopCars', carId),
+      {
+        workshopId: booking.mechanicId,
+        mechanicId: booking.mechanicId,
+        make: booking.vehicleMake || '',
+        model: booking.vehicleModel || '',
+        year: booking.vehicleYear ? String(booking.vehicleYear) : '',
+        licensePlate: booking.vehicleLicensePlate || '',
+        mileage: booking.currentMileage ?? null,
+        owner: booking.userName || '',
+        ownerId: booking.userId,
+        ownerEmail: booking.userEmail || '',
+        ownerPhone: booking.userPhone ?? null,
+        entryDate: date.toISOString(),
+        isActive: true,
+        repairs: arrayUnion(repair),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return { interventionCarId: carId, interventionRepairId: repairId };
+  }
+
+  /**
+   * Aggiorna insieme lo stato della prenotazione e del suo intervento
+   */
+  async setWorkStatus(bookingId: string, status: 'in_progress' | 'completed' | 'cancelled'): Promise<void> {
+    try {
+      const bookingRef = doc(db, 'booking_requests', bookingId);
+
+      await runTransaction(db, async (transaction) => {
+        const bookingSnap = await transaction.get(bookingRef);
+        if (!bookingSnap.exists()) {
+          throw new Error('Prenotazione non trovata');
+        }
+
+        const booking = bookingSnap.data() as BookingRequest;
+        const carRef = booking.interventionCarId ? doc(db, 'workshopCars', booking.interventionCarId) : null;
+        const carSnap = carRef ? await transaction.get(carRef) : null;
+
+        if (carRef && carSnap?.exists()) {
+          const now = new Date().toISOString();
+          transaction.update(carRef, {
+            repairs: (carSnap.data().repairs ?? []).map((repair: any) =>
+              repair.id === booking.interventionRepairId
+                ? { ...repair, status, updatedAt: now }
+                : repair
+            ),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        transaction.update(bookingRef, {
+          status,
+          ...(status === 'completed' ? { completedAt: serverTimestamp() } : {}),
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      console.log('✅ Stato lavori aggiornato:', status);
+    } catch (error) {
+      console.error('❌ Errore aggiornamento stato lavori:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Crea gli interventi delle prenotazioni confermate prima che esistesse il collegamento
+   * o approvate da un preventivo. Una prenotazione senza data non ha niente da mettere in agenda
+   */
+  async syncInterventions(mechanicId: string): Promise<void> {
+    const snapshot = await getDocs(query(
+      collection(db, 'booking_requests'),
+      where('mechanicId', '==', mechanicId),
+      where('status', 'in', ['confirmed', 'in_progress']),
+      limit(100)
+    ));
+
+    for (const bookingDoc of snapshot.docs) {
+      const booking = this.convertTimestamps(bookingDoc.data()) as BookingRequest;
+      if (booking.interventionCarId || !booking.selectedDate) continue;
+
+      const date = new Date(booking.selectedDate);
+      const repairStatus = booking.status === 'in_progress' ? 'in_progress' : 'pending';
+
+      await runTransaction(db, async (transaction) => {
+        const current = await transaction.get(bookingDoc.ref);
+        if (current.data()?.interventionCarId) return;
+
+        transaction.update(bookingDoc.ref, {
+          ...this.writeIntervention(transaction, { ...booking, id: bookingDoc.id }, date, repairStatus),
+          updatedAt: serverTimestamp(),
+        });
+      });
+    }
+  }
+
+  /**
    * Aggiunge una proposta di data
    */
   async addProposal(
     bookingId: string,
-    proposal: Omit<BookingProposal, 'id' | 'createdAt'>
+    proposal: Omit<BookingProposal, 'id' | 'createdAt' | 'status'>
   ): Promise<void> {
     try {
       const booking = await this.getBookingRequest(bookingId);
@@ -211,29 +390,63 @@ export class BookingService {
    */
   async acceptProposal(bookingId: string, proposalId: string): Promise<void> {
     try {
-      const booking = await this.getBookingRequest(bookingId);
-      if (!booking) {
-        throw new Error('Prenotazione non trovata');
-      }
+      const bookingRef = doc(db, 'booking_requests', bookingId);
 
-      const updatedProposals = booking.proposals.map(p =>
-        p.id === proposalId
-          ? { ...p, status: 'accepted' as const }
-          : { ...p, status: 'rejected' as const }
-      );
+      await runTransaction(db, async (transaction) => {
+        const bookingSnap = await transaction.get(bookingRef);
+        if (!bookingSnap.exists()) {
+          throw new Error('Prenotazione non trovata');
+        }
 
-      const acceptedProposal = booking.proposals.find(p => p.id === proposalId);
+        const booking = this.convertTimestamps(bookingSnap.data()) as BookingRequest;
+        const acceptedProposal = booking.proposals.find(p => p.id === proposalId);
+        if (!acceptedProposal) {
+          throw new Error('Proposta non trovata');
+        }
 
-      await updateDoc(doc(db, 'booking_requests', bookingId), {
-        proposals: updatedProposals,
-        selectedDate: acceptedProposal?.proposedDate,
-        status: 'confirmed',
-        updatedAt: serverTimestamp(),
+        const selectedDate = new Date(acceptedProposal.proposedDate);
+
+        transaction.update(bookingRef, {
+          proposals: booking.proposals.map(p =>
+            p.id === proposalId
+              ? { ...p, status: 'accepted' as const }
+              : { ...p, status: 'rejected' as const }
+          ),
+          selectedDate,
+          status: 'confirmed',
+          ...this.writeIntervention(transaction, { ...booking, id: bookingId }, selectedDate),
+          updatedAt: serverTimestamp(),
+        });
       });
 
       console.log('✅ Proposta accettata');
     } catch (error) {
       console.error('❌ Errore accettazione proposta:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Rifiuta una proposta senza indicare un'altra data: la richiesta torna all'officina
+   */
+  async rejectProposal(bookingId: string, proposalId: string): Promise<void> {
+    try {
+      const booking = await this.getBookingRequest(bookingId);
+      if (!booking) {
+        throw new Error('Prenotazione non trovata');
+      }
+
+      await updateDoc(doc(db, 'booking_requests', bookingId), {
+        proposals: booking.proposals.map(p =>
+          p.id === proposalId ? { ...p, status: 'rejected' as const } : p
+        ),
+        status: 'pending',
+        updatedAt: serverTimestamp(),
+      });
+
+      console.log('✅ Proposta rifiutata');
+    } catch (error) {
+      console.error('❌ Errore rifiuto proposta:', error);
       throw error;
     }
   }
@@ -325,6 +538,11 @@ export class BookingService {
         throw new Error('Prenotazione non trovata');
       }
 
+      // Senza messaggi da segnare non si scrive: ogni scrittura riattiva il listener del dettaglio
+      if (!booking.messages.some(msg => msg.senderId !== userId && !msg.isRead)) {
+        return;
+      }
+
       const updatedMessages = booking.messages.map(msg =>
         msg.senderId !== userId ? { ...msg, isRead: true } : msg
       );
@@ -377,8 +595,7 @@ export class BookingService {
     const q = query(
       collection(db, 'booking_requests'),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(50)
+      limit(100)
     );
 
     const unsubscribe = onSnapshot(
@@ -387,7 +604,7 @@ export class BookingService {
         const bookings = snapshot.docs.map(doc =>
           this.convertTimestamps(doc.data()) as BookingRequest
         );
-        callback(bookings);
+        callback(this.sortByNewest(bookings));
       },
       (error) => {
         console.error('❌ Errore listener prenotazioni utente:', error);
@@ -399,15 +616,21 @@ export class BookingService {
   }
 
   /**
-   * Ascolta le prenotazioni dell'officina in tempo reale
+   * Ascolta le prenotazioni dell'officina in tempo reale.
+   * mechanicId serve alle regole Firestore (vedi getWorkshopBookings).
+   * Con onError un errore non viene confuso con una lista vuota; dopo un errore
+   * il listener è chiuso e va ricreato
    */
   onWorkshopBookingsChange(
     workshopId: string,
-    callback: (bookings: BookingRequest[]) => void
+    mechanicId: string,
+    callback: (bookings: BookingRequest[]) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const q = query(
       collection(db, 'booking_requests'),
       where('workshopId', '==', workshopId),
+      where('mechanicId', '==', mechanicId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -422,7 +645,11 @@ export class BookingService {
       },
       (error) => {
         console.error('❌ Errore listener prenotazioni officina:', error);
-        callback([]);
+        if (onError) {
+          onError(error);
+        } else {
+          callback([]);
+        }
       }
     );
 
@@ -430,16 +657,41 @@ export class BookingService {
   }
 
   /**
+   * Conta in tempo reale le richieste che aspettano una risposta del meccanico.
+   * Una data proposta conta solo se l'ultima proposta è del cliente
+   */
+  onMechanicPendingCountChange(
+    mechanicId: string,
+    callback: (count: number) => void
+  ): () => void {
+    const q = query(
+      collection(db, 'booking_requests'),
+      where('mechanicId', '==', mechanicId),
+      where('status', 'in', ['pending', 'quote_requested', 'date_proposed']),
+      limit(100)
+    );
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const count = snapshot.docs.filter((bookingDoc) => {
+          const booking = bookingDoc.data();
+          if (booking.status !== 'date_proposed') return true;
+          const proposals = booking.proposals ?? [];
+          return proposals[proposals.length - 1]?.proposedBy === 'user';
+        }).length;
+        callback(count);
+      },
+      (error) => console.error('❌ Errore conteggio richieste officina:', error)
+    );
+  }
+
+  /**
    * Cancella una prenotazione
    */
-  async cancelBooking(bookingId: string, reason?: string): Promise<void> {
+  async cancelBooking(bookingId: string): Promise<void> {
     try {
-      await updateDoc(doc(db, 'booking_requests', bookingId), {
-        status: 'cancelled',
-        mechanicNotes: reason || '',
-        updatedAt: serverTimestamp(),
-      });
-
+      await this.setWorkStatus(bookingId, 'cancelled');
       console.log('✅ Prenotazione cancellata');
     } catch (error) {
       console.error('❌ Errore cancellazione prenotazione:', error);
@@ -454,6 +706,12 @@ export class BookingService {
     return booking.messages.filter(msg => msg.senderId !== userId && !msg.isRead).length;
   }
 
+  // Ordinamento sul dispositivo: così le liste del cliente non dipendono da un indice composito
+  private sortByNewest(bookings: BookingRequest[]): BookingRequest[] {
+    const toTime = (value: unknown) => (value instanceof Date ? value.getTime() : 0);
+    return [...bookings].sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
+  }
+
   /**
    * Converte i Timestamp di Firestore in Date
    */
@@ -465,9 +723,10 @@ export class BookingService {
       if (converted[key] instanceof Timestamp) {
         converted[key] = converted[key].toDate();
       } else if (Array.isArray(converted[key])) {
-        converted[key] = converted[key].map((item: any) =>
-          typeof item === 'object' && item !== null ? this.convertTimestamps(item) : item
-        );
+        converted[key] = converted[key].map((item: any) => {
+          if (item instanceof Timestamp) return item.toDate();
+          return typeof item === 'object' && item !== null ? this.convertTimestamps(item) : item;
+        });
       } else if (typeof converted[key] === 'object' && converted[key] !== null) {
         converted[key] = this.convertTimestamps(converted[key]);
       }

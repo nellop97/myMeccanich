@@ -7,19 +7,13 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   StyleSheet,
   Platform,
   ActivityIndicator,
-  Alert,
-  useWindowDimensions,
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import {
-  ArrowLeft,
   User,
   Mail,
   Phone,
@@ -36,48 +30,28 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../../hooks/useAuth';
+import { refreshAuthUser, useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+import WorkshopService from '../../services/WorkshopService';
 
-// Glass Card Component
-const GlassCard = ({ children, style }: any) => {
-  const { darkMode } = useStore();
+import { useMechanicTheme, mechanicButton, mechanicRadius, useMechanicBreakpoints } from './mechanicTheme';
+import MechanicTextInput from './MechanicTextInput';
+import { MechanicLoadingState } from './MechanicStates';
+import MechanicHeader from './MechanicHeader';
+import { showAlert } from '../../utils/platformHelpers';
+const ProfileCard = ({ children, style }: any) => {
+  const theme = useMechanicTheme();
 
-  return Platform.OS === 'web' || Platform.OS === 'ios' ? (
-    <BlurView
-      intensity={Platform.OS === 'web' ? 40 : darkMode ? 30 : 60}
-      tint={darkMode ? 'dark' : 'light'}
-      style={[
-        {
-          backgroundColor: darkMode
-            ? 'rgba(30, 30, 30, 0.7)'
-            : 'rgba(255, 255, 255, 0.7)',
-          borderColor: darkMode
-            ? 'rgba(255, 255, 255, 0.1)'
-            : 'rgba(0, 0, 0, 0.05)',
-          borderWidth: 1,
-          borderRadius: 16,
-          overflow: 'hidden',
-        },
-        style,
-      ]}
-    >
-      {children}
-    </BlurView>
-  ) : (
+  return (
     <View
       style={[
         {
-          backgroundColor: darkMode
-            ? 'rgba(30, 30, 30, 0.95)'
-            : 'rgba(255, 255, 255, 0.95)',
-          borderColor: darkMode
-            ? 'rgba(255, 255, 255, 0.1)'
-            : 'rgba(0, 0, 0, 0.05)',
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
           borderWidth: 1,
-          borderRadius: 16,
+          borderRadius: mechanicRadius.xl,
           overflow: 'hidden',
         },
         style,
@@ -110,14 +84,16 @@ interface MechanicProfile {
 
 const MechanicProfileScreen = () => {
   const navigation = useNavigation();
-  const { width } = useWindowDimensions();
-  const { user, logout } = useAuth();
-  const { darkMode } = useStore();
+  const { isMobile } = useMechanicBreakpoints();
+  const { user, signOut } = useAuth();
+  const theme = useMechanicTheme();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<MechanicProfile | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [bookingsActive, setBookingsActive] = useState(false);
+  const [activating, setActivating] = useState(false);
 
   // Form state
   const [firstName, setFirstName] = useState('');
@@ -134,25 +110,12 @@ const MechanicProfileScreen = () => {
 
   // Responsive
   const isWeb = Platform.OS === 'web';
-  const isLargeScreen = width >= 768;
+  const isLargeScreen = !isMobile;
 
-  const theme = {
-    background: darkMode ? '#0f172a' : '#f8fafc',
-    surface: darkMode ? '#1e293b' : '#ffffff',
-    card: darkMode ? '#334155' : '#ffffff',
-    primary: '#3b82f6',
-    primaryDark: '#1d4ed8',
-    text: darkMode ? '#f1f5f9' : '#0f172a',
-    textSecondary: darkMode ? '#94a3b8' : '#64748b',
-    border: darkMode ? '#334155' : '#e2e8f0',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-  };
 
   useEffect(() => {
     loadProfile();
-  }, [user]);
+  }, [user?.uid]);
 
   const loadProfile = async () => {
     if (!user?.uid) return;
@@ -179,9 +142,12 @@ const MechanicProfileScreen = () => {
         setMechanicLicense(data.mechanicLicense || '');
         setOpeningHours(data.openingHours || 'Lun-Ven 8:00-18:00');
       }
+
+      const workshopDoc = await getDoc(doc(db, 'workshops', user.uid));
+      setBookingsActive(workshopDoc.exists());
     } catch (error) {
       console.error('Errore caricamento profilo:', error);
-      Alert.alert('Errore', 'Impossibile caricare il profilo');
+      showAlert('Errore', 'Impossibile caricare il profilo');
     } finally {
       setLoading(false);
     }
@@ -191,12 +157,12 @@ const MechanicProfileScreen = () => {
     if (!user?.uid) return;
 
     if (!workshopName.trim()) {
-      Alert.alert('Errore', 'Inserisci il nome dell\'officina');
+      showAlert('Errore', 'Inserisci il nome dell\'officina');
       return;
     }
 
     if (!address.trim() || !city.trim()) {
-      Alert.alert('Errore', 'Inserisci indirizzo e città dell\'officina');
+      showAlert('Errore', 'Inserisci indirizzo e città dell\'officina');
       return;
     }
 
@@ -222,6 +188,8 @@ const MechanicProfileScreen = () => {
       // Aggiorna displayName se nome e cognome sono presenti
       if (firstName.trim() && lastName.trim()) {
         updateData.displayName = `${firstName.trim()} ${lastName.trim()}`;
+        // name ha la precedenza su displayName in buildUserDisplayName
+        updateData.name = updateData.displayName;
       }
 
       await updateDoc(userDocRef, updateData);
@@ -245,19 +213,75 @@ const MechanicProfileScreen = () => {
         console.log('Workshop non trovato o errore aggiornamento:', workshopError);
       }
 
-      Alert.alert('Successo', 'Profilo aggiornato con successo');
+      // Sidebar e dashboard leggono da useAuth, non da questa schermata
+      await refreshAuthUser();
+
+      showAlert('Successo', 'Profilo aggiornato con successo');
       setEditMode(false);
       await loadProfile();
     } catch (error) {
       console.error('Errore salvataggio:', error);
-      Alert.alert('Errore', 'Impossibile salvare le modifiche');
+      showAlert('Errore', 'Impossibile salvare le modifiche');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleActivateBookings = async () => {
+    if (!user?.uid) return;
+
+    if (!workshopName.trim() || !phone.trim() || !address.trim() || !city.trim()) {
+      showAlert('Dati mancanti', "Completa nome dell'officina, telefono, indirizzo e città con Modifica");
+      return;
+    }
+
+    try {
+      setActivating(true);
+      await WorkshopService.createOrUpdateWorkshop(
+        {
+          ownerId: user.uid,
+          name: workshopName.trim(),
+          email: profile?.email || user.email || '',
+          phone: phone.trim(),
+          address: {
+            street: address.trim(),
+            city: city.trim(),
+            province: province.trim(),
+            postalCode: postalCode.trim(),
+            country: 'IT',
+          },
+          vatNumber: vatNumber.trim(),
+          businessHours: {},
+          services: [],
+          specializations: [],
+          galleryImages: [],
+          rating: 0,
+          reviewCount: 0,
+          totalBookings: 0,
+          bookingSettings: {
+            autoAccept: false,
+            minAdvanceHours: 24,
+            maxAdvanceDays: 60,
+            allowEmergency: true,
+          },
+          isVerified: false,
+          isActive: true,
+          createdAt: serverTimestamp() as any,
+        },
+        user.uid
+      );
+      setBookingsActive(true);
+      showAlert('Prenotazioni attive', 'Ora i clienti possono trovarti e inviarti richieste');
+    } catch (error) {
+      console.error('Errore attivazione prenotazioni:', error);
+      showAlert('Errore', 'Impossibile attivare le prenotazioni. Riprova.');
+    } finally {
+      setActivating(false);
+    }
+  };
+
   const handleLogout = () => {
-    Alert.alert(
+    showAlert(
       'Disconnetti',
       'Sei sicuro di voler uscire?',
       [
@@ -267,10 +291,10 @@ const MechanicProfileScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await logout();
+              await signOut();
             } catch (error) {
               console.error('Errore logout:', error);
-              Alert.alert('Errore', 'Impossibile disconnettersi');
+              showAlert('Errore', 'Impossibile disconnettersi');
             }
           },
         },
@@ -280,56 +304,52 @@ const MechanicProfileScreen = () => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <MechanicHeader title="Profilo Meccanico" onBack={() => navigation.goBack()} />
+        <MechanicLoadingState text="Caricamento profilo..." />
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <LinearGradient
-        colors={darkMode ? ['#1a1a1a', '#0a0a0a'] : ['#f8f9fa', '#e9ecef']}
-        style={styles.gradient}
-      >
-        {/* Header */}
-        <View style={[styles.header, isWeb && styles.headerWeb]}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <ArrowLeft size={24} color={theme.text} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Profilo Meccanico
-            </Text>
-          </View>
-
-          {!editMode ? (
-            <TouchableOpacity
-              onPress={() => setEditMode(true)}
-              style={[styles.editButton, { backgroundColor: `${theme.primary}20` }]}
-            >
-              <Edit3 size={20} color={theme.primary} />
-              <Text style={[styles.editButtonText, { color: theme.primary }]}>
-                Modifica
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={handleSave}
-              style={[styles.saveButton, { backgroundColor: theme.success }]}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <>
-                  <Save size={20} color="white" />
-                  <Text style={styles.saveButtonText}>Salva</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
+      <View style={styles.gradient}>
+        <MechanicHeader
+          title="Profilo Meccanico"
+          onBack={() => navigation.goBack()}
+          right={
+            !editMode ? (
+              <TouchableOpacity
+                onPress={() => setEditMode(true)}
+                style={[styles.editButton, { backgroundColor: theme.primaryLight }]}
+                accessibilityRole="button"
+                accessibilityLabel="Modifica profilo"
+              >
+                <Edit3 size={20} color={theme.onPrimaryLight} />
+                <Text style={[styles.editButtonText, { color: theme.onPrimaryLight }]}>
+                  Modifica
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={handleSave}
+                style={[styles.saveButton, { backgroundColor: theme.primary }]}
+                disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel="Salva profilo"
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color={theme.onPrimary} />
+                ) : (
+                  <>
+                    <Save size={20} color={theme.onPrimary} />
+                    <Text style={styles.saveButtonText}>Salva</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )
+          }
+        />
 
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -345,7 +365,7 @@ const MechanicProfileScreen = () => {
           >
             {/* Stats Card */}
             {!editMode && (
-              <GlassCard style={styles.statsCard}>
+              <ProfileCard style={styles.statsCard}>
                 <View style={styles.statsRow}>
                   <View style={styles.statItem}>
                     <View style={[styles.statIcon, { backgroundColor: `${theme.warning}20` }]}>
@@ -383,11 +403,11 @@ const MechanicProfileScreen = () => {
                     </Text>
                   </View>
                 </View>
-              </GlassCard>
+              </ProfileCard>
             )}
 
             {/* Dati Personali */}
-            <GlassCard style={styles.card}>
+            <ProfileCard style={styles.card}>
               <View style={styles.cardHeader}>
                 <User size={20} color={theme.primary} />
                 <Text style={[styles.cardTitle, { color: theme.text }]}>
@@ -396,56 +416,42 @@ const MechanicProfileScreen = () => {
               </View>
 
               <View style={styles.cardContent}>
-                <View style={styles.inputRow}>
-                  <User size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Nome"
-                    placeholderTextColor={theme.textSecondary}
-                    value={firstName}
-                    onChangeText={setFirstName}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<User size={20} color={theme.primary} />}
+                  placeholder="Nome"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  editable={editMode}
+                />
 
-                <View style={styles.inputRow}>
-                  <User size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Cognome"
-                    placeholderTextColor={theme.textSecondary}
-                    value={lastName}
-                    onChangeText={setLastName}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<User size={20} color={theme.primary} />}
+                  placeholder="Cognome"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  editable={editMode}
+                />
 
-                <View style={styles.inputRow}>
-                  <Mail size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.textSecondary }]}
-                    value={profile?.email || ''}
-                    editable={false}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<Mail size={20} color={theme.primary} />}
+                  style={{ color: theme.textSecondary }}
+                  value={profile?.email || ''}
+                  editable={false}
+                />
 
-                <View style={styles.inputRow}>
-                  <Phone size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Telefono"
-                    placeholderTextColor={theme.textSecondary}
-                    value={phone}
-                    onChangeText={setPhone}
-                    keyboardType="phone-pad"
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<Phone size={20} color={theme.primary} />}
+                  placeholder="Telefono"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  editable={editMode}
+                />
               </View>
-            </GlassCard>
+            </ProfileCard>
 
             {/* Dati Officina */}
-            <GlassCard style={styles.card}>
+            <ProfileCard style={styles.card}>
               <View style={styles.cardHeader}>
                 <Building2 size={20} color={theme.primary} />
                 <Text style={[styles.cardTitle, { color: theme.text }]}>
@@ -454,34 +460,26 @@ const MechanicProfileScreen = () => {
               </View>
 
               <View style={styles.cardContent}>
-                <View style={styles.inputRow}>
-                  <Briefcase size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Nome Officina"
-                    placeholderTextColor={theme.textSecondary}
-                    value={workshopName}
-                    onChangeText={setWorkshopName}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<Briefcase size={20} color={theme.primary} />}
+                  placeholder="Nome Officina"
+                  value={workshopName}
+                  onChangeText={setWorkshopName}
+                  editable={editMode}
+                />
 
-                <View style={styles.inputRow}>
-                  <Clock size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Orari (es. Lun-Ven 8:00-18:00)"
-                    placeholderTextColor={theme.textSecondary}
-                    value={openingHours}
-                    onChangeText={setOpeningHours}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<Clock size={20} color={theme.primary} />}
+                  placeholder="Orari (es. Lun-Ven 8:00-18:00)"
+                  value={openingHours}
+                  onChangeText={setOpeningHours}
+                  editable={editMode}
+                />
               </View>
-            </GlassCard>
+            </ProfileCard>
 
             {/* Posizione Officina */}
-            <GlassCard style={styles.card}>
+            <ProfileCard style={styles.card}>
               <View style={styles.cardHeader}>
                 <MapPin size={20} color={theme.primary} />
                 <Text style={[styles.cardTitle, { color: theme.text }]}>
@@ -490,61 +488,47 @@ const MechanicProfileScreen = () => {
               </View>
 
               <View style={styles.cardContent}>
-                <View style={styles.inputRow}>
-                  <Navigation size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Indirizzo"
-                    placeholderTextColor={theme.textSecondary}
-                    value={address}
-                    onChangeText={setAddress}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<Navigation size={20} color={theme.primary} />}
+                  placeholder="Indirizzo"
+                  value={address}
+                  onChangeText={setAddress}
+                  editable={editMode}
+                />
 
-                <View style={styles.inputRow}>
-                  <MapPin size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Città"
-                    placeholderTextColor={theme.textSecondary}
-                    value={city}
-                    onChangeText={setCity}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<MapPin size={20} color={theme.primary} />}
+                  placeholder="Città"
+                  value={city}
+                  onChangeText={setCity}
+                  editable={editMode}
+                />
 
                 <View style={styles.twoColumns}>
-                  <View style={[styles.inputRow, styles.inputHalf]}>
-                    <TextInput
-                      style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                      placeholder="Provincia"
-                      placeholderTextColor={theme.textSecondary}
-                      value={province}
-                      onChangeText={setProvince}
-                      editable={editMode}
-                      maxLength={2}
-                    />
-                  </View>
+                  <MechanicTextInput
+                    containerStyle={styles.inputHalf}
+                    placeholder="Provincia"
+                    value={province}
+                    onChangeText={setProvince}
+                    editable={editMode}
+                    maxLength={2}
+                  />
 
-                  <View style={[styles.inputRow, styles.inputHalf]}>
-                    <TextInput
-                      style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                      placeholder="CAP"
-                      placeholderTextColor={theme.textSecondary}
-                      value={postalCode}
-                      onChangeText={setPostalCode}
-                      keyboardType="numeric"
-                      editable={editMode}
-                      maxLength={5}
-                    />
-                  </View>
+                  <MechanicTextInput
+                    containerStyle={styles.inputHalf}
+                    placeholder="CAP"
+                    value={postalCode}
+                    onChangeText={setPostalCode}
+                    keyboardType="numeric"
+                    editable={editMode}
+                    maxLength={5}
+                  />
                 </View>
               </View>
-            </GlassCard>
+            </ProfileCard>
 
             {/* Dati Professionali */}
-            <GlassCard style={styles.card}>
+            <ProfileCard style={styles.card}>
               <View style={styles.cardHeader}>
                 <Award size={20} color={theme.primary} />
                 <Text style={[styles.cardTitle, { color: theme.text }]}>
@@ -553,43 +537,63 @@ const MechanicProfileScreen = () => {
               </View>
 
               <View style={styles.cardContent}>
-                <View style={styles.inputRow}>
-                  <Briefcase size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="P.IVA"
-                    placeholderTextColor={theme.textSecondary}
-                    value={vatNumber}
-                    onChangeText={setVatNumber}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<Briefcase size={20} color={theme.primary} />}
+                  placeholder="P.IVA"
+                  value={vatNumber}
+                  onChangeText={setVatNumber}
+                  editable={editMode}
+                />
 
-                <View style={styles.inputRow}>
-                  <Shield size={20} color={theme.primary} />
-                  <TextInput
-                    style={[styles.input, { color: theme.text, backgroundColor: editMode ? theme.border : 'transparent' }]}
-                    placeholder="Numero Patentino"
-                    placeholderTextColor={theme.textSecondary}
-                    value={mechanicLicense}
-                    onChangeText={setMechanicLicense}
-                    editable={editMode}
-                  />
-                </View>
+                <MechanicTextInput
+                  left={<Shield size={20} color={theme.primary} />}
+                  placeholder="Numero Patentino"
+                  value={mechanicLicense}
+                  onChangeText={setMechanicLicense}
+                  editable={editMode}
+                />
               </View>
-            </GlassCard>
+            </ProfileCard>
 
             {/* Logout Button */}
+            {!editMode && (
+              <ProfileCard style={styles.card}>
+                <View style={styles.bookingsCard}>
+                  <Text style={[styles.bookingsTitle, { color: theme.text }]}>Prenotazioni</Text>
+                  <Text style={[styles.bookingsText, { color: theme.textSecondary }]}>
+                    {bookingsActive
+                      ? 'Attive: i clienti possono trovarti e inviarti richieste.'
+                      : 'Attivale per comparire nella ricerca officine e ricevere richieste.'}
+                  </Text>
+                  {!bookingsActive && (
+                    <TouchableOpacity
+                      style={[styles.bookingsButton, { backgroundColor: theme.primary }]}
+                      onPress={handleActivateBookings}
+                      disabled={activating}
+                      accessibilityRole="button"
+                      accessibilityLabel="Attiva prenotazioni"
+                    >
+                      {activating ? (
+                        <ActivityIndicator size="small" color={theme.onPrimary} />
+                      ) : (
+                        <Text style={[styles.bookingsButtonText, { color: theme.onPrimary }]}>Attiva prenotazioni</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ProfileCard>
+            )}
+
             <TouchableOpacity
-              style={[styles.logoutButton, { backgroundColor: theme.danger }]}
+              style={[styles.logoutButton, { backgroundColor: theme.error }]}
               onPress={handleLogout}
             >
-              <LogOut size={20} color="white" />
+              <LogOut size={20} color={theme.onPrimary} />
               <Text style={styles.logoutButtonText}>Disconnetti</Text>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
-      </LinearGradient>
+      </View>
     </SafeAreaView>
   );
 };
@@ -601,49 +605,12 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  headerWeb: {
-    paddingHorizontal: 32,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
+  editButton: mechanicButton.header,
   editButtonText: {
     fontSize: 14,
     fontWeight: '600',
   },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
+  saveButton: mechanicButton.header,
   saveButtonText: {
     color: 'white',
     fontSize: 14,
@@ -708,19 +675,6 @@ const styles = StyleSheet.create({
   cardContent: {
     gap: 12,
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
-  },
   twoColumns: {
     flexDirection: 'row',
     gap: 12,
@@ -728,13 +682,26 @@ const styles = StyleSheet.create({
   inputHalf: {
     flex: 1,
   },
+  bookingsCard: {
+    gap: 8,
+  },
+  bookingsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  bookingsText: {
+    fontSize: 14,
+  },
+  bookingsButton: {
+    ...mechanicButton.primary,
+    marginTop: 8,
+  },
+  bookingsButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 16,
-    borderRadius: 16,
+    ...mechanicButton.primary,
     marginTop: 8,
     marginBottom: 20,
   },

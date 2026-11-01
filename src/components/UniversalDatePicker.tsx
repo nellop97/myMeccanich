@@ -1,42 +1,38 @@
-// src/components/pickers/UniversalDatePicker.tsx
-import React, { useState, useRef, useEffect } from 'react';
+// src/components/UniversalDatePicker.tsx
+// Unico selettore di date dell'app: stesso calendario su iOS, Android e web
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    View,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
     Text,
     TouchableOpacity,
-    StyleSheet,
-    Platform,
-    Modal,
-    Animated,
-    Pressable,
+    View,
 } from 'react-native';
-import { Calendar, Clock, ChevronDown, X } from 'lucide-react-native';
-import { useAppThemeManager } from '../hooks/useTheme';
-
-// Import condizionale per DateTimePicker nativo
-let DateTimePicker: any = null;
-if (Platform.OS !== 'web') {
-    try {
-        DateTimePicker = require('@react-native-community/datetimepicker').default;
-    } catch (error) {
-        console.warn('DateTimePicker non disponibile');
-    }
-}
-
-// Import condizionale per react-native-calendars (opzionale)
-let RNCalendar: any = null;
-if (Platform.OS !== 'web') {
-    try {
-        const CalendarModule = require('react-native-calendars');
-        RNCalendar = CalendarModule.Calendar;
-    } catch (error) {
-        console.warn('react-native-calendars non disponibile, usando picker nativo');
-    }
-}
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock, X } from 'lucide-react-native';
+import {
+    MECHANIC_MIN_TOUCH,
+    mechanicRadius,
+    mechanicStaticColors,
+    useMechanicBreakpoints,
+    useMechanicTheme,
+} from '../screens/mechanic/mechanicTheme';
+import {
+    MONTH_NAMES,
+    WEEKDAY_NAMES,
+    buildMonthGrid,
+    buildYearRange,
+    isDayAllowed,
+    isMonthAllowed,
+    isSameDay,
+    withDay,
+} from '../utils/calendarGrid';
 
 interface UniversalDatePickerProps {
-    value: Date;
+    value?: Date | null;
     onChange: (date: Date) => void;
+    onClear?: () => void;
     label?: string;
     placeholder?: string;
     mode?: 'date' | 'time' | 'datetime';
@@ -45,530 +41,642 @@ interface UniversalDatePickerProps {
     disabled?: boolean;
     error?: string;
     helperText?: string;
-    showCalendar?: boolean; // Mostra calendario completo su mobile
+    showCalendar?: boolean;
     locale?: string;
     format?: 'short' | 'medium' | 'long' | 'full';
 }
 
-export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
-                                                                            value,
-                                                                            onChange,
-                                                                            label,
-                                                                            placeholder,
-                                                                            mode = 'date',
-                                                                            minimumDate,
-                                                                            maximumDate,
-                                                                            disabled = false,
-                                                                            error,
-                                                                            helperText,
-                                                                            showCalendar = false,
-                                                                            locale = 'it-IT',
-                                                                            format = 'long',
-                                                                        }) => {
-    const { colors, isDark } = useAppThemeManager();
-    const [showPicker, setShowPicker] = useState(false);
-    const [showModal, setShowModal] = useState(false);
-    const [tempDate, setTempDate] = useState(value);
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(50)).current;
+type PanelView = 'days' | 'months' | 'years';
 
-    useEffect(() => {
-        if (showModal) {
-            Animated.parallel([
-                Animated.timing(fadeAnim, {
-                    toValue: 1,
-                    duration: 200,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(slideAnim, {
-                    toValue: 0,
-                    duration: 250,
-                    useNativeDriver: true,
-                }),
-            ]).start();
-        }
-    }, [showModal]);
+const TIME_ROW_HEIGHT = 44;
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+const MINUTES = Array.from({ length: 12 }, (_, step) => step * 5);
 
-    const formatDate = (date: Date) => {
-        const options: Intl.DateTimeFormatOptions = {};
+const pad = (value: number) => String(value).padStart(2, '0');
 
-        if (mode === 'time') {
-            options.hour = '2-digit';
-            options.minute = '2-digit';
-            if (format === 'long' || format === 'full') {
-                options.second = '2-digit';
-            }
-            return date.toLocaleTimeString(locale, options);
-        }
-
-        if (mode === 'datetime') {
-            switch (format) {
-                case 'short':
-                    options.dateStyle = 'short';
-                    options.timeStyle = 'short';
-                    break;
-                case 'medium':
-                    options.dateStyle = 'medium';
-                    options.timeStyle = 'short';
-                    break;
-                case 'long':
-                    options.dateStyle = 'long';
-                    options.timeStyle = 'short';
-                    break;
-                case 'full':
-                    options.dateStyle = 'full';
-                    options.timeStyle = 'medium';
-                    break;
-            }
-            return date.toLocaleString(locale, options);
-        }
-
-        // mode === 'date'
-        switch (format) {
-            case 'short':
-                options.dateStyle = 'short';
-                break;
-            case 'medium':
-                options.dateStyle = 'medium';
-                break;
-            case 'long':
-                options.dateStyle = 'long';
-                break;
-            case 'full':
-                options.dateStyle = 'full';
-                break;
-        }
-        return date.toLocaleDateString(locale, options);
-    };
-
-    const handleDateChange = (date: Date) => {
-        if (minimumDate && date < minimumDate) {
-            date = minimumDate;
-        }
-        if (maximumDate && date > maximumDate) {
-            date = maximumDate;
-        }
-
-        onChange(date);
-        setTempDate(date);
-        setShowPicker(false);
-        setShowModal(false);
-    };
-
-    const closeModal = () => {
-        Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 0,
-                duration: 150,
-                useNativeDriver: true,
-            }),
-            Animated.timing(slideAnim, {
-                toValue: 50,
-                duration: 200,
-                useNativeDriver: true,
-            }),
-        ]).start(() => {
-            setShowModal(false);
-        });
-    };
-
-    // ==================== WEB IMPLEMENTATION ====================
-    if (Platform.OS === 'web') {
-        const getInputType = () => {
-            switch (mode) {
-                case 'time': return 'time';
-                case 'datetime': return 'datetime-local';
-                default: return 'date';
-            }
-        };
-
-        const getWebValue = () => {
-            try {
-                if (mode === 'time') {
-                    return value.toTimeString().slice(0, 5);
-                }
-                if (mode === 'datetime') {
-                    // Format: YYYY-MM-DDTHH:mm
-                    const year = value.getFullYear();
-                    const month = String(value.getMonth() + 1).padStart(2, '0');
-                    const day = String(value.getDate()).padStart(2, '0');
-                    const hours = String(value.getHours()).padStart(2, '0');
-                    const minutes = String(value.getMinutes()).padStart(2, '0');
-                    return `${year}-${month}-${day}T${hours}:${minutes}`;
-                }
-                // mode === 'date'
-                return value.toISOString().split('T')[0];
-            } catch (error) {
-                return '';
-            }
-        };
-
-        const getWebMin = () => {
-            if (!minimumDate) return undefined;
-            if (mode === 'datetime') {
-                return minimumDate.toISOString().slice(0, 16);
-            }
-            return minimumDate.toISOString().split('T')[0];
-        };
-
-        const getWebMax = () => {
-            if (!maximumDate) return undefined;
-            if (mode === 'datetime') {
-                return maximumDate.toISOString().slice(0, 16);
-            }
-            return maximumDate.toISOString().split('T')[0];
-        };
-
-        return (
-            <View style={[styles.container, disabled && styles.disabled]}>
-                {label && (
-                    <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                        {label}
-                    </Text>
-                )}
-
-                <View
-                    style={[
-                        styles.webInputContainer,
-                        {
-                            backgroundColor: colors.surfaceVariant,
-                            borderColor: error ? colors.error : colors.outline,
-                        },
-                        disabled && styles.disabledInput,
-                    ]}
-                >
-                    <View style={styles.iconContainer}>
-                        {mode !== 'time' ?
-                            <Calendar size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} /> :
-                            <Clock size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} />
-                        }
-                    </View>
-
-                    <input
-                        type={getInputType()}
-                        value={getWebValue()}
-                        onChange={(e) => {
-                            const newDate = new Date(e.target.value);
-                            if (!isNaN(newDate.getTime())) {
-                                handleDateChange(newDate);
-                            }
-                        }}
-                        min={getWebMin()}
-                        max={getWebMax()}
-                        disabled={disabled}
-                        placeholder={placeholder}
-                        style={{
-                            flex: 1,
-                            padding: '12px',
-                            fontSize: '16px',
-                            border: 'none',
-                            background: 'transparent',
-                            color: disabled ? colors.onSurfaceVariant : colors.onSurface,
-                            outline: 'none',
-                            fontFamily: 'inherit',
-                            cursor: disabled ? 'not-allowed' : 'pointer',
-                        }}
-                    />
-                </View>
-
-                {error && (
-                    <Text style={[styles.errorText, { color: colors.error }]}>
-                        {error}
-                    </Text>
-                )}
-                {helperText && !error && (
-                    <Text style={[styles.helperText, { color: colors.onSurfaceVariant }]}>
-                        {helperText}
-                    </Text>
-                )}
-            </View>
-        );
+const formatValue = (date: Date, mode: string, format: string, locale: string) => {
+    if (mode === 'time') {
+        return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     }
+    const dateOptions: Intl.DateTimeFormatOptions =
+        format === 'short'
+            ? { day: '2-digit', month: '2-digit', year: 'numeric' }
+            : format === 'medium'
+                ? { day: 'numeric', month: 'short', year: 'numeric' }
+                : format === 'full'
+                    ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+                    : { day: 'numeric', month: 'long', year: 'numeric' };
 
-    // ==================== MOBILE IMPLEMENTATION ====================
+    return mode === 'datetime'
+        ? date.toLocaleDateString(locale, { ...dateOptions, hour: '2-digit', minute: '2-digit' })
+        : date.toLocaleDateString(locale, dateOptions);
+};
 
-    // Render del calendario customizzato se disponibile e richiesto
-    const renderCalendarModal = () => {
-        if (!showCalendar || !RNCalendar || mode !== 'date') {
-            return null;
-        }
+export const UniversalDatePicker: React.FC<UniversalDatePickerProps> = ({
+    value,
+    onChange,
+    onClear,
+    label,
+    placeholder,
+    mode = 'date',
+    minimumDate,
+    maximumDate,
+    disabled = false,
+    error,
+    helperText,
+    locale = 'it-IT',
+    format = 'long',
+}) => {
+    const theme = useMechanicTheme();
+    const { isMobile } = useMechanicBreakpoints();
 
-        return (
-            <Modal
-                visible={showModal}
-                transparent
-                animationType="none"
-                onRequestClose={closeModal}
-            >
-                <Pressable style={styles.modalOverlay} onPress={closeModal}>
-                    <Animated.View
-                        style={[
-                            styles.modalContent,
-                            {
-                                backgroundColor: colors.surface,
-                                opacity: fadeAnim,
-                                transform: [{ translateY: slideAnim }],
-                            }
-                        ]}
-                        onStartShouldSetResponder={() => true}
-                    >
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
-                                {label || 'Seleziona Data'}
-                            </Text>
-                            <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
-                                <X size={24} color={colors.onSurfaceVariant} />
-                            </TouchableOpacity>
-                        </View>
+    const [open, setOpen] = useState(false);
+    const [view, setView] = useState<PanelView>('days');
+    const [draft, setDraft] = useState<Date>(new Date());
+    const [visibleYear, setVisibleYear] = useState(draft.getFullYear());
+    const [visibleMonth, setVisibleMonth] = useState(draft.getMonth());
+    const hoursRef = useRef<ScrollView>(null);
+    const minutesRef = useRef<ScrollView>(null);
 
-                        <RNCalendar
-                            current={value.toISOString().split('T')[0]}
-                            minDate={minimumDate?.toISOString().split('T')[0]}
-                            maxDate={maximumDate?.toISOString().split('T')[0]}
-                            onDayPress={(day: any) => {
-                                handleDateChange(new Date(day.dateString));
-                            }}
-                            theme={{
-                                backgroundColor: colors.surface,
-                                calendarBackground: colors.surface,
-                                textSectionTitleColor: colors.onSurfaceVariant,
-                                selectedDayBackgroundColor: colors.primary,
-                                selectedDayTextColor: colors.onPrimary,
-                                todayTextColor: colors.primary,
-                                dayTextColor: colors.onSurface,
-                                textDisabledColor: colors.onSurfaceVariant,
-                                monthTextColor: colors.onSurface,
-                                arrowColor: colors.primary,
-                                dotColor: colors.primary,
-                                selectedDotColor: colors.onPrimary,
-                                textDayFontFamily: 'System',
-                                textMonthFontFamily: 'System',
-                                textDayHeaderFontFamily: 'System',
-                                textDayFontWeight: '400',
-                                textMonthFontWeight: '600',
-                                textDayHeaderFontWeight: '600',
-                                textDayFontSize: 16,
-                                textMonthFontSize: 18,
-                                textDayHeaderFontSize: 14,
-                            }}
-                            style={styles.calendar}
-                        />
+    const showsDays = mode !== 'time';
+    const showsTime = mode !== 'date';
+    const today = useMemo(() => new Date(), [open]);
 
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, { backgroundColor: colors.surfaceVariant }]}
-                                onPress={closeModal}
-                            >
-                                <Text style={[styles.modalButtonText, { color: colors.onSurfaceVariant }]}>
-                                    Annulla
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, { backgroundColor: colors.primary }]}
-                                onPress={() => handleDateChange(tempDate)}
-                            >
-                                <Text style={[styles.modalButtonText, { color: colors.onPrimary }]}>
-                                    Conferma
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Animated.View>
-                </Pressable>
-            </Modal>
-        );
+    const openPanel = () => {
+        if (disabled) return;
+
+        const start = value ?? (minimumDate && minimumDate > today ? minimumDate : today);
+        const rounded = new Date(start);
+        rounded.setMinutes(Math.min(Math.round(rounded.getMinutes() / 5) * 5, 55), 0, 0);
+
+        setDraft(rounded);
+        setVisibleYear(rounded.getFullYear());
+        setVisibleMonth(rounded.getMonth());
+        setView('days');
+        setOpen(true);
     };
+
+    // L'orario selezionato deve essere visibile appena si apre il pannello
+    useEffect(() => {
+        if (!open || !showsTime) return;
+
+        const timer = setTimeout(() => {
+            hoursRef.current?.scrollTo({ y: draft.getHours() * TIME_ROW_HEIGHT, animated: false });
+            minutesRef.current?.scrollTo({ y: (draft.getMinutes() / 5) * TIME_ROW_HEIGHT, animated: false });
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [open]);
+
+    const close = () => setOpen(false);
+
+    const days = useMemo(() => buildMonthGrid(visibleYear, visibleMonth), [visibleYear, visibleMonth]);
+    const years = useMemo(() => buildYearRange(minimumDate, maximumDate), [minimumDate, maximumDate]);
+
+    const changeMonth = (offset: number) => {
+        const next = new Date(visibleYear, visibleMonth + offset, 1);
+        setVisibleYear(next.getFullYear());
+        setVisibleMonth(next.getMonth());
+    };
+
+    const canGoBack = isMonthAllowed(
+        new Date(visibleYear, visibleMonth - 1, 1).getFullYear(),
+        new Date(visibleYear, visibleMonth - 1, 1).getMonth(),
+        minimumDate,
+        maximumDate
+    );
+    const canGoForward = isMonthAllowed(
+        new Date(visibleYear, visibleMonth + 1, 1).getFullYear(),
+        new Date(visibleYear, visibleMonth + 1, 1).getMonth(),
+        minimumDate,
+        maximumDate
+    );
+
+    const handleDayPress = (day: Date) => {
+        if (mode === 'date') {
+            onChange(withDay(day, value));
+            close();
+            return;
+        }
+        setDraft(withDay(day, draft));
+        setVisibleYear(day.getFullYear());
+        setVisibleMonth(day.getMonth());
+    };
+
+    const setDraftTime = (hours: number, minutes: number) => {
+        const next = new Date(draft);
+        next.setHours(hours, minutes, 0, 0);
+        setDraft(next);
+    };
+
+    const isBeforeMinimum = showsDays && !!minimumDate && draft.getTime() < minimumDate.getTime();
+    const isAfterMaximum = showsDays && !!maximumDate && draft.getTime() > maximumDate.getTime();
+    // Il minimo conta sull'orario solo con data e ora: col solo giorno basta la griglia
+    const timeInvalid = mode === 'datetime' && (isBeforeMinimum || isAfterMaximum);
+
+    const confirm = () => {
+        if (timeInvalid) return;
+        onChange(draft);
+        close();
+    };
+
+    const renderHeader = () => (
+        <View style={styles.header}>
+            <TouchableOpacity
+                style={styles.arrow}
+                onPress={() => changeMonth(-1)}
+                disabled={!canGoBack}
+                accessibilityRole="button"
+                accessibilityLabel="Mese precedente"
+                accessibilityState={{ disabled: !canGoBack }}
+            >
+                <ChevronLeft size={22} color={canGoBack ? theme.text : theme.disabled} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={styles.headerTitle}
+                onPress={() => setView('years')}
+                accessibilityRole="button"
+                accessibilityLabel={`${MONTH_NAMES[visibleMonth]} ${visibleYear}, scegli anno e mese`}
+            >
+                <Text style={[styles.headerText, { color: theme.text }]}>
+                    {MONTH_NAMES[visibleMonth]} {visibleYear}
+                </Text>
+                <ChevronDown size={16} color={theme.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={styles.arrow}
+                onPress={() => changeMonth(1)}
+                disabled={!canGoForward}
+                accessibilityRole="button"
+                accessibilityLabel="Mese successivo"
+                accessibilityState={{ disabled: !canGoForward }}
+            >
+                <ChevronRight size={22} color={canGoForward ? theme.text : theme.disabled} strokeWidth={2} />
+            </TouchableOpacity>
+        </View>
+    );
+
+    const renderDays = () => (
+        <>
+            {renderHeader()}
+            <View style={styles.week}>
+                {WEEKDAY_NAMES.map((weekday) => (
+                    <Text key={weekday} style={[styles.weekday, { color: theme.textSecondary }]}>
+                        {weekday}
+                    </Text>
+                ))}
+            </View>
+            <View style={styles.grid}>
+                {days.map(({ date, isCurrentMonth }) => {
+                    const allowed = isDayAllowed(date, minimumDate, maximumDate);
+                    const selected = isSameDay(date, mode === 'date' ? value : draft);
+                    const isToday = isSameDay(date, today);
+                    const textColor = selected
+                        ? theme.onPrimary
+                        : !allowed
+                            ? theme.disabled
+                            : isCurrentMonth
+                                ? theme.text
+                                : theme.textSecondary;
+
+                    return (
+                        <TouchableOpacity
+                            key={date.toISOString()}
+                            style={styles.dayCell}
+                            onPress={() => handleDayPress(date)}
+                            disabled={!allowed}
+                            accessibilityRole="button"
+                            accessibilityLabel={date.toLocaleDateString(locale, {
+                                weekday: 'long',
+                                day: 'numeric',
+                                month: 'long',
+                                year: 'numeric',
+                            })}
+                            accessibilityState={{ selected, disabled: !allowed }}
+                        >
+                            <View
+                                style={[
+                                    styles.day,
+                                    selected && { backgroundColor: theme.primary },
+                                    !selected && isToday && { borderWidth: 1, borderColor: theme.primary },
+                                ]}
+                            >
+                                <Text style={[styles.dayText, { color: textColor }]}>{date.getDate()}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </>
+    );
+
+    const renderMonths = () => (
+        <>
+            <TouchableOpacity
+                style={styles.headerTitle}
+                onPress={() => setView('years')}
+                accessibilityRole="button"
+                accessibilityLabel={`Anno ${visibleYear}, cambia anno`}
+            >
+                <Text style={[styles.headerText, { color: theme.text }]}>{visibleYear}</Text>
+                <ChevronDown size={16} color={theme.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+            <View style={styles.choiceGrid}>
+                {MONTH_NAMES.map((name, month) => {
+                    const allowed = isMonthAllowed(visibleYear, month, minimumDate, maximumDate);
+                    const selected = month === visibleMonth;
+                    return (
+                        <TouchableOpacity
+                            key={name}
+                            style={[styles.choice, selected && { backgroundColor: theme.primary }]}
+                            disabled={!allowed}
+                            onPress={() => {
+                                setVisibleMonth(month);
+                                setView('days');
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${name} ${visibleYear}`}
+                            accessibilityState={{ selected, disabled: !allowed }}
+                        >
+                            <Text
+                                style={[
+                                    styles.choiceText,
+                                    { color: selected ? theme.onPrimary : allowed ? theme.text : theme.disabled },
+                                ]}
+                            >
+                                {name.slice(0, 3)}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </>
+    );
+
+    const renderYears = () => (
+        <ScrollView
+            style={styles.yearsList}
+            contentOffset={{
+                x: 0,
+                y: Math.max(0, Math.floor(years.indexOf(visibleYear) / 4) * TIME_ROW_HEIGHT - TIME_ROW_HEIGHT * 2),
+            }}
+        >
+            <View style={styles.choiceGrid}>
+                {years.map((year) => {
+                    const selected = year === visibleYear;
+                    return (
+                        <TouchableOpacity
+                            key={year}
+                            style={[styles.yearChoice, selected && { backgroundColor: theme.primary }]}
+                            onPress={() => {
+                                setVisibleYear(year);
+                                setView('months');
+                            }}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                        >
+                            <Text style={[styles.choiceText, { color: selected ? theme.onPrimary : theme.text }]}>
+                                {year}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </ScrollView>
+    );
+
+    const renderTimeColumn = (
+        title: string,
+        values: number[],
+        selectedValue: number,
+        onSelect: (value: number) => void,
+        ref: React.RefObject<ScrollView | null>
+    ) => (
+        <View style={styles.timeColumn}>
+            <Text style={[styles.timeTitle, { color: theme.textSecondary }]}>{title}</Text>
+            <ScrollView ref={ref} style={[styles.timeList, { borderColor: theme.border }]} showsVerticalScrollIndicator={false}>
+                {values.map((item) => {
+                    const selected = item === selectedValue;
+                    return (
+                        <TouchableOpacity
+                            key={item}
+                            style={[styles.timeRow, selected && { backgroundColor: theme.primary }]}
+                            onPress={() => onSelect(item)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${title} ${pad(item)}`}
+                            accessibilityState={{ selected }}
+                        >
+                            <Text style={[styles.timeText, { color: selected ? theme.onPrimary : theme.text }]}>
+                                {pad(item)}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </ScrollView>
+        </View>
+    );
+
+    const renderTime = () => (
+        <View style={styles.timeRowGroup}>
+            {renderTimeColumn('Ora', HOURS, draft.getHours(), (hour) => setDraftTime(hour, draft.getMinutes()), hoursRef)}
+            {renderTimeColumn('Minuti', MINUTES, draft.getMinutes(), (minute) => setDraftTime(draft.getHours(), minute), minutesRef)}
+        </View>
+    );
+
+    const Icon = mode === 'time' ? Clock : Calendar;
+    const title = label || (mode === 'time' ? 'Scegli un orario' : mode === 'datetime' ? 'Scegli data e ora' : 'Scegli una data');
 
     return (
-        <View style={[styles.container, disabled && styles.disabled]}>
-            {label && (
-                <Text style={[styles.label, { color: colors.onSurfaceVariant }]}>
-                    {label}
-                </Text>
-            )}
+        <View style={styles.container}>
+            {label ? <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text> : null}
 
             <TouchableOpacity
                 style={[
-                    styles.inputContainer,
-                    {
-                        backgroundColor: colors.surfaceVariant,
-                        borderColor: error ? colors.error : colors.outline,
-                    },
-                    disabled && styles.disabledInput,
+                    styles.field,
+                    { backgroundColor: theme.inputBackground, borderColor: error ? theme.error : theme.border },
+                    disabled && styles.fieldDisabled,
                 ]}
-                onPress={() => {
-                    if (disabled) return;
-                    if (showCalendar && RNCalendar && mode === 'date') {
-                        setShowModal(true);
-                    } else {
-                        setShowPicker(true);
-                    }
-                }}
+                onPress={openPanel}
                 disabled={disabled}
+                accessibilityRole="button"
+                accessibilityLabel={`${title}: ${value ? formatValue(value, mode, format, locale) : 'non impostata'}`}
             >
-                <View style={styles.iconContainer}>
-                    {mode !== 'time' ?
-                        <Calendar size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} /> :
-                        <Clock size={20} color={disabled ? colors.onSurfaceVariant : colors.primary} />
-                    }
-                </View>
-
+                <Icon size={20} color={theme.primary} strokeWidth={2} />
                 <Text
-                    style={[
-                        styles.value,
-                        { color: disabled ? colors.onSurfaceVariant : colors.onSurface }
-                    ]}
+                    style={[styles.fieldText, { color: value ? theme.text : theme.placeholder }]}
                     numberOfLines={1}
                 >
-                    {value ? formatDate(value) : (placeholder || 'Seleziona...')}
+                    {value ? formatValue(value, mode, format, locale) : placeholder || 'Seleziona...'}
                 </Text>
-
-                <ChevronDown
-                    size={20}
-                    color={disabled ? colors.onSurfaceVariant : colors.onSurfaceVariant}
-                />
+                <ChevronDown size={20} color={theme.textSecondary} strokeWidth={2} />
             </TouchableOpacity>
 
-            {error && (
-                <Text style={[styles.errorText, { color: colors.error }]}>
-                    {error}
-                </Text>
-            )}
-            {helperText && !error && (
-                <Text style={[styles.helperText, { color: colors.onSurfaceVariant }]}>
-                    {helperText}
-                </Text>
-            )}
+            {error ? <Text style={[styles.message, { color: theme.error }]}>{error}</Text> : null}
+            {helperText && !error ? <Text style={[styles.message, { color: theme.textSecondary }]}>{helperText}</Text> : null}
 
-            {/* Native Date/Time Picker per Mobile */}
-            {showPicker && DateTimePicker && (
-                <DateTimePicker
-                    value={value}
-                    mode={mode === 'datetime' ? 'date' : mode}
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    minimumDate={minimumDate}
-                    maximumDate={maximumDate}
-                    onChange={(event: any, selectedDate?: Date) => {
-                        setShowPicker(false);
-                        if (selectedDate) {
-                            if (mode === 'datetime' && Platform.OS === 'android') {
-                                // Per Android datetime, mostra prima date poi time
-                                setTempDate(selectedDate);
-                                setTimeout(() => {
-                                    setShowPicker(true);
-                                    // Qui dovrebbe mostrare il time picker
-                                }, 100);
-                            } else {
-                                handleDateChange(selectedDate);
-                            }
-                        }
-                    }}
-                />
-            )}
+            <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+                <View style={[styles.overlay, isMobile && styles.overlayMobile]}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Chiudi il calendario" />
 
-            {/* Calendar Modal per Mobile (opzionale) */}
-            {renderCalendarModal()}
+                    <View
+                        style={[styles.panel, isMobile && styles.panelMobile, { backgroundColor: theme.surface }]}
+                        accessibilityViewIsModal
+                    >
+                        <View style={styles.panelHeader}>
+                            <Text style={[styles.panelTitle, { color: theme.text }]} numberOfLines={1} accessibilityRole="header">
+                                {title}
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.arrow}
+                                onPress={close}
+                                accessibilityRole="button"
+                                accessibilityLabel="Chiudi"
+                            >
+                                <X size={22} color={theme.textSecondary} strokeWidth={2} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
+                            {showsDays && view === 'days' && renderDays()}
+                            {showsDays && view === 'months' && renderMonths()}
+                            {showsDays && view === 'years' && renderYears()}
+                            {showsTime && view === 'days' && renderTime()}
+
+                            {timeInvalid && (
+                                <Text style={[styles.message, { color: theme.error }]}>
+                                    {isBeforeMinimum ? 'Scegli un orario futuro' : "L'orario supera il limite consentito"}
+                                </Text>
+                            )}
+                        </ScrollView>
+
+                        {(showsTime || onClear) && view === 'days' && (
+                            <View style={styles.footer}>
+                                {onClear && value ? (
+                                    <TouchableOpacity
+                                        style={[styles.footerButton, { borderColor: theme.border, borderWidth: 1 }]}
+                                        onPress={() => {
+                                            onClear();
+                                            close();
+                                        }}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={[styles.footerText, { color: theme.text }]}>Rimuovi</Text>
+                                    </TouchableOpacity>
+                                ) : null}
+                                {showsTime && (
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.footerButton,
+                                            styles.footerPrimary,
+                                            { backgroundColor: timeInvalid ? theme.disabled : theme.primary },
+                                        ]}
+                                        onPress={confirm}
+                                        disabled={timeInvalid}
+                                        accessibilityRole="button"
+                                        accessibilityState={{ disabled: timeInvalid }}
+                                    >
+                                        <Text style={[styles.footerText, { color: theme.onPrimary }]}>Conferma</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        marginVertical: 8,
-    },
-    disabled: {
-        opacity: 0.6,
+        marginBottom: 16,
     },
     label: {
         fontSize: 14,
+        fontWeight: '600',
         marginBottom: 8,
-        fontWeight: '500',
     },
-    inputContainer: {
+    field: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
+        gap: 12,
         minHeight: 48,
-    },
-    webInputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 12,
+        paddingHorizontal: 16,
         borderWidth: 1,
-        overflow: 'hidden',
+        borderRadius: mechanicRadius.md,
     },
-    disabledInput: {
-        backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    fieldDisabled: {
+        opacity: 0.6,
     },
-    iconContainer: {
-        marginRight: 12,
-    },
-    value: {
+    fieldText: {
         flex: 1,
         fontSize: 16,
     },
-    errorText: {
-        fontSize: 12,
-        marginTop: 4,
-        marginLeft: 4,
+    message: {
+        fontSize: 14,
+        marginTop: 6,
     },
-    helperText: {
-        fontSize: 12,
-        marginTop: 4,
-        marginLeft: 4,
-    },
-    modalOverlay: {
+    overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        alignItems: 'center',
         justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+        padding: 16,
+        backgroundColor: mechanicStaticColors.overlay,
     },
-    modalContent: {
+    overlayMobile: {
+        justifyContent: 'flex-end',
+        padding: 0,
+    },
+    panel: {
         width: '100%',
-        maxWidth: 400,
-        borderRadius: 16,
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        maxWidth: 380,
+        maxHeight: '90%',
+        padding: 16,
+        borderRadius: mechanicRadius.xl,
     },
-    modalHeader: {
+    panelMobile: {
+        maxWidth: '100%',
+        paddingBottom: 32,
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+    },
+    panelHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 20,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+        justifyContent: 'space-between',
+        marginBottom: 8,
     },
-    modalTitle: {
+    panelTitle: {
+        flex: 1,
         fontSize: 18,
+        fontWeight: '700',
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    headerTitle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        minHeight: MECHANIC_MIN_TOUCH,
+        paddingHorizontal: 8,
+    },
+    headerText: {
+        fontSize: 16,
         fontWeight: '600',
     },
-    closeButton: {
-        padding: 4,
-    },
-    calendar: {
-        marginHorizontal: 20,
-        marginVertical: 10,
-    },
-    modalActions: {
-        flexDirection: 'row',
-        padding: 20,
-        gap: 12,
-    },
-    modalButton: {
-        flex: 1,
-        paddingVertical: 12,
-        borderRadius: 8,
+    arrow: {
+        width: MECHANIC_MIN_TOUCH,
+        height: MECHANIC_MIN_TOUCH,
         alignItems: 'center',
+        justifyContent: 'center',
     },
-    modalButtonText: {
+    week: {
+        flexDirection: 'row',
+        marginTop: 4,
+    },
+    weekday: {
+        flex: 1,
+        textAlign: 'center',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    grid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    dayCell: {
+        width: `${100 / 7}%`,
+        height: MECHANIC_MIN_TOUCH,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    day: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dayText: {
         fontSize: 16,
-        fontWeight: '500',
+    },
+    choiceGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    choice: {
+        width: '33.33%',
+        minHeight: 56,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: mechanicRadius.md,
+    },
+    yearChoice: {
+        width: '25%',
+        minHeight: TIME_ROW_HEIGHT,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: mechanicRadius.md,
+    },
+    choiceText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    yearsList: {
+        maxHeight: 308,
+    },
+    timeRowGroup: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 12,
+    },
+    timeColumn: {
+        flex: 1,
+    },
+    timeTitle: {
+        fontSize: 12,
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    timeList: {
+        height: TIME_ROW_HEIGHT * 3,
+        borderWidth: 1,
+        borderRadius: mechanicRadius.md,
+    },
+    timeRow: {
+        height: TIME_ROW_HEIGHT,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    timeText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    footer: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 12,
+    },
+    footerButton: {
+        flex: 1,
+        minHeight: MECHANIC_MIN_TOUCH,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: mechanicRadius.md,
+    },
+    footerPrimary: {
+        flex: 2,
+    },
+    footerText: {
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
 

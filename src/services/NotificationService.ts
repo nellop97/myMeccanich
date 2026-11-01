@@ -6,7 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Configurazione notifiche
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -94,7 +95,7 @@ export class NotificationService {
         body,
         data,
       },
-      trigger,
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: trigger },
     });
 
     return id;
@@ -184,7 +185,7 @@ export class NotificationService {
   // Cancella notifiche programmate
   static async cancelScheduledNotifications(notificationIds: string[]) {
     try {
-      await Notifications.cancelScheduledNotificationAsync(...notificationIds);
+      await Promise.all(notificationIds.map((id) => Notifications.cancelScheduledNotificationAsync(id)));
     } catch (error) {
       console.error('Error canceling notifications:', error);
     }
@@ -200,9 +201,10 @@ export class NotificationService {
   }
 
   // Salva impostazioni notifiche
-  static async updateNotificationSettings(settings: NotificationSettings) {
+  static async updateNotificationSettings(settings: Partial<NotificationSettings>) {
     try {
-      await AsyncStorage.setItem(this.SETTINGS_KEY, JSON.stringify(settings));
+      const current = await this.getNotificationSettings();
+      await AsyncStorage.setItem(this.SETTINGS_KEY, JSON.stringify({ ...current, ...settings }));
     } catch (error) {
       console.error('Error saving notification settings:', error);
     }
@@ -287,10 +289,10 @@ export class NotificationService {
         data: { type: 'weekly_report' },
       },
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
         weekday: 1, // Domenica
         hour: 18,
         minute: 0,
-        repeats: true,
       },
       identifier: 'weekly_report',
     });

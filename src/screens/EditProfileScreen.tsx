@@ -137,7 +137,7 @@ const EditProfileScreen = () => {
     // Handler: Blur input
     const handleBlur = (name: string) => {
         setTouched(prev => ({ ...prev, [name]: true }));
-        const error = validateField(name, formData[name]);
+        const error = validateField(name, formData[name as keyof typeof formData]);
         setErrors(prev => ({ ...prev, [name]: error }));
     };
 
@@ -146,7 +146,7 @@ const EditProfileScreen = () => {
         // Valida tutti i campi
         const newErrors: { [key: string]: string } = {};
         Object.keys(formData).forEach(key => {
-            const error = validateField(key, formData[key]);
+            const error = validateField(key, formData[key as keyof typeof formData]);
             if (error) newErrors[key] = error;
         });
 

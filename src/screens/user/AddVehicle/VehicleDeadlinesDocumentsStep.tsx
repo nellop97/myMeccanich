@@ -13,7 +13,9 @@ import {
     Alert,
 } from 'react-native';
 import { FileText, Upload, X } from 'lucide-react-native';
+import UniversalDatePicker from '../../../components/UniversalDatePicker';
 import { VehicleFormData } from '../../../types/addVehicle.types';
+import { AiComingSoonButton } from '../../../components/AiComingSoonButton';
 
 interface Props {
     formData: VehicleFormData;
@@ -63,6 +65,8 @@ const VehicleDeadlinesDocumentsStep: React.FC<Props> = ({
                 ]}
                 showsVerticalScrollIndicator={false}
             >
+                <AiComingSoonButton feature="deadlineDocument" style={styles.aiButton} />
+
                 <Text style={styles.subtitle}>
                     Inserisci le date di scadenza e carica i documenti relativi al tuo
                     veicolo.
@@ -77,36 +81,17 @@ const VehicleDeadlinesDocumentsStep: React.FC<Props> = ({
                         <Text style={styles.cardTitle}>Assicurazione</Text>
                     </View>
 
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>Scadenza Assicurazione</Text>
-                        <View style={styles.inputWrapper}>
-                            <Text style={styles.inputIcon}>📅</Text>
-                            <input
-                                type="date"
-                                value={
-                                    formData.insurance?.expiryDate
-                                        ? formData.insurance.expiryDate.toISOString().split('T')[0]
-                                        : ''
-                                }
-                                onChange={(e) =>
-                                    updateFormData({
-                                        insurance: {
-                                            ...formData.insurance,
-                                            expiryDate: e.target.value ? new Date(e.target.value) : undefined,
-                                        },
-                                    })
-                                }
-                                style={{
-                                    flex: 1,
-                                    fontSize: 15,
-                                    color: '#1e293b',
-                                    border: 'none',
-                                    outline: 'none',
-                                    backgroundColor: 'transparent',
-                                }}
-                            />
-                        </View>
-                    </View>
+                    <UniversalDatePicker
+                        label="Scadenza Assicurazione"
+                        placeholder="Seleziona la data"
+                        value={formData.insurance?.expiryDate}
+                        onChange={(date) =>
+                            updateFormData({ insurance: { ...formData.insurance, expiryDate: date } })
+                        }
+                        onClear={() =>
+                            updateFormData({ insurance: { ...formData.insurance, expiryDate: undefined } })
+                        }
+                    />
 
                     <TouchableOpacity
                         style={styles.uploadButton}
@@ -126,36 +111,17 @@ const VehicleDeadlinesDocumentsStep: React.FC<Props> = ({
                         <Text style={styles.cardTitle}>Revisione</Text>
                     </View>
 
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>Scadenza Revisione</Text>
-                        <View style={styles.inputWrapper}>
-                            <Text style={styles.inputIcon}>📅</Text>
-                            <input
-                                type="date"
-                                value={
-                                    formData.revision?.expiryDate
-                                        ? formData.revision.expiryDate.toISOString().split('T')[0]
-                                        : ''
-                                }
-                                onChange={(e) =>
-                                    updateFormData({
-                                        revision: {
-                                            ...formData.revision,
-                                            expiryDate: e.target.value ? new Date(e.target.value) : undefined,
-                                        },
-                                    })
-                                }
-                                style={{
-                                    flex: 1,
-                                    fontSize: 15,
-                                    color: '#1e293b',
-                                    border: 'none',
-                                    outline: 'none',
-                                    backgroundColor: 'transparent',
-                                }}
-                            />
-                        </View>
-                    </View>
+                    <UniversalDatePicker
+                        label="Scadenza Revisione"
+                        placeholder="Seleziona la data"
+                        value={formData.revision?.expiryDate}
+                        onChange={(date) =>
+                            updateFormData({ revision: { ...formData.revision, expiryDate: date } })
+                        }
+                        onClear={() =>
+                            updateFormData({ revision: { ...formData.revision, expiryDate: undefined } })
+                        }
+                    />
 
                     <TouchableOpacity
                         style={styles.uploadButton}
@@ -175,36 +141,17 @@ const VehicleDeadlinesDocumentsStep: React.FC<Props> = ({
                         <Text style={styles.cardTitle}>Bollo</Text>
                     </View>
 
-                    <View style={styles.fieldContainer}>
-                        <Text style={styles.label}>Scadenza Bollo</Text>
-                        <View style={styles.inputWrapper}>
-                            <Text style={styles.inputIcon}>📅</Text>
-                            <input
-                                type="date"
-                                value={
-                                    formData.roadTax?.expiryDate
-                                        ? formData.roadTax.expiryDate.toISOString().split('T')[0]
-                                        : ''
-                                }
-                                onChange={(e) =>
-                                    updateFormData({
-                                        roadTax: {
-                                            ...formData.roadTax,
-                                            expiryDate: e.target.value ? new Date(e.target.value) : undefined,
-                                        },
-                                    })
-                                }
-                                style={{
-                                    flex: 1,
-                                    fontSize: 15,
-                                    color: '#1e293b',
-                                    border: 'none',
-                                    outline: 'none',
-                                    backgroundColor: 'transparent',
-                                }}
-                            />
-                        </View>
-                    </View>
+                    <UniversalDatePicker
+                        label="Scadenza Bollo"
+                        placeholder="Seleziona la data"
+                        value={formData.roadTax?.expiryDate}
+                        onChange={(date) =>
+                            updateFormData({ roadTax: { ...formData.roadTax, expiryDate: date } })
+                        }
+                        onClear={() =>
+                            updateFormData({ roadTax: { ...formData.roadTax, expiryDate: undefined } })
+                        }
+                    />
 
                     <TouchableOpacity
                         style={styles.uploadButton}
@@ -254,6 +201,9 @@ const VehicleDeadlinesDocumentsStep: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
+    aiButton: {
+        marginBottom: 16,
+    },
     container: {
         flex: 1,
     },

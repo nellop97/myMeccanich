@@ -8,6 +8,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  writeBatch,
   updateDoc,
   query,
   where,
@@ -201,16 +202,34 @@ export class VehicleViewRequestService {
       const request = docSnap.data() as VehicleViewRequest;
 
       // Verifica che non sia scaduta
-      if (request.expiresAt.toDate() < new Date()) {
+      if ((request.expiresAt as unknown as Timestamp).toDate() < new Date()) {
         throw new Error('Richiesta scaduta');
       }
 
-      await updateDoc(docRef, {
+      const batch = writeBatch(db);
+      batch.update(docRef, {
         status: 'approved',
         visibleData,
         approvedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+
+      // Le regole aprono lo storico solo con questo documento, che può scrivere
+      // soltanto il proprietario del veicolo
+      const accessRef = this.getHistoryAccessRef(request.vehicleId, request.requesterEmail);
+      if (visibleData.maintenanceHistory) {
+        batch.set(accessRef, {
+          vehicleId: request.vehicleId,
+          ownerId: request.ownerId,
+          requesterEmail: request.requesterEmail.toLowerCase(),
+          requestId,
+          expiresAt: request.expiresAt,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        batch.delete(accessRef);
+      }
+      await batch.commit();
 
       // Invia notifica al richiedente
       await this.notifyRequester(requestId, request.requesterEmail, 'approved');
@@ -237,12 +256,15 @@ export class VehicleViewRequestService {
 
       const request = docSnap.data() as VehicleViewRequest;
 
-      await updateDoc(docRef, {
+      const batch = writeBatch(db);
+      batch.update(docRef, {
         status: 'rejected',
         rejectedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         rejectionReason: reason || 'Rifiutata dal proprietario'
       });
+      batch.delete(this.getHistoryAccessRef(request.vehicleId, request.requesterEmail));
+      await batch.commit();
 
       // Invia notifica al richiedente
       await this.notifyRequester(requestId, request.requesterEmail, 'rejected');
@@ -261,18 +283,23 @@ export class VehicleViewRequestService {
   async revokeViewRequest(requestId: string): Promise<void> {
     try {
       const docRef = doc(db, this.viewRequestsCollection, requestId);
+      const docSnap = await getDoc(docRef);
 
-      await updateDoc(docRef, {
+      if (!docSnap.exists()) {
+        throw new Error('Richiesta non trovata');
+      }
+
+      const request = docSnap.data() as VehicleViewRequest;
+      const batch = writeBatch(db);
+      batch.update(docRef, {
         status: 'revoked',
         updatedAt: serverTimestamp()
       });
+      batch.delete(this.getHistoryAccessRef(request.vehicleId, request.requesterEmail));
+      await batch.commit();
 
       // Log della revoca
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const request = docSnap.data() as VehicleViewRequest;
-        await this.logViewAccess(requestId, request.ownerId, 'revoked');
-      }
+      await this.logViewAccess(requestId, request.ownerId, 'revoked');
     } catch (error) {
       console.error('Error revoking view request:', error);
       throw error;
@@ -304,7 +331,7 @@ export class VehicleViewRequestService {
       }
 
       // Verifica scadenza
-      if (request.expiresAt.toDate() < new Date()) {
+      if ((request.expiresAt as unknown as Timestamp).toDate() < new Date()) {
         await updateDoc(docRef, { status: 'expired' });
         throw new Error('Richiesta scaduta');
       }
@@ -489,6 +516,10 @@ export class VehicleViewRequestService {
     return hash.substring(0, 12).toUpperCase();
   }
 
+  private getHistoryAccessRef(vehicleId: string, requesterEmail: string) {
+    return doc(db, 'vehicle_history_access', `${vehicleId}_${requesterEmail.toLowerCase()}`);
+  }
+
   /**
    * Recupera lo storico manutenzione filtrato
    */
@@ -512,6 +543,8 @@ export class VehicleViewRequestService {
         if (!includeDetails) {
           // Nascondi costi e dettagli meccanico
           delete data.cost;
+          delete data.subtotal;
+          delete data.vatAmount;
           delete data.laborCost;
           delete data.partsCost;
           delete data.mechanicName;

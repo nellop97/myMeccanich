@@ -38,6 +38,8 @@ interface UniversalImagePickerProps {
     showGalleryOption?: boolean;
     label?: string;
     disabled?: boolean;
+    /** Da spegnere quando è la schermata a mostrare e gestire le foto scelte */
+    showPreview?: boolean;
 }
 
 export const UniversalImagePicker: React.FC<UniversalImagePickerProps> = ({
@@ -49,21 +51,17 @@ export const UniversalImagePicker: React.FC<UniversalImagePickerProps> = ({
     showGalleryOption = true,
     label = 'Seleziona immagini',
     disabled = false,
+    showPreview = true,
 }) => {
     const { colors, isDark } = useAppThemeManager();
     const [selectedImages, setSelectedImages] = useState<ImageAsset[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    const requestPermissions = async () => {
+    const requestCameraPermission = async () => {
         if (Platform.OS === 'web') return true;
 
-        const cameraPermission = await ExpoImagePicker.requestCameraPermissionsAsync();
-        const mediaLibraryPermission = await ExpoImagePicker.requestMediaLibraryPermissionsAsync();
-
-        return (
-            cameraPermission.status === 'granted' &&
-            mediaLibraryPermission.status === 'granted'
-        );
+        const { status } = await ExpoImagePicker.requestCameraPermissionsAsync();
+        return status === 'granted';
     };
 
     const pickFromGallery = async () => {
@@ -99,10 +97,10 @@ export const UniversalImagePicker: React.FC<UniversalImagePickerProps> = ({
     const takePhoto = async () => {
         try {
             setIsLoading(true);
-            const hasPermission = await requestPermissions();
-            
+            const hasPermission = await requestCameraPermission();
+
             if (!hasPermission) {
-                Alert.alert('Permessi necessari', 'Sono necessari i permessi per camera e galleria');
+                Alert.alert('Permesso necessario', "Consenti l'accesso alla fotocamera per scattare la foto.");
                 return;
             }
 
@@ -168,6 +166,8 @@ export const UniversalImagePicker: React.FC<UniversalImagePickerProps> = ({
                         ]}
                         onPress={pickFromGallery}
                         disabled={disabled || isLoading}
+                        accessibilityRole="button"
+                        accessibilityLabel="Scegli dalla galleria"
                     >
                         <ImageIcon size={20} color={colors.primary} />
                         <Text style={[styles.buttonText, { color: colors.primary }]}>
@@ -187,6 +187,8 @@ export const UniversalImagePicker: React.FC<UniversalImagePickerProps> = ({
                         ]}
                         onPress={takePhoto}
                         disabled={disabled || isLoading}
+                        accessibilityRole="button"
+                        accessibilityLabel="Scatta con la fotocamera"
                     >
                         <Camera size={20} color={colors.secondary} />
                         <Text style={[styles.buttonText, { color: colors.secondary }]}>
@@ -196,7 +198,7 @@ export const UniversalImagePicker: React.FC<UniversalImagePickerProps> = ({
                 )}
             </View>
 
-            {selectedImages.length > 0 && (
+            {showPreview && selectedImages.length > 0 && (
                 <ScrollView 
                     horizontal 
                     style={styles.imagePreview}

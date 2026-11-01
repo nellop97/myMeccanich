@@ -7,11 +7,13 @@ import {
     Text,
     ScrollView,
     StyleSheet,
+    TextInput,
     TouchableOpacity,
     Platform,
     useWindowDimensions,
 } from 'react-native';
 import { Info } from 'lucide-react-native';
+import UniversalDatePicker from '../../../components/UniversalDatePicker';
 import { VehicleFormData, FUEL_TYPES, TRANSMISSION_TYPES } from '../../../types/addVehicle.types';
 
 interface Props {
@@ -97,23 +99,16 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
                             Cilindrata <Text style={styles.optionalLabel}>(Opzionale)</Text>
                         </Text>
                         <View style={styles.inputWrapper}>
-                            <input
-                                type="number"
-                                placeholder="" // ✅ RIMOSSO placeholder
+                            <TextInput
+                                keyboardType="number-pad"
                                 value={formData.engineSize?.toString() || ''}
-                                onChange={(e) =>
+                                onChangeText={(text) =>
                                     updateFormData({
-                                        engineSize: e.target.value ? parseInt(e.target.value) : undefined,
+                                        engineSize: text ? parseInt(text, 10) || undefined : undefined,
                                     })
                                 }
-                                style={{
-                                    flex: 1,
-                                    fontSize: 16,
-                                    color: '#1e293b',
-                                    border: 'none',
-                                    outline: 'none',
-                                    backgroundColor: 'transparent',
-                                }}
+                                style={styles.textField}
+                                accessibilityLabel="Cilindrata"
                             />
                             <Text style={styles.inputUnit}>cc</Text>
                         </View>
@@ -125,23 +120,16 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
                             Potenza <Text style={styles.optionalLabel}>(Opzionale)</Text>
                         </Text>
                         <View style={styles.inputWrapper}>
-                            <input
-                                type="number"
-                                placeholder="" // ✅ RIMOSSO placeholder
+                            <TextInput
+                                keyboardType="number-pad"
                                 value={formData.power?.toString() || ''}
-                                onChange={(e) =>
+                                onChangeText={(text) =>
                                     updateFormData({
-                                        power: e.target.value ? parseInt(e.target.value) : undefined,
+                                        power: text ? parseInt(text, 10) || undefined : undefined,
                                     })
                                 }
-                                style={{
-                                    flex: 1,
-                                    fontSize: 16,
-                                    color: '#1e293b',
-                                    border: 'none',
-                                    outline: 'none',
-                                    backgroundColor: 'transparent',
-                                }}
+                                style={styles.textField}
+                                accessibilityLabel="Potenza"
                             />
                             <Text style={styles.inputUnit}>CV</Text>
                         </View>
@@ -164,58 +152,27 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
                     )}
 
                     <View style={styles.inputWrapper}>
-                        <input
-                            type="text"
-                            placeholder="" // ✅ RIMOSSO placeholder
+                        <TextInput
                             value={formData.vin || ''}
-                            onChange={(e) =>
-                                updateFormData({ vin: e.target.value.toUpperCase() })
-                            }
+                            onChangeText={(text) => updateFormData({ vin: text.toUpperCase() })}
                             maxLength={17}
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                color: '#1e293b',
-                                border: 'none',
-                                outline: 'none',
-                                backgroundColor: 'transparent',
-                                textTransform: 'uppercase',
-                                letterSpacing: 1,
-                            }}
+                            autoCapitalize="characters"
+                            style={[styles.textField, styles.vinField]}
+                            accessibilityLabel="Numero di telaio"
                         />
                     </View>
                 </View>
 
                 {/* Data di Immatricolazione */}
                 <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>Data di Immatricolazione</Text>
-                    <View style={styles.inputWrapper}>
-                        <Text style={styles.inputIcon}>📅</Text>
-                        <input
-                            type="date"
-                            value={
-                                formData.registrationDate
-                                    ? formData.registrationDate.toISOString().split('T')[0]
-                                    : ''
-                            }
-                            onChange={(e) =>
-                                updateFormData({
-                                    registrationDate: e.target.value
-                                        ? new Date(e.target.value)
-                                        : undefined,
-                                })
-                            }
-                            style={{
-                                flex: 1,
-                                fontSize: 16,
-                                color: '#1e293b',
-                                border: 'none',
-                                outline: 'none',
-                                backgroundColor: 'transparent',
-                            }}
-                        />
-                    </View>
-                    <Text style={styles.helperText}>GG/MM/AAAA</Text>
+                    <UniversalDatePicker
+                        label="Data di Immatricolazione"
+                        placeholder="Seleziona la data"
+                        value={formData.registrationDate}
+                        onChange={(date) => updateFormData({ registrationDate: date })}
+                        onClear={() => updateFormData({ registrationDate: undefined })}
+                        maximumDate={new Date()}
+                    />
                 </View>
 
                 {/* Pulsanti Navigazione */}
@@ -238,6 +195,13 @@ const VehicleTechnicalDetailsStep: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
+    optionalLabel: {
+        fontWeight: '400',
+        color: '#64748b',
+    },
+    helperTextContainer: {
+        marginTop: 4,
+    },
     container: {
         flex: 1,
     },
@@ -360,6 +324,14 @@ const styles = StyleSheet.create({
     },
 
     // Input Wrapper
+    textField: {
+        flex: 1,
+        fontSize: 16,
+        color: '#1e293b',
+    },
+    vinField: {
+        letterSpacing: 1,
+    },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',

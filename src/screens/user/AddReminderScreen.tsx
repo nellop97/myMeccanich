@@ -32,16 +32,16 @@ import {
   Info,
   Gauge,
   DollarSign,
-  Clock,
 } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import UniversalDatePicker from '../../components/UniversalDatePicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { useUserData } from '../../hooks/useUserData';
 import ReminderService from '../../services/ReminderService';
 import { ReminderType } from '../../types/database.types';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 
 // ============================================
 // GLASS CARD COMPONENT
@@ -94,7 +94,6 @@ const AddReminderScreen = () => {
   const preselectedVehicleId = (route.params as any)?.vehicleId;
 
   const [saving, setSaving] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Form data
   const [vehicleId, setVehicleId] = useState(preselectedVehicleId || vehicles[0]?.id || '');
@@ -332,6 +331,8 @@ const AddReminderScreen = () => {
             ]}
             showsVerticalScrollIndicator={false}
           >
+            <AiComingSoonButton feature="deadlineDocument" style={styles.aiButton} />
+
             {/* Veicolo */}
             <GlassCard style={styles.card}>
               <View style={styles.cardHeader}>
@@ -468,56 +469,7 @@ const AddReminderScreen = () => {
                 </Text>
               </View>
               <View style={styles.cardContent}>
-                <TouchableOpacity
-                  style={[styles.dateButton, { backgroundColor: colors.surfaceVariant }]}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Clock size={20} color={colors.primary} />
-                  <Text style={[styles.dateButtonText, { color: colors.onSurface }]}>
-                    {dueDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </Text>
-                </TouchableOpacity>
-
-                {showDatePicker && Platform.OS !== 'web' && (
-                  <DateTimePicker
-                    value={dueDate}
-                    mode="date"
-                    display="default"
-                    minimumDate={new Date()}
-                    onChange={(event, selectedDate) => {
-                      setShowDatePicker(Platform.OS === 'ios');
-                      if (selectedDate) setDueDate(selectedDate);
-                    }}
-                  />
-                )}
-
-                {showDatePicker && Platform.OS === 'web' && (
-                  <View style={[styles.inputRow, { marginTop: 12 }]}>
-                    <View style={styles.inputIcon}>
-                      <Calendar size={20} color={colors.primary} />
-                    </View>
-                    <input
-                      type="date"
-                      value={dueDate.toISOString().split('T')[0]}
-                      min={new Date().toISOString().split('T')[0]}
-                      onChange={(e) => {
-                        const selectedDate = new Date(e.target.value);
-                        setDueDate(selectedDate);
-                        setShowDatePicker(false);
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: 12,
-                        fontSize: 16,
-                        borderRadius: 12,
-                        border: 'none',
-                        backgroundColor: colors.surfaceVariant,
-                        color: colors.onSurface,
-                        fontFamily: 'inherit',
-                      }}
-                    />
-                  </View>
-                )}
+                <UniversalDatePicker value={dueDate} onChange={setDueDate} minimumDate={new Date()} />
 
                 <View style={styles.inputRow}>
                   <View style={styles.inputIcon}>
@@ -718,6 +670,9 @@ const AddReminderScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  aiButton: {
+    marginBottom: 16,
+  },
   container: {
     flex: 1,
   },
@@ -858,18 +813,6 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  dateButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
   },
   switchRow: {
     flexDirection: 'row',

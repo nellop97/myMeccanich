@@ -466,7 +466,7 @@ export default function MaintenanceHistoryScreen() {
             </Text>
             {vehicle && (
               <Text style={[styles.headerSubtitle, { color: isDark ? '#999' : '#666' }]}>
-                {vehicle.brand} {vehicle.model}
+                {vehicle.make} {vehicle.model}
               </Text>
             )}
           </View>
@@ -755,7 +755,7 @@ export default function MaintenanceHistoryScreen() {
                         </View>
                       )}
 
-                      {record.cost && vehicle?.privacySettings?.showCosts && (
+                      {!!record.cost && (vehicle?.ownerId === user?.uid || vehicle?.privacySettings?.showCosts) && (
                         <View style={styles.costBadge}>
                           <Text style={[styles.costText, {
                             color: isDark ? '#fff' : '#000'

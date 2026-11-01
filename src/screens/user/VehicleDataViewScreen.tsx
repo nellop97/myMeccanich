@@ -42,6 +42,7 @@ import {
   User,
   UserCheck
 } from 'lucide-react-native';
+import { getDisplayableParts, InstalledPartsList } from '../../components/InstalledPartRow';
 import { useAppThemeManager } from '../../hooks/useTheme';
 import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
 import { auth } from '../../services/firebase';
@@ -214,6 +215,9 @@ export default function VehicleDataViewScreen() {
       return null;
     }
 
+    // Il servizio toglie i totali ma non i costi dentro parts: senza il flag restano nascosti
+    const showCosts = requestData?.visibleData?.maintenanceDetails === true;
+
     return (
       <Card style={[styles.card, { backgroundColor: colors.surface }]}>
         <Card.Content>
@@ -281,6 +285,31 @@ export default function VehicleDataViewScreen() {
                         </Text>
                       </View>
                     )}
+                  </View>
+                )}
+
+                {record.verifiedByWorkshop && (
+                  <Text style={{ color: colors.onSurfaceVariant, marginTop: 4 }}>
+                    Eseguita da officina, dati non modificabili{getDisplayableParts(record.parts).length ? ` · ${getDisplayableParts(record.parts).length} ricambi` : ''}{record.photos?.length ? ` · ${record.photos.length} foto` : ''}
+                  </Text>
+                )}
+
+                <InstalledPartsList
+                  parts={record.parts}
+                  showCosts={showCosts}
+                  verifiedByWorkshop={record.verifiedByWorkshop}
+                />
+
+                {record.photos?.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                    {record.photos.map((photo: any) => (
+                      <Image
+                        key={photo.url}
+                        source={{ uri: photo.url }}
+                        style={{ width: 84, height: 84, borderRadius: 12 }}
+                        accessibilityLabel={photo.kind === 'part' ? 'Foto ricambio usato' : 'Foto della manutenzione'}
+                      />
+                    ))}
                   </View>
                 )}
 

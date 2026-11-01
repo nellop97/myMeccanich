@@ -1,5 +1,5 @@
 // src/screens/user/BookingRequestScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,17 +8,21 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Car, FileText, Clock, AlertCircle, Check, ArrowLeft } from 'lucide-react-native';
+import { useMechanicTheme } from '../mechanic/mechanicTheme';
+import MechanicHeader from '../mechanic/MechanicHeader';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Calendar, Car, FileText, Clock, AlertCircle, Check } from 'lucide-react-native';
 import { useStore } from '../../store';
 import WorkshopService from '../../services/WorkshopService';
 import BookingService from '../../services/BookingService';
 import { VehicleService } from '../../services/VehicleService';
 import { Workshop, Vehicle, WorkshopService as WorkshopServiceType } from '../../types/database.types';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import UniversalDatePicker from '../../components/UniversalDatePicker';
+import { showAlert } from '../../utils/platformHelpers';
+import { AiComingSoonButton } from '../../components/AiComingSoonButton';
 
 interface BookingRequestScreenProps {
   navigation: any;
@@ -28,10 +32,16 @@ interface BookingRequestScreenProps {
 type Step = 1 | 2 | 3 | 4;
 
 export default function BookingRequestScreen({ navigation, route }: BookingRequestScreenProps) {
-  const { darkMode, user } = useStore();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
   const { workshopId } = route.params;
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadErrorCode, setLoadErrorCode] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const submitInProgress = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -43,45 +53,53 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
   const [problemDescription, setProblemDescription] = useState('');
   const [urgencyLevel, setUrgencyLevel] = useState<'low' | 'medium' | 'high' | 'emergency'>('medium');
   const [preferredDates, setPreferredDates] = useState<Date[]>([]);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [tempDate, setTempDate] = useState(new Date());
-
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    primary: '#3b82f6',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
+  const [tempDate, setTempDate] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    return tomorrow;
+  });
 
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.id) {
       loadData();
     }
-  }, [user]);
+  }, [user?.id, workshopId]);
+
+  // Ogni passaggio riparte dall'inizio della pagina
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [currentStep]);
 
   const loadData = async () => {
-    if (!user?.uid) {
+    if (!user?.id) {
       console.warn('User not authenticated');
       return;
     }
 
     try {
       setLoading(true);
+      setLoadFailed(false);
       const [workshopData, vehiclesData] = await Promise.all([
         WorkshopService.getWorkshop(workshopId),
-        VehicleService.getInstance().getUserVehicles(user.uid),
+        VehicleService.getInstance().getUserVehicles(user.id),
       ]);
 
       setWorkshop(workshopData);
       setVehicles(vehiclesData);
+
+      // Con un solo veicolo non c'è niente da scegliere
+      if (vehiclesData.length === 1) {
+        setSelectedVehicle(vehiclesData[0]);
+      }
+      // Senza servizi a listino resta solo la richiesta personalizzata
+      if (!workshopData?.services?.some((service) => service.isAvailable)) {
+        setBookingType('custom');
+      }
     } catch (error) {
       console.error('Errore caricamento dati:', error);
-      Alert.alert('Errore', 'Impossibile caricare i dati');
+      setLoadErrorCode((error as any)?.code || (error as Error)?.message || '');
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -89,16 +107,22 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
 
   const handleSubmit = async () => {
     if (!selectedVehicle || !workshop || !user) {
-      Alert.alert('Errore', 'Dati mancanti');
+      showAlert('Errore', 'Dati mancanti');
       return;
     }
 
+    if (submitInProgress.current) return;
+    submitInProgress.current = true;
+
     try {
-      setLoading(true);
+      setSubmitting(true);
+
+      // Un servizio scelto prima di passare a Personalizzato o Urgente non vale più
+      const chosenService = bookingType === 'routine' ? selectedService : null;
 
       const bookingData = {
-        userId: user.uid,
-        userName: user.displayName || user.email || '',
+        userId: user.id,
+        userName: user.name || user.email || '',
         userEmail: user.email || '',
         userPhone: user.phoneNumber,
         workshopId: workshop.id,
@@ -109,43 +133,51 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         vehicleModel: selectedVehicle.model,
         vehicleYear: selectedVehicle.year,
         vehicleLicensePlate: selectedVehicle.licensePlate,
-        currentMileage: selectedVehicle.mileage,
+        currentMileage: selectedVehicle.mileage ?? (selectedVehicle as any).currentMileage ?? 0,
         bookingType,
-        serviceId: selectedService?.id,
-        serviceName: selectedService?.name || 'Servizio personalizzato',
-        serviceCategory: selectedService?.category,
+        serviceId: chosenService?.id,
+        serviceName: chosenService?.name || 'Servizio personalizzato',
+        serviceCategory: chosenService?.category,
         problemDescription,
-        urgencyLevel,
+        urgencyLevel: bookingType === 'emergency' ? 'emergency' : urgencyLevel,
         preferredDates,
       };
 
       const bookingId = await BookingService.createBookingRequest(bookingData);
 
-      Alert.alert(
+      showAlert(
         'Richiesta Inviata!',
         'La tua richiesta di prenotazione è stata inviata. Riceverai presto una risposta.',
         [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('BookingDetail', { bookingId }),
+            onPress: () => navigation.replace('BookingDetail', { bookingId }),
           },
         ]
       );
     } catch (error) {
       console.error('Errore invio richiesta:', error);
-      Alert.alert('Errore', 'Impossibile inviare la richiesta');
+      showAlert('Errore', 'Impossibile inviare la richiesta. Controlla la connessione e riprova.');
     } finally {
-      setLoading(false);
+      submitInProgress.current = false;
+      setSubmitting(false);
     }
   };
 
   const addPreferredDate = () => {
     if (preferredDates.length >= 3) {
-      Alert.alert('Limite raggiunto', 'Puoi selezionare massimo 3 date preferite');
+      showAlert('Limite raggiunto', 'Puoi selezionare massimo 3 date preferite');
+      return;
+    }
+    if (tempDate.getTime() <= Date.now()) {
+      showAlert('Data non valida', 'Scegli una data e un orario futuri');
+      return;
+    }
+    if (preferredDates.some((date) => date.getTime() === tempDate.getTime())) {
+      showAlert('Data già aggiunta', 'Scegli una data o un orario diversi');
       return;
     }
     setPreferredDates([...preferredDates, tempDate]);
-    setShowDatePicker(false);
   };
 
   const removePreferredDate = (index: number) => {
@@ -157,7 +189,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
       case 1:
         return selectedVehicle !== null;
       case 2:
-        return bookingType === 'custom' || selectedService !== null;
+        return bookingType !== 'routine' || selectedService !== null;
       case 3:
         return problemDescription.trim().length > 10;
       case 4:
@@ -180,9 +212,9 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
             ]}
           >
             {currentStep > step ? (
-              <Check size={16} color="#fff" />
+              <Check size={16} color={theme.onPrimary} />
             ) : (
-              <Text style={[styles.stepNumber, { color: currentStep >= step ? '#fff' : theme.textSecondary }]}>
+              <Text style={[styles.stepNumber, { color: currentStep >= step ? theme.onPrimary : theme.textSecondary }]}>
                 {step}
               </Text>
             )}
@@ -208,7 +240,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         <Car size={32} color={theme.primary} />
         <Text style={[styles.stepTitle, { color: theme.text }]}>Seleziona Veicolo</Text>
         <Text style={[styles.stepDescription, { color: theme.textSecondary }]}>
-          Scegli il veicolo per cui richiedere l'intervento
+          Scegli il veicolo per cui richiedere l&apos;intervento
         </Text>
       </View>
 
@@ -218,7 +250,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
           style={[
             styles.vehicleCard,
             {
-              backgroundColor: theme.cardBackground,
+              backgroundColor: theme.surface,
               borderColor: selectedVehicle?.id === vehicle.id ? theme.primary : theme.border,
               borderWidth: selectedVehicle?.id === vehicle.id ? 2 : 1,
             },
@@ -233,12 +265,12 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
               {vehicle.year} • {vehicle.licensePlate}
             </Text>
             <Text style={[styles.vehicleMileage, { color: theme.textSecondary }]}>
-              {vehicle.mileage.toLocaleString()} km
+              {(vehicle.mileage ?? (vehicle as any).currentMileage ?? 0).toLocaleString('it-IT')} km
             </Text>
           </View>
           {selectedVehicle?.id === vehicle.id && (
             <View style={[styles.checkmark, { backgroundColor: theme.primary }]}>
-              <Check size={20} color="#fff" />
+              <Check size={20} color={theme.onPrimary} />
             </View>
           )}
         </TouchableOpacity>
@@ -251,8 +283,15 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
             Nessun veicolo trovato
           </Text>
           <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            Aggiungi un veicolo dal tuo profilo per poter prenotare servizi
+            Aggiungi un veicolo per poter prenotare servizi
           </Text>
+          <TouchableOpacity
+            style={[styles.addDateButton, { backgroundColor: theme.primary }]}
+            onPress={() => navigation.navigate('AddVehicle')}
+          >
+            <Car size={20} color={theme.onPrimary} />
+            <Text style={styles.addDateButtonText}>Aggiungi Veicolo</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -270,32 +309,34 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
 
       {/* Tipo prenotazione */}
       <View style={styles.typeButtons}>
-        <TouchableOpacity
-          style={[
-            styles.typeButton,
-            {
-              backgroundColor: bookingType === 'routine' ? theme.primary : theme.cardBackground,
-              borderColor: theme.border,
-            },
-          ]}
-          onPress={() => setBookingType('routine')}
-        >
-          <Text style={[styles.typeButtonText, { color: bookingType === 'routine' ? '#fff' : theme.text }]}>
-            Servizio Routine
-          </Text>
-        </TouchableOpacity>
+        {workshop?.services?.some((service) => service.isAvailable) && (
+          <TouchableOpacity
+            style={[
+              styles.typeButton,
+              {
+                backgroundColor: bookingType === 'routine' ? theme.primary : theme.surface,
+                borderColor: theme.border,
+              },
+            ]}
+            onPress={() => setBookingType('routine')}
+          >
+            <Text style={[styles.typeButtonText, { color: bookingType === 'routine' ? theme.onPrimary : theme.text }]}>
+              Servizio Routine
+            </Text>
+          </TouchableOpacity>
+          )}
 
         <TouchableOpacity
           style={[
             styles.typeButton,
             {
-              backgroundColor: bookingType === 'custom' ? theme.primary : theme.cardBackground,
+              backgroundColor: bookingType === 'custom' ? theme.primary : theme.surface,
               borderColor: theme.border,
             },
           ]}
           onPress={() => setBookingType('custom')}
         >
-          <Text style={[styles.typeButtonText, { color: bookingType === 'custom' ? '#fff' : theme.text }]}>
+          <Text style={[styles.typeButtonText, { color: bookingType === 'custom' ? theme.onPrimary : theme.text }]}>
             Personalizzato
           </Text>
         </TouchableOpacity>
@@ -304,14 +345,14 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
           style={[
             styles.typeButton,
             {
-              backgroundColor: bookingType === 'emergency' ? theme.error : theme.cardBackground,
+              backgroundColor: bookingType === 'emergency' ? theme.error : theme.surface,
               borderColor: theme.border,
             },
           ]}
           onPress={() => setBookingType('emergency')}
         >
-          <AlertCircle size={16} color={bookingType === 'emergency' ? '#fff' : theme.text} />
-          <Text style={[styles.typeButtonText, { color: bookingType === 'emergency' ? '#fff' : theme.text }]}>
+          <AlertCircle size={16} color={bookingType === 'emergency' ? theme.onPrimary : theme.text} />
+          <Text style={[styles.typeButtonText, { color: bookingType === 'emergency' ? theme.onPrimary : theme.text }]}>
             Urgente
           </Text>
         </TouchableOpacity>
@@ -329,7 +370,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
                 style={[
                   styles.serviceCard,
                   {
-                    backgroundColor: theme.cardBackground,
+                    backgroundColor: theme.surface,
                     borderColor: selectedService?.id === service.id ? theme.primary : theme.border,
                     borderWidth: selectedService?.id === service.id ? 2 : 1,
                   },
@@ -361,7 +402,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
                 </View>
                 {selectedService?.id === service.id && (
                   <View style={[styles.checkmark, { backgroundColor: theme.primary }]}>
-                    <Check size={20} color="#fff" />
+                    <Check size={20} color={theme.onPrimary} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -381,11 +422,13 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         </Text>
       </View>
 
+      <AiComingSoonButton feature="ownerProblem" style={styles.aiButton} />
+
       <TextInput
         style={[
           styles.textArea,
           {
-            backgroundColor: theme.cardBackground,
+            backgroundColor: theme.surface,
             borderColor: theme.border,
             color: theme.text,
           },
@@ -399,20 +442,28 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         textAlignVertical="top"
       />
 
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>Livello di Urgenza</Text>
-      <View style={styles.urgencyButtons}>
+      <Text style={[styles.characterHint, { color: theme.textSecondary }]}>
+        {problemDescription.trim().length > 10
+          ? 'Descrizione completa'
+          : `Scrivi almeno 11 caratteri (${problemDescription.trim().length}/11)`}
+      </Text>
+
+      {bookingType !== 'emergency' && (
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Livello di Urgenza</Text>
+      )}
+      {bookingType !== 'emergency' && <View style={styles.urgencyButtons}>
         {[
           { value: 'low', label: 'Bassa', color: theme.success },
           { value: 'medium', label: 'Media', color: theme.warning },
           { value: 'high', label: 'Alta', color: theme.error },
-          { value: 'emergency', label: 'Emergenza', color: '#dc2626' },
+          { value: 'emergency', label: 'Emergenza', color: theme.error },
         ].map((urgency) => (
           <TouchableOpacity
             key={urgency.value}
             style={[
               styles.urgencyButton,
               {
-                backgroundColor: urgencyLevel === urgency.value ? urgency.color : theme.cardBackground,
+                backgroundColor: urgencyLevel === urgency.value ? urgency.color : theme.surface,
                 borderColor: theme.border,
               },
             ]}
@@ -421,14 +472,14 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
             <Text
               style={[
                 styles.urgencyButtonText,
-                { color: urgencyLevel === urgency.value ? '#fff' : theme.text },
+                { color: urgencyLevel === urgency.value ? theme.onPrimary : theme.text },
               ]}
             >
               {urgency.label}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </View>}
     </View>
   );
 
@@ -445,7 +496,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
       {preferredDates.map((date, index) => (
         <View
           key={index}
-          style={[styles.dateCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+          style={[styles.dateCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
           <Text style={[styles.dateText, { color: theme.text }]}>
             {date.toLocaleDateString('it-IT', {
@@ -463,54 +514,18 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         </View>
       ))}
 
+      {preferredDates.length < 3 && <UniversalDatePicker label="Data e ora" mode="datetime" value={tempDate} onChange={setTempDate} minimumDate={new Date()} />}
+
       <TouchableOpacity
         style={[styles.addDateButton, { backgroundColor: theme.primary }]}
-        onPress={() => setShowDatePicker(true)}
+        onPress={addPreferredDate}
         disabled={preferredDates.length >= 3}
       >
-        <Calendar size={20} color="#fff" />
+        <Calendar size={20} color={theme.onPrimary} />
         <Text style={styles.addDateButtonText}>
           {preferredDates.length === 0 ? 'Aggiungi Data' : `Aggiungi altra data (${preferredDates.length}/3)`}
         </Text>
       </TouchableOpacity>
-
-      {showDatePicker && (
-        <View>
-          <DateTimePicker
-            value={tempDate}
-            mode="datetime"
-            display="default"
-            onChange={(event, selectedDate) => {
-              if (Platform.OS === 'android') {
-                setShowDatePicker(false);
-              }
-              if (selectedDate) {
-                setTempDate(selectedDate);
-                if (Platform.OS === 'android') {
-                  addPreferredDate();
-                }
-              }
-            }}
-            minimumDate={new Date()}
-          />
-          {Platform.OS === 'ios' && (
-            <View style={styles.datePickerButtons}>
-              <TouchableOpacity
-                style={[styles.datePickerButton, { backgroundColor: theme.border }]}
-                onPress={() => setShowDatePicker(false)}
-              >
-                <Text style={[styles.datePickerButtonText, { color: theme.text }]}>Annulla</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.datePickerButton, { backgroundColor: theme.primary }]}
-                onPress={addPreferredDate}
-              >
-                <Text style={[styles.datePickerButtonText, { color: '#fff' }]}>Conferma</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
     </View>
   );
 
@@ -522,33 +537,52 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
     );
   }
 
+  if (loadFailed || !workshop) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.surface }}>
+          <MechanicHeader title="Nuova Prenotazione" onBack={() => navigation.goBack()} />
+        </SafeAreaView>
+        <View style={styles.emptyState}>
+          <AlertCircle size={48} color={theme.error} />
+          <Text style={[styles.emptyText, { color: theme.text }]}>
+            {loadFailed ? 'Impossibile caricare i dati' : 'Officina non disponibile'}
+          </Text>
+          <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+            {loadFailed
+              ? `Riprova tra poco. Se continua, segnala questo codice: ${loadErrorCode || 'sconosciuto'}`
+              : 'Scegli un\'altra officina dalla ricerca.'}
+          </Text>
+          {loadFailed && (
+            <TouchableOpacity style={[styles.addDateButton, { backgroundColor: theme.primary }]} onPress={loadData}>
+              <Text style={styles.addDateButtonText}>Riprova</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <ArrowLeft size={24} color="#fff" strokeWidth={2} />
-          </TouchableOpacity>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Nuova Prenotazione</Text>
-            {workshop && (
-              <Text style={styles.headerSubtitle}>{workshop.name}</Text>
-            )}
-          </View>
-        </View>
-      </LinearGradient>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.surface }}>
+        <MechanicHeader
+          title="Nuova Prenotazione"
+          subtitle={workshop?.name}
+          onBack={() => navigation.goBack()}
+        />
+      </SafeAreaView>
 
       {renderStepIndicator()}
 
-      <ScrollView
+      <KeyboardAvoidingView
         style={styles.scrollView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scrollView}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -557,9 +591,10 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
         {currentStep === 3 && renderStep3()}
         {currentStep === 4 && renderStep4()}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Navigation Buttons */}
-      <View style={[styles.navigationButtons, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+      <View style={[styles.navigationButtons, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {currentStep > 1 && (
           <TouchableOpacity
             style={[styles.navButton, { backgroundColor: theme.border }]}
@@ -581,7 +616,7 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
             onPress={() => setCurrentStep((currentStep + 1) as Step)}
             disabled={!canProceedToNextStep()}
           >
-            <Text style={[styles.navButtonText, { color: '#fff' }]}>Avanti</Text>
+            <Text style={[styles.navButtonText, { color: theme.onPrimary }]}>Avanti</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -593,10 +628,10 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
               },
             ]}
             onPress={handleSubmit}
-            disabled={!canProceedToNextStep() || loading}
+            disabled={!canProceedToNextStep() || submitting}
           >
-            <Text style={[styles.navButtonText, { color: '#fff' }]}>
-              {loading ? 'Invio...' : 'Invia Richiesta'}
+            <Text style={[styles.navButtonText, { color: theme.onPrimary }]}>
+              {submitting ? 'Invio...' : 'Invia Richiesta'}
             </Text>
           </TouchableOpacity>
         )}
@@ -606,36 +641,15 @@ export default function BookingRequestScreen({ navigation, route }: BookingReque
 }
 
 const styles = StyleSheet.create({
+  aiButton: {
+    marginBottom: 16,
+  },
+  characterHint: {
+    fontSize: 13,
+    marginTop: 6,
+  },
   container: {
     flex: 1,
-  },
-  header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#e0e7ff',
   },
   stepIndicator: {
     flexDirection: 'row',
@@ -839,21 +853,6 @@ const styles = StyleSheet.create({
   },
   addDateButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  datePickerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  datePickerButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  datePickerButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
   },

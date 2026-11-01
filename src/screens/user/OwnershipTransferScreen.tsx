@@ -19,7 +19,6 @@ import {
   Text,
   Card,
   Button,
-  Stepper,
   Checkbox,
   Surface,
   IconButton,
@@ -225,7 +224,7 @@ export default function OwnershipTransferScreen() {
               <Surface style={styles.infoBox} elevation={1}>
                 <AlertCircle size={16} color="#2196F3" />
                 <Text style={styles.infoText}>
-                  L'acquirente riceverà una notifica via email con le 
+                  L&apos;acquirente riceverà una notifica via email con le 
                   istruzioni per accedere ai dati del veicolo.
                 </Text>
               </Surface>
@@ -239,7 +238,7 @@ export default function OwnershipTransferScreen() {
             <Card.Title title="Seleziona le informazioni da trasferire" />
             <Card.Content>
               <Text style={styles.sectionDescription}>
-                Scegli quali informazioni vuoi condividere con l'acquirente. 
+                Scegli quali informazioni vuoi condividere con l&apos;acquirente. 
                 Le informazioni non selezionate rimarranno private.
               </Text>
 
@@ -300,7 +299,7 @@ export default function OwnershipTransferScreen() {
                 <Lock size={16} color="#FF6B35" />
                 <Text style={styles.warningText}>
                   I dati trasferiti rimarranno comunque protetti e non 
-                  potranno essere esportati dall'app.
+                  potranno essere esportati dall&apos;app.
                 </Text>
               </Surface>
             </Card.Content>
@@ -313,7 +312,7 @@ export default function OwnershipTransferScreen() {
             <Card.Title title="Imposta PIN di sicurezza" />
             <Card.Content>
               <Text style={styles.sectionDescription}>
-                Crea un PIN che l'acquirente dovrà inserire per accedere 
+                Crea un PIN che l&apos;acquirente dovrà inserire per accedere 
                 ai dati del veicolo. Comunicaglielo in modo sicuro.
               </Text>
 
@@ -358,7 +357,7 @@ export default function OwnershipTransferScreen() {
                   • Non condividere il PIN pubblicamente
                 </Text>
                 <Text style={styles.securityTip}>
-                  • Comunica il PIN solo all'acquirente verificato
+                  • Comunica il PIN solo all&apos;acquirente verificato
                 </Text>
               </Surface>
             </Card.Content>
@@ -416,7 +415,7 @@ export default function OwnershipTransferScreen() {
                   color={colors.primary}
                 />
                 <Text style={styles.termsText}>
-                  Confermo di voler trasferire i dati selezionati all'acquirente. 
+                  Confermo di voler trasferire i dati selezionati all&apos;acquirente. 
                   Questa azione è irreversibile.
                 </Text>
               </TouchableOpacity>
@@ -424,7 +423,7 @@ export default function OwnershipTransferScreen() {
               <Surface style={styles.finalWarning} elevation={2}>
                 <AlertCircle size={20} color="#FF6B35" />
                 <Text style={styles.finalWarningText}>
-                  Una volta completato il trasferimento, perderai l'accesso 
+                  Una volta completato il trasferimento, perderai l&apos;accesso 
                   a questi dati. Assicurati di aver salvato tutto ciò che 
                   ti serve.
                 </Text>

@@ -1,5 +1,5 @@
 // src/screens/mechanic/CustomerDetailScreen.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -9,11 +9,7 @@ import {
   StyleSheet,
   StatusBar,
   FlatList,
-  Modal,
-  Alert,
-  Linking,
-  Dimensions,
-  Platform
+  Linking
 } from 'react-native';
 import {
   User,
@@ -21,245 +17,282 @@ import {
   Mail,
   MapPin,
   Car,
+  Wrench,
   FileText,
-  DollarSign,
   Calendar,
   Edit,
-  Trash2,
-  Plus,
   Clock,
   CheckCircle,
   AlertCircle,
-  CreditCard,
   Building,
   Hash,
-  MoreVertical,
-  ChevronRight,
-  Download,
-  Share2
+  ChevronRight
 } from 'lucide-react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 import { useStore } from '../../store';
-import { LinearGradient } from 'expo-linear-gradient';
+import type { Invoice, InvoiceStatus } from '../../store/invoicingStore';
+import type { Repair, WorkshopCar } from '../../store/workshopStore';
 
-const { width: screenWidth } = Dimensions.get('window');
+import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
 
-interface Customer {
+import MechanicHeader from './MechanicHeader';
+import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
+import { showAlert } from '../../utils/platformHelpers';
+
+interface CustomerDetail {
   id: string;
   name: string;
   email?: string;
   phone?: string;
   address?: string;
-  city?: string;
+  cityLine?: string;
   vatNumber?: string;
   fiscalCode?: string;
-  type: 'private' | 'business';
+  sdiCode?: string;
+  pecEmail?: string;
+  isCompany: boolean;
   notes?: string;
-  createdAt: string;
-  totalSpent: number;
-  activeVehicles: number;
-  completedServices: number;
-  pendingInvoices: number;
 }
 
-interface Vehicle {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  licensePlate: string;
-  vin?: string;
-  lastService?: string;
-  totalServices: number;
-  totalSpent: number;
+interface CustomerRepair extends Repair {
+  car: WorkshopCar;
 }
 
-interface Invoice {
-  id: string;
-  number: string;
-  date: string;
-  amount: number;
-  status: 'paid' | 'pending' | 'overdue';
-  dueDate?: string;
-  vehicleId?: string;
-}
+type LoadStatus = 'loading' | 'ready' | 'notFound' | 'accessDenied' | 'error';
 
-interface Service {
-  id: string;
-  vehicleId: string;
-  date: string;
-  description: string;
-  amount: number;
-  status: 'completed' | 'in-progress' | 'scheduled';
-  invoiceId?: string;
-}
+const cleanText = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  return value.trim() || undefined;
+};
+
+// name viene prima: la modifica cliente aggiorna name ma non firstName e lastName
+const mapCustomer = (id: string, data: Record<string, any>): CustomerDetail => {
+  const fullName = [cleanText(data.firstName), cleanText(data.lastName)].filter(Boolean).join(' ');
+  const personName = cleanText(data.name) || fullName;
+  const isCompany = !!data.isCompany;
+  const companyName = isCompany ? cleanText(data.companyName) : undefined;
+  const province = cleanText(data.province);
+  const city = [cleanText(data.postalCode), cleanText(data.city)].filter(Boolean).join(' ');
+
+  return {
+    id,
+    name: companyName || personName || 'Cliente senza nome',
+    email: cleanText(data.email),
+    phone: cleanText(data.phone),
+    address: cleanText(data.address),
+    cityLine: [city, province && `(${province})`].filter(Boolean).join(' ') || undefined,
+    vatNumber: cleanText(data.vatNumber),
+    fiscalCode: cleanText(data.fiscalCode),
+    sdiCode: cleanText(data.sdiCode),
+    pecEmail: cleanText(data.pecEmail) || cleanText(data.pec),
+    isCompany,
+    notes: cleanText(data.notes),
+  };
+};
+
+const getInitials = (name: string) =>
+  name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0].toUpperCase()).join('');
+
+const getWhatsAppNumber = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+  if (phone.trim().startsWith('+')) return digits;
+  if (digits.startsWith('00')) return digits.slice(2);
+  return `39${digits}`; // Numero nazionale: wa.me vuole il prefisso internazionale
+};
+
+const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
+  draft: 'Bozza',
+  sent: 'In attesa',
+  paid: 'Pagata',
+  overdue: 'Scaduta',
+  cancelled: 'Annullata',
+};
+
+const REPAIR_STATUS_LABELS: Record<Repair['status'], string> = {
+  pending: 'In attesa',
+  in_progress: 'In corso',
+  ready: 'Pronta per il ritiro',
+  completed: 'Completato',
+  cancelled: 'Annullato',
+};
 
 const CustomerDetailScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute();
-  const { customerId } = route.params as { customerId: string };
-  const { darkMode } = useStore();
-  
+  const customerId = (route.params as { customerId?: string } | undefined)?.customerId;
+  const { user } = useStore();
+  const theme = useMechanicTheme();
+  const workshopId = user?.id;
+
   const [activeTab, setActiveTab] = useState<'info' | 'vehicles' | 'invoices' | 'history'>('info');
-  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [status, setStatus] = useState<LoadStatus>('loading');
+  const [customer, setCustomer] = useState<CustomerDetail | null>(null);
+  const [vehicles, setVehicles] = useState<WorkshopCar[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [vehiclesFailed, setVehiclesFailed] = useState(false);
+  const [invoicesFailed, setInvoicesFailed] = useState(false);
+  const lastRequest = useRef(0);
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    accent: '#2563eb',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
+  const loadInvoices = useCallback(async (id: string, ownerId: string) => {
+    // Due uguaglianze senza orderBy: bastano gli indici semplici, l'ordine è lato client
+    const snapshot = await getDocs(query(
+      collection(db, 'invoices'),
+      where('workshopId', '==', ownerId),
+      where('customerId', '==', id)
+    ));
+    return snapshot.docs
+      .map(item => ({ ...item.data(), id: item.id }) as Invoice)
+      .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''));
+  }, []);
+
+  const loadVehicles = useCallback(async (id: string, ownerId: string) => {
+    // ownerId coincide col cliente solo per le auto create scegliendo un documento customers:
+    // chi è stato scelto tra gli utenti registrati ha l'id di users e qui non compare
+    const snapshot = await getDocs(query(
+      collection(db, 'workshopCars'),
+      where('workshopId', '==', ownerId),
+      where('ownerId', '==', id)
+    ));
+    return snapshot.docs
+      .map(item => ({ ...item.data(), id: item.id }) as WorkshopCar)
+      .filter(car => car.isActive !== false);
+  }, []);
+
+  const loadData = useCallback(async () => {
+    const request = ++lastRequest.current;
+    const isCurrent = () => request === lastRequest.current;
+
+    if (!customerId) {
+      setStatus('notFound');
+      return;
+    }
+    if (!workshopId) {
+      setStatus('error');
+      return;
+    }
+
+    // Al ritorno da modifica o nuova fattura i dati restano visibili durante l'aggiornamento
+    setStatus(current => (current === 'ready' ? current : 'loading'));
+
+    try {
+      const customerSnap = await getDoc(doc(db, 'customers', customerId));
+      if (!isCurrent()) return;
+
+      if (!customerSnap.exists()) {
+        setStatus('notFound');
+        return;
+      }
+
+      const [invoicesResult, vehiclesResult] = await Promise.allSettled([
+        loadInvoices(customerId, workshopId),
+        loadVehicles(customerId, workshopId),
+      ]);
+      if (!isCurrent()) return;
+
+      setCustomer(mapCustomer(customerSnap.id, customerSnap.data()));
+
+      if (invoicesResult.status === 'fulfilled') {
+        setInvoices(invoicesResult.value);
+      } else {
+        console.error('Errore caricamento fatture cliente:', invoicesResult.reason);
+      }
+      setInvoicesFailed(invoicesResult.status === 'rejected');
+
+      if (vehiclesResult.status === 'fulfilled') {
+        setVehicles(vehiclesResult.value);
+      } else {
+        console.error('Errore caricamento veicoli cliente:', vehiclesResult.reason);
+      }
+      setVehiclesFailed(vehiclesResult.status === 'rejected');
+
+      setStatus('ready');
+    } catch (error: any) {
+      if (!isCurrent()) return;
+      console.error('Errore caricamento cliente:', error);
+      // Le regole leggono resource.data: permission-denied arriva anche su un documento
+      // inesistente, quindi non distingue tra cliente assente e cliente di un altro meccanico
+      setStatus(error?.code === 'permission-denied' ? 'accessDenied' : 'error');
+    }
+  }, [customerId, workshopId, loadInvoices, loadVehicles]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const repairs = useMemo<CustomerRepair[]>(() => (
+    vehicles
+      .flatMap(car => (car.repairs || []).map(repair => ({ ...repair, car })))
+      .sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || ''))
+  ), [vehicles]);
+
+  const stats = useMemo(() => ({
+    totalPaid: invoices
+      .filter(invoice => invoice.status === 'paid')
+      .reduce((sum, invoice) => sum + (invoice.totalAmount || 0), 0),
+    pendingInvoices: invoices.filter(invoice => invoice.status === 'sent' || invoice.status === 'overdue').length,
+    completedRepairs: repairs.filter(repair => repair.status === 'completed').length,
+  }), [invoices, repairs]);
+
+  const openLink = async (url: string, failureMessage: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error('Errore apertura collegamento:', error);
+      showAlert('Errore', failureMessage);
+    }
   };
-
-  // Mock data - in produzione verrebbe dal database
-  const customer: Customer = {
-    id: customerId,
-    name: 'Mario Rossi',
-    email: 'mario.rossi@email.com',
-    phone: '+39 333 1234567',
-    address: 'Via Roma 123',
-    city: 'Milano, MI',
-    vatNumber: '12345678901',
-    fiscalCode: 'RSSMRA80A01H501Z',
-    type: 'private',
-    notes: 'Cliente affidabile, preferisce essere contattato via WhatsApp',
-    createdAt: '2023-01-15',
-    totalSpent: 4580.50,
-    activeVehicles: 2,
-    completedServices: 12,
-    pendingInvoices: 1
-  };
-
-  const vehicles: Vehicle[] = [
-    {
-      id: '1',
-      make: 'Fiat',
-      model: '500',
-      year: 2019,
-      licensePlate: 'AB123CD',
-      vin: 'ZFA3120000J123456',
-      lastService: '2025-05-15',
-      totalServices: 8,
-      totalSpent: 2450.00
-    },
-    {
-      id: '2',
-      make: 'Ford',
-      model: 'Focus',
-      year: 2021,
-      licensePlate: 'EF456GH',
-      lastService: '2025-06-01',
-      totalServices: 4,
-      totalSpent: 2130.50
-    }
-  ];
-
-  const invoices: Invoice[] = [
-    {
-      id: '1',
-      number: 'FT-2025-0156',
-      date: '2025-06-01',
-      amount: 380.50,
-      status: 'pending',
-      dueDate: '2025-07-01',
-      vehicleId: '2'
-    },
-    {
-      id: '2',
-      number: 'FT-2025-0142',
-      date: '2025-05-15',
-      amount: 520.00,
-      status: 'paid',
-      vehicleId: '1'
-    }
-  ];
-
-  const services: Service[] = [
-    {
-      id: '1',
-      vehicleId: '2',
-      date: '2025-06-01',
-      description: 'Tagliando completo + cambio filtri',
-      amount: 380.50,
-      status: 'completed',
-      invoiceId: '1'
-    },
-    {
-      id: '2',
-      vehicleId: '1',
-      date: '2025-05-15',
-      description: 'Sostituzione pastiglie freni anteriori',
-      amount: 520.00,
-      status: 'completed',
-      invoiceId: '2'
-    }
-  ];
 
   const handleCall = () => {
-    if (customer.phone) {
-      Linking.openURL(`tel:${customer.phone}`);
+    if (customer?.phone) {
+      openLink(`tel:${customer.phone.replace(/\s+/g, '')}`, 'Impossibile avviare la chiamata');
     }
   };
 
   const handleEmail = () => {
-    if (customer.email) {
-      Linking.openURL(`mailto:${customer.email}`);
+    if (customer?.email) {
+      openLink(`mailto:${customer.email}`, "Impossibile aprire l'email");
     }
   };
 
   const handleWhatsApp = () => {
-    if (customer.phone) {
-      const phoneNumber = customer.phone.replace(/\s+/g, '');
-      Linking.openURL(`whatsapp://send?phone=${phoneNumber}`);
+    if (customer?.phone) {
+      openLink(`https://wa.me/${getWhatsAppNumber(customer.phone)}`, 'Impossibile aprire WhatsApp');
     }
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Elimina Cliente',
-      `Sei sicuro di voler eliminare ${customer.name}? Questa azione eliminerà anche tutti i dati associati.`,
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina',
-          style: 'destructive',
-          onPress: () => {
-            // Logica eliminazione
-            navigation.goBack();
-          }
-        }
-      ]
-    );
+  const openRepair = (carId: string, repairId: string) => {
+    navigation.navigate('RepairPartsManagement', { carId, repairId });
   };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('it-IT', {
       style: 'currency',
       currency: 'EUR'
-    }).format(amount);
+    }).format(amount || 0);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('it-IT', {
+  const formatDate = (dateString?: string) => {
+    const date = dateString ? new Date(dateString) : null;
+    if (!date || isNaN(date.getTime())) return 'Data non indicata';
+    return date.toLocaleDateString('it-IT', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const getStatusColor = (value: string) => {
+    switch (value) {
       case 'paid':
       case 'completed':
         return theme.success;
+      case 'sent':
       case 'pending':
-      case 'in-progress':
-      case 'scheduled':
+      case 'in_progress':
         return theme.warning;
       case 'overdue':
         return theme.error;
@@ -268,310 +301,372 @@ const CustomerDetailScreen = () => {
     }
   };
 
-  const renderInfoTab = () => (
-    <ScrollView showsVerticalScrollIndicator={false}>
-      {/* Contact Info */}
-      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>
-          Informazioni Contatto
-        </Text>
-        
-        <TouchableOpacity 
-          style={styles.infoRow}
-          onPress={handleCall}
-          disabled={!customer.phone}
-        >
-          <Phone size={18} color={theme.textSecondary} />
-          <Text style={[styles.infoText, { color: theme.text }]}>
-            {customer.phone || 'Non specificato'}
-          </Text>
-          {customer.phone && <ChevronRight size={16} color={theme.textSecondary} />}
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.infoRow}
-          onPress={handleEmail}
-          disabled={!customer.email}
-        >
-          <Mail size={18} color={theme.textSecondary} />
-          <Text style={[styles.infoText, { color: theme.text }]}>
-            {customer.email || 'Non specificato'}
-          </Text>
-          {customer.email && <ChevronRight size={16} color={theme.textSecondary} />}
-        </TouchableOpacity>
-        
-        <View style={styles.infoRow}>
-          <MapPin size={18} color={theme.textSecondary} />
-          <View style={styles.addressContainer}>
-            <Text style={[styles.infoText, { color: theme.text }]}>
-              {customer.address || 'Non specificato'}
-            </Text>
-            {customer.city && (
-              <Text style={[styles.cityText, { color: theme.textSecondary }]}>
-                {customer.city}
-              </Text>
-            )}
-          </View>
-        </View>
-      </View>
-
-      {/* Fiscal Info */}
-      {(customer.vatNumber || customer.fiscalCode) && (
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>
-            Dati Fiscali
-          </Text>
-          
-          {customer.vatNumber && (
-            <View style={styles.infoRow}>
-              <Building size={18} color={theme.textSecondary} />
-              <View>
-                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
-                  Partita IVA
-                </Text>
-                <Text style={[styles.infoText, { color: theme.text }]}>
-                  {customer.vatNumber}
-                </Text>
-              </View>
-            </View>
-          )}
-          
-          {customer.fiscalCode && (
-            <View style={styles.infoRow}>
-              <Hash size={18} color={theme.textSecondary} />
-              <View>
-                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
-                  Codice Fiscale
-                </Text>
-                <Text style={[styles.infoText, { color: theme.text }]}>
-                  {customer.fiscalCode}
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Notes */}
-      {customer.notes && (
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>
-            Note
-          </Text>
-          <Text style={[styles.notesText, { color: theme.textSecondary }]}>
-            {customer.notes}
-          </Text>
-        </View>
-      )}
-
-      {/* Quick Actions */}
-      <View style={styles.quickActions}>
-        <TouchableOpacity
-          style={[styles.quickActionButton, { backgroundColor: theme.accent }]}
-          onPress={() => navigation.navigate('CreateInvoice', { customerId: customer.id })}
-        >
-          <FileText size={20} color="#ffffff" />
-          <Text style={styles.quickActionText}>Nuova Fattura</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.quickActionButton, { backgroundColor: theme.success }]}
-          onPress={handleWhatsApp}
-        >
-          <Phone size={20} color="#ffffff" />
-          <Text style={styles.quickActionText}>WhatsApp</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+  const renderLoadError = (title: string, subtitle = 'Controlla la connessione e riprova') => (
+    <MechanicEmptyState
+      icon={AlertCircle}
+      title={title}
+      subtitle={subtitle}
+      actionLabel="Riprova"
+      onAction={loadData}
+    />
   );
 
-  const renderVehicleCard = (vehicle: Vehicle) => (
-    <TouchableOpacity
-      key={vehicle.id}
-      style={[styles.vehicleCard, { backgroundColor: theme.cardBackground }]}
-      onPress={() => navigation.navigate('CarDetail', { carId: vehicle.id })}
-      activeOpacity={0.8}
-    >
-      <View style={styles.vehicleHeader}>
-        <View>
-          <Text style={[styles.vehicleName, { color: theme.text }]}>
-            {vehicle.make} {vehicle.model}
+  const renderInfoTab = (current: CustomerDetail) => {
+    const hasAddress = !!(current.address || current.cityLine);
+    const hasFiscalData = !!(current.vatNumber || current.fiscalCode || current.sdiCode || current.pecEmail);
+
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.infoContent}>
+        {/* Contact Info */}
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>
+            Informazioni Contatto
           </Text>
-          <Text style={[styles.vehicleInfo, { color: theme.textSecondary }]}>
-            {vehicle.year} • {vehicle.licensePlate}
-          </Text>
+
+          {current.phone && (
+            <TouchableOpacity
+              style={styles.infoRow}
+              onPress={handleCall}
+              accessibilityRole="button"
+              accessibilityLabel={`Chiama ${current.phone}`}
+            >
+              <Phone size={18} color={theme.textSecondary} />
+              <Text style={[styles.infoText, { color: theme.text }]}>
+                {current.phone}
+              </Text>
+              <ChevronRight size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+
+          {current.email && (
+            <TouchableOpacity
+              style={styles.infoRow}
+              onPress={handleEmail}
+              accessibilityRole="button"
+              accessibilityLabel={`Scrivi a ${current.email}`}
+            >
+              <Mail size={18} color={theme.textSecondary} />
+              <Text style={[styles.infoText, { color: theme.text }]}>
+                {current.email}
+              </Text>
+              <ChevronRight size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+
+          {hasAddress && (
+            <View style={styles.infoRow}>
+              <MapPin size={18} color={theme.textSecondary} />
+              <View style={styles.addressContainer}>
+                {current.address && (
+                  <Text style={[styles.infoText, { color: theme.text }]}>
+                    {current.address}
+                  </Text>
+                )}
+                {current.cityLine && (
+                  <Text style={[styles.cityText, { color: theme.textSecondary }]}>
+                    {current.cityLine}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {!current.phone && !current.email && !hasAddress && (
+            <Text style={[styles.notesText, { color: theme.textSecondary }]}>
+              Nessun recapito registrato
+            </Text>
+          )}
         </View>
-        <ChevronRight size={20} color={theme.textSecondary} />
-      </View>
-      
-      <View style={styles.vehicleStats}>
-        <View style={styles.vehicleStat}>
-          <Wrench size={16} color={theme.textSecondary} />
-          <Text style={[styles.vehicleStatText, { color: theme.textSecondary }]}>
-            {vehicle.totalServices} servizi
-          </Text>
-        </View>
-        <View style={styles.vehicleStat}>
-          <DollarSign size={16} color={theme.textSecondary} />
-          <Text style={[styles.vehicleStatText, { color: theme.textSecondary }]}>
-            {formatCurrency(vehicle.totalSpent)}
-          </Text>
-        </View>
-        {vehicle.lastService && (
-          <View style={styles.vehicleStat}>
-            <Calendar size={16} color={theme.textSecondary} />
-            <Text style={[styles.vehicleStatText, { color: theme.textSecondary }]}>
-              {formatDate(vehicle.lastService)}
+
+        {/* Fiscal Info */}
+        {hasFiscalData && (
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Dati Fiscali
+            </Text>
+
+            {([
+              { label: 'Partita IVA', value: current.vatNumber, icon: Building },
+              { label: 'Codice Fiscale', value: current.fiscalCode, icon: Hash },
+              { label: 'Codice SDI', value: current.sdiCode, icon: Hash },
+              { label: 'Email PEC', value: current.pecEmail, icon: Mail },
+            ]).filter(row => row.value).map(({ label, value, icon: Icon }) => (
+              <View key={label} style={styles.infoRow}>
+                <Icon size={18} color={theme.textSecondary} />
+                <View style={styles.addressContainer}>
+                  <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+                    {label}
+                  </Text>
+                  <Text style={[styles.infoText, { color: theme.text }]}>
+                    {value}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Notes */}
+        {current.notes && (
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Note
+            </Text>
+            <Text style={[styles.notesText, { color: theme.textSecondary }]}>
+              {current.notes}
             </Text>
           </View>
         )}
-      </View>
-    </TouchableOpacity>
-  );
 
-  const renderInvoiceCard = (invoice: Invoice) => {
-    const StatusIcon = invoice.status === 'paid' ? CheckCircle : 
-                      invoice.status === 'overdue' ? AlertCircle : Clock;
-    const statusColor = getStatusColor(invoice.status);
-    
+        {/* Quick Actions */}
+        <View style={styles.quickActions}>
+          <TouchableOpacity
+            style={[styles.quickActionButton, { backgroundColor: theme.primary }]}
+            onPress={() => navigation.navigate('CreateInvoice', { customerId: current.id })}
+            accessibilityRole="button"
+          >
+            <FileText size={20} color={theme.onPrimary} />
+            <Text style={styles.quickActionText}>Nuova Fattura</Text>
+          </TouchableOpacity>
+
+          {current.phone && (
+            <TouchableOpacity
+              style={[styles.quickActionButton, { backgroundColor: theme.success }]}
+              onPress={handleWhatsApp}
+              accessibilityRole="button"
+            >
+              <Phone size={20} color={theme.onPrimary} />
+              <Text style={styles.quickActionText}>WhatsApp</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
+
+  const renderVehicleCard = (vehicle: WorkshopCar) => {
+    const carRepairs = repairs.filter(repair => repair.car.id === vehicle.id);
+    const lastRepair = carRepairs[0];
+    const details = [vehicle.year, vehicle.licensePlate].filter(Boolean).join(' • ');
+
+    const content = (
+      <>
+        <View style={styles.vehicleHeader}>
+          <View style={styles.addressContainer}>
+            <Text style={[styles.vehicleName, { color: theme.text }]}>
+              {vehicle.make} {vehicle.model}
+            </Text>
+            <Text style={[styles.vehicleInfo, { color: theme.textSecondary }]}>
+              {details}
+            </Text>
+          </View>
+          {lastRepair && <ChevronRight size={20} color={theme.textSecondary} />}
+        </View>
+
+        <View style={styles.vehicleStats}>
+          <View style={styles.vehicleStat}>
+            <Wrench size={16} color={theme.textSecondary} />
+            <Text style={[styles.vehicleStatText, { color: theme.textSecondary }]}>
+              {carRepairs.length === 1 ? '1 intervento' : `${carRepairs.length} interventi`}
+            </Text>
+          </View>
+          {lastRepair && (
+            <View style={styles.vehicleStat}>
+              <Calendar size={16} color={theme.textSecondary} />
+              <Text style={[styles.vehicleStatText, { color: theme.textSecondary }]}>
+                {formatDate(lastRepair.scheduledDate)}
+              </Text>
+            </View>
+          )}
+        </View>
+      </>
+    );
+
+    const cardStyle = [styles.vehicleCard, { backgroundColor: theme.surface, borderColor: theme.border }];
+
+    // La scheda veicolo CarDetail legge solo la collezione vehicles: si apre l'ultimo intervento
+    if (!lastRepair) {
+      return <View style={cardStyle}>{content}</View>;
+    }
+
     return (
       <TouchableOpacity
-        key={invoice.id}
-        style={[styles.invoiceCard, { backgroundColor: theme.cardBackground }]}
-        onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
+        style={cardStyle}
+        onPress={() => openRepair(vehicle.id, lastRepair.id)}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`Apri ultimo intervento di ${vehicle.make} ${vehicle.model}`}
       >
+        {content}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderInvoiceCard = (invoice: Invoice) => {
+    const StatusIcon = invoice.status === 'paid' ? CheckCircle :
+                      invoice.status === 'overdue' ? AlertCircle : Clock;
+    const statusColor = getStatusColor(invoice.status);
+
+    // InvoiceDetail è ancora un segnaposto: la card resta informativa
+    return (
+      <View style={[styles.invoiceCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={styles.invoiceHeader}>
-          <View>
+          <View style={styles.addressContainer}>
             <Text style={[styles.invoiceNumber, { color: theme.text }]}>
               {invoice.number}
             </Text>
             <Text style={[styles.invoiceDate, { color: theme.textSecondary }]}>
-              {formatDate(invoice.date)}
+              {formatDate(invoice.issueDate)}
             </Text>
           </View>
           <View style={styles.invoiceRight}>
             <Text style={[styles.invoiceAmount, { color: theme.text }]}>
-              {formatCurrency(invoice.amount)}
+              {formatCurrency(invoice.totalAmount)}
             </Text>
             <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
               <StatusIcon size={14} color={statusColor} />
               <Text style={[styles.statusText, { color: statusColor }]}>
-                {invoice.status === 'paid' ? 'Pagata' : 
-                 invoice.status === 'pending' ? 'In attesa' : 'Scaduta'}
+                {INVOICE_STATUS_LABELS[invoice.status] || invoice.status}
               </Text>
             </View>
           </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderRepairCard = (repair: CustomerRepair) => {
+    const statusColor = getStatusColor(repair.status);
+
+    return (
+      <TouchableOpacity
+        style={[styles.serviceCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        onPress={() => openRepair(repair.car.id, repair.id)}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`Apri intervento: ${repair.description}`}
+      >
+        <View style={styles.serviceHeader}>
+          <View style={styles.addressContainer}>
+            <Text style={[styles.serviceDescription, { color: theme.text }]}>
+              {repair.description}
+            </Text>
+            <Text style={[styles.serviceVehicle, { color: theme.textSecondary }]}>
+              {repair.car.make} {repair.car.model} • {repair.car.licensePlate}
+            </Text>
+          </View>
+          {repair.totalCost > 0 && (
+            <Text style={[styles.serviceAmount, { color: theme.text }]}>
+              {formatCurrency(repair.totalCost)}
+            </Text>
+          )}
+        </View>
+        <View style={styles.serviceFooter}>
+          <Text style={[styles.serviceDate, { color: theme.textSecondary }]}>
+            {formatDate(repair.scheduledDate)}
+          </Text>
+          <Text style={[styles.statusText, { color: statusColor }]}>
+            {REPAIR_STATUS_LABELS[repair.status] || repair.status}
+          </Text>
         </View>
       </TouchableOpacity>
     );
   };
 
-  const renderServiceCard = (service: Service) => {
-    const vehicle = vehicles.find(v => v.id === service.vehicleId);
-    
+  const statusBar = (
+    <StatusBar
+      barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+      backgroundColor={theme.background}
+    />
+  );
+
+  if (status !== 'ready' || !customer) {
     return (
-      <View
-        key={service.id}
-        style={[styles.serviceCard, { backgroundColor: theme.cardBackground }]}
-      >
-        <View style={styles.serviceHeader}>
-          <View>
-            <Text style={[styles.serviceDescription, { color: theme.text }]}>
-              {service.description}
-            </Text>
-            <Text style={[styles.serviceVehicle, { color: theme.textSecondary }]}>
-              {vehicle?.make} {vehicle?.model} • {vehicle?.licensePlate}
-            </Text>
-          </View>
-          <Text style={[styles.serviceAmount, { color: theme.text }]}>
-            {formatCurrency(service.amount)}
-          </Text>
-        </View>
-        <View style={styles.serviceFooter}>
-          <Text style={[styles.serviceDate, { color: theme.textSecondary }]}>
-            {formatDate(service.date)}
-          </Text>
-          {service.invoiceId && (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: service.invoiceId })}
-            >
-              <Text style={[styles.invoiceLink, { color: theme.accent }]}>
-                Vedi fattura →
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        {statusBar}
+        <MechanicHeader title="Dettaglio Cliente" onBack={() => navigation.goBack()} />
+        {status === 'notFound' ? (
+          <MechanicEmptyState
+            icon={User}
+            title="Cliente non trovato"
+            subtitle="Il cliente non esiste più o non appartiene alla tua officina"
+            actionLabel="Torna indietro"
+            onAction={() => navigation.goBack()}
+          />
+        ) : status === 'accessDenied' ? (
+          renderLoadError(
+            'Impossibile accedere a questo cliente',
+            'La scheda potrebbe non essere più disponibile o non essere accessibile dal tuo account'
+          )
+        ) : status === 'error' ? (
+          renderLoadError('Impossibile caricare il cliente')
+        ) : (
+          <MechanicLoadingState text="Caricamento cliente..." />
+        )}
+      </SafeAreaView>
     );
-  };
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar
-        barStyle={darkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.background}
-      />
+      {statusBar}
 
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <View style={styles.headerLeft}>
-          <View style={[styles.avatar, { backgroundColor: theme.accent }]}>
+      <MechanicHeader
+        title={customer.name}
+        subtitle={`Cliente ${customer.isCompany ? 'Business' : 'Privato'}`}
+        onBack={() => navigation.goBack()}
+        leading={
+          <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
             <Text style={styles.avatarText}>
-              {customer.name.split(' ').map(n => n[0]).join('')}
+              {getInitials(customer.name)}
             </Text>
           </View>
-          <View>
-            <Text style={[styles.customerName, { color: theme.text }]}>
-              {customer.name}
-            </Text>
-            <Text style={[styles.customerType, { color: theme.textSecondary }]}>
-              Cliente {customer.type === 'business' ? 'Business' : 'Privato'}
-            </Text>
-          </View>
-        </View>
-        
-        <TouchableOpacity
-          style={styles.moreButton}
-          onPress={() => setShowOptionsMenu(true)}
-        >
-          <MoreVertical size={24} color={theme.text} />
-        </TouchableOpacity>
-      </View>
+        }
+        right={
+          <TouchableOpacity
+            style={styles.moreButton}
+            onPress={() => navigation.navigate('EditCustomer', { customerId: customer.id })}
+            accessibilityRole="button"
+            accessibilityLabel="Modifica cliente"
+          >
+            <Edit size={24} color={theme.text} />
+          </TouchableOpacity>
+        }
+      />
 
       {/* Stats */}
       <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.statValue, { color: theme.accent }]}>
-            {formatCurrency(customer.totalSpent)}
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.statValue, { color: theme.primary }]}>
+            {invoicesFailed ? '—' : formatCurrency(stats.totalPaid)}
           </Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-            Totale Speso
+            Totale Pagato
           </Text>
         </View>
-        
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground }]}>
+
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.statValue, { color: theme.success }]}>
-            {customer.activeVehicles}
+            {vehiclesFailed ? '—' : vehicles.length}
           </Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
             Veicoli Attivi
           </Text>
         </View>
-        
-        <View style={[styles.statCard, { backgroundColor: theme.cardBackground }]}>
-          <Text style={[styles.statValue, { color: theme.info }]}>
-            {customer.completedServices}
+
+        <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.statValue, { color: theme.primary }]}>
+            {vehiclesFailed ? '—' : stats.completedRepairs}
           </Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-            Servizi Completati
+            Interventi Completati
           </Text>
         </View>
-        
-        {customer.pendingInvoices > 0 && (
-          <View style={[styles.statCard, { backgroundColor: theme.warning + '10' }]}>
+
+        {!invoicesFailed && stats.pendingInvoices > 0 && (
+          <View style={[styles.statCard, { backgroundColor: theme.warning + '10', borderColor: theme.border }]}>
             <Text style={[styles.statValue, { color: theme.warning }]}>
-              {customer.pendingInvoices}
+              {stats.pendingInvoices}
             </Text>
             <Text style={[styles.statLabel, { color: theme.warning }]}>
               Fatture in Attesa
@@ -581,19 +676,21 @@ const CustomerDetailScreen = () => {
       </View>
 
       {/* Tabs */}
-      <View style={styles.tabs}>
+      <View style={styles.tabs} accessibilityRole="tablist">
         {(['info', 'vehicles', 'invoices', 'history'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
             style={[
               styles.tab,
-              activeTab === tab && { borderBottomColor: theme.accent }
+              activeTab === tab && { borderBottomColor: theme.primary }
             ]}
             onPress={() => setActiveTab(tab)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === tab }}
           >
             <Text style={[
               styles.tabText,
-              { color: activeTab === tab ? theme.accent : theme.textSecondary }
+              { color: activeTab === tab ? theme.primary : theme.textSecondary }
             ]}>
               {tab === 'info' ? 'Info' :
                tab === 'vehicles' ? 'Veicoli' :
@@ -605,122 +702,59 @@ const CustomerDetailScreen = () => {
 
       {/* Tab Content */}
       <View style={styles.tabContent}>
-        {activeTab === 'info' && renderInfoTab()}
-        
-        {activeTab === 'vehicles' && (
+        {activeTab === 'info' && renderInfoTab(customer)}
+
+        {activeTab === 'vehicles' && (vehiclesFailed ? renderLoadError('Impossibile caricare i veicoli') : (
           <FlatList
             data={vehicles}
             renderItem={({ item }) => renderVehicleCard(item)}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            ListHeaderComponent={
-              <TouchableOpacity
-                style={[styles.addButton, { borderColor: theme.accent }]}
-                onPress={() => navigation.navigate('AddCar', { customerId: customer.id })}
-              >
-                <Plus size={20} color={theme.accent} />
-                <Text style={[styles.addButtonText, { color: theme.accent }]}>
-                  Aggiungi Veicolo
-                </Text>
-              </TouchableOpacity>
+            ListEmptyComponent={
+              <MechanicEmptyState
+                icon={Car}
+                title="Nessun veicolo collegato"
+                subtitle="I veicoli registrati in officina per questo cliente compariranno qui"
+              />
             }
           />
-        )}
-        
-        {activeTab === 'invoices' && (
+        ))}
+
+        {activeTab === 'invoices' && (invoicesFailed ? renderLoadError('Impossibile caricare le fatture') : (
           <FlatList
             data={invoices}
             renderItem={({ item }) => renderInvoiceCard(item)}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <MechanicEmptyState
+                icon={FileText}
+                title="Nessuna fattura"
+                subtitle="Le fatture emesse per questo cliente compariranno qui"
+              />
+            }
           />
-        )}
-        
-        {activeTab === 'history' && (
+        ))}
+
+        {activeTab === 'history' && (vehiclesFailed ? renderLoadError('Impossibile caricare lo storico') : (
           <FlatList
-            data={services}
-            renderItem={({ item }) => renderServiceCard(item)}
-            keyExtractor={(item) => item.id}
+            data={repairs}
+            renderItem={({ item }) => renderRepairCard(item)}
+            keyExtractor={(item) => `${item.car.id}_${item.id}`}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <MechanicEmptyState
+                icon={Wrench}
+                title="Nessun intervento"
+                subtitle="Gli interventi sui veicoli collegati a questo cliente compariranno qui"
+              />
+            }
           />
-        )}
+        ))}
       </View>
-
-      {/* Options Modal */}
-      <Modal
-        visible={showOptionsMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowOptionsMenu(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowOptionsMenu(false)}
-        >
-          <View 
-            style={[styles.optionsMenu, { backgroundColor: theme.cardBackground }]}
-            onStartShouldSetResponder={() => true}
-          >
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
-                setShowOptionsMenu(false);
-                navigation.navigate('EditCustomer', { customerId: customer.id });
-              }}
-            >
-              <Edit size={20} color={theme.text} />
-              <Text style={[styles.optionText, { color: theme.text }]}>
-                Modifica Cliente
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
-                setShowOptionsMenu(false);
-                // Export logic
-              }}
-            >
-              <Download size={20} color={theme.text} />
-              <Text style={[styles.optionText, { color: theme.text }]}>
-                Esporta Dati
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
-                setShowOptionsMenu(false);
-                // Share logic
-              }}
-            >
-              <Share2 size={20} color={theme.text} />
-              <Text style={[styles.optionText, { color: theme.text }]}>
-                Condividi Contatto
-              </Text>
-            </TouchableOpacity>
-            
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => {
-                setShowOptionsMenu(false);
-                handleDelete();
-              }}
-            >
-              <Trash2 size={20} color={theme.error} />
-              <Text style={[styles.optionText, { color: theme.error }]}>
-                Elimina Cliente
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -728,19 +762,6 @@ const CustomerDetailScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
   },
   avatar: {
     width: 48,
@@ -752,19 +773,9 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#ffffff',
+    color: mechanicStaticColors.onPrimary,
   },
-  customerName: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  customerType: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  moreButton: {
-    padding: 8,
-  },
+  moreButton: mechanicButton.icon,
   statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -772,15 +783,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statCard: {
+    ...mechanicCard,
     flex: 1,
     minWidth: '45%',
-    padding: 16,
-    borderRadius: 12,
     alignItems: 'center',
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   statValue: {
     fontSize: 20,
@@ -794,7 +800,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: mechanicStaticColors.divider,
   },
   tab: {
     flex: 1,
@@ -813,11 +819,14 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 20,
   },
+  infoContent: {
+    paddingTop: 16,
+  },
   card: {
     marginHorizontal: 20,
     marginBottom: 16,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 20,
     elevation: 2,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -860,27 +869,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   quickActionButton: {
+    ...mechanicButton.primary,
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
   },
   quickActionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: mechanicStaticColors.onPrimary,
   },
   vehicleCard: {
+    ...mechanicCard,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   vehicleHeader: {
     flexDirection: 'row',
@@ -909,13 +908,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   invoiceCard: {
+    ...mechanicCard,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   invoiceHeader: {
     flexDirection: 'row',
@@ -950,13 +944,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   serviceCard: {
+    ...mechanicCard,
     marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   serviceHeader: {
     flexDirection: 'row',
@@ -982,53 +971,6 @@ const styles = StyleSheet.create({
   },
   serviceDate: {
     fontSize: 12,
-  },
-  invoiceLink: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderRadius: 12,
-    borderStyle: 'dashed',
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  optionsMenu: {
-    margin: 20,
-    padding: 8,
-    borderRadius: 16,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderRadius: 8,
-  },
-  optionText: {
-    fontSize: 16,
-  },
-  divider: {
-    height: 1,
-    marginVertical: 4,
   },
 });
 
