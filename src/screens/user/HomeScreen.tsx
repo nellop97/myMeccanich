@@ -1,3015 +1,809 @@
 // src/screens/user/HomeScreen.tsx
-// HomeScreen completa per Owner con Firebase + Responsive + Dark Mode
-
-import React, { useState, useEffect, useCallback } from 'react';
+// Home del proprietario: il veicolo, cosa c'è da fare e la prossima prenotazione
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    View,
-    Text,
-    ScrollView,
-    TouchableOpacity,
-    Image,
-    StyleSheet,
-    SafeAreaView,
-    StatusBar,
-    Platform,
-    RefreshControl,
     ActivityIndicator,
-    useWindowDimensions,
-    Alert,
-    Modal,
-    Animated,
+    Image,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import {
-    Plus,
-    Car,
-    Wrench,
-    Calendar,
-    DollarSign,
-    Fuel,
     AlertCircle,
-    TrendingUp,
+    Calendar,
+    Car,
     ChevronRight,
-    ChevronDown,
-    ChevronUp,
-    Bell,
+    DollarSign,
     Eye,
-    Settings as SettingsIcon,
-    Menu,
+    Fuel,
+    LucideIcon,
+    Plus,
+    Repeat,
     Search,
-    Package,
-    X,
+    Settings,
+    Wrench,
 } from 'lucide-react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { useAppThemeManager } from '../../hooks/useTheme';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 
-// Firebase
-import {
-    collection,
-    query,
-    where,
-    orderBy,
-    limit,
-    getDocs,
-    onSnapshot,
-} from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useStore } from '../../store';
-
-// Services
-import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
+import BookingService from '../../services/BookingService';
 import { TransferService } from '../../services/TransferService';
-
-// Components
+import { VehicleViewRequestService } from '../../services/VehicleViewRequestService';
 import TransferAcceptanceModal from '../../components/TransferAcceptanceModal';
+import { BookingRequest, VehicleTransfer } from '../../types/database.types';
+import { MechanicTheme, mechanicCard, mechanicRadius, useMechanicBreakpoints, useMechanicTheme } from '../mechanic/mechanicTheme';
+import UserLayout from './UserLayout';
+import { bookingNeedsUserAction, getBookingStatusLabel, isBookingOpen } from './bookingStatus';
 
-// Types
-import { VehicleTransfer } from '../../types/database.types';
-
-// ============================================
-// INTERFACES
-// ============================================
 interface Vehicle {
     id: string;
     make: string;
     model: string;
     year: number;
     licensePlate: string;
-    mileage: number;
+    mileage?: number;
+    currentMileage?: number;
     imageUrl?: string;
     mainImageUrl?: string;
-    color?: string;
-    ownerId: string;
-    fuel?: string;
 }
 
 interface Deadline {
     id: string;
     vehicleId: string;
-    type: 'insurance' | 'revision' | 'roadTax' | 'maintenance';
     description: string;
     dueDate: any;
-    amount?: number;
-    status: 'active' | 'completed' | 'overdue';
-    priority: 'low' | 'medium' | 'high';
 }
 
 interface RecentActivity {
     id: string;
-    vehicleId: string;
-    type: 'maintenance' | 'fuel' | 'expense';
     description: string;
     date: any;
-    cost: number;
-    workshopName?: string;
+    cost?: number;
 }
 
-interface MonthlyStats {
-    totalExpenses: number;
-    totalFuel: number;
-    totalMaintenance: number;
-    totalKm: number;
+interface TodoItem {
+    id: string;
+    icon: LucideIcon;
+    title: string;
+    subtitle: string;
+    tone: 'primary' | 'warning' | 'error';
+    onPress: () => void;
 }
 
-// ============================================
-// HOMESCREEN COMPONENT
-// ============================================
-const HomeScreen = () => {
-    const navigation = useNavigation();
-    const { user } = useStore();
-    const { colors, isDark } = useAppThemeManager();
-    const { width } = useWindowDimensions();
+const toDate = (value: any): Date => value?.toDate?.() || new Date(value);
 
-    // Responsive
-    const isDesktop = width >= 1024;
-    const isTablet = width >= 768 && width < 1024;
-    const isMobile = width < 768;
+const formatShortDate = (value: any) =>
+    toDate(value).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
 
-    // Stati
-    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-    const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
-    const [deadlines, setDeadlines] = useState<Deadline[]>([]);
-    const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
-    const [monthlyStats, setMonthlyStats] = useState<MonthlyStats>({
-        totalExpenses: 0,
-        totalFuel: 0,
-        totalMaintenance: 0,
-        totalKm: 0,
+const formatBookingDate = (value: any) =>
+    toDate(value).toLocaleDateString('it-IT', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
     });
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+
+const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
+
+const getDaysUntil = (value: any) =>
+    Math.ceil((toDate(value).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+const Section = ({ title, theme, children }: { title: string; theme: MechanicTheme; children: React.ReactNode }) => (
+    <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]} accessibilityRole="header">
+            {title}
+        </Text>
+        {children}
+    </View>
+);
+
+const HomeScreen = () => {
+    const navigation = useNavigation<any>();
+    const { user } = useStore();
+    const theme = useMechanicTheme();
+    const { isDesktop, isMobile } = useMechanicBreakpoints();
+
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+    const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+    const [activities, setActivities] = useState<RecentActivity[]>([]);
+    const [bookings, setBookings] = useState<BookingRequest[]>([]);
     const [pendingViewRequests, setPendingViewRequests] = useState(0);
-    const [approvedViewRequests, setApprovedViewRequests] = useState(0);
-    const [pendingTransferRequests, setPendingTransferRequests] = useState(0);
-    const [activeTransfers, setActiveTransfers] = useState<VehicleTransfer[]>([]);
-    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [transfers, setTransfers] = useState<VehicleTransfer[]>([]);
     const [selectedTransfer, setSelectedTransfer] = useState<VehicleTransfer | null>(null);
-    const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
-    const [isTabSectionExpanded, setIsTabSectionExpanded] = useState(true);
-    const [tabSectionHeight] = useState(new Animated.Value(1));
+    const [loading, setLoading] = useState(true);
+    const [loadFailed, setLoadFailed] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
 
-    // Dynamic theme colors
-    const themeColors = React.useMemo(() => ({
-        background: colors.background,
-        surface: colors.surface,
-        cardBackground: colors.surfaceVariant, // Grigio per le cards
-        text: colors.onSurface,
-        textSecondary: colors.onSurfaceVariant,
-        border: colors.outline,
-        primary: colors.primary,
-        error: colors.error,
-    }), [colors]);
+    const loadSecondaryData = async (vehicleIds: string[]) => {
+        const [deadlineDocs, activityDocs, viewRequests, activeTransfers] = await Promise.allSettled([
+            vehicleIds.length > 0
+                ? getDocs(query(
+                    collection(db, 'deadlines'),
+                    where('vehicleId', 'in', vehicleIds.slice(0, 30)),
+                    where('status', '==', 'active'),
+                    orderBy('dueDate', 'asc'),
+                    limit(10)
+                ))
+                : Promise.resolve(null),
+            vehicleIds.length > 0
+                ? getDocs(query(
+                    collection(db, 'activities'),
+                    where('vehicleId', 'in', vehicleIds.slice(0, 30)),
+                    orderBy('date', 'desc'),
+                    limit(5)
+                ))
+                : Promise.resolve(null),
+            user?.id ? VehicleViewRequestService.getInstance().getIncomingRequests(user.id) : Promise.resolve([]),
+            user?.email ? TransferService.getInstance().getActiveTransfers(user.email) : Promise.resolve([]),
+        ]);
 
-    // ============================================
-    // LOAD DATA
-    // ============================================
+        if (deadlineDocs.status === 'fulfilled' && deadlineDocs.value) {
+            setDeadlines(deadlineDocs.value.docs.map((d) => ({ id: d.id, ...d.data() })) as Deadline[]);
+        }
+        if (activityDocs.status === 'fulfilled' && activityDocs.value) {
+            setActivities(activityDocs.value.docs.map((d) => ({ id: d.id, ...d.data() })) as RecentActivity[]);
+        }
+        if (viewRequests.status === 'fulfilled') {
+            setPendingViewRequests(viewRequests.value.filter((r) => r.status === 'pending').length);
+        }
+        if (activeTransfers.status === 'fulfilled') {
+            setTransfers(activeTransfers.value);
+        }
+    };
+
     const loadData = useCallback(async () => {
         if (!user?.id) return;
 
         try {
-            setLoading(true);
-
-            // Carica veicoli
-            const vehiclesQuery = query(
+            setLoadFailed(false);
+            const snapshot = await getDocs(query(
                 collection(db, 'vehicles'),
                 where('ownerId', '==', user.id),
                 where('isActive', '==', true)
+            ));
+
+            const vehiclesList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as Vehicle[];
+            setVehicles(vehiclesList);
+            setSelectedVehicleId((current) =>
+                current && vehiclesList.some((v) => v.id === current) ? current : vehiclesList[0]?.id ?? null
             );
 
-            const vehiclesSnapshot = await getDocs(vehiclesQuery);
-            const vehiclesList = vehiclesSnapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            })) as Vehicle[];
-
-            setVehicles(vehiclesList);
-
-            // Seleziona primo veicolo se disponibile
-            if (vehiclesList.length > 0 && !selectedVehicle) {
-                setSelectedVehicle(vehiclesList[0]);
-            }
-
-            // Carica scadenze
-            if (vehiclesList.length > 0) {
-                await loadDeadlines(vehiclesList);
-                await loadRecentActivities(vehiclesList);
-                await calculateMonthlyStats(vehiclesList);
-            }
-
-            // Carica richieste di visualizzazione pendenti
-            await loadPendingViewRequests();
-
-            // Carica richieste di trasferimento pendenti
-            await loadPendingTransferRequests();
+            // Il veicolo si mostra subito: il resto non deve tenere ferma la pagina
+            setLoading(false);
+            await loadSecondaryData(vehiclesList.map((v) => v.id));
         } catch (error) {
-            console.error('Error loading data:', error);
-            Alert.alert('Errore', 'Impossibile caricare i dati');
+            console.error('Errore caricamento Home:', error);
+            setLoadFailed(true);
         } finally {
             setLoading(false);
         }
-    }, [user?.id, selectedVehicle]);
+    }, [user?.id, user?.email]);
 
-    const loadDeadlines = async (vehiclesList: Vehicle[]) => {
-        try {
-            const vehicleIds = vehiclesList.map((v) => v.id);
-            const deadlinesQuery = query(
-                collection(db, 'deadlines'),
-                where('vehicleId', 'in', vehicleIds),
-                where('status', '==', 'active'),
-                orderBy('dueDate', 'asc'),
-                limit(10)
-            );
-
-            const snapshot = await getDocs(deadlinesQuery);
-            const deadlinesList = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            })) as Deadline[];
-
-            setDeadlines(deadlinesList);
-        } catch (error) {
-            console.error('Error loading deadlines:', error);
-        }
-    };
-
-    const loadRecentActivities = async (vehiclesList: Vehicle[]) => {
-        try {
-            const vehicleIds = vehiclesList.map((v) => v.id);
-            const activitiesQuery = query(
-                collection(db, 'activities'),
-                where('vehicleId', 'in', vehicleIds),
-                orderBy('date', 'desc'),
-                limit(10)
-            );
-
-            const snapshot = await getDocs(activitiesQuery);
-            const activitiesList = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            })) as RecentActivity[];
-
-            setRecentActivities(activitiesList);
-        } catch (error) {
-            console.error('Error loading activities:', error);
-        }
-    };
-
-    const calculateMonthlyStats = async (vehiclesList: Vehicle[]) => {
-        // TODO: Implementa calcolo stats del mese corrente
-        // Per ora dati mock
-        setMonthlyStats({
-            totalExpenses: 450.50,
-            totalFuel: 180.00,
-            totalMaintenance: 270.50,
-            totalKm: 1250,
-        });
-    };
-
-    const loadPendingViewRequests = async () => {
-        try {
-            if (!user?.id || !user?.email) {
-                console.log('⚠️ No user ID or email, skipping view requests load');
-                return;
-            }
-
-            console.log('📥 Loading view requests for user:', user.id, user.email);
-            const viewRequestService = VehicleViewRequestService.getInstance();
-
-            // Carica richieste ricevute (come proprietario)
-            const incomingRequests = await viewRequestService.getIncomingRequests(user.id);
-            console.log('📋 Total incoming requests:', incomingRequests.length);
-            const pendingCount = incomingRequests.filter(r => r.status === 'pending').length;
-            console.log('🔔 Pending incoming requests:', pendingCount);
-            setPendingViewRequests(pendingCount);
-
-            // Carica richieste inviate (come acquirente)
-            const myRequests = await viewRequestService.getMyRequests(user.email);
-            console.log('📤 Total my requests:', myRequests.length);
-            const approvedCount = myRequests.filter(r => r.status === 'approved').length;
-            console.log('✅ Approved my requests:', approvedCount);
-            setApprovedViewRequests(approvedCount);
-        } catch (error: any) {
-            // Ignora errori di permessi Firebase - le regole potrebbero non essere ancora configurate
-            if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
-                console.warn('⚠️ Firestore rules not configured. Run: firebase deploy --only firestore:rules');
-                setPendingViewRequests(0);
-                setApprovedViewRequests(0);
-            } else if (error?.message?.includes('index')) {
-                console.warn('⚠️ Firestore index required. Click the link in the error or deploy indexes: firebase deploy --only firestore:indexes');
-                console.error('Error loading view requests:', error);
-                setPendingViewRequests(0);
-                setApprovedViewRequests(0);
-            } else {
-                console.error('❌ Error loading view requests:', error);
-            }
-        }
-    };
-
-    const loadPendingTransferRequests = async () => {
-        try {
-            if (!user?.email) {
-                console.log('⚠️ No user email, skipping transfer requests load');
-                return;
-            }
-
-            console.log('🚗 Loading transfer requests for user:', user.email);
-            const transferService = TransferService.getInstance();
-
-            // Carica richieste di trasferimento ricevute
-            const transfers = await transferService.getActiveTransfers(user.email);
-            console.log('📋 Total active transfers:', transfers.length);
-
-            setActiveTransfers(transfers);
-            setPendingTransferRequests(transfers.length);
-        } catch (error: any) {
-            console.error('❌ Error loading transfer requests:', error);
-            setPendingTransferRequests(0);
-            setActiveTransfers([]);
-        }
-    };
-
-    // Toggle espansione sezione tab
-    const toggleTabSection = () => {
-        const toValue = isTabSectionExpanded ? 0 : 1;
-        Animated.spring(tabSectionHeight, {
-            toValue,
-            friction: 8,
-            tension: 40,
-            useNativeDriver: false,
-        }).start();
-        setIsTabSectionExpanded(!isTabSectionExpanded);
-    };
-
-    const onRefresh = useCallback(async () => {
-        setRefreshing(true);
-        await loadData();
-        setRefreshing(false);
-    }, [loadData]);
-
-    // Carica dati all'avvio
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    // Ricarica dati quando la schermata diventa attiva (es. dopo aggiunta veicolo)
     useFocusEffect(
         useCallback(() => {
-            console.log('🔄 HomeScreen focused - Reloading data...');
             loadData();
         }, [loadData])
     );
 
-    // Polling automatico per richieste pendenti ogni 3 minuti
     useEffect(() => {
-        const interval = setInterval(() => {
-            if (user?.id && user?.email) {
-                console.log('🔔 Polling pending requests ....');
-                loadPendingViewRequests();
-                loadPendingTransferRequests();
-            }
-        }, 180000); // <-- 3 minuti
+        if (!user?.id) return;
+        return BookingService.onUserBookingsChange(user.id, setBookings);
+    }, [user?.id]);
 
-        return () => clearInterval(interval);
-    }, [user?.id, user?.email]);
-
-    // ============================================
-    // RENDER HELPERS
-    // ============================================
-    const getDeadlineColor = (deadline: Deadline) => {
-        const dueDate = deadline.dueDate?.toDate?.() || new Date(deadline.dueDate);
-        const daysUntil = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-
-        if (daysUntil < 0) return '#ef4444'; // Scaduto
-        if (daysUntil <= 30) return '#f59e0b'; // In scadenza
-        return '#10b981'; // OK
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await loadData();
+        setRefreshing(false);
     };
 
-    const formatDate = (date: any) => {
-        const d = date?.toDate?.() || new Date(date);
-        return d.toLocaleDateString('it-IT', {
-            day: '2-digit',
-            month: 'short',
+    const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId) ?? null;
+    const nextBooking = useMemo(() => bookings.find(isBookingOpen) ?? null, [bookings]);
+    const bookingsToAnswer = useMemo(() => bookings.filter(bookingNeedsUserAction), [bookings]);
+
+    const todoItems = useMemo(() => {
+        const items: TodoItem[] = bookingsToAnswer.map((booking) => ({
+            id: `booking-${booking.id}`,
+            icon: Calendar,
+            title: getBookingStatusLabel(booking),
+            subtitle: `${booking.workshopName} · ${booking.vehicleMake} ${booking.vehicleModel}`,
+            tone: 'primary',
+            onPress: () => navigation.navigate('BookingDetail', { bookingId: booking.id }),
+        }));
+
+        transfers.forEach((transfer) => {
+            items.push({
+                id: `transfer-${transfer.id}`,
+                icon: Repeat,
+                title: 'Trasferimento di proprietà da confermare',
+                subtitle: 'Controlla i dati del veicolo',
+                tone: 'primary',
+                onPress: () => setSelectedTransfer(transfer),
+            });
         });
+
+        if (pendingViewRequests > 0) {
+            items.push({
+                id: 'view-requests',
+                icon: Eye,
+                title: pendingViewRequests === 1
+                    ? '1 richiesta di vedere i dati del veicolo'
+                    : `${pendingViewRequests} richieste di vedere i dati del veicolo`,
+                subtitle: 'Approva o rifiuta',
+                tone: 'primary',
+                onPress: () => navigation.navigate('ViewRequests'),
+            });
+        }
+
+        deadlines
+            .filter((deadline) => getDaysUntil(deadline.dueDate) <= 30)
+            .slice(0, 4)
+            .forEach((deadline) => {
+                const days = getDaysUntil(deadline.dueDate);
+                const vehicle = vehicles.find((v) => v.id === deadline.vehicleId);
+                items.push({
+                    id: `deadline-${deadline.id}`,
+                    icon: AlertCircle,
+                    title: deadline.description,
+                    subtitle: `${days < 0 ? 'Scaduta il' : 'Scade il'} ${formatShortDate(deadline.dueDate)}${vehicle ? ` · ${vehicle.make} ${vehicle.model}` : ''}`,
+                    tone: days < 0 ? 'error' : 'warning',
+                    onPress: () => navigation.navigate('Reminders'),
+                });
+            });
+
+        return items;
+    }, [bookingsToAnswer, transfers, pendingViewRequests, deadlines, vehicles, navigation]);
+
+    const toneColors = {
+        primary: { background: theme.primaryLight, color: theme.onPrimaryLight },
+        warning: { background: theme.warningLight, color: theme.text },
+        error: { background: theme.errorLight, color: theme.text },
     };
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('it-IT', {
-            style: 'currency',
-            currency: 'EUR',
-        }).format(amount);
-    };
+    const cardStyle = [styles.card, { backgroundColor: theme.surface, borderColor: theme.border }];
+    const firstName = user?.name?.split(' ')[0];
 
-    // ============================================
-    // RENDER ADD VEHICLE MODAL
-    // ============================================
-    const renderAddVehicleModal = () => (
-        <Modal
-            visible={showAddVehicleModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowAddVehicleModal(false)}
-        >
-            <TouchableOpacity
-                style={styles.modalOverlay}
-                activeOpacity={1}
-                onPress={() => setShowAddVehicleModal(false)}
-            >
+    const renderBookingCard = () => {
+        if (nextBooking) {
+            const date = nextBooking.selectedDate;
+            return (
                 <TouchableOpacity
-                    activeOpacity={1}
-                    style={[styles.modalContent, { backgroundColor: themeColors.surface }]}
-                    onPress={(e) => e.stopPropagation()}
+                    style={cardStyle}
+                    onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Prenotazione presso ${nextBooking.workshopName}, ${getBookingStatusLabel(nextBooking)}`}
                 >
-                    {/* Header */}
-                    <View style={styles.modalHeader}>
-                        <Text style={[styles.modalTitle, { color: themeColors.text }]}>
-                            Cosa vuoi fare?
-                        </Text>
-                        <TouchableOpacity
-                            onPress={() => setShowAddVehicleModal(false)}
-                            style={styles.modalCloseButton}
-                        >
-                            <X size={24} color={themeColors.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <Text style={[styles.modalDescription, { color: themeColors.textSecondary }]}>
-                        Scegli se aggiungere un veicolo già in tuo possesso o cercarne uno da acquistare
+                    <Text style={[styles.eyebrow, { color: theme.textSecondary }]}>Prossima prenotazione</Text>
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>
+                        {date ? formatBookingDate(date) : getBookingStatusLabel(nextBooking)}
                     </Text>
-
-                    {/* Options */}
-                    <View style={styles.modalOptions}>
-                        {/* Aggiungi mio veicolo */}
-                        <TouchableOpacity
-                            style={[styles.modalOption, { backgroundColor: themeColors.cardBackground }]}
-                            onPress={() => {
-                                setShowAddVehicleModal(false);
-                                navigation.navigate('AddVehicle' as never);
-                            }}
-                        >
-                            <View style={[styles.modalOptionIcon, { backgroundColor: '#dbeafe' }]}>
-                                <Package size={32} color="#3b82f6" />
-                            </View>
-                            <View style={styles.modalOptionContent}>
-                                <Text style={[styles.modalOptionTitle, { color: themeColors.text }]}>
-                                    Aggiungi il Mio Veicolo
-                                </Text>
-                                <Text style={[styles.modalOptionDescription, { color: themeColors.textSecondary }]}>
-                                    Registra un veicolo che possiedi già per tracciare manutenzioni e spese
-                                </Text>
-                            </View>
-                            <ChevronRight size={20} color={themeColors.textSecondary} />
-                        </TouchableOpacity>
-
-                        {/* Cerca veicolo da acquistare */}
-                        <TouchableOpacity
-                            style={[styles.modalOption, { backgroundColor: themeColors.cardBackground }]}
-                            onPress={() => {
-                                setShowAddVehicleModal(false);
-                                navigation.navigate('RequestVehicleView' as never);
-                            }}
-                        >
-                            <View style={[styles.modalOptionIcon, { backgroundColor: '#ede9fe' }]}>
-                                <Search size={32} color="#8b5cf6" />
-                            </View>
-                            <View style={styles.modalOptionContent}>
-                                <Text style={[styles.modalOptionTitle, { color: themeColors.text }]}>
-                                    Cerca Veicolo da Acquistare
-                                </Text>
-                                <Text style={[styles.modalOptionDescription, { color: themeColors.textSecondary }]}>
-                                    Richiedi di visualizzare i dati di un veicolo che vuoi comprare
-                                </Text>
-                            </View>
-                            <ChevronRight size={20} color={themeColors.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
+                    <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+                        {nextBooking.workshopName} · {nextBooking.serviceName}
+                    </Text>
                 </TouchableOpacity>
-            </TouchableOpacity>
-        </Modal>
-    );
+            );
+        }
 
-    // ============================================
-    // RENDER EMPTY STATE
-    // ============================================
-    if (loading) {
         return (
-            <View style={[styles.container, styles.centerContent]}>
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text style={styles.loadingText}>Caricamento...</Text>
+            <View style={cardStyle}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>Serve un intervento?</Text>
+                <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+                    {"Scegli un'officina e proponi le date che preferisci."}
+                </Text>
+                <TouchableOpacity
+                    style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                    onPress={() => navigation.navigate('WorkshopSearch')}
+                    accessibilityRole="button"
+                >
+                    <Search size={18} color={theme.onPrimary} strokeWidth={2} />
+                    <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>Prenota un intervento</Text>
+                </TouchableOpacity>
             </View>
         );
-    }
+    };
 
-    // ============================================
-    // RENDER EMPTY STATE
-    // ============================================
-    if (vehicles.length === 0) {
-        // Desktop/Tablet empty state (width >= 1024)
-        if (isDesktop) {
-            return (
-                <View style={[styles.webContainer, { backgroundColor: themeColors.background }]}>
-                    <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
+    const renderVehicle = () => {
+        if (!selectedVehicle) return null;
+        const imageUrl = selectedVehicle.mainImageUrl || selectedVehicle.imageUrl;
+        const mileage = selectedVehicle.mileage ?? selectedVehicle.currentMileage;
 
-                    {/* Web Header */}
-                    <View style={[styles.webHeader, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
-                        <View style={styles.webHeaderLeft}>
-                            <Text style={[styles.webHeaderTitle, { color: themeColors.text }]}>MyMeccanich</Text>
-                            <Text style={[styles.webHeaderGreeting, { color: themeColors.textSecondary }]}>
-                                Ciao, {user?.name || 'Benvenuto'}
-                            </Text>
-                        </View>
-                        <View style={styles.webHeaderRight}>
-                            <TouchableOpacity
-                                style={styles.webHeaderButton}
-                                onPress={() => setShowAddVehicleModal(true)}
-                            >
-                                <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
-                                <Text style={styles.webHeaderButtonText}>Nuovo Veicolo</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.webIconButton}
-                                onPress={() => navigation.navigate('Settings' as never)}
-                            >
-                                <SettingsIcon size={22} color={themeColors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
+        return (
+            <TouchableOpacity
+                style={[styles.vehicleCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={() => navigation.navigate('CarDetail', { carId: selectedVehicle.id })}
+                accessibilityRole="button"
+                accessibilityLabel={`Apri la scheda di ${selectedVehicle.make} ${selectedVehicle.model}`}
+            >
+                {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={styles.vehicleImage} accessibilityLabel={`Foto di ${selectedVehicle.make} ${selectedVehicle.model}`} />
+                ) : (
+                    <View style={[styles.vehicleImage, styles.vehiclePlaceholder, { backgroundColor: theme.surfaceVariant }]}>
+                        <Car size={40} color={theme.textSecondary} strokeWidth={2} />
                     </View>
+                )}
+                <View style={styles.vehicleInfo}>
+                    <Text style={[styles.vehicleName, { color: theme.text }]} numberOfLines={2}>
+                        {selectedVehicle.make} {selectedVehicle.model}
+                    </Text>
+                    <View style={[styles.plate, { borderColor: theme.border }]}>
+                        <Text style={[styles.plateText, { color: theme.text }]}>{selectedVehicle.licensePlate}</Text>
+                    </View>
+                    <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+                        {selectedVehicle.year}
+                        {typeof mileage === 'number' ? ` · ${mileage.toLocaleString('it-IT')} km` : ''}
+                    </Text>
+                </View>
+                <ChevronRight size={20} color={theme.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+        );
+    };
 
-                    {/* Web Empty State */}
-                    <View style={[styles.webEmptyState, { backgroundColor: themeColors.background }]}>
-                        <View style={[styles.emptyIconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#E5E5EA' }]}>
-                            <Car size={96} color={themeColors.textSecondary} strokeWidth={1.5} />
-                        </View>
-                        <Text style={[styles.webEmptyTitle, { color: themeColors.text }]}>Nessun Veicolo</Text>
-                        <Text style={[styles.webEmptyDescription, { color: themeColors.textSecondary }]}>
-                            Inizia aggiungendo il tuo primo veicolo per tracciare manutenzioni, scadenze e spese.
+    const logActions: { label: string; route: string; icon: LucideIcon }[] = [
+        { label: 'Rifornimento', route: 'AddFuel', icon: Fuel },
+        { label: 'Spesa', route: 'AddExpense', icon: DollarSign },
+        { label: 'Manutenzione', route: 'AddMaintenance', icon: Wrench },
+    ];
+
+    const renderVehicleArea = () => (
+        <>
+            {vehicles.length > 1 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.vehicleTabs}>
+                    {vehicles.map((vehicle) => {
+                        const isSelected = vehicle.id === selectedVehicleId;
+                        return (
+                            <TouchableOpacity
+                                key={vehicle.id}
+                                style={[
+                                    styles.vehicleTab,
+                                    {
+                                        backgroundColor: isSelected ? theme.primaryLight : theme.surface,
+                                        borderColor: isSelected ? theme.primary : theme.border,
+                                    },
+                                ]}
+                                onPress={() => setSelectedVehicleId(vehicle.id)}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: isSelected }}
+                            >
+                                <Text style={[styles.vehicleTabText, { color: isSelected ? theme.onPrimaryLight : theme.text }]}>
+                                    {vehicle.make} {vehicle.model}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+            )}
+
+            {renderVehicle()}
+        </>
+    );
+
+    const renderLogArea = () => (
+        <>
+            <Section title="Registra" theme={theme}>
+                <View style={styles.logRow}>
+                    {logActions.map(({ label, route, icon: Icon }) => (
+                        <TouchableOpacity
+                            key={route}
+                            style={[styles.logAction, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                            onPress={() => navigation.navigate(route, { carId: selectedVehicleId })}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Registra ${label.toLowerCase()}`}
+                        >
+                            <Icon size={22} color={theme.primary} strokeWidth={2} />
+                            <Text style={[styles.logLabel, { color: theme.text }]} numberOfLines={1}>{label}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </Section>
+
+            {activities.length > 0 && (
+                <Section title="Ultime attività" theme={theme}>
+                    <View style={[styles.list, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        {activities.map((activity, index) => (
+                            <View
+                                key={activity.id}
+                                style={[styles.listRow, index > 0 && { borderTopWidth: 1, borderTopColor: theme.border }]}
+                            >
+                                <View style={styles.listBody}>
+                                    <Text style={[styles.listTitle, { color: theme.text }]}>{activity.description}</Text>
+                                    <Text style={[styles.cardText, { color: theme.textSecondary }]}>{formatShortDate(activity.date)}</Text>
+                                </View>
+                                {typeof activity.cost === 'number' && (
+                                    <Text style={[styles.listTitle, { color: theme.text }]}>{formatCurrency(activity.cost)}</Text>
+                                )}
+                            </View>
+                        ))}
+                    </View>
+                </Section>
+            )}
+        </>
+    );
+
+    const renderSideColumn = () => (
+        <View style={[isDesktop ? styles.sideColumn : styles.stackedColumn]}>
+            {renderBookingCard()}
+
+            <Section title="Da fare" theme={theme}>
+                {todoItems.length === 0 ? (
+                    <View style={cardStyle}>
+                        <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+                            Niente da fare: nessuna scadenza nei prossimi 30 giorni.
                         </Text>
-                        <TouchableOpacity
-                            style={[styles.webEmptyButton, { backgroundColor: themeColors.primary }]}
-                            onPress={() => setShowAddVehicleModal(true)}
-                        >
-                            <Plus size={24} color="#fff" strokeWidth={2.5} />
-                            <Text style={styles.webEmptyButtonText}>Aggiungi Primo Veicolo</Text>
-                        </TouchableOpacity>
-
-                        {/* Link to view sent requests */}
-                        <TouchableOpacity
-                            style={styles.emptySecondaryLink}
-                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                        >
-                            <TrendingUp size={18} color={themeColors.primary} />
-                            <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
-                                Visualizza le Mie Richieste Inviate
-                            </Text>
-                        </TouchableOpacity>
                     </View>
+                ) : (
+                    <View style={[styles.list, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        {todoItems.map(({ id, icon: Icon, title, subtitle, tone, onPress }, index) => (
+                            <TouchableOpacity
+                                key={id}
+                                style={[styles.listRow, index > 0 && { borderTopWidth: 1, borderTopColor: theme.border }]}
+                                onPress={onPress}
+                                accessibilityRole="button"
+                            >
+                                <View style={[styles.todoIcon, { backgroundColor: toneColors[tone].background }]}>
+                                    <Icon size={18} color={toneColors[tone].color} strokeWidth={2} />
+                                </View>
+                                <View style={styles.listBody}>
+                                    <Text style={[styles.listTitle, { color: theme.text }]}>{title}</Text>
+                                    <Text style={[styles.cardText, { color: theme.textSecondary }]}>{subtitle}</Text>
+                                </View>
+                                <ChevronRight size={18} color={theme.textSecondary} strokeWidth={2} />
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+            </Section>
 
-                    {/* Add Vehicle Modal */}
-                    {renderAddVehicleModal()}
+            <TouchableOpacity
+                style={[styles.linkRow, { borderColor: theme.border }]}
+                onPress={() => navigation.navigate('RequestVehicleView')}
+                accessibilityRole="button"
+            >
+                <Text style={[styles.cardText, styles.listBody, { color: theme.text }]}>
+                    {"Stai comprando un'auto? Chiedi di vederne i dati"}
+                </Text>
+                <ChevronRight size={18} color={theme.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => navigation.navigate('MyVehicleViewRequests')}
+                accessibilityRole="button"
+            >
+                <Text style={[styles.cardText, styles.listBody, { color: theme.text }]}>
+                    Le tue richieste di dati sui veicoli
+                </Text>
+                <ChevronRight size={18} color={theme.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+        </View>
+    );
+
+    const renderContent = () => {
+        if (loading) {
+            return (
+                <View style={styles.centered}>
+                    <ActivityIndicator size="large" color={theme.primary} />
                 </View>
             );
         }
 
-        // Mobile empty state
-        return (
-            <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-                <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
-
-                {/* Header */}
-                <View style={[styles.header, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
-                    <Text style={[styles.headerTitle, { color: themeColors.text }]}>I Miei Veicoli</Text>
+        if (loadFailed) {
+            return (
+                <View style={styles.centered}>
+                    <AlertCircle size={40} color={theme.error} strokeWidth={2} />
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>Impossibile caricare i tuoi veicoli</Text>
+                    <Text style={[styles.cardText, { color: theme.textSecondary }]}>Controlla la connessione e riprova.</Text>
                     <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => navigation.navigate('Settings' as never)}
+                        style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                        onPress={() => {
+                            setLoading(true);
+                            loadData();
+                        }}
+                        accessibilityRole="button"
                     >
-                        <SettingsIcon size={24} color={themeColors.textSecondary} />
+                        <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>Riprova</Text>
                     </TouchableOpacity>
                 </View>
+            );
+        }
 
-                {/* Empty State */}
-                <View style={[styles.emptyState, { backgroundColor: themeColors.background }]}>
-                    <View style={[styles.emptyIconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#E5E5EA' }]}>
-                        <Car size={64} color={themeColors.textSecondary} strokeWidth={1.5} />
-                    </View>
-                    <Text style={[styles.emptyTitle, { color: themeColors.text }]}>Nessun Veicolo</Text>
-                    <Text style={[styles.emptyDescription, { color: themeColors.textSecondary }]}>
-                        Inizia aggiungendo il tuo primo veicolo per tracciare manutenzioni, scadenze e spese.
+        if (vehicles.length === 0) {
+            return (
+                <View style={styles.centered}>
+                    <Car size={48} color={theme.textSecondary} strokeWidth={2} />
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>Aggiungi la tua prima auto</Text>
+                    <Text style={[styles.cardText, styles.centeredText, { color: theme.textSecondary }]}>
+                        Tieni insieme manutenzioni, spese e scadenze, e prenota in officina.
                     </Text>
                     <TouchableOpacity
-                        style={[styles.emptyButton, { backgroundColor: themeColors.primary }]}
-                        onPress={() => setShowAddVehicleModal(true)}
+                        style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+                        onPress={() => navigation.navigate('AddVehicle')}
+                        accessibilityRole="button"
                     >
-                        <Plus size={20} color="#fff" strokeWidth={2.5} />
-                        <Text style={styles.emptyButtonText}>Aggiungi Veicolo</Text>
-                    </TouchableOpacity>
-
-                    {/* Link to view sent requests */}
-                    <TouchableOpacity
-                        style={styles.emptySecondaryLink}
-                        onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                    >
-                        <TrendingUp size={16} color={themeColors.primary} />
-                        <Text style={[styles.emptySecondaryLinkText, { color: themeColors.primary }]}>
-                            Visualizza le Mie Richieste Inviate
-                        </Text>
+                        <Plus size={18} color={theme.onPrimary} strokeWidth={2} />
+                        <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>Aggiungi veicolo</Text>
                     </TouchableOpacity>
                 </View>
+            );
+        }
 
-                {/* Add Vehicle Modal */}
-                {renderAddVehicleModal()}
-            </SafeAreaView>
-        );
-    }
-
-    // ============================================
-    // RENDER DESKTOP LAYOUT (width >= 1024, with vehicles)
-    // ============================================
-    if (isDesktop) {
         return (
-            <View style={[styles.webContainer, { backgroundColor: themeColors.background }]}>
-                <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={themeColors.surface} />
-                {/* Web Header */}
-                <View style={[styles.webHeader, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
-                    <View style={styles.webHeaderLeft}>
-                        <Text style={[styles.webHeaderTitle, { color: themeColors.text }]}>MyMeccanich</Text>
-                        <Text style={[styles.webHeaderGreeting, { color: themeColors.textSecondary }]}>
-                            Ciao, {user?.name || 'Benvenuto'}
-                        </Text>
-                    </View>
-                    <View style={styles.webHeaderRight}>
-                        <TouchableOpacity
-                            style={styles.webHeaderButton}
-                            onPress={() => setShowAddVehicleModal(true)}
-                        >
-                            <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
-                            <Text style={styles.webHeaderButtonText}>Nuovo Veicolo</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.webIconButton}
-                            onPress={() => navigation.navigate('ViewRequests' as never)}
-                        >
-                            <Bell size={22} color={pendingViewRequests > 0 ? "#f59e0b" : themeColors.textSecondary} />
-                            {pendingViewRequests > 0 && (
-                                <View style={styles.webBadge}>
-                                    <Text style={styles.webBadgeText}>{pendingViewRequests}</Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.webIconButton}
-                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                        >
-                            <Eye size={22} color={approvedViewRequests > 0 ? "#10b981" : themeColors.textSecondary} />
-                            {approvedViewRequests > 0 && (
-                                <View style={styles.webBadge}>
-                                    <Text style={styles.webBadgeText}>{approvedViewRequests}</Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.webIconButton}
-                            onPress={() => navigation.navigate('Reminders' as never)}
-                        >
-                            <Calendar size={22} color={deadlines.length > 0 ? "#f59e0b" : themeColors.textSecondary} />
-                            {deadlines.length > 0 && (
-                                <View style={styles.webBadge}>
-                                    <Text style={styles.webBadgeText}>{deadlines.length}</Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.webIconButton}
-                            onPress={() => navigation.navigate('Settings' as never)}
-                        >
-                            <SettingsIcon size={22} color={themeColors.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                <ScrollView
-                    style={styles.webContent}
-                    showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                    }
-                >
-                    <View style={styles.webGrid}>
-                        {/* Left Column - Vehicle & Stats */}
-                        <View style={styles.webLeftColumn}>
-                            {/* Selected Vehicle Card */}
-                            {selectedVehicle && (
-                                <View style={styles.webVehicleCard}>
-                                    <LinearGradient
-                                        colors={['#3b82f6', '#2563eb']}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                        style={styles.webVehicleGradient}
-                                    >
-                                        <View style={styles.webVehicleHeader}>
-                                            <View>
-                                                <Text style={styles.webVehicleName}>
-                                                    {selectedVehicle.make} {selectedVehicle.model}
-                                                </Text>
-                                                <Text style={styles.webVehiclePlate}>
-                                                    {selectedVehicle.licensePlate}
-                                                </Text>
-                                                <View style={styles.webVehicleTag}>
-                                                    <Text style={styles.webVehicleTagText}>
-                                                        {selectedVehicle.year} • {selectedVehicle.fuel || 'Benzina'}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                            {selectedVehicle.imageUrl && (
-                                                <Image
-                                                    source={{ uri: selectedVehicle.imageUrl }}
-                                                    style={styles.webVehicleImage}
-                                                    resizeMode="contain"
-                                                />
-                                            )}
-                                        </View>
-                                        <TouchableOpacity
-                                            style={styles.webVehicleButton}
-                                            onPress={() =>
-                                                navigation.navigate('CarDetail' as never, {
-                                                    carId: selectedVehicle.id,
-                                                } as never)
-                                            }
-                                        >
-                                            <Text style={styles.webVehicleButtonText}>
-                                                Vedi Dettagli
-                                            </Text>
-                                            <ChevronRight size={18} color="#fff" />
-                                        </TouchableOpacity>
-                                    </LinearGradient>
-                                </View>
-                            )}
-
-                            {/* Monthly Stats Grid */}
-                            <View style={styles.webStatsGrid}>
-                                <View style={styles.webStatCard}>
-                                    <View style={[styles.webStatIcon, { backgroundColor: '#dbeafe' }]}>
-                                        <DollarSign size={28} color="#3b82f6" strokeWidth={2} />
-                                    </View>
-                                    <Text style={styles.webStatValue}>
-                                        {formatCurrency(monthlyStats.totalExpenses)}
-                                    </Text>
-                                    <Text style={styles.webStatLabel}>Spese Totali</Text>
-                                </View>
-                                <View style={styles.webStatCard}>
-                                    <View style={[styles.webStatIcon, { backgroundColor: '#fef3c7' }]}>
-                                        <Fuel size={28} color="#f59e0b" strokeWidth={2} />
-                                    </View>
-                                    <Text style={styles.webStatValue}>
-                                        {formatCurrency(monthlyStats.totalFuel)}
-                                    </Text>
-                                    <Text style={styles.webStatLabel}>Carburante</Text>
-                                </View>
-                                <View style={styles.webStatCard}>
-                                    <View style={[styles.webStatIcon, { backgroundColor: '#dbeafe' }]}>
-                                        <Wrench size={28} color="#3b82f6" strokeWidth={2} />
-                                    </View>
-                                    <Text style={styles.webStatValue}>
-                                        {formatCurrency(monthlyStats.totalMaintenance)}
-                                    </Text>
-                                    <Text style={styles.webStatLabel}>Manutenzioni</Text>
-                                </View>
-                                <View style={styles.webStatCard}>
-                                    <View style={[styles.webStatIcon, { backgroundColor: '#dcfce7' }]}>
-                                        <TrendingUp size={28} color="#10b981" strokeWidth={2} />
-                                    </View>
-                                    <Text style={styles.webStatValue}>{monthlyStats.totalKm} km</Text>
-                                    <Text style={styles.webStatLabel}>Percorsi</Text>
-                                </View>
-                            </View>
-
-                            {/* Quick Actions */}
-                            <View style={styles.webQuickActions}>
-                                <Text style={styles.webSectionTitle}>Azioni Rapide</Text>
-                                <View style={styles.webActionGrid}>
-                                    <TouchableOpacity
-                                        style={styles.webActionCard}
-                                        onPress={() => navigation.navigate('WorkshopSearch' as never)}
-                                    >
-                                        <View style={[styles.webActionIcon, { backgroundColor: '#dbeafe' }]}>
-                                            <Wrench size={24} color="#3b82f6" />
-                                        </View>
-                                        <Text style={styles.webActionTitle}>Prenota Servizio</Text>
-                                        <Text style={styles.webActionDescription}>
-                                            Cerca officina e prenota
-                                        </Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        style={styles.webActionCard}
-                                        onPress={() => navigation.navigate('BookingsDashboard' as never)}
-                                    >
-                                        <View style={[styles.webActionIcon, { backgroundColor: '#fef3c7' }]}>
-                                            <Calendar size={24} color="#f59e0b" />
-                                        </View>
-                                        <Text style={styles.webActionTitle}>Prenotazioni</Text>
-                                        <Text style={styles.webActionDescription}>
-                                            Gestisci appuntamenti
-                                        </Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        style={styles.webActionCard}
-                                        onPress={() =>
-                                            navigation.navigate('AddMaintenance' as never, {
-                                                carId: selectedVehicle?.id,
-                                            } as never)
-                                        }
-                                    >
-                                        <View style={[styles.webActionIcon, { backgroundColor: '#dbeafe' }]}>
-                                            <Wrench size={24} color="#3b82f6" />
-                                        </View>
-                                        <Text style={styles.webActionLabel}>Manutenzione</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.webActionCard}
-                                        onPress={() =>
-                                            navigation.navigate('AddFuel' as never, {
-                                                carId: selectedVehicle?.id,
-                                            } as never)
-                                        }
-                                    >
-                                        <View style={[styles.webActionIcon, { backgroundColor: '#fef3c7' }]}>
-                                            <Fuel size={24} color="#f59e0b" />
-                                        </View>
-                                        <Text style={styles.webActionLabel}>Rifornimento</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.webActionCard}
-                                        onPress={() =>
-                                            navigation.navigate('AddExpense' as never, {
-                                                carId: selectedVehicle?.id,
-                                            } as never)
-                                        }
-                                    >
-                                        <View style={[styles.webActionIcon, { backgroundColor: '#dcfce7' }]}>
-                                            <DollarSign size={24} color="#10b981" />
-                                        </View>
-                                        <Text style={styles.webActionLabel}>Spesa</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.webActionCard}
-                                        onPress={() => navigation.navigate('Reminders' as never)}
-                                    >
-                                        <View style={[styles.webActionIcon, { backgroundColor: '#fce7f3' }]}>
-                                            <Calendar size={24} color="#ec4899" />
-                                        </View>
-                                        <Text style={styles.webActionLabel}>Promemoria</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
+            <View style={[styles.columns, isDesktop && styles.columnsDesktop]}>
+                {isDesktop ? (
+                    <>
+                        <View style={styles.column}>
+                            {renderVehicleArea()}
+                            {renderLogArea()}
                         </View>
-
-                        {/* Right Column - Deadlines & Activities */}
-                        <View style={styles.webRightColumn}>
-                            {/* Deadlines */}
-                            {deadlines.length > 0 && (
-                                <View style={styles.webSection}>
-                                    <View style={styles.webSectionHeader}>
-                                        <Text style={styles.webSectionTitle}>Prossime Scadenze</Text>
-                                        <TouchableOpacity
-                                            onPress={() => navigation.navigate('Reminders' as never)}
-                                        >
-                                            <Text style={styles.webSectionLink}>Vedi tutte</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    {deadlines.slice(0, 5).map((deadline) => (
-                                        <TouchableOpacity
-                                            key={deadline.id}
-                                            style={styles.webDeadlineCard}
-                                            onPress={() =>
-                                                navigation.navigate('CarDetail' as never, {
-                                                    carId: deadline.vehicleId,
-                                                } as never)
-                                            }
-                                        >
-                                            <View
-                                                style={[
-                                                    styles.webDeadlineIcon,
-                                                    { backgroundColor: getDeadlineColor(deadline) + '20' },
-                                                ]}
-                                            >
-                                                {deadline.type === 'insurance' && (
-                                                    <AlertCircle
-                                                        size={22}
-                                                        color={getDeadlineColor(deadline)}
-                                                    />
-                                                )}
-                                                {deadline.type === 'revision' && (
-                                                    <Wrench size={22} color={getDeadlineColor(deadline)} />
-                                                )}
-                                                {deadline.type === 'roadTax' && (
-                                                    <DollarSign
-                                                        size={22}
-                                                        color={getDeadlineColor(deadline)}
-                                                    />
-                                                )}
-                                            </View>
-                                            <View style={styles.webDeadlineInfo}>
-                                                <Text style={styles.webDeadlineTitle}>
-                                                    {deadline.description}
-                                                </Text>
-                                                <Text style={styles.webDeadlineDate}>
-                                                    {formatDate(deadline.dueDate)}
-                                                </Text>
-                                            </View>
-                                            <ChevronRight size={18} color="#94a3b8" />
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
-
-                            {/* Recent Activities */}
-                            {recentActivities.length > 0 && (
-                                <View style={styles.webSection}>
-                                    <Text style={styles.webSectionTitle}>Attività Recenti</Text>
-                                    {recentActivities.slice(0, 5).map((activity) => (
-                                        <View key={activity.id} style={styles.webActivityCard}>
-                                            <View
-                                                style={[
-                                                    styles.webActivityIcon,
-                                                    {
-                                                        backgroundColor:
-                                                            activity.type === 'maintenance'
-                                                                ? '#dbeafe'
-                                                                : activity.type === 'fuel'
-                                                                    ? '#fef3c7'
-                                                                    : '#dcfce7',
-                                                    },
-                                                ]}
-                                            >
-                                                {activity.type === 'maintenance' && (
-                                                    <Wrench size={22} color="#3b82f6" />
-                                                )}
-                                                {activity.type === 'fuel' && (
-                                                    <Fuel size={22} color="#f59e0b" />
-                                                )}
-                                                {activity.type === 'expense' && (
-                                                    <DollarSign size={22} color="#10b981" />
-                                                )}
-                                            </View>
-                                            <View style={styles.webActivityInfo}>
-                                                <Text style={styles.webActivityTitle}>
-                                                    {activity.description}
-                                                </Text>
-                                                <Text style={styles.webActivityDate}>
-                                                    {formatDate(activity.date)}
-                                                    {activity.workshopName && ` • ${activity.workshopName}`}
-                                                </Text>
-                                            </View>
-                                            <Text style={styles.webActivityAmount}>
-                                                {formatCurrency(activity.cost)}
-                                            </Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
-
-                            {/* Other Vehicles */}
-                            {vehicles.length > 1 && (
-                                <View style={styles.webSection}>
-                                    <Text style={styles.webSectionTitle}>Altri Veicoli</Text>
-                                    {vehicles
-                                        .filter((v) => v.id !== selectedVehicle?.id)
-                                        .map((vehicle) => (
-                                            <TouchableOpacity
-                                                key={vehicle.id}
-                                                style={styles.webOtherVehicleCard}
-                                                onPress={() => setSelectedVehicle(vehicle)}
-                                            >
-                                                <View style={styles.webOtherVehicleIcon}>
-                                                    <Car size={24} color="#64748b" />
-                                                </View>
-                                                <View style={styles.webOtherVehicleInfo}>
-                                                    <Text style={styles.webOtherVehicleName}>
-                                                        {vehicle.make} {vehicle.model}
-                                                    </Text>
-                                                    <Text style={styles.webOtherVehiclePlate}>
-                                                        {vehicle.licensePlate}
-                                                    </Text>
-                                                </View>
-                                                <ChevronRight size={18} color="#94a3b8" />
-                                            </TouchableOpacity>
-                                        ))}
-                                </View>
-                            )}
-                        </View>
-                    </View>
-                </ScrollView>
-
-                {/* Add Vehicle Modal */}
-                {renderAddVehicleModal()}
+                        {renderSideColumn()}
+                    </>
+                ) : (
+                    <>
+                        {renderVehicleArea()}
+                        {renderSideColumn()}
+                        {renderLogArea()}
+                    </>
+                )}
             </View>
         );
-    }
+    };
 
-    // ============================================
-    // RENDER MOBILE LAYOUT
-    // ============================================
     return (
-        <View style={[styles.container, { backgroundColor: isDark ? '#0a0a0a' : '#f5f5f7' }]}>
-            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
-
-            {/* Liquid Glass Header */}
-            <BlurView
-                intensity={isDark ? 70 : 90}
-                tint={isDark ? 'dark' : 'light'}
-                style={styles.liquidHeader}
-            >
-                <SafeAreaView>
-                    <View style={styles.liquidHeaderContent}>
-                        <View style={styles.liquidHeaderTop}>
-                            <View>
-                                <Text style={[styles.liquidHeaderGreeting, { color: themeColors.text }]}>
-                                    Ciao, {user?.name || 'Benvenuto'}
-                                </Text>
-                                <Text style={[styles.liquidHeaderSubtitle, { color: themeColors.textSecondary }]}>
-                                    {vehicles.length} veicol{vehicles.length === 1 ? 'o' : 'i'}
-                                </Text>
-                            </View>
-                            <TouchableOpacity
-                                style={[styles.liquidSettingsButton, {
-                                    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
-                                    borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
-                                }]}
-                                onPress={() => navigation.navigate('Settings' as never)}
-                            >
-                                <SettingsIcon size={22} color={themeColors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Tab Section Header with Expand/Collapse */}
-                        <TouchableOpacity
-                            style={styles.tabSectionHeader}
-                            onPress={toggleTabSection}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={[styles.tabSectionTitle, { color: themeColors.text }]}>
-                                Attività
-                            </Text>
-                            <View style={[styles.expandButton, {
-                                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                            }]}>
-                                {isTabSectionExpanded ? (
-                                    <ChevronUp size={18} color={themeColors.text} />
-                                ) : (
-                                    <ChevronDown size={18} color={themeColors.text} />
-                                )}
-                            </View>
-                        </TouchableOpacity>
-
-                        {/* Quick Action Pills */}
-                        <Animated.View style={[
-                            styles.liquidActionPills,
-                            {
-                                maxHeight: tabSectionHeight.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [0, 200],
-                                }),
-                                opacity: tabSectionHeight,
-                                overflow: 'hidden',
-                            }
-                        ]}>
-                            <TouchableOpacity
-                                style={[styles.liquidPill, {
-                                    backgroundColor: pendingViewRequests > 0
-                                        ? isDark ? 'rgba(251,146,60,0.2)' : 'rgba(251,146,60,0.15)'
-                                        : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
-                                    borderColor: pendingViewRequests > 0
-                                        ? isDark ? 'rgba(251,146,60,0.3)' : 'rgba(251,146,60,0.25)'
-                                        : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
-                                }]}
-                                onPress={() => navigation.navigate('ViewRequests' as never)}
-                            >
-                                <Bell
-                                    size={20}
-                                    color={pendingViewRequests > 0 ? "#fb923c" : themeColors.text}
-                                />
-                                <Text style={[styles.liquidPillText, {
-                                    color: pendingViewRequests > 0 ? "#fb923c" : themeColors.text
-                                }]}>
-                                    Richieste
-                                </Text>
-                                {pendingViewRequests > 0 && (
-                                    <View style={styles.liquidBadge}>
-                                        <Text style={styles.liquidBadgeText}>{pendingViewRequests}</Text>
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.liquidPill, {
-                                    backgroundColor: approvedViewRequests > 0
-                                        ? isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.15)'
-                                        : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
-                                    borderColor: approvedViewRequests > 0
-                                        ? isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.25)'
-                                        : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
-                                }]}
-                                onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                            >
-                                <Eye
-                                    size={20}
-                                    color={approvedViewRequests > 0 ? "#10b981" : themeColors.text}
-                                />
-                                <Text style={[styles.liquidPillText, {
-                                    color: approvedViewRequests > 0 ? "#10b981" : themeColors.text
-                                }]}>
-                                    Mie Richieste
-                                </Text>
-                                {approvedViewRequests > 0 && (
-                                    <View style={styles.liquidBadge}>
-                                        <Text style={styles.liquidBadgeText}>{approvedViewRequests}</Text>
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.liquidPill, {
-                                    backgroundColor: deadlines.length > 0
-                                        ? isDark ? 'rgba(251,146,60,0.2)' : 'rgba(251,146,60,0.15)'
-                                        : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
-                                    borderColor: deadlines.length > 0
-                                        ? isDark ? 'rgba(251,146,60,0.3)' : 'rgba(251,146,60,0.25)'
-                                        : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)'
-                                }]}
-                                onPress={() => navigation.navigate('Reminders' as never)}
-                            >
-                                <Calendar
-                                    size={20}
-                                    color={deadlines.length > 0 ? "#fb923c" : themeColors.text}
-                                />
-                                <Text style={[styles.liquidPillText, {
-                                    color: deadlines.length > 0 ? "#fb923c" : themeColors.text
-                                }]}>
-                                    Scadenze
-                                </Text>
-                                {deadlines.length > 0 && (
-                                    <View style={styles.liquidBadge}>
-                                        <Text style={styles.liquidBadgeText}>{deadlines.length}</Text>
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-                        </Animated.View>
-                    </View>
-                </SafeAreaView>
-            </BlurView>
-
+        <UserLayout active="home" badges={{ bookings: bookingsToAnswer.length }}>
             <ScrollView
-                style={[styles.scrollView, { backgroundColor: 'transparent' }]}
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                showsVerticalScrollIndicator={false}
+                style={[styles.page, { backgroundColor: theme.background }]}
+                contentContainerStyle={[styles.pageContent, !isMobile && styles.pageContentWide]}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} />}
             >
-                {/* Liquid Glass Vehicle Card */}
-                {selectedVehicle && (
-                    <View style={styles.liquidVehicleCardContainer}>
-                        <LinearGradient
-                            colors={isDark
-                                ? ['rgba(59,130,246,0.4)', 'rgba(37,99,235,0.5)']
-                                : ['rgba(59,130,246,0.9)', 'rgba(37,99,235,1)']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.liquidVehicleGradient}
-                        >
-                            <BlurView
-                                intensity={isDark ? 40 : 30}
-                                tint={isDark ? 'dark' : 'light'}
-                                style={styles.liquidVehicleBlur}
-                            >
-                                <View style={styles.liquidVehicleHeader}>
-                                    <View style={styles.liquidVehicleInfo}>
-                                        <Text style={styles.liquidVehicleName}>
-                                            {selectedVehicle.make} {selectedVehicle.model}
-                                        </Text>
-                                        <Text style={styles.liquidVehiclePlate}>
-                                            {selectedVehicle.licensePlate}
-                                        </Text>
-                                        <View style={styles.liquidVehicleTag}>
-                                            <Text style={styles.liquidVehicleTagText}>
-                                                {selectedVehicle.year} • {selectedVehicle.fuel || 'Benzina'}
-                                            </Text>
-                                        </View>
-                                    </View>
-
-                                    {selectedVehicle.imageUrl && (
-                                        <Image
-                                            source={{ uri: selectedVehicle.imageUrl }}
-                                            style={styles.liquidVehicleImage}
-                                            resizeMode="contain"
-                                        />
-                                    )}
-                                </View>
-
-                                <TouchableOpacity
-                                    style={styles.liquidVehicleButton}
-                                    onPress={() =>
-                                        navigation.navigate('CarDetail' as never, {
-                                            carId: selectedVehicle.id,
-                                        } as never)
-                                    }
-                                >
-                                    <Text style={styles.liquidVehicleButtonText}>Vedi Dettagli</Text>
-                                    <ChevronRight size={18} color="#fff" />
-                                </TouchableOpacity>
-                            </BlurView>
-                        </LinearGradient>
-                    </View>
-                )}
-
-                {/* Liquid Glass Stats */}
-                <View style={styles.liquidStatsContainer}>
-                    <Text style={[styles.liquidSectionTitle, { color: themeColors.text }]}>Questo Mese</Text>
-                    <View style={styles.liquidStatsGrid}>
-                        <BlurView
-                            intensity={isDark ? 60 : 80}
-                            tint={isDark ? 'dark' : 'light'}
-                            style={[styles.liquidStatCard, {
-                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
-                            }]}
-                        >
-                            <View style={[styles.liquidStatIcon, {
-                                backgroundColor: isDark ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.15)'
-                            }]}>
-                                <DollarSign size={22} color="#3b82f6" strokeWidth={2.5} />
-                            </View>
-                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
-                                {formatCurrency(monthlyStats.totalExpenses)}
-                            </Text>
-                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
-                                Spese Totali
-                            </Text>
-                        </BlurView>
-
-                        <BlurView
-                            intensity={isDark ? 60 : 80}
-                            tint={isDark ? 'dark' : 'light'}
-                            style={[styles.liquidStatCard, {
-                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
-                            }]}
-                        >
-                            <View style={[styles.liquidStatIcon, {
-                                backgroundColor: isDark ? 'rgba(251,146,60,0.25)' : 'rgba(251,146,60,0.15)'
-                            }]}>
-                                <Fuel size={22} color="#fb923c" strokeWidth={2.5} />
-                            </View>
-                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
-                                {formatCurrency(monthlyStats.totalFuel)}
-                            </Text>
-                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
-                                Carburante
-                            </Text>
-                        </BlurView>
-
-                        <BlurView
-                            intensity={isDark ? 60 : 80}
-                            tint={isDark ? 'dark' : 'light'}
-                            style={[styles.liquidStatCard, {
-                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
-                            }]}
-                        >
-                            <View style={[styles.liquidStatIcon, {
-                                backgroundColor: isDark ? 'rgba(139,92,246,0.25)' : 'rgba(139,92,246,0.15)'
-                            }]}>
-                                <Wrench size={22} color="#8b5cf6" strokeWidth={2.5} />
-                            </View>
-                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
-                                {formatCurrency(monthlyStats.totalMaintenance)}
-                            </Text>
-                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
-                                Manutenzioni
-                            </Text>
-                        </BlurView>
-
-                        <BlurView
-                            intensity={isDark ? 60 : 80}
-                            tint={isDark ? 'dark' : 'light'}
-                            style={[styles.liquidStatCard, {
-                                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
-                            }]}
-                        >
-                            <View style={[styles.liquidStatIcon, {
-                                backgroundColor: isDark ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.15)'
-                            }]}>
-                                <TrendingUp size={22} color="#10b981" strokeWidth={2.5} />
-                            </View>
-                            <Text style={[styles.liquidStatValue, { color: themeColors.text }]}>
-                                {monthlyStats.totalKm} km
-                            </Text>
-                            <Text style={[styles.liquidStatLabel, { color: themeColors.textSecondary }]}>
-                                Percorsi
-                            </Text>
-                        </BlurView>
-                    </View>
-                </View>
-
-                {/* Quick Actions */}
-                <View style={styles.quickActionsContainer}>
-                    <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Azioni Rapide</Text>
-                    <View style={styles.quickActions}>
+                <View style={styles.pageHeader}>
+                    <Text style={[styles.greeting, { color: theme.text }]} accessibilityRole="header">
+                        {firstName ? `Ciao, ${firstName}` : 'Ciao'}
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.addButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                        onPress={() => navigation.navigate('Settings')}
+                        accessibilityRole="button"
+                        accessibilityLabel="Impostazioni"
+                    >
+                        <Settings size={18} color={theme.text} strokeWidth={2} />
+                    </TouchableOpacity>
+                    {vehicles.length > 0 && (
                         <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() => navigation.navigate('WorkshopSearch' as never)}
+                            style={[styles.addButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                            onPress={() => navigation.navigate('AddVehicle')}
+                            accessibilityRole="button"
+                            accessibilityLabel="Aggiungi veicolo"
                         >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#f0f9ff' }]}>
-                                <Search size={20} color="#3b82f6" />
-                            </View>
-                            <Text style={styles.quickActionLabel}>Prenota</Text>
+                            <Plus size={18} color={theme.text} strokeWidth={2} />
+                            {!isMobile && <Text style={[styles.addButtonText, { color: theme.text }]}>Aggiungi veicolo</Text>}
                         </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() => navigation.navigate('BookingsDashboard' as never)}
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#fff7ed' }]}>
-                                <Calendar size={20} color="#f59e0b" />
-                            </View>
-                            <Text style={styles.quickActionLabel}>Appuntamenti</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() =>
-                                navigation.navigate('AddMaintenance' as never, {
-                                    carId: selectedVehicle?.id,
-                                } as never)
-                            }
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#dbeafe' }]}>
-                                <Wrench size={20} color="#3b82f6" />
-                            </View>
-                            <Text style={styles.quickActionLabel}>Manutenzione</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() =>
-                                navigation.navigate('AddFuel' as never, {
-                                    carId: selectedVehicle?.id,
-                                } as never)
-                            }
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#fef3c7' }]}>
-                                <Fuel size={20} color="#f59e0b" />
-                            </View>
-                            <Text style={styles.quickActionLabel}>Rifornimento</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() =>
-                                navigation.navigate('AddExpense' as never, {
-                                    carId: selectedVehicle?.id,
-                                } as never)
-                            }
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#dcfce7' }]}>
-                                <DollarSign size={20} color="#10b981" />
-                            </View>
-                            <Text style={styles.quickActionLabel}>Spesa</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() => navigation.navigate('Reminders' as never)}
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#fce7f3' }]}>
-                                <Calendar size={20} color="#ec4899" />
-                            </View>
-                            <Text style={styles.quickActionLabel}>Promemoria</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Vehicle View Requests Actions */}
-                    <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 16 }]}>Trasferimento Veicoli</Text>
-                    <View style={styles.quickActions}>
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() => navigation.navigate('RequestVehicleView' as never)}
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#ede9fe' }]}>
-                                <Car size={20} color="#8b5cf6" />
-                            </View>
-                            <Text style={styles.quickActionLabel}>Cerca Auto</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() => navigation.navigate('MyVehicleViewRequests' as never)}
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#e0f2fe' }]}>
-                                <TrendingUp size={20} color="#0284c7" />
-                                {approvedViewRequests > 0 && (
-                                    <View style={styles.quickActionBadge}>
-                                        <Text style={styles.quickActionBadgeText}>{approvedViewRequests}</Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text style={styles.quickActionLabel}>Mie Richieste</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() => navigation.navigate('ViewRequests' as never)}
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#fef3c7' }]}>
-                                <Bell size={20} color="#f59e0b" />
-                                {pendingViewRequests > 0 && (
-                                    <View style={styles.quickActionBadge}>
-                                        <Text style={styles.quickActionBadgeText}>{pendingViewRequests}</Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text style={styles.quickActionLabel}>Richieste</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickActionButton}
-                            onPress={() => {
-                                if (pendingTransferRequests > 0) {
-                                    setSelectedTransfer(activeTransfers[0]);
-                                    setShowTransferModal(true);
-                                } else {
-                                    Alert.alert('Nessuna Richiesta', 'Non hai richieste di trasferimento in sospeso.');
-                                }
-                            }}
-                        >
-                            <View style={[styles.quickActionIcon, { backgroundColor: '#dcfce7' }]}>
-                                <Package size={20} color="#10b981" />
-                                {pendingTransferRequests > 0 && (
-                                    <View style={styles.quickActionBadge}>
-                                        <Text style={styles.quickActionBadgeText}>{pendingTransferRequests}</Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text style={styles.quickActionLabel}>Trasferimenti</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* Prossime Scadenze */}
-                {deadlines.length > 0 && (
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Prossime Scadenze</Text>
-                            <TouchableOpacity onPress={() => navigation.navigate('Reminders' as never)}>
-                                <Text style={styles.sectionLink}>Vedi tutte</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {deadlines.slice(0, 3).map((deadline) => (
-                            <TouchableOpacity
-                                key={deadline.id}
-                                style={[styles.deadlineCard, { backgroundColor: themeColors.cardBackground }]}
-                                onPress={() =>
-                                    navigation.navigate('CarDetail' as never, {
-                                        carId: deadline.vehicleId,
-                                    } as never)
-                                }
-                            >
-                                <View
-                                    style={[
-                                        styles.deadlineIcon,
-                                        { backgroundColor: getDeadlineColor(deadline) + '20' },
-                                    ]}
-                                >
-                                    {deadline.type === 'insurance' && (
-                                        <AlertCircle size={20} color={getDeadlineColor(deadline)} />
-                                    )}
-                                    {deadline.type === 'revision' && (
-                                        <Wrench size={20} color={getDeadlineColor(deadline)} />
-                                    )}
-                                    {deadline.type === 'roadTax' && (
-                                        <DollarSign size={20} color={getDeadlineColor(deadline)} />
-                                    )}
-                                </View>
-
-                                <View style={styles.deadlineInfo}>
-                                    <Text style={[styles.deadlineTitle, { color: themeColors.text }]}>{deadline.description}</Text>
-                                    <Text style={[styles.deadlineDate, { color: themeColors.textSecondary }]}>
-                                        Scade il {formatDate(deadline.dueDate)}
-                                    </Text>
-                                </View>
-
-                                <ChevronRight size={20} color={themeColors.textSecondary} />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
-                {/* Attività Recenti */}
-                {recentActivities.length > 0 && (
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Attività Recenti</Text>
-                            <TouchableOpacity>
-                                <Text style={styles.sectionLink}>Vedi tutte</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {recentActivities.slice(0, 5).map((activity) => (
-                            <View key={activity.id} style={[styles.activityCard, { backgroundColor: themeColors.cardBackground }]}>
-                                <View
-                                    style={[
-                                        styles.activityIcon,
-                                        {
-                                            backgroundColor:
-                                                activity.type === 'maintenance'
-                                                    ? '#dbeafe'
-                                                    : activity.type === 'fuel'
-                                                        ? '#fef3c7'
-                                                        : '#dcfce7',
-                                        },
-                                    ]}
-                                >
-                                    {activity.type === 'maintenance' && (
-                                        <Wrench size={20} color="#3b82f6" />
-                                    )}
-                                    {activity.type === 'fuel' && <Fuel size={20} color="#f59e0b" />}
-                                    {activity.type === 'expense' && (
-                                        <DollarSign size={20} color="#10b981" />
-                                    )}
-                                </View>
-
-                                <View style={styles.activityInfo}>
-                                    <Text style={[styles.activityTitle, { color: themeColors.text }]}>{activity.description}</Text>
-                                    <Text style={[styles.activityDate, { color: themeColors.textSecondary }]}>
-                                        {formatDate(activity.date)}
-                                        {activity.workshopName && ` • ${activity.workshopName}`}
-                                    </Text>
-                                </View>
-
-                                <Text style={[styles.activityAmount, { color: themeColors.text }]}>
-                                    {formatCurrency(activity.cost)}
-                                </Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
-                {/* Le Mie Auto */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Le Mie Auto</Text>
-                        <TouchableOpacity
-                            style={[styles.addVehicleButton, isDesktop && styles.addVehicleButtonDesktop]}
-                            onPress={() => setShowAddVehicleModal(true)}
-                        >
-                            <Plus size={18} color="#007AFF" strokeWidth={2.5} />
-                            <Text style={styles.addVehicleButtonText}>Aggiungi</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {vehicles.length > 1 && (
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.vehiclesScrollContent}
-                        >
-                            {vehicles
-                                .filter((v) => v.id !== selectedVehicle?.id)
-                                .map((vehicle) => (
-                                    <TouchableOpacity
-                                        key={vehicle.id}
-                                        style={[styles.otherVehicleCard, { backgroundColor: themeColors.cardBackground }]}
-                                        onPress={() => setSelectedVehicle(vehicle)}
-                                    >
-                                        <View style={[styles.otherVehicleIcon, { backgroundColor: isDark ? colors.surfaceContainer : '#D1D1D6' }]}>
-                                            <Car size={24} color={themeColors.textSecondary} />
-                                        </View>
-                                        <Text style={[styles.otherVehicleName, { color: themeColors.text }]}>
-                                            {vehicle.make} {vehicle.model}
-                                        </Text>
-                                        <Text style={[styles.otherVehiclePlate, { color: themeColors.textSecondary }]}>
-                                            {vehicle.licensePlate}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                        </ScrollView>
                     )}
                 </View>
-
-                {/* Spacer finale */}
-                <View style={{ height: 40 }} />
+                {renderContent()}
             </ScrollView>
 
-            {/* Add Vehicle Modal */}
-            {renderAddVehicleModal()}
-
-            {/* Transfer Acceptance Modal */}
             <TransferAcceptanceModal
-                visible={showTransferModal}
-                onClose={() => {
-                    setShowTransferModal(false);
-                    setSelectedTransfer(null);
-                }}
+                visible={selectedTransfer !== null}
+                onClose={() => setSelectedTransfer(null)}
                 transfer={selectedTransfer}
-                onTransferProcessed={() => {
-                    // Ricarica i dati dopo aver processato il trasferimento
-                    loadData();
-                }}
+                onTransferProcessed={loadData}
             />
-        </View>
+        </UserLayout>
     );
 };
 
-// ============================================
-// STYLES - LIQUID GLASS DESIGN
-// ============================================
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f5f5f7',
-    },
-
-    // ============================================
-    // LIQUID GLASS HEADER
-    // ============================================
-    liquidHeader: {
-        borderBottomLeftRadius: 36,
-        borderBottomRightRadius: 36,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderTopWidth: 0,
-        borderColor: 'rgba(255,255,255,0.2)',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.12,
-                shadowRadius: 24,
-            },
-            android: {
-                elevation: 10,
-            },
-            web: {
-                boxShadow: '0 10px 40px rgba(0,0,0,0.12)',
-            },
-        }),
-    },
-    liquidHeaderContent: {
-        paddingHorizontal: 20,
-        paddingTop: 8,
-        paddingBottom: 24,
-    },
-    liquidHeaderTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 20,
-    },
-    liquidHeaderGreeting: {
-        fontSize: 30,
-        fontWeight: '800',
-        letterSpacing: -0.7,
-        marginBottom: 6,
-    },
-    liquidHeaderSubtitle: {
-        fontSize: 16,
-        fontWeight: '500',
-        letterSpacing: -0.3,
-        opacity: 0.75,
-    },
-    liquidSettingsButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 3,
-            },
-            web: {
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            },
-        }),
-    },
-    tabSectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 16,
-        marginBottom: 12,
-    },
-    tabSectionTitle: {
-        fontSize: 17,
-        fontWeight: '600',
-        letterSpacing: -0.3,
-    },
-    expandButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    liquidActionPills: {
-        gap: 10,
-    },
-    liquidPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 18,
-        paddingVertical: 14,
-        borderRadius: 16,
-        borderWidth: 1,
-        marginBottom: 4,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 2,
-            },
-            web: {
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            },
-        }),
-    },
-    liquidPillText: {
-        flex: 1,
-        fontSize: 15,
-        fontWeight: '600',
-        marginLeft: 12,
-        letterSpacing: -0.2,
-    },
-    liquidBadge: {
-        backgroundColor: '#ef4444',
-        minWidth: 22,
-        height: 22,
-        borderRadius: 11,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 6,
-        marginLeft: 8,
-    },
-    liquidBadgeText: {
-        color: '#ffffff',
-        fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: -0.2,
-    },
-
-    // ============================================
-    // LIQUID GLASS VEHICLE CARD
-    // ============================================
-    liquidVehicleCardContainer: {
-        marginBottom: 28,
-        borderRadius: 32,
-        overflow: 'hidden',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#3b82f6',
-                shadowOffset: { width: 0, height: 16 },
-                shadowOpacity: 0.25,
-                shadowRadius: 32,
-            },
-            android: {
-                elevation: 12,
-            },
-            web: {
-                boxShadow: '0 16px 48px rgba(59,130,246,0.25)',
-            },
-        }),
-    },
-    liquidVehicleGradient: {
-        borderRadius: 28,
-    },
-    liquidVehicleBlur: {
-        padding: 24,
-        borderRadius: 28,
-        overflow: 'hidden',
-    },
-    liquidVehicleHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    liquidVehicleInfo: {
+    page: {
         flex: 1,
     },
-    liquidVehicleName: {
-        fontSize: 26,
-        fontWeight: '800',
-        color: '#ffffff',
-        marginBottom: 6,
-        letterSpacing: -0.6,
-        textShadowColor: 'rgba(0,0,0,0.2)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
-    },
-    liquidVehiclePlate: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: 'rgba(255,255,255,0.95)',
-        marginBottom: 12,
-        letterSpacing: 1.5,
-        textShadowColor: 'rgba(0,0,0,0.15)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 3,
-    },
-    liquidVehicleTag: {
-        alignSelf: 'flex-start',
-        backgroundColor: 'rgba(255,255,255,0.25)',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.3)',
-    },
-    liquidVehicleTagText: {
-        color: '#ffffff',
-        fontSize: 13,
-        fontWeight: '600',
-        letterSpacing: -0.2,
-    },
-    liquidVehicleImage: {
-        width: 120,
-        height: 85,
-        marginLeft: 12,
-    },
-    liquidVehicleButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: 'rgba(255,255,255,0.25)',
-        paddingVertical: 14,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.3)',
-    },
-    liquidVehicleButtonText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#ffffff',
-        letterSpacing: -0.3,
-    },
-
-    // ============================================
-    // LIQUID GLASS STATS
-    // ============================================
-    liquidStatsContainer: {
-        marginBottom: 28,
-    },
-    liquidSectionTitle: {
-        fontSize: 22,
-        fontWeight: '800',
-        letterSpacing: -0.5,
-        marginBottom: 18,
-        paddingHorizontal: 4,
-    },
-    liquidStatsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 14,
-        justifyContent: 'space-between',
-    },
-    liquidStatCard: {
-        flex: 1,
-        minWidth: 160,
-        borderRadius: 20,
-        padding: 20,
-        alignItems: 'center',
-        borderWidth: 1,
-        overflow: 'hidden',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.08,
-                shadowRadius: 12,
-            },
-            android: {
-                elevation: 4,
-            },
-            web: {
-                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-            },
-        }),
-    },
-    liquidStatIcon: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
-    },
-    liquidStatValue: {
-        fontSize: 19,
-        fontWeight: '800',
-        marginBottom: 4,
-        letterSpacing: -0.4,
-    },
-    liquidStatLabel: {
-        fontSize: 13,
-        fontWeight: '600',
-        textAlign: 'center',
-        letterSpacing: -0.2,
-        opacity: 0.7,
-    },
-    centerContent: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        marginTop: 20,
-        fontSize: 17,
-        fontWeight: '400',
-        color: '#8E8E93',
-        letterSpacing: -0.4,
-    },
-
-    // Header
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingTop: 20,
-        paddingBottom: 20,
-        backgroundColor: '#FFFFFF',
-        borderBottomWidth: Platform.OS === 'web' ? 0.5 : 0,
-        borderBottomColor: '#E5E5EA',
-    },
-    headerTitle: {
-        fontSize: 34,
-        fontWeight: '700',
-        color: '#000000',
-        letterSpacing: -0.8,
-    },
-    headerGreeting: {
-        fontSize: 34,
-        fontWeight: '700',
-        color: '#000000',
-        letterSpacing: -0.8,
-    },
-    headerSubtitle: {
-        fontSize: 15,
-        fontWeight: '400',
-        color: '#8E8E93',
-        marginTop: 4,
-        letterSpacing: -0.3,
-    },
-    headerActions: {
-        flexDirection: 'row',
+    pageContent: {
+        padding: 16,
+        paddingBottom: 32,
         gap: 16,
     },
-    headerButton: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-        borderRadius: 22,
-        backgroundColor: '#F2F2F7',
-    },
-    badge: {
-        position: 'absolute',
-        top: 6,
-        right: 6,
-        backgroundColor: '#FF3B30',
-        minWidth: 20,
-        height: 20,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 6,
-        borderWidth: 2,
-        borderColor: '#FFFFFF',
-    },
-    badgeText: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '600',
-        letterSpacing: -0.2,
-    },
-
-    // ScrollView
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 24,
-    },
-    scrollContentDesktop: {
-        maxWidth: 1400,
-        alignSelf: 'center',
+    pageContentWide: {
+        padding: 32,
         width: '100%',
-        paddingHorizontal: 80,
-        paddingVertical: 40,
+        maxWidth: 1120,
+        alignSelf: 'center',
     },
-
-    // Empty State
-    emptyState: {
+    pageHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    greeting: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 40,
-    },
-    emptyIconContainer: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 32,
-    },
-    emptyTitle: {
         fontSize: 28,
         fontWeight: '700',
-        marginBottom: 12,
-        textAlign: 'center',
-        letterSpacing: -0.6,
     },
-    emptyDescription: {
-        fontSize: 17,
-        fontWeight: '400',
-        textAlign: 'center',
-        lineHeight: 24,
-        marginBottom: 40,
-        maxWidth: 400,
-        letterSpacing: -0.4,
-    },
-    emptyButton: {
+    addButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 8,
-        paddingHorizontal: 28,
-        paddingVertical: 14,
-        borderRadius: 14,
+        minWidth: 44,
+        minHeight: 44,
+        paddingHorizontal: 12,
+        borderRadius: mechanicRadius.md,
+        borderWidth: 1,
     },
-    emptyButtonText: {
-        color: '#FFFFFF',
-        fontSize: 17,
+    addButtonText: {
+        fontSize: 14,
         fontWeight: '600',
-        letterSpacing: -0.4,
     },
-    emptySecondaryLink: {
+    columns: {
+        gap: 24,
+    },
+    columnsDesktop: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    column: {
+        flex: 1,
+        gap: 24,
+        minWidth: 0,
+    },
+    sideColumn: {
+        width: 360,
+        gap: 24,
+    },
+    stackedColumn: {
+        gap: 24,
+    },
+    section: {
+        gap: 12,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    card: {
+        ...mechanicCard,
+        gap: 8,
+    },
+    eyebrow: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    cardTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    cardText: {
+        fontSize: 14,
+    },
+    primaryButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 8,
-        marginTop: 20,
-        paddingVertical: 12,
+        minHeight: 44,
+        marginTop: 8,
         paddingHorizontal: 16,
+        borderRadius: mechanicRadius.md,
     },
-    emptySecondaryLinkText: {
-        fontSize: 15,
+    primaryButtonText: {
+        fontSize: 16,
         fontWeight: '600',
-        letterSpacing: -0.3,
     },
-
-    // Vehicle Card - Apple Style
+    vehicleTabs: {
+        gap: 8,
+    },
+    vehicleTab: {
+        minHeight: 44,
+        justifyContent: 'center',
+        paddingHorizontal: 16,
+        borderRadius: mechanicRadius.full,
+        borderWidth: 1,
+    },
+    vehicleTabText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
     vehicleCard: {
-        borderRadius: 20,
-        overflow: 'hidden',
-        marginBottom: 32,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.08,
-                shadowRadius: 16,
-            },
-            android: {
-                elevation: 3,
-            },
-            web: {
-                boxShadow: '0 2px 16px rgba(0,0,0,0.08)',
-            },
-        }),
-    },
-    vehicleGradient: {
-        padding: 32,
-    },
-    vehicleHeader: {
+        ...mechanicCard,
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        gap: 16,
+    },
+    vehicleImage: {
+        width: 120,
+        height: 90,
+        borderRadius: mechanicRadius.md,
+    },
+    vehiclePlaceholder: {
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     vehicleInfo: {
         flex: 1,
+        gap: 6,
+        alignItems: 'flex-start',
     },
     vehicleName: {
-        fontSize: 28,
-        fontWeight: '700',
-        color: '#FFFFFF',
-        marginBottom: 8,
-        letterSpacing: -0.7,
-    },
-    vehiclePlate: {
-        fontSize: 19,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.95)',
-        marginBottom: 16,
-        letterSpacing: 1.2,
-    },
-    vehicleTag: {
-        alignSelf: 'flex-start',
-        backgroundColor: 'rgba(255,255,255,0.25)',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 10,
-    },
-    vehicleTagText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
-        letterSpacing: -0.3,
-    },
-    vehicleImage: {
-        width: 130,
-        height: 90,
-    },
-    vehicleActions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    vehicleActionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(255,255,255,0.25)',
-        paddingHorizontal: 24,
-        paddingVertical: 14,
-        borderRadius: 12,
-    },
-    vehicleActionText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-        letterSpacing: -0.3,
-    },
-
-    // Stats - Apple Style
-    statsContainer: {
-        marginBottom: 32,
-    },
-    sectionTitle: {
-        fontSize: 22,
-        fontWeight: '800',
-        color: '#000000',
-        marginBottom: 20,
-        letterSpacing: -0.5,
-    },
-    statsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 16,
-    },
-    statsGridDesktop: {
-        flexWrap: 'nowrap',
-        gap: 20,
-    },
-    statCard: {
-        flex: 1,
-        minWidth: 160,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 24,
-        alignItems: 'center',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.06,
-                shadowRadius: 12,
-            },
-            android: {
-                elevation: 2,
-            },
-            web: {
-                boxShadow: '0 1px 12px rgba(0,0,0,0.06)',
-            },
-        }),
-    },
-    statIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 16,
-    },
-    statValue: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#000000',
-        marginBottom: 6,
-        letterSpacing: -0.5,
     },
-    statLabel: {
+    plate: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderWidth: 1,
+        borderRadius: 6,
+    },
+    plateText: {
         fontSize: 14,
-        fontWeight: '400',
-        color: '#8E8E93',
-        textAlign: 'center',
-        letterSpacing: -0.3,
-    },
-
-    // Quick Actions - Apple Style
-    quickActionsContainer: {
-        marginBottom: 32,
-    },
-    quickActions: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 18,
-        justifyContent: 'flex-start',
-    },
-    quickActionButton: {
-        flex: 1,
-        minWidth: 80,
-        maxWidth: 110,
-        alignItems: 'center',
-        gap: 12,
-    },
-    quickActionIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.06,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 2,
-            },
-            web: {
-                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-            },
-        }),
-    },
-    quickActionLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#000000',
-        textAlign: 'center',
-        letterSpacing: -0.3,
-    },
-    quickActionBadge: {
-        position: 'absolute',
-        top: -4,
-        right: -4,
-        backgroundColor: '#ef4444',
-        borderRadius: 10,
-        minWidth: 20,
-        height: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 6,
-        borderWidth: 2,
-        borderColor: '#ffffff',
-    },
-    quickActionBadgeText: {
-        color: '#ffffff',
-        fontSize: 11,
         fontWeight: '700',
+        letterSpacing: 1,
     },
-
-    // Section - Apple Style
-    section: {
-        marginBottom: 32,
-    },
-    sectionHeader: {
+    logRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    sectionLink: {
-        fontSize: 15,
-        color: '#007AFF',
-        fontWeight: '600',
-        letterSpacing: -0.3,
-    },
-
-    // Deadline Card - Apple Style
-    deadlineCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 14,
-        padding: 18,
-        marginBottom: 12,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 1,
-            },
-            web: {
-                boxShadow: '0 1px 8px rgba(0,0,0,0.05)',
-            },
-        }),
-    },
-    deadlineIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    deadlineInfo: {
-        flex: 1,
-    },
-    deadlineTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#000000',
-        marginBottom: 5,
-        letterSpacing: -0.3,
-    },
-    deadlineDate: {
-        fontSize: 14,
-        fontWeight: '400',
-        color: '#8E8E93',
-        letterSpacing: -0.2,
-    },
-
-    // Activity Card - Apple Style
-    activityCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 14,
-        padding: 18,
-        marginBottom: 12,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 1,
-            },
-            web: {
-                boxShadow: '0 1px 8px rgba(0,0,0,0.05)',
-            },
-        }),
-    },
-    activityIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    activityInfo: {
-        flex: 1,
-    },
-    activityTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#000000',
-        marginBottom: 5,
-        letterSpacing: -0.3,
-    },
-    activityDate: {
-        fontSize: 14,
-        fontWeight: '400',
-        color: '#8E8E93',
-        letterSpacing: -0.2,
-    },
-    activityAmount: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#000000',
-        letterSpacing: -0.4,
-    },
-
-    // Other Vehicles - Apple Style
-    vehiclesScrollContent: {
-        gap: 12,
-    },
-    otherVehicleCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 20,
-        marginRight: 12,
-        width: 150,
-        alignItems: 'center',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 1,
-            },
-            web: {
-                boxShadow: '0 1px 8px rgba(0,0,0,0.05)',
-            },
-        }),
-    },
-    otherVehicleIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#F2F2F7',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 14,
-    },
-    otherVehicleName: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#000000',
-        textAlign: 'center',
-        marginBottom: 5,
-        letterSpacing: -0.3,
-    },
-    otherVehiclePlate: {
-        fontSize: 13,
-        fontWeight: '400',
-        color: '#8E8E93',
-        letterSpacing: -0.2,
-    },
-
-    // Add Vehicle Button - Apple Style
-    addVehicleButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#F2F2F7',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 12,
-    },
-    addVehicleButtonDesktop: {
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-    },
-    addVehicleButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#007AFF',
-        letterSpacing: -0.3,
-    },
-
-    // ============================================
-    // WEB-SPECIFIC STYLES
-    // ============================================
-    webContainer: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    webHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#ffffff',
-        paddingHorizontal: 40,
-        paddingVertical: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        }),
-    },
-    webEmptyState: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 40,
-        paddingBottom: 80,
-    },
-    webEmptyTitle: {
-        fontSize: 32,
-        fontWeight: '700',
-        marginTop: 24,
-        marginBottom: 12,
-    },
-    webEmptyDescription: {
-        fontSize: 16,
-        lineHeight: 24,
-        textAlign: 'center',
-        maxWidth: 500,
-        marginBottom: 32,
-    },
-    webEmptyButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        paddingHorizontal: 32,
-        paddingVertical: 16,
-        borderRadius: 12,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
-    },
-    webEmptyButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#ffffff',
-    },
-    webHeaderLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 32,
-    },
-    webHeaderTitle: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#111827',
-        letterSpacing: -0.5,
-    },
-    webHeaderGreeting: {
-        fontSize: 16,
-        fontWeight: '400',
-        color: '#6b7280',
-    },
-    webHeaderRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
-    webHeaderButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
         gap: 8,
-        backgroundColor: '#3b82f6',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 10,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
     },
-    webHeaderButtonText: {
-        fontSize: 15,
+    logAction: {
+        flex: 1,
+        minHeight: 84,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        padding: 8,
+        borderWidth: 1,
+        borderRadius: mechanicRadius.lg,
+    },
+    logLabel: {
+        fontSize: 14,
         fontWeight: '600',
-        color: '#ffffff',
     },
-    webIconButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 10,
-        backgroundColor: '#f3f4f6',
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
-    },
-    webBadge: {
-        position: 'absolute',
-        top: 6,
-        right: 6,
-        backgroundColor: '#ef4444',
-        minWidth: 18,
-        height: 18,
-        borderRadius: 9,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 5,
-        borderWidth: 2,
-        borderColor: '#f3f4f6',
-    },
-    webBadgeText: {
-        color: '#ffffff',
-        fontSize: 11,
-        fontWeight: '700',
-    },
-    webContent: {
-        flex: 1,
-    },
-    webGrid: {
-        flexDirection: 'row',
-        maxWidth: 1600,
-        alignSelf: 'center',
-        width: '100%',
-        paddingHorizontal: 40,
-        paddingVertical: 32,
-        gap: 32,
-    },
-    webLeftColumn: {
-        flex: 2,
-        gap: 24,
-    },
-    webRightColumn: {
-        flex: 1,
-        gap: 24,
-    },
-
-    // Web Vehicle Card
-    webVehicleCard: {
-        borderRadius: 16,
+    list: {
+        borderWidth: 1,
+        borderRadius: mechanicRadius.xl,
         overflow: 'hidden',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-        }),
     },
-    webVehicleGradient: {
-        padding: 32,
-    },
-    webVehicleHeader: {
+    listRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
-    },
-    webVehicleName: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: '#ffffff',
-        marginBottom: 8,
-        letterSpacing: -0.8,
-    },
-    webVehiclePlate: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.95)',
-        marginBottom: 16,
-        letterSpacing: 1.5,
-    },
-    webVehicleTag: {
-        alignSelf: 'flex-start',
-        backgroundColor: 'rgba(255,255,255,0.25)',
+        gap: 12,
+        minHeight: 56,
         paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 10,
+        paddingVertical: 12,
     },
-    webVehicleTagText: {
-        color: '#ffffff',
-        fontSize: 15,
+    listBody: {
+        flex: 1,
+    },
+    listTitle: {
+        fontSize: 16,
         fontWeight: '600',
     },
-    webVehicleImage: {
-        width: 200,
-        height: 130,
+    todoIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    webVehicleButton: {
+    linkRow: {
         flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        minHeight: 44,
+        paddingVertical: 8,
+    },
+    centered: {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        paddingVertical: 14,
-        borderRadius: 12,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
+        paddingVertical: 64,
     },
-    webVehicleButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#ffffff',
-    },
-
-    // Web Stats Grid
-    webStatsGrid: {
-        flexDirection: 'row',
-        gap: 20,
-    },
-    webStatCard: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-        borderRadius: 14,
-        padding: 24,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
-    },
-    webStatIcon: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 16,
-    },
-    webStatValue: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#111827',
-        marginBottom: 6,
-        letterSpacing: -0.6,
-    },
-    webStatLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#6b7280',
+    centeredText: {
         textAlign: 'center',
-    },
-
-    // Web Quick Actions
-    webQuickActions: {
-        backgroundColor: '#ffffff',
-        borderRadius: 14,
-        padding: 24,
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        }),
-    },
-    webActionGrid: {
-        flexDirection: 'row',
-        gap: 16,
-        marginTop: 16,
-    },
-    webActionCard: {
-        flex: 1,
-        alignItems: 'center',
-        gap: 12,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-        }),
-    },
-    webActionIcon: {
-        width: 70,
-        height: 70,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...(Platform.OS === 'web' && {
-            transition: 'all 0.2s',
-        }),
-    },
-    webActionLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-        textAlign: 'center',
-    },
-    webActionTitle: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#111827',
-        textAlign: 'center',
-        letterSpacing: -0.3,
-    },
-    webActionDescription: {
-        fontSize: 13,
-        fontWeight: '400',
-        color: '#6b7280',
-        textAlign: 'center',
-        marginTop: 4,
-    },
-
-    // Web Section
-    webSection: {
-        backgroundColor: '#ffffff',
-        borderRadius: 14,
-        padding: 24,
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-        ...(Platform.OS === 'web' && {
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        }),
-    },
-    webSectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    webSectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#111827',
-        letterSpacing: -0.4,
-    },
-    webSectionLink: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#3b82f6',
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-        }),
-    },
-
-    // Web Deadline Card
-    webDeadlineCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        marginHorizontal: -16,
-        marginBottom: 4,
-        borderRadius: 10,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
-    },
-    webDeadlineIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    webDeadlineInfo: {
-        flex: 1,
-    },
-    webDeadlineTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    webDeadlineDate: {
-        fontSize: 13,
-        fontWeight: '400',
-        color: '#6b7280',
-    },
-
-    // Web Activity Card
-    webActivityCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        marginHorizontal: -16,
-        marginBottom: 4,
-        borderRadius: 10,
-    },
-    webActivityIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    webActivityInfo: {
-        flex: 1,
-    },
-    webActivityTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    webActivityDate: {
-        fontSize: 13,
-        fontWeight: '400',
-        color: '#6b7280',
-    },
-    webActivityAmount: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#111827',
-    },
-
-    // Web Other Vehicle Card
-    webOtherVehicleCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        marginHorizontal: -16,
-        marginBottom: 4,
-        borderRadius: 10,
-        ...(Platform.OS === 'web' && {
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-        }),
-    },
-    webOtherVehicleIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        backgroundColor: '#f3f4f6',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    webOtherVehicleInfo: {
-        flex: 1,
-    },
-    webOtherVehicleName: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    webOtherVehiclePlate: {
-        fontSize: 13,
-        fontWeight: '400',
-        color: '#6b7280',
-    },
-
-    // Add Vehicle Modal
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        width: '100%',
-        maxWidth: 500,
-        borderRadius: 20,
-        padding: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 10,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    modalTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-    },
-    modalCloseButton: {
-        padding: 4,
-    },
-    modalDescription: {
-        fontSize: 15,
-        lineHeight: 22,
-        marginBottom: 24,
-    },
-    modalOptions: {
-        gap: 12,
-    },
-    modalOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 16,
-        gap: 16,
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-            },
-        }),
-    },
-    modalOptionIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalOptionContent: {
-        flex: 1,
-    },
-    modalOptionTitle: {
-        fontSize: 17,
-        fontWeight: '600',
-        marginBottom: 4,
-    },
-    modalOptionDescription: {
-        fontSize: 14,
-        lineHeight: 20,
+        maxWidth: 360,
     },
 });
 

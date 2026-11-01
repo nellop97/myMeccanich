@@ -112,6 +112,9 @@ const MechanicDashboard: React.FC = () => {
       case 'customers':
         navigation.navigate('CustomersList' as never);
         break;
+      case 'bookings':
+        navigation.navigate('MechanicBookings' as never);
+        break;
       case 'parts':
         // Gestione Intervento richiede un intervento: si sceglie dalla lista delle auto
         navigation.navigate('AllCarsInWorkshop' as never);

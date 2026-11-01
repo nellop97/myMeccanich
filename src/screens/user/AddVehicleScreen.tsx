@@ -1,7 +1,7 @@
 // src/screens/user/AddVehicleScreen.tsx
 // Wizard principale per aggiunta veicolo - Multipiattaforma
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,6 @@ import {
     StatusBar,
     useWindowDimensions,
     ActivityIndicator,
-    Alert,
 } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -29,7 +28,8 @@ import VehicleImagesStep from './AddVehicle/VehicleImagesStep';
 import { VehicleFormData, AddVehicleStep } from '../../types/addVehicle.types';
 
 // Firebase
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { showAlert } from '../../utils/platformHelpers';
 import { db } from '../../services/firebase';
 
 const AddVehicleScreen = () => {
@@ -45,6 +45,8 @@ const AddVehicleScreen = () => {
     // Stati
     const [currentStep, setCurrentStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // Lo stato si aggiorna al render successivo: un doppio tocco lo supererebbe
+    const submitInProgress = useRef(false);
     const [formData, setFormData] = useState<VehicleFormData>({
         make: '',
         model: '',
@@ -93,7 +95,7 @@ const AddVehicleScreen = () => {
     // Vai allo step successivo
     const handleNext = () => {
         if (!validateCurrentStep()) {
-            Alert.alert('Attenzione', 'Compila tutti i campi obbligatori');
+            showAlert('Attenzione', 'Compila tutti i campi obbligatori');
             return;
         }
 
@@ -124,14 +126,28 @@ const AddVehicleScreen = () => {
     // Salva veicolo su Firebase
     const handleSubmit = async () => {
         if (!user?.id) {
-            Alert.alert('Errore', 'Utente non autenticato');
+            showAlert('Errore', 'Utente non autenticato');
             return;
         }
 
+        if (submitInProgress.current) return;
+        submitInProgress.current = true;
         setIsSubmitting(true);
 
         try {
             console.log('📝 Salvando veicolo per utente:', user.id);
+
+            const licensePlate = formData.licensePlate.trim().toUpperCase();
+            const samePlate = await getDocs(query(
+                collection(db, 'vehicles'),
+                where('ownerId', '==', user.id),
+                where('licensePlate', '==', licensePlate)
+            ));
+
+            if (samePlate.docs.some((vehicleDoc) => vehicleDoc.data().isActive !== false)) {
+                showAlert('Veicolo già presente', `La targa ${licensePlate} è già tra i tuoi veicoli.`);
+                return;
+            }
 
             // Helper per serializzare le date
             const serializeDate = (date: any): string | null => {
@@ -155,7 +171,7 @@ const AddVehicleScreen = () => {
                 make: formData.make,
                 model: formData.model,
                 year: Number(formData.year),
-                licensePlate: formData.licensePlate.toUpperCase(),
+                licensePlate: formData.licensePlate.trim().toUpperCase(),
 
                 // Dettagli tecnici
                 fuel: formData.fuelType || 'benzina',
@@ -232,7 +248,7 @@ const AddVehicleScreen = () => {
             console.log('✅ Veicolo creato con ID:', docRef.id);
 
             // Mostra successo e redirect alla Home
-            Alert.alert(
+            showAlert(
                 'Veicolo Aggiunto!',
                 `${formData.make} ${formData.model} è stato aggiunto correttamente.`,
                 [
@@ -260,8 +276,9 @@ const AddVehicleScreen = () => {
                 errorMessage = error.message;
             }
 
-            Alert.alert('Errore', errorMessage);
+            showAlert('Errore', errorMessage);
         } finally {
+            submitInProgress.current = false;
             setIsSubmitting(false);
         }
     };

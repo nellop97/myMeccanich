@@ -266,28 +266,6 @@ export class WorkshopService {
   }
 
   /**
-   * Incrementa il contatore di prenotazioni
-   */
-  async incrementBookingCount(workshopId: string): Promise<void> {
-    try {
-      const workshopRef = doc(db, 'workshops', workshopId);
-      const workshop = await this.getWorkshop(workshopId);
-
-      if (!workshop) {
-        throw new Error('Workshop non trovata');
-      }
-
-      await updateDoc(workshopRef, {
-        totalBookings: (workshop.totalBookings || 0) + 1,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      console.error('❌ Errore incremento contatore prenotazioni:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Calcola la distanza tra due coordinate (formula di Haversine)
    */
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -310,13 +288,20 @@ export class WorkshopService {
    * Converte i Timestamp di Firestore in Date
    */
   private convertTimestamps(data: any): any {
+    if (data instanceof Timestamp) {
+      return data.toDate();
+    }
+    // Gli array restano array: services e specializations si usano con some e filter
+    if (Array.isArray(data)) {
+      return data.map(item => this.convertTimestamps(item));
+    }
+    if (typeof data !== 'object' || data === null || data instanceof Date) {
+      return data;
+    }
+
     const converted = { ...data };
     Object.keys(converted).forEach(key => {
-      if (converted[key] instanceof Timestamp) {
-        converted[key] = converted[key].toDate();
-      } else if (typeof converted[key] === 'object' && converted[key] !== null) {
-        converted[key] = this.convertTimestamps(converted[key]);
-      }
+      converted[key] = this.convertTimestamps(converted[key]);
     });
     return converted;
   }

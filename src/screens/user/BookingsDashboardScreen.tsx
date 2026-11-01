@@ -10,7 +10,9 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useMechanicTheme } from '../mechanic/mechanicTheme';
+import MechanicHeader from '../mechanic/MechanicHeader';
+import UserLayout from './UserLayout';
 import {
   Calendar,
   Clock,
@@ -32,43 +34,32 @@ interface BookingsDashboardScreenProps {
 type FilterStatus = 'all' | 'pending' | 'confirmed' | 'in_progress' | 'completed';
 
 export default function BookingsDashboardScreen({ navigation }: BookingsDashboardScreenProps) {
-  const { darkMode, user } = useStore();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [filter, setFilter] = useState<FilterStatus>('all');
 
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    primary: '#3b82f6',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
-
   useEffect(() => {
-    loadBookings();
-
-    // Real-time listener
-    if (user?.uid) {
-      const unsubscribe = BookingService.onUserBookingsChange(user.uid, (updatedBookings) => {
+    // Il listener fornisce anche il primo caricamento
+    if (user?.id) {
+      setLoading(true);
+      const unsubscribe = BookingService.onUserBookingsChange(user.id, (updatedBookings) => {
         setBookings(updatedBookings);
+        setLoading(false);
       });
 
       return () => unsubscribe();
     }
-  }, [user]);
+  }, [user?.id]);
 
   const loadBookings = async () => {
-    if (!user?.uid) return;
+    if (!user?.id) return;
 
     try {
       setLoading(true);
-      const data = await BookingService.getUserBookings(user.uid);
+      const data = await BookingService.getUserBookings(user.id);
       setBookings(data);
     } catch (error) {
       console.error('Errore caricamento prenotazioni:', error);
@@ -88,7 +79,7 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
     return bookings.filter((b) => {
       if (filter === 'pending') return ['pending', 'quote_requested', 'quote_sent', 'date_proposed'].includes(b.status);
       if (filter === 'confirmed') return b.status === 'confirmed';
-      if (filter === 'in_progress') return b.status === 'in_progress';
+      if (filter === 'in_progress') return b.status === 'in_progress' || b.status === 'ready';
       if (filter === 'completed') return b.status === 'completed';
       return true;
     });
@@ -108,6 +99,8 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
         return { label: 'Confermata', color: theme.success, icon: CheckCircle };
       case 'in_progress':
         return { label: 'In Corso', color: theme.primary, icon: AlertCircle };
+      case 'ready':
+        return { label: 'Pronta per il ritiro', color: theme.success, icon: CheckCircle };
       case 'completed':
         return { label: 'Completata', color: theme.success, icon: CheckCircle };
       case 'cancelled':
@@ -120,8 +113,8 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
   };
 
   const getUnreadCount = (booking: BookingRequest) => {
-    if (!user?.uid) return 0;
-    return BookingService.getUnreadMessageCount(booking, user.uid);
+    if (!user?.id) return 0;
+    return BookingService.getUnreadMessageCount(booking, user.id);
   };
 
   const renderBookingCard = (booking: BookingRequest) => {
@@ -132,7 +125,7 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
     return (
       <TouchableOpacity
         key={booking.id}
-        style={[styles.bookingCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+        style={[styles.bookingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
         onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
       >
         {/* Header */}
@@ -208,17 +201,23 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
   };
 
   return (
+    <UserLayout active="bookings">
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
-        style={styles.header}
-      >
-        <Text style={styles.headerTitle}>Le Mie Prenotazioni</Text>
-        <Text style={styles.headerSubtitle}>
-          Gestisci tutti i tuoi appuntamenti
-        </Text>
-      </LinearGradient>
+      <MechanicHeader
+        title="Prenotazioni"
+        subtitle="I tuoi interventi in officina"
+        right={
+          <TouchableOpacity
+            style={[styles.newButton, { backgroundColor: theme.primary }]}
+            onPress={() => navigation.navigate('WorkshopSearch')}
+            accessibilityRole="button"
+            accessibilityLabel="Nuova prenotazione"
+          >
+            <Plus size={20} color={theme.onPrimary} />
+            <Text style={[styles.newButtonText, { color: theme.onPrimary }]}>Nuova</Text>
+          </TouchableOpacity>
+        }
+      />
 
       {/* Filters */}
       <ScrollView
@@ -243,7 +242,7 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
             style={[
               styles.filterButton,
               {
-                backgroundColor: filter === filterOption.value ? theme.primary : theme.cardBackground,
+                backgroundColor: filter === filterOption.value ? theme.primary : theme.surface,
                 borderColor: theme.border,
               },
             ]}
@@ -252,7 +251,7 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
             <Text
               style={[
                 styles.filterText,
-                { color: filter === filterOption.value ? '#fff' : theme.text },
+                { color: filter === filterOption.value ? theme.onPrimary : theme.text },
               ]}
             >
               {filterOption.label}
@@ -262,7 +261,7 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
                 style={[
                   styles.filterBadge,
                   {
-                    backgroundColor: filter === filterOption.value ? '#fff' : theme.primary,
+                    backgroundColor: filter === filterOption.value ? theme.onPrimary : theme.primary,
                   },
                 ]}
               >
@@ -270,7 +269,7 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
                   style={[
                     styles.filterBadgeText,
                     {
-                      color: filter === filterOption.value ? theme.primary : '#fff',
+                      color: filter === filterOption.value ? theme.primary : theme.onPrimary,
                     },
                   ]}
                 >
@@ -321,34 +320,14 @@ export default function BookingsDashboardScreen({ navigation }: BookingsDashboar
         </ScrollView>
       )}
 
-      {/* FAB */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: theme.primary }]}
-        onPress={() => navigation.navigate('WorkshopSearch')}
-      >
-        <Plus size={28} color="#fff" />
-      </TouchableOpacity>
     </View>
+    </UserLayout>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#e0e7ff',
   },
   filtersContainer: {
     maxHeight: 60,
@@ -509,28 +488,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 32,
   },
-  fab: {
-    position: 'absolute',
-    right: 24,
-    bottom: 24,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
+  newButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-      web: {
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-      },
-    }),
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  newButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

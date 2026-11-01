@@ -60,6 +60,7 @@ import AllCarsInWorkshopScreen from '../screens/mechanic/AllCarsInWorkshopScreen
 import RepairPartsManagementScreen from '../screens/mechanic/RepairPartsManagementScreen';
 import MechanicCalendarScreen from '../screens/mechanic/MechanicCalendarScreen';
 import NewAppointmentScreen from '../screens/mechanic/NewAppointmentScreen';
+import CompleteInterventionScreen from '../screens/mechanic/CompleteInterventionScreen';
 import MechanicBookingsScreen from '../screens/mechanic/MechanicBookingsScreen';
 import MechanicProfileScreen from '../screens/mechanic/MechanicProfileScreen';
 
@@ -78,6 +79,8 @@ import CustomerDetailScreen from '../screens/mechanic/CustomerDetailScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import PrivacyScreen from '../screens/PrivacyScreen';
+
+import { withUserLayout } from '../screens/user/UserLayout';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -144,6 +147,7 @@ export type RootStackParamList = {
     MechanicBookingDetail: { bookingId: string };
     AllCarsInWorkshop: undefined;
     RepairPartsManagement: { carId: string; repairId: string };
+    CompleteIntervention: { carId: string; repairId: string };
     NewAppointment: undefined;
     MechanicCalendar: undefined;
     MechanicProfile: undefined;
@@ -173,6 +177,11 @@ export type AuthStackParamList = {
     Register: undefined;
     ForgotPassword: undefined;
 };
+
+// Fuori dai componenti, così il navigatore non le rimonta a ogni render
+const VehicleListWithLayout = withUserLayout(VehicleListScreen, 'vehicles');
+const RemindersWithLayout = withUserLayout(RemindersListScreen, 'reminders');
+const ProfileWithLayout = withUserLayout(ProfileScreen, 'profile');
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -309,6 +318,16 @@ export default function AppNavigator() {
                             component={RepairPartsManagementScreen}
                             options={{
                                 title: 'Gestione Ricambi',
+                                headerShown: false,
+                                animation: 'slide_from_right',
+                            }}
+                        />
+
+                        <Stack.Screen
+                            name="CompleteIntervention"
+                            component={CompleteInterventionScreen}
+                            options={{
+                                title: 'Completa lavori',
                                 headerShown: false,
                                 animation: 'slide_from_right',
                             }}
@@ -549,7 +568,7 @@ export default function AppNavigator() {
 
                     <Stack.Screen
                         name="VehicleList"
-                        component={VehicleListScreen}
+                        component={VehicleListWithLayout}
                         options={{
                             title: 'I Miei Veicoli',
                             headerShown: false,
@@ -676,7 +695,7 @@ export default function AppNavigator() {
 
                     <Stack.Screen
                         name="Reminders"
-                        component={RemindersListScreen}
+                        component={RemindersWithLayout}
                         options={{
                             title: 'Promemoria',
                             headerShown: false,
@@ -818,7 +837,7 @@ export default function AppNavigator() {
                     {/* Profile - Profilo Utente */}
                     <Stack.Screen
                         name="Profile"
-                        component={ProfileScreen}
+                        component={ProfileWithLayout}
                         options={{
                             title: 'Profilo',
                             headerShown: false,

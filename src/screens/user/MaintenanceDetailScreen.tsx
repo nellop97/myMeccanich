@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
+  Image,
   StyleSheet,
   TouchableOpacity,
   Alert,
@@ -24,6 +25,7 @@ import {
   MapPin,
   User,
   Package,
+  ShieldCheck,
   FileText,
   Shield,
   Clock,
@@ -348,7 +350,8 @@ export default function MaintenanceDetailScreen() {
 
   const typeColors = getTypeColor(maintenance.type);
   const canEdit = isOwner;
-  const showCosts = vehicle.privacySettings?.showCosts !== false;
+  // Il filtro privacy riguarda chi guarda l'auto da fuori, non il suo proprietario
+  const showCosts = isOwner || vehicle.privacySettings?.showCosts !== false;
   const showWorkshop = vehicle.privacySettings?.showMechanics !== false;
 
   return (
@@ -381,7 +384,7 @@ export default function MaintenanceDetailScreen() {
           </Text>
         </View>
 
-        {canEdit && (
+        {canEdit && !maintenance.verifiedByWorkshop && (
           <View style={styles.headerActions}>
             <TouchableOpacity
               onPress={() => navigation.navigate('EditMaintenance' as never, {
@@ -624,6 +627,42 @@ export default function MaintenanceDetailScreen() {
                 </View>
               </>
             )}
+          </GlassCard>
+        )}
+
+        {maintenance.verifiedByWorkshop && (
+          <GlassCard style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <ShieldCheck size={20} color={isDark ? '#fff' : '#000'} />
+              <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>
+                Eseguita da officina
+              </Text>
+            </View>
+            <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)' }}>
+              {maintenance.workshopName ? `${maintenance.workshopName}. ` : ''}
+              Dati, costi e foto sono stati inseriti dall'officina e non si possono modificare.
+            </Text>
+          </GlassCard>
+        )}
+
+        {maintenance.photos && maintenance.photos.length > 0 && (
+          <GlassCard style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Package size={20} color={isDark ? '#fff' : '#000'} />
+              <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#000' }]}>
+                Foto del lavoro
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {maintenance.photos.map((photo) => (
+                <Image
+                  key={photo.url}
+                  source={{ uri: photo.url }}
+                  style={{ width: 104, height: 104, borderRadius: 12 }}
+                  accessibilityLabel={photo.kind === 'part' ? 'Foto ricambio usato' : 'Foto della manutenzione'}
+                />
+              ))}
+            </View>
           </GlassCard>
         )}
 

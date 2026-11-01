@@ -43,12 +43,19 @@ export interface Repair {
     id: string;
     description: string;
     scheduledDate: string;
+    scheduledTime?: string;
+    bookingId?: string;
     deliveryDate?: string;
     totalCost: number;
     laborCost: number;
     estimatedHours: number;
-    status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+    status: 'pending' | 'in_progress' | 'ready' | 'completed' | 'cancelled';
     parts: RepairPart[];
+    subtotal?: number;
+    vatAmount?: number;
+    photos?: { url: string; kind: 'work' | 'part'; name: string }[];
+    invoiceId?: string;
+    completedAt?: string;
     notes?: string;
     mechanicId: string;
     createdAt: string; // ⚠️ CHANGED: ISO string invece di serverTimestamp

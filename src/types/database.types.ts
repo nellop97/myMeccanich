@@ -114,6 +114,14 @@ export interface MaintenanceRecord {
   documents: MaintenanceDocument[];
   invoiceNumber?: string;
   
+  // Intervento chiuso dall'officina: i dati non sono modificabili dal proprietario
+  verifiedByWorkshop?: boolean;
+  bookingId?: string;
+  subtotal?: number;
+  vatRate?: number;
+  vatAmount?: number;
+  photos?: { url: string; kind: 'work' | 'part'; name: string }[];
+
   // Metadata
   createdAt: Date;
   updatedAt: Date;
@@ -331,7 +339,7 @@ export interface BookingRequest {
   quoteStatus?: 'pending' | 'approved' | 'rejected';
 
   // Stato prenotazione
-  status: 'pending' | 'quote_requested' | 'quote_sent' | 'date_proposed' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'rejected';
+  status: 'pending' | 'quote_requested' | 'quote_sent' | 'date_proposed' | 'confirmed' | 'in_progress' | 'ready' | 'completed' | 'cancelled' | 'rejected';
 
   // Conversazione/proposte
   proposals: BookingProposal[];
@@ -342,6 +350,10 @@ export interface BookingRequest {
   actualCost?: number;
   invoiceId?: string;
   maintenanceRecordId?: string;
+
+  // Intervento nato dalla conferma, in workshopCars
+  interventionCarId?: string;
+  interventionRepairId?: string;
 
   // Note
   userNotes?: string;

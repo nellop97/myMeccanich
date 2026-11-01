@@ -284,6 +284,31 @@ export default function VehicleDataViewScreen() {
                   </View>
                 )}
 
+                {record.verifiedByWorkshop && (
+                  <Text style={{ color: colors.onSurfaceVariant, marginTop: 4 }}>
+                    Eseguita da officina, dati non modificabili{record.parts?.length ? ` · ${record.parts.length} ricambi` : ''}{record.photos?.length ? ` · ${record.photos.length} foto` : ''}
+                  </Text>
+                )}
+
+                {record.parts?.length > 0 && (
+                  <Text style={{ color: colors.onSurface, marginTop: 4 }}>
+                    Ricambi: {record.parts.map((part: any) => part.name).join(', ')}
+                  </Text>
+                )}
+
+                {record.photos?.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                    {record.photos.map((photo: any) => (
+                      <Image
+                        key={photo.url}
+                        source={{ uri: photo.url }}
+                        style={{ width: 84, height: 84, borderRadius: 12 }}
+                        accessibilityLabel={photo.kind === 'part' ? 'Foto ricambio usato' : 'Foto della manutenzione'}
+                      />
+                    ))}
+                  </View>
+                )}
+
                 {record.cost && (
                   <Text style={[styles.maintenanceCost, { color: colors.primary }]}>
                     Costo: €{record.cost.toFixed(2)}

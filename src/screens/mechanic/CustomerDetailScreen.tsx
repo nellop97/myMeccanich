@@ -113,6 +113,7 @@ const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
 const REPAIR_STATUS_LABELS: Record<Repair['status'], string> = {
   pending: 'In attesa',
   in_progress: 'In corso',
+  ready: 'Pronta per il ritiro',
   completed: 'Completato',
   cancelled: 'Annullato',
 };

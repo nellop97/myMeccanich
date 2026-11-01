@@ -41,6 +41,7 @@ import MechanicTextInput from './MechanicTextInput';
 import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
 
 import MechanicHeader from './MechanicHeader';
+import { parseDayString } from '../../utils/calendarGrid';
 interface RouteParams {
   carId?: string;
   repairId?: string;
@@ -611,7 +612,7 @@ const RepairPartsManagementScreen = () => {
                   <View style={styles.infoRow}>
                     <Calendar size={16} color={theme.textSecondary} />
                     <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                      Data: {new Date(repair.scheduledDate).toLocaleDateString('it-IT')}
+                      Data: {(parseDayString(repair.scheduledDate) ?? new Date(repair.scheduledDate)).toLocaleDateString('it-IT')}{repair.scheduledTime ? ` alle ${repair.scheduledTime}` : ''}
                     </Text>
                   </View>
                   <View style={styles.infoRow}>

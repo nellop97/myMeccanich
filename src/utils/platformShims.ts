@@ -5,14 +5,6 @@ import { Platform } from 'react-native';
  * Shim per moduli nativi non disponibili su web
  */
 
-// Date Picker Shim
-export const getDatePicker = () => {
-  if (Platform.OS === 'web') {
-    return null; // Useremo input HTML5
-  }
-  return require('@react-native-community/datetimepicker').default;
-};
-
 // Document Picker Shim
 export const getDocumentPicker = () => {
   if (Platform.OS === 'web') {

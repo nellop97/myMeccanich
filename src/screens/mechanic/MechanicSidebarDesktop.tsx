@@ -38,6 +38,7 @@ const menuSections = [
         icon: "car-multiple",
       },
       { id: "MechanicCalendar", label: "Calendario", icon: "calendar-month" },
+      { id: "bookings", label: "Prenotazioni", icon: "calendar-clock" },
       {
         id: "NewAppointment",
         label: "Nuovo Appuntamento",
@@ -105,6 +106,9 @@ const MechanicSidebarDesktop: React.FC<MechanicSidebarDesktopProps> = ({
         break;
       case "MechanicCalendar":
         onTabChange("calendar");
+        break;
+      case "bookings":
+        onTabChange("bookings");
         break;
       case "NewAppointment":
         onTabChange("newAppointment");

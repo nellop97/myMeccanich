@@ -34,6 +34,7 @@ import { refreshAuthUser, useAuth } from '../../hooks/useAuth';
 import { useStore } from '../../store';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+import WorkshopService from '../../services/WorkshopService';
 
 import { useMechanicTheme, mechanicButton, mechanicRadius, useMechanicBreakpoints } from './mechanicTheme';
 import MechanicTextInput from './MechanicTextInput';
@@ -91,6 +92,8 @@ const MechanicProfileScreen = () => {
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<MechanicProfile | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [bookingsActive, setBookingsActive] = useState(false);
+  const [activating, setActivating] = useState(false);
 
   // Form state
   const [firstName, setFirstName] = useState('');
@@ -139,6 +142,9 @@ const MechanicProfileScreen = () => {
         setMechanicLicense(data.mechanicLicense || '');
         setOpeningHours(data.openingHours || 'Lun-Ven 8:00-18:00');
       }
+
+      const workshopDoc = await getDoc(doc(db, 'workshops', user.uid));
+      setBookingsActive(workshopDoc.exists());
     } catch (error) {
       console.error('Errore caricamento profilo:', error);
       showAlert('Errore', 'Impossibile caricare il profilo');
@@ -218,6 +224,59 @@ const MechanicProfileScreen = () => {
       showAlert('Errore', 'Impossibile salvare le modifiche');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleActivateBookings = async () => {
+    if (!user?.uid) return;
+
+    if (!workshopName.trim() || !phone.trim() || !address.trim() || !city.trim()) {
+      showAlert('Dati mancanti', "Completa nome dell'officina, telefono, indirizzo e città con Modifica");
+      return;
+    }
+
+    try {
+      setActivating(true);
+      await WorkshopService.createOrUpdateWorkshop(
+        {
+          ownerId: user.uid,
+          name: workshopName.trim(),
+          email: profile?.email || user.email || '',
+          phone: phone.trim(),
+          address: {
+            street: address.trim(),
+            city: city.trim(),
+            province: province.trim(),
+            postalCode: postalCode.trim(),
+            country: 'IT',
+          },
+          vatNumber: vatNumber.trim(),
+          businessHours: {},
+          services: [],
+          specializations: [],
+          galleryImages: [],
+          rating: 0,
+          reviewCount: 0,
+          totalBookings: 0,
+          bookingSettings: {
+            autoAccept: false,
+            minAdvanceHours: 24,
+            maxAdvanceDays: 60,
+            allowEmergency: true,
+          },
+          isVerified: false,
+          isActive: true,
+          createdAt: serverTimestamp() as any,
+        },
+        user.uid
+      );
+      setBookingsActive(true);
+      showAlert('Prenotazioni attive', 'Ora i clienti possono trovarti e inviarti richieste');
+    } catch (error) {
+      console.error('Errore attivazione prenotazioni:', error);
+      showAlert('Errore', 'Impossibile attivare le prenotazioni. Riprova.');
+    } finally {
+      setActivating(false);
     }
   };
 
@@ -497,6 +556,34 @@ const MechanicProfileScreen = () => {
             </ProfileCard>
 
             {/* Logout Button */}
+            {!editMode && (
+              <ProfileCard style={styles.card}>
+                <View style={styles.bookingsCard}>
+                  <Text style={[styles.bookingsTitle, { color: theme.text }]}>Prenotazioni</Text>
+                  <Text style={[styles.bookingsText, { color: theme.textSecondary }]}>
+                    {bookingsActive
+                      ? 'Attive: i clienti possono trovarti e inviarti richieste.'
+                      : 'Attivale per comparire nella ricerca officine e ricevere richieste.'}
+                  </Text>
+                  {!bookingsActive && (
+                    <TouchableOpacity
+                      style={[styles.bookingsButton, { backgroundColor: theme.primary }]}
+                      onPress={handleActivateBookings}
+                      disabled={activating}
+                      accessibilityRole="button"
+                      accessibilityLabel="Attiva prenotazioni"
+                    >
+                      {activating ? (
+                        <ActivityIndicator size="small" color={theme.onPrimary} />
+                      ) : (
+                        <Text style={[styles.bookingsButtonText, { color: theme.onPrimary }]}>Attiva prenotazioni</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ProfileCard>
+            )}
+
             <TouchableOpacity
               style={[styles.logoutButton, { backgroundColor: theme.error }]}
               onPress={handleLogout}
@@ -594,6 +681,24 @@ const styles = StyleSheet.create({
   },
   inputHalf: {
     flex: 1,
+  },
+  bookingsCard: {
+    gap: 8,
+  },
+  bookingsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  bookingsText: {
+    fontSize: 14,
+  },
+  bookingsButton: {
+    ...mechanicButton.primary,
+    marginTop: 8,
+  },
+  bookingsButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   logoutButton: {
     ...mechanicButton.primary,

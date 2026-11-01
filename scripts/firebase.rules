@@ -280,12 +280,21 @@ service cloud.firestore {
                get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.get('transferToEmail', '') == request.auth.token.email;
       }
 
-      // Lettura: proprietario diretto, meccanico, o proprietario del veicolo
+      // Helper: il proprietario ha autorizzato questo utente a vedere lo storico.
+      // L'accesso è un documento che può scrivere solo il proprietario, e scade da solo
+      function hasHistoryAccess(vehicleId) {
+        let accessPath = /databases/$(database)/documents/vehicle_history_access/$(vehicleId + '_' + request.auth.token.email.lower());
+        return exists(accessPath) && get(accessPath).data.expiresAt > request.time;
+      }
+
+      // Lettura: proprietario diretto, meccanico, proprietario del veicolo
+      // o acquirente approvato, solo per le manutenzioni visibili
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId)
+        ownsVehicle(resource.data.vehicleId) ||
+        (resource.data.isVisible == true && hasHistoryAccess(resource.data.vehicleId))
       );
 
       // Creazione: utenti per i propri veicoli o meccanici
@@ -297,22 +306,36 @@ service cloud.firestore {
       );
 
       // Aggiornamento: proprietario, meccanico, o buyer durante trasferimento
+      // Un intervento chiuso dall'officina è la prova del lavoro svolto: il proprietario
+      // può solo decidere se mostrarlo, non modificarlo
+      function isWorkshopRecord() {
+        return resource.data.get('verifiedByWorkshop', false) == true;
+      }
+
+      function onlyChangesVisibility() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isVisible', 'updatedAt']);
+      }
+
       allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
         resource.data.mechanicId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId) ||
         // Permetti aggiornamento al buyer durante trasferimento veicolo
-        isTransferBuyer(resource.data.vehicleId)
+        isTransferBuyer(resource.data.vehicleId) ||
+        ((!isWorkshopRecord() || onlyChangesVisibility()) && (
+          resource.data.userId == request.auth.uid ||
+          resource.data.ownerId == request.auth.uid ||
+          ownsVehicle(resource.data.vehicleId)
+        ))
       );
 
       // Cancellazione: proprietario o buyer durante trasferimento
       allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        ownsVehicle(resource.data.vehicleId) ||
         // Permetti cancellazione al buyer durante trasferimento veicolo
-        isTransferBuyer(resource.data.vehicleId)
+        isTransferBuyer(resource.data.vehicleId) ||
+        (!isWorkshopRecord() && (
+          resource.data.userId == request.auth.uid ||
+          resource.data.ownerId == request.auth.uid ||
+          ownsVehicle(resource.data.vehicleId)
+        ))
       );
     }
 
@@ -736,6 +759,25 @@ service cloud.firestore {
     // ============================================
     // VEHICLE VIEW REQUESTS COLLECTION
     // ============================================
+    // Autorizzazione a leggere lo storico di un veicolo, scritta all'approvazione
+    match /vehicle_history_access/{accessId} {
+      function ownsAccessVehicle(vehicleId) {
+        return get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.userId == request.auth.uid ||
+               get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerId == request.auth.uid;
+      }
+
+      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+
+      // Solo il proprietario del veicolo, con l'id legato a veicolo e richiedente
+      allow create, update: if isAuthenticated() &&
+                              request.resource.data.ownerId == request.auth.uid &&
+                              ownsAccessVehicle(request.resource.data.vehicleId) &&
+                              accessId == request.resource.data.vehicleId + '_' + request.resource.data.requesterEmail;
+
+      // La revoca può riguardare richieste senza accesso allo storico
+      allow delete: if isAuthenticated() && (resource == null || resource.data.ownerId == request.auth.uid);
+    }
+
     match /vehicle_view_requests/{requestId} {
       // Lettura: proprietario del veicolo o richiedente
       allow read: if isAuthenticated() && (

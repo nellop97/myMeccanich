@@ -1,5 +1,5 @@
 // src/screens/mechanic/MechanicSidebarMobile.tsx - COMPONENTE COMPLETO
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useAppThemeManager } from '../../hooks/useTheme';
 
 import { MECHANIC_MIN_TOUCH, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
 import MechanicIcon from './MechanicIcon';
+import BookingService from '../../services/BookingService';
 import { showAlert } from '../../utils/platformHelpers';
 import { buildUserDisplayName, buildUserInitials } from '../../utils/authUtils';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -51,6 +52,13 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
   };
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [pendingBookings, setPendingBookings] = useState(0);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    return BookingService.onMechanicPendingCountChange(user.uid, setPendingBookings);
+  }, [user?.uid]);
+
   const [expandedSections, setExpandedSections] = useState<string[]>(['main']);
   
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -106,6 +114,7 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
           badge: stats.activeCustomers,
           color: theme.primary 
         },
+        { id: 'bookings', label: 'Prenotazioni', icon: 'calendar-clock', color: theme.secondary },
         { id: 'parts', label: 'Ricambi', icon: 'wrench', color: theme.success },
         { id: 'reports', label: 'Report', icon: 'chart-bar', color: theme.secondary },
       ] as MenuItem[]
@@ -256,15 +265,22 @@ const MechanicSidebarMobile: React.FC<SidebarProps> = ({ children, activeTab, on
         {/* Notification Bell */}
         <TouchableOpacity
           style={styles.notificationButton}
+          onPress={() => onTabChange('bookings')}
           accessibilityRole="button"
-          accessibilityLabel="Notifiche"
+          accessibilityLabel={pendingBookings > 0 ? `Prenotazioni, ${pendingBookings} da gestire` : 'Prenotazioni'}
         >
           <MechanicIcon
             name="bell"
             size={22}
             color={theme.textSecondary}
           />
-          <View style={[styles.notificationDot, { backgroundColor: theme.error }]} />
+          {pendingBookings > 0 && (
+            <View style={[styles.notificationCount, { backgroundColor: theme.error }]}>
+              <Text style={[styles.notificationCountText, { color: theme.onPrimary }]}>
+                {pendingBookings > 9 ? '9+' : pendingBookings}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
         
         {/* User Avatar Small */}
@@ -546,13 +562,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  notificationDot: {
+  notificationCount: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 8,
+    top: 4,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationCountText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   userAvatarSmall: {
     width: 32,

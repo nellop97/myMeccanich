@@ -1,6 +1,7 @@
 
 // src/hooks/useMechanicStats.ts - Hook per statistiche meccanico da Firebase
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from './useAuth';
 import { 
   collection, 
@@ -9,10 +10,11 @@ import {
   getDocs, 
   orderBy, 
   limit,
-  Timestamp,
   onSnapshot
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { toDayString } from '../utils/calendarGrid';
+import { calculateInvoiceStats } from '../utils/invoiceStats';
 
 export interface MechanicStats {
   carsInWorkshop: number;
@@ -58,6 +60,7 @@ export const useMechanicStats = () => {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoaded = useRef(false);
 
   // Utility per formattare il tempo
   const formatTimeAgo = useCallback((date: Date): string => {
@@ -71,220 +74,111 @@ export const useMechanicStats = () => {
     return date.toLocaleDateString('it-IT');
   }, []);
 
-  // Carica auto in officina
-  const loadCarsInWorkshop = useCallback(async (mechanicId: string): Promise<number> => {
+  // Auto, appuntamenti e lavori si ricavano dagli interventi, che sono la fonte dell'agenda
+  const loadWorkshopOverview = useCallback(async (mechanicId: string) => {
     try {
-      const carsQuery = query(
+      const snapshot = await getDocs(query(
         collection(db, 'workshopCars'),
         where('workshopId', '==', mechanicId),
         where('isActive', '==', true)
-      );
+      ));
 
-      const carsSnapshot = await getDocs(carsQuery);
-      return carsSnapshot.size;
-    } catch (error) {
-      console.error('Errore nel caricamento auto in officina:', error);
-      return 0;
-    }
-  }, []);
-
-  // Carica appuntamenti di oggi
-  const loadTodayAppointments = useCallback(async (mechanicId: string): Promise<number> => {
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const appointmentsQuery = query(
-        collection(db, 'appointments'),
-        where('mechanicId', '==', mechanicId),
-        where('date', '>=', Timestamp.fromDate(today)),
-        where('date', '<', Timestamp.fromDate(tomorrow)),
-        where('status', '!=', 'cancelled')
-      );
-      
-      const appointmentsSnapshot = await getDocs(appointmentsQuery);
-      return appointmentsSnapshot.size;
-    } catch (error) {
-      console.error('Errore nel caricamento appuntamenti di oggi:', error);
-      return 0;
-    }
-  }, []);
-
-  // Carica appuntamenti della settimana
-  const loadWeekAppointments = useCallback(async (mechanicId: string): Promise<number> => {
-    try {
-      const today = new Date();
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay());
-      weekStart.setHours(0, 0, 0, 0);
-      
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 7);
-
-      const appointmentsQuery = query(
-        collection(db, 'appointments'),
-        where('mechanicId', '==', mechanicId),
-        where('date', '>=', Timestamp.fromDate(weekStart)),
-        where('date', '<', Timestamp.fromDate(weekEnd)),
-        where('status', '!=', 'cancelled')
-      );
-      
-      const appointmentsSnapshot = await getDocs(appointmentsQuery);
-      return appointmentsSnapshot.size;
-    } catch (error) {
-      console.error('Errore nel caricamento appuntamenti della settimana:', error);
-      return 0;
-    }
-  }, []);
-
-  // Carica fatture in sospeso
-  const loadPendingInvoices = useCallback(async (mechanicId: string): Promise<{ pending: number, overdue: number }> => {
-    try {
-      const invoicesQuery = query(
-        collection(db, 'invoices'),
-        where('mechanicId', '==', mechanicId),
-        where('status', '==', 'pending')
-      );
-      
-      const invoicesSnapshot = await getDocs(invoicesQuery);
-      const invoices = invoicesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-
-      const today = new Date();
-      let overdueCount = 0;
-
-      invoices.forEach(invoice => {
-        const dueDate = invoice.dueDate?.toDate();
-        if (dueDate && dueDate < today) {
-          overdueCount++;
-        }
-      });
-
-      return {
-        pending: invoices.length,
-        overdue: overdueCount
-      };
-    } catch (error) {
-      console.error('Errore nel caricamento fatture:', error);
-      return { pending: 0, overdue: 0 };
-    }
-  }, []);
-
-  // Carica fatturato mensile
-  const loadMonthlyRevenue = useCallback(async (mechanicId: string): Promise<{ revenue: number, growth: number }> => {
-    try {
-      const today = new Date();
-      
-      // Mese corrente
-      const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      
-      // Mese precedente
-      const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-
-      // Query per il mese corrente
-      const currentMonthQuery = query(
-        collection(db, 'invoices'),
-        where('mechanicId', '==', mechanicId),
-        where('status', '==', 'paid'),
-        where('paidDate', '>=', Timestamp.fromDate(currentMonthStart)),
-        where('paidDate', '<=', Timestamp.fromDate(currentMonthEnd))
-      );
-
-      // Query per il mese precedente
-      const lastMonthQuery = query(
-        collection(db, 'invoices'),
-        where('mechanicId', '==', mechanicId),
-        where('status', '==', 'paid'),
-        where('paidDate', '>=', Timestamp.fromDate(lastMonthStart)),
-        where('paidDate', '<=', Timestamp.fromDate(lastMonthEnd))
-      );
-
-      const [currentMonthSnapshot, lastMonthSnapshot] = await Promise.all([
-        getDocs(currentMonthQuery),
-        getDocs(lastMonthQuery)
-      ]);
-
-      const currentRevenue = currentMonthSnapshot.docs.reduce((sum, doc) => {
-        return sum + (doc.data().total || 0);
-      }, 0);
-
-      const lastRevenue = lastMonthSnapshot.docs.reduce((sum, doc) => {
-        return sum + (doc.data().total || 0);
-      }, 0);
-
-      const growth = lastRevenue > 0 ? ((currentRevenue - lastRevenue) / lastRevenue) * 100 : 0;
-
-      return {
-        revenue: currentRevenue,
-        growth: growth
-      };
-    } catch (error) {
-      console.error('Errore nel caricamento fatturato mensile:', error);
-      return { revenue: 0, growth: 0 };
-    }
-  }, []);
-
-  // Carica altre statistiche
-  const loadOtherStats = useCallback(async (mechanicId: string) => {
-    try {
-      // Lavori completati (ultimi 30 giorni)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const completedJobsQuery = query(
-        collection(db, 'workshopCars'),
-        where('workshopId', '==', mechanicId),
-        where('status', '==', 'completed')
-      );
-
-      const completedJobsSnapshot = await getDocs(completedJobsQuery);
-
-      // Clienti attivi (ultimi 3 mesi)
+      const todayKey = toDayString(new Date());
+      const week = new Date();
+      week.setDate(week.getDate() + 7);
+      const weekKey = toDayString(week);
+      const monthAgo = new Date();
+      monthAgo.setDate(monthAgo.getDate() - 30);
       const threeMonthsAgo = new Date();
       threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
-      const activeCustomersQuery = query(
-        collection(db, 'appointments'),
-        where('mechanicId', '==', mechanicId),
-        where('date', '>=', Timestamp.fromDate(threeMonthsAgo)),
-        where('status', '==', 'completed')
-      );
+      let carsInWorkshop = 0;
+      let appointmentsToday = 0;
+      let appointmentsWeek = 0;
+      let completedJobs = 0;
+      let hoursTotal = 0;
+      let hoursCount = 0;
+      const customers = new Set<string>();
 
-      const activeCustomersSnapshot = await getDocs(activeCustomersQuery);
-      const uniqueCustomers = new Set(activeCustomersSnapshot.docs.map(doc => doc.data().customerId));
+      snapshot.docs.forEach((carDoc) => {
+        const car = carDoc.data();
+        const repairs: any[] = car.repairs ?? [];
+        const open = repairs.filter((repair) => ['pending', 'in_progress', 'in-progress', 'ready'].includes(repair.status));
 
-      // Media recensioni
-      const reviewsQuery = query(
-        collection(db, 'reviews'),
-        where('mechanicId', '==', mechanicId)
-      );
+        if (open.length > 0) carsInWorkshop++;
 
-      const reviewsSnapshot = await getDocs(reviewsQuery);
-      const reviews = reviewsSnapshot.docs.map(doc => doc.data());
-      const averageRating = reviews.length > 0 
-        ? reviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviews.length 
-        : 0;
+        open.forEach((repair) => {
+          if (repair.status === 'ready') return;
+          if (repair.scheduledDate === todayKey) appointmentsToday++;
+          if (repair.scheduledDate >= todayKey && repair.scheduledDate < weekKey) appointmentsWeek++;
+        });
+
+        repairs.forEach((repair) => {
+          const finishedAt = new Date(repair.completedAt || repair.updatedAt || 0);
+          const finished = repair.status === 'completed' || repair.status === 'ready';
+
+          if (finished && finishedAt >= monthAgo) {
+            completedJobs++;
+            if (repair.estimatedHours > 0) {
+              hoursTotal += repair.estimatedHours;
+              hoursCount++;
+            }
+          }
+          if (car.ownerId && new Date(repair.updatedAt || 0) >= threeMonthsAgo) {
+            customers.add(car.ownerId);
+          }
+        });
+      });
 
       return {
-        completedJobs: completedJobsSnapshot.size,
-        activeCustomers: uniqueCustomers.size,
-        customerSatisfaction: Math.round(averageRating * 10) / 10,
-        averageJobTime: 2.5 // Placeholder - difficile da calcolare senza dati specifici
+        carsInWorkshop,
+        appointmentsToday,
+        appointmentsWeek,
+        completedJobs,
+        activeCustomers: customers.size,
+        averageJobTime: hoursCount > 0 ? Math.round((hoursTotal / hoursCount) * 10) / 10 : 0,
       };
     } catch (error) {
-      console.error('Errore nel caricamento altre statistiche:', error);
+      console.error('Errore nel caricamento panoramica officina:', error);
       return {
+        carsInWorkshop: 0,
+        appointmentsToday: 0,
+        appointmentsWeek: 0,
         completedJobs: 0,
         activeCustomers: 0,
-        customerSatisfaction: 0,
-        averageJobTime: 0
+        averageJobTime: 0,
       };
+    }
+  }, []);
+
+  // Fatture in sospeso e fatturato: una sola lettura, gli importi si calcolano sul dispositivo
+  const loadInvoiceStats = useCallback(async (mechanicId: string) => {
+    try {
+      const snapshot = await getDocs(query(
+        collection(db, 'invoices'),
+        where('workshopId', '==', mechanicId),
+        limit(1000)
+      ));
+
+      return calculateInvoiceStats(snapshot.docs.map((invoiceDoc) => invoiceDoc.data() as any), new Date());
+    } catch (error) {
+      console.error('Errore nel caricamento fatture:', error);
+      return { pending: 0, overdue: 0, revenue: 0, growth: 0 };
+    }
+  }, []);
+
+  // Media recensioni
+  const loadRating = useCallback(async (mechanicId: string) => {
+    try {
+      const reviewsSnapshot = await getDocs(query(collection(db, 'reviews'), where('mechanicId', '==', mechanicId)));
+      const reviews = reviewsSnapshot.docs.map((reviewDoc) => reviewDoc.data());
+      const average = reviews.length > 0
+        ? reviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviews.length
+        : 0;
+      return Math.round(average * 10) / 10;
+    } catch (error) {
+      console.error('Errore nel caricamento recensioni:', error);
+      return 0;
     }
   }, []);
 
@@ -355,7 +249,7 @@ export const useMechanicStats = () => {
           id: `invoice_${doc.id}`,
           type: 'invoice',
           title: 'Fattura emessa',
-          description: `Fattura #${data.number} - €${data.total?.toFixed(2)}`,
+          description: `Fattura ${data.number} - €${(data.totalAmount ?? 0).toFixed(2)}`,
           time: formatTimeAgo(data.createdAt?.toDate() || new Date()),
           relatedId: doc.id,
           icon: 'receipt',
@@ -384,44 +278,30 @@ export const useMechanicStats = () => {
   const loadAllStats = useCallback(async () => {
     if (!user?.uid) return;
 
-    setIsLoading(true);
+    // Al ritorno sulla Home i numeri si aggiornano senza coprire la pagina
+    setIsLoading(!hasLoaded.current);
     setError(null);
 
     try {
       console.log('🔄 Caricamento statistiche per meccanico:', user.uid);
 
-      const [
-        carsInWorkshop,
-        appointmentsToday,
-        appointmentsWeek,
-        invoicesData,
-        revenueData,
-        otherStats,
-        activities
-      ] = await Promise.all([
-        loadCarsInWorkshop(user.uid),
-        loadTodayAppointments(user.uid),
-        loadWeekAppointments(user.uid),
-        loadPendingInvoices(user.uid),
-        loadMonthlyRevenue(user.uid),
-        loadOtherStats(user.uid),
+      const [overview, invoices, customerSatisfaction, activities] = await Promise.all([
+        loadWorkshopOverview(user.uid),
+        loadInvoiceStats(user.uid),
+        loadRating(user.uid),
         loadRecentActivity(user.uid)
       ]);
 
       const newStats: MechanicStats = {
-        carsInWorkshop,
-        appointmentsToday,
-        appointmentsWeek,
-        pendingInvoices: invoicesData.pending,
-        overdueInvoices: invoicesData.overdue,
-        monthlyRevenue: revenueData.revenue,
-        monthlyGrowth: revenueData.growth,
-        completedJobs: otherStats.completedJobs,
-        activeCustomers: otherStats.activeCustomers,
-        averageJobTime: otherStats.averageJobTime,
-        customerSatisfaction: otherStats.customerSatisfaction,
+        ...overview,
+        pendingInvoices: invoices.pending,
+        overdueInvoices: invoices.overdue,
+        monthlyRevenue: invoices.revenue,
+        monthlyGrowth: invoices.growth,
+        customerSatisfaction,
       };
 
+      hasLoaded.current = true;
       setStats(newStats);
       setRecentActivity(activities);
 
@@ -433,14 +313,16 @@ export const useMechanicStats = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.uid, loadCarsInWorkshop, loadTodayAppointments, loadWeekAppointments, loadPendingInvoices, loadMonthlyRevenue, loadOtherStats, loadRecentActivity]);
+  }, [user?.uid, loadWorkshopOverview, loadInvoiceStats, loadRating, loadRecentActivity]);
 
-  // Effetto per caricare i dati quando l'utente cambia
-  useEffect(() => {
-    if (user?.uid && user.userType === 'mechanic') {
-      loadAllStats();
-    }
-  }, [user?.uid, user?.userType, loadAllStats]);
+  // Ogni ritorno sulla Home mostra i numeri aggiornati
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.uid && user.userType === 'mechanic') {
+        loadAllStats();
+      }
+    }, [user?.uid, user?.userType, loadAllStats])
+  );
 
   // Funzione per refresh manuale
   const refreshStats = useCallback(() => {

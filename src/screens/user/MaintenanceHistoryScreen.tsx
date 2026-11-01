@@ -755,7 +755,7 @@ export default function MaintenanceHistoryScreen() {
                         </View>
                       )}
 
-                      {record.cost && vehicle?.privacySettings?.showCosts && (
+                      {!!record.cost && (vehicle?.ownerId === user?.uid || vehicle?.privacySettings?.showCosts) && (
                         <View style={styles.costBadge}>
                           <Text style={[styles.costText, {
                             color: isDark ? '#fff' : '#000'

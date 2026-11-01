@@ -32,6 +32,7 @@ import MechanicTextInput from './MechanicTextInput';
 import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
 
 import MechanicHeader from './MechanicHeader';
+import { toDayString } from '../../utils/calendarGrid';
 const InvoicingDashboardScreen = () => {
   const navigation = useNavigation();
   const theme = useMechanicTheme();
@@ -105,7 +106,7 @@ const InvoicingDashboardScreen = () => {
   };
 
   const handleMarkAsPaid = (invoiceId: string) => {
-    updateInvoiceStatus(invoiceId, 'paid');
+    updateInvoiceStatus(invoiceId, 'paid', toDayString(new Date()));
   };
 
   const formatCurrency = (amount: number) => {

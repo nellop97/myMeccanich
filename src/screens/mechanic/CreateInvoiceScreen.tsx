@@ -44,6 +44,8 @@ import { MechanicEmptyState } from './MechanicStates';
 
 import MechanicHeader from './MechanicHeader';
 import { showAlert } from '../../utils/platformHelpers';
+import UniversalDatePicker from '../../components/UniversalDatePicker';
+import { parseDayString, toDayString } from '../../utils/calendarGrid';
 interface RouteParams {
     carId?: string;
     repairId?: string;
@@ -679,11 +681,10 @@ const CreateInvoiceScreen = () => {
                             <Text style={[styles.sectionTitle, { color: theme.text }]}>
                                 Data Emissione
                             </Text>
-                            <MechanicTextInput
-                                left={<Calendar size={20} color={theme.primary} />}
-                                value={formData.issueDate}
-                                onChangeText={(text) => updateFormData('issueDate', text)}
-                                placeholder="YYYY-MM-DD"
+                            <UniversalDatePicker
+                                value={parseDayString(formData.issueDate)}
+                                onChange={(date) => updateFormData('issueDate', toDayString(date))}
+                                format="medium"
                             />
                         </View>
 
@@ -691,11 +692,10 @@ const CreateInvoiceScreen = () => {
                             <Text style={[styles.sectionTitle, { color: theme.text }]}>
                                 Scadenza
                             </Text>
-                            <MechanicTextInput
-                                left={<Calendar size={20} color={theme.primary} />}
-                                value={formData.dueDate}
-                                onChangeText={(text) => updateFormData('dueDate', text)}
-                                placeholder="YYYY-MM-DD"
+                            <UniversalDatePicker
+                                value={parseDayString(formData.dueDate)}
+                                onChange={(date) => updateFormData('dueDate', toDayString(date))}
+                                format="medium"
                             />
                         </View>
                     </View>

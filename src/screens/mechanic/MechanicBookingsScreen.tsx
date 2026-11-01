@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Platform,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,12 +19,14 @@ import {
   User,
   Car,
   MessageCircle,
+  Wrench,
 } from 'lucide-react-native';
 import { useStore } from '../../store';
 import BookingService, { BOOKING_NOT_PENDING } from '../../services/BookingService';
 import WorkshopService from '../../services/WorkshopService';
+import InterventionService from '../../services/InterventionService';
 import { BookingRequest, Workshop } from '../../types/database.types';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import UniversalDatePicker from '../../components/UniversalDatePicker';
 
 import { mechanicButton, mechanicCard, mechanicStaticColors, useMechanicTheme } from './mechanicTheme';
 import { MechanicEmptyState, MechanicLoadingState } from './MechanicStates';
@@ -46,24 +47,16 @@ const formatBookingDate = (date: Date) =>
     minute: '2-digit',
   });
 
-/**
- * Data con cui il meccanico può confermare subito la richiesta: la prima data
- * preferita dal cliente non ancora passata. Senza una data futura, o con un
- * preventivo in ballo, restituisce null e la conferma non è possibile.
- */
-const getAcceptableDate = (booking: BookingRequest): Date | null => {
-  if (booking.status !== 'pending' || booking.quoteId || booking.quoteStatus) return null;
+// Date proposte dal cliente, nell'ordine in cui le ha indicate
+const getPreferredDates = (booking: BookingRequest) =>
+  (booking.preferredDates ?? []).map((value) => new Date(value));
 
-  const now = Date.now();
-  for (const value of booking.preferredDates ?? []) {
-    // convertTimestamps di BookingService non converte i Timestamp dentro un
-    // array: qui arrivano come { seconds, nanoseconds } e non come Date
-    const raw = value as Date | { seconds: number };
-    const date = raw instanceof Date ? raw : new Date(raw.seconds * 1000);
-    if (date.getTime() > now) return date;
-  }
-  return null;
-};
+/**
+ * Il meccanico può confermare direttamente solo una richiesta in attesa,
+ * senza un preventivo in ballo, scegliendo una data non ancora passata
+ */
+const canAcceptDirectly = (booking: BookingRequest) =>
+  booking.status === 'pending' && !booking.quoteId && !booking.quoteStatus;
 
 export default function MechanicBookingsScreen({ navigation }: MechanicBookingsScreenProps) {
   const { user } = useStore();
@@ -83,6 +76,9 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   useEffect(() => {
     loadWorkshop();
   }, [user]);
+
+  // Le prenotazioni si attivano dal profilo: al ritorno l'officina va riletta
+  useEffect(() => navigation.addListener('focus', loadWorkshop), [navigation, user]);
 
   useEffect(() => {
     if (workshop) {
@@ -145,19 +141,27 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     return bookings.filter((b) => {
       if (filter === 'pending') return ['pending', 'quote_requested', 'quote_sent', 'date_proposed'].includes(b.status);
       if (filter === 'confirmed') return b.status === 'confirmed';
-      if (filter === 'in_progress') return b.status === 'in_progress';
+      if (filter === 'in_progress') return b.status === 'in_progress' || b.status === 'ready';
       return true;
     });
   };
 
   const handleProposeDate = (bookingId: string) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
     setSelectedBookingForProposal(bookingId);
-    setProposedDate(new Date());
+    setProposedDate(tomorrow);
     setShowDatePicker(true);
   };
 
   const handleConfirmProposal = async () => {
     if (!selectedBookingForProposal) return;
+
+    if (proposedDate.getTime() <= Date.now()) {
+      showAlert('Data non valida', 'Scegli una data e un orario futuri');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -181,7 +185,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   const handleAcceptBooking = async (bookingId: string, date: Date) => {
     showAlert(
       'Accetta Prenotazione',
-      `Confermi l'appuntamento di ${formatBookingDate(date)}? Per fissare un'altra data usa Proponi Data.`,
+      `Confermi l'appuntamento di ${formatBookingDate(date)}?`,
       [
         { text: 'Annulla', style: 'cancel' },
         {
@@ -190,7 +194,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
             try {
               setLoading(true);
               await BookingService.acceptBooking(bookingId, date);
-              showAlert('Successo', 'Prenotazione accettata!');
+              showAlert('Prenotazione accettata', 'Trovi l\'intervento nel calendario.');
             } catch (error) {
               console.error('Errore:', error);
               showAlert(
@@ -231,7 +235,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
   const handleMarkInProgress = async (bookingId: string) => {
     try {
       setLoading(true);
-      await BookingService.updateBookingStatus(bookingId, 'in_progress');
+      await BookingService.setWorkStatus(bookingId, 'in_progress');
       showAlert('Successo', 'Lavori iniziati!');
     } catch (error) {
       console.error('Errore:', error);
@@ -241,46 +245,35 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     }
   };
 
-  const handleMarkCompleted = async (bookingId: string) => {
-    showAlert(
-      'Completa Lavori',
-      'Confermi che i lavori sono stati completati? Il cliente riceverà una notifica.',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Completa',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await BookingService.updateBookingStatus(bookingId, 'completed');
+  const handleMarkCompleted = (booking: BookingRequest) => {
+    if (!booking.interventionCarId || !booking.interventionRepairId) {
+      showAlert('Intervento non trovato', 'Apri il Calendario Interventi e riprova.');
+      return;
+    }
+    navigation.navigate('CompleteIntervention', {
+      carId: booking.interventionCarId,
+      repairId: booking.interventionRepairId,
+    });
+  };
 
-              // Invia notifica veicolo pronto
-              const booking = await BookingService.getBookingRequest(bookingId);
-              if (booking && workshop) {
-                await import('../../services/NotificationService').then((module) => {
-                  module.default.notifyVehicleReady(
-                    {
-                      make: booking.vehicleMake,
-                      model: booking.vehicleModel,
-                      licensePlate: booking.vehicleLicensePlate,
-                    },
-                    workshop.name,
-                    bookingId
-                  );
-                });
-              }
+  const collectBooking = async (booking: BookingRequest, paid: boolean) => {
+    try {
+      setLoading(true);
+      await InterventionService.collect(booking.id, booking.invoiceId, paid);
+    } catch (error) {
+      console.error('Errore ritiro:', error);
+      showAlert('Errore', 'Impossibile registrare il ritiro. Riprova.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-              showAlert('Successo', 'Lavori completati! Il cliente è stato notificato.');
-            } catch (error) {
-              console.error('Errore:', error);
-              showAlert('Errore', 'Impossibile completare i lavori');
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
+  const handleCollected = (booking: BookingRequest) => {
+    showAlert('Ritiro auto', "L'auto è stata ritirata. Il cliente ha pagato?", [
+      { text: 'Annulla', style: 'cancel' },
+      { text: 'Da pagare', onPress: () => collectBooking(booking, false) },
+      { text: 'Pagato', onPress: () => collectBooking(booking, true) },
+    ]);
   };
 
   const getUnreadCount = (booking: BookingRequest) => {
@@ -293,7 +286,9 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
     const isPending = ['pending', 'quote_requested', 'quote_sent', 'date_proposed'].includes(booking.status);
     const isConfirmed = booking.status === 'confirmed';
     const isInProgress = booking.status === 'in_progress';
-    const acceptableDate = getAcceptableDate(booking);
+    const preferredDates = getPreferredDates(booking);
+    const acceptable = canAcceptDirectly(booking);
+    const now = Date.now();
 
     return (
       <TouchableOpacity
@@ -366,18 +361,37 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
           </View>
         )}
 
-        {/* Actions */}
-        {acceptableDate && (
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonFull, { backgroundColor: theme.success }]}
-              onPress={() => handleAcceptBooking(booking.id, acceptableDate)}
-              accessibilityRole="button"
-              accessibilityLabel={`Accetta la prenotazione di ${booking.userName} per ${formatBookingDate(acceptableDate)}`}
-            >
-              <CheckCircle size={16} color={theme.onPrimary} />
-              <Text style={styles.actionButtonText}>Accetta</Text>
-            </TouchableOpacity>
+        {/* Date proposte dal cliente */}
+        {isPending && preferredDates.length > 0 && (
+          <View style={styles.preferredDates}>
+            <Text style={[styles.preferredTitle, { color: theme.text }]}>
+              {acceptable ? 'Date proposte: scegline una per confermare' : 'Date proposte dal cliente'}
+            </Text>
+            {preferredDates.map((date) => {
+              const isPast = date.getTime() <= now;
+              const canPick = acceptable && !isPast;
+
+              return (
+                <TouchableOpacity
+                  key={date.getTime()}
+                  style={[styles.preferredDate, { borderColor: canPick ? theme.primary : theme.border }]}
+                  onPress={() => handleAcceptBooking(booking.id, date)}
+                  disabled={!canPick}
+                  accessibilityRole={canPick ? 'button' : undefined}
+                  accessibilityLabel={`${canPick ? 'Conferma' : 'Data proposta'} ${formatBookingDate(date)}`}
+                >
+                  <Calendar size={16} color={canPick ? theme.primary : theme.textSecondary} />
+                  <Text style={[styles.preferredDateText, { color: isPast ? theme.textSecondary : theme.text }]}>
+                    {formatBookingDate(date)}
+                  </Text>
+                  {isPast ? (
+                    <Text style={[styles.preferredHint, { color: theme.textSecondary }]}>Passata</Text>
+                  ) : canPick ? (
+                    <CheckCircle size={18} color={theme.primary} />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -422,13 +436,37 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
           {isInProgress && (
             <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonFull, { backgroundColor: theme.success }]}
-              onPress={() => handleMarkCompleted(booking.id)}
+              onPress={() => handleMarkCompleted(booking)}
             >
               <CheckCircle size={16} color={theme.onPrimary} />
               <Text style={styles.actionButtonText}>Completa Lavori</Text>
             </TouchableOpacity>
           )}
+
+          {booking.status === 'ready' && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonFull, { backgroundColor: theme.primary }]}
+              onPress={() => handleCollected(booking)}
+            >
+              <CheckCircle size={16} color={theme.onPrimary} />
+              <Text style={styles.actionButtonText}>Segna ritirata</Text>
+            </TouchableOpacity>
+          )}
         </View>
+
+        {booking.interventionCarId && booking.interventionRepairId && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonFull, styles.interventionButton, { borderColor: theme.border }]}
+            onPress={() => navigation.navigate('RepairPartsManagement', {
+              carId: booking.interventionCarId,
+              repairId: booking.interventionRepairId,
+            })}
+            accessibilityRole="button"
+          >
+            <Wrench size={16} color={theme.primary} />
+            <Text style={[styles.actionButtonText, { color: theme.primary }]}>Apri intervento</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Date */}
         {booking.selectedDate && (
@@ -458,8 +496,10 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
         ) : (
           <MechanicEmptyState
             icon={AlertCircle}
-            title="Nessuna officina trovata"
-            subtitle="Configura prima la tua officina nelle impostazioni"
+            title="Prenotazioni non attive"
+            subtitle="Attivale dal profilo per comparire nella ricerca e ricevere richieste"
+            actionLabel="Apri il profilo"
+            onAction={() => navigation.navigate('MechanicProfile')}
           />
         )}
       </SafeAreaView>
@@ -489,7 +529,7 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
             count: bookings.filter((b) => ['pending', 'quote_requested', 'quote_sent', 'date_proposed'].includes(b.status)).length,
           },
           { value: 'confirmed', label: 'Confermate', count: bookings.filter((b) => b.status === 'confirmed').length },
-          { value: 'in_progress', label: 'In Corso', count: bookings.filter((b) => b.status === 'in_progress').length },
+          { value: 'in_progress', label: 'In Corso', count: bookings.filter((b) => b.status === 'in_progress' || b.status === 'ready').length },
         ].map((filterOption) => (
           <TouchableOpacity
             key={filterOption.value}
@@ -573,46 +613,30 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
               Proponi una Data
             </Text>
 
-            <DateTimePicker
-              value={proposedDate}
-              mode="datetime"
-              display="default"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) {
-                  setProposedDate(selectedDate);
-                }
-                if (Platform.OS === 'android') {
+            <UniversalDatePicker label="Data e ora" mode="datetime" value={proposedDate} onChange={setProposedDate} minimumDate={new Date()} />
+
+            <View style={styles.pickerActions}>
+              <TouchableOpacity
+                style={[styles.pickerButton, { backgroundColor: theme.border }]}
+                onPress={() => {
                   setShowDatePicker(false);
-                  handleConfirmProposal();
-                }
-              }}
-              minimumDate={new Date()}
-            />
+                  setSelectedBookingForProposal(null);
+                }}
+              >
+                <Text style={[styles.pickerButtonText, { color: theme.text }]}>
+                  Annulla
+                </Text>
+              </TouchableOpacity>
 
-            {Platform.OS === 'ios' && (
-              <View style={styles.pickerActions}>
-                <TouchableOpacity
-                  style={[styles.pickerButton, { backgroundColor: theme.border }]}
-                  onPress={() => {
-                    setShowDatePicker(false);
-                    setSelectedBookingForProposal(null);
-                  }}
-                >
-                  <Text style={[styles.pickerButtonText, { color: theme.text }]}>
-                    Annulla
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.pickerButton, { backgroundColor: theme.primary }]}
-                  onPress={handleConfirmProposal}
-                >
-                  <Text style={[styles.pickerButtonText, { color: theme.onPrimary }]}>
-                    Invia Proposta
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+              <TouchableOpacity
+                style={[styles.pickerButton, { backgroundColor: theme.primary }]}
+                onPress={handleConfirmProposal}
+              >
+                <Text style={[styles.pickerButtonText, { color: theme.onPrimary }]}>
+                  Invia Proposta
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
@@ -621,6 +645,34 @@ export default function MechanicBookingsScreen({ navigation }: MechanicBookingsS
 }
 
 const styles = StyleSheet.create({
+  preferredDates: {
+    gap: 8,
+    marginTop: 12,
+  },
+  preferredTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  preferredDate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  preferredDateText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  preferredHint: {
+    fontSize: 12,
+  },
+  interventionButton: {
+    borderWidth: 1,
+    marginTop: 8,
+  },
   container: {
     flex: 1,
   },

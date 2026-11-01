@@ -34,10 +34,9 @@ import {
   DollarSign,
   Download,
   Trash2,
-  Clock,
 } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import UniversalDatePicker from '../../components/UniversalDatePicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useAppThemeManager } from '../../hooks/useTheme';
@@ -100,7 +99,6 @@ const ReminderDetailScreen = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [reminder, setReminder] = useState<Reminder | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Form data
   const [vehicleId, setVehicleId] = useState('');
@@ -473,27 +471,7 @@ const ReminderDetailScreen = () => {
                 </Text>
               </View>
               <View style={styles.cardContent}>
-                <TouchableOpacity
-                  style={[styles.dateButton, { backgroundColor: colors.surfaceVariant }]}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Clock size={20} color={colors.primary} />
-                  <Text style={[styles.dateButtonText, { color: colors.onSurface }]}>
-                    {dueDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </Text>
-                </TouchableOpacity>
-
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={dueDate}
-                    mode="date"
-                    display="default"
-                    onChange={(event, selectedDate) => {
-                      setShowDatePicker(Platform.OS === 'ios');
-                      if (selectedDate) setDueDate(selectedDate);
-                    }}
-                  />
-                )}
+                <UniversalDatePicker value={dueDate} onChange={setDueDate} />
 
                 <View style={styles.inputRow}>
                   <View style={styles.inputIcon}>
@@ -820,18 +798,6 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  dateButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
   },
   switchRow: {
     flexDirection: 'row',

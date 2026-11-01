@@ -9,10 +9,11 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
-  Alert,
   KeyboardAvoidingView,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useMechanicTheme } from '../mechanic/mechanicTheme';
+import MechanicHeader from '../mechanic/MechanicHeader';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Calendar,
   Clock,
@@ -31,6 +32,9 @@ import BookingService from '../../services/BookingService';
 import QuoteService from '../../services/QuoteService';
 import { BookingRequest, BookingProposal, Quote } from '../../types/database.types';
 import NotificationService from '../../services/NotificationService';
+import { showAlert, showPrompt } from '../../utils/platformHelpers';
+import UniversalDatePicker from '../../components/UniversalDatePicker';
+import { canCancelBooking, getBookingStatusLabel } from './bookingStatus';
 
 interface BookingDetailScreenProps {
   navigation: any;
@@ -38,7 +42,8 @@ interface BookingDetailScreenProps {
 }
 
 export default function BookingDetailScreen({ navigation, route }: BookingDetailScreenProps) {
-  const { darkMode, user } = useStore();
+  const { user } = useStore();
+  const theme = useMechanicTheme();
   const { bookingId } = route.params;
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -48,19 +53,14 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
   const [message, setMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showProposalForm, setShowProposalForm] = useState(false);
-  const [proposedDate, setProposedDate] = useState(new Date());
-
-  const theme = {
-    background: darkMode ? '#111827' : '#f3f4f6',
-    cardBackground: darkMode ? '#1f2937' : '#ffffff',
-    text: darkMode ? '#ffffff' : '#000000',
-    textSecondary: darkMode ? '#9ca3af' : '#6b7280',
-    border: darkMode ? '#374151' : '#e5e7eb',
-    primary: '#3b82f6',
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-  };
+  const [proposedDate, setProposedDate] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    return tomorrow;
+  });
+  // Stessa schermata per entrambi: ognuno risponde solo alle proposte dell'altro
+  const myRole = user?.isMechanic ? 'mechanic' : 'user';
 
   useEffect(() => {
     loadBookingDetails();
@@ -70,14 +70,14 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
       if (updatedBooking) {
         setBooking(updatedBooking);
         // Mark messages as read
-        if (user?.uid) {
-          BookingService.markMessagesAsRead(bookingId, user.uid);
+        if (user?.id) {
+          BookingService.markMessagesAsRead(bookingId, user.id);
         }
       }
     });
 
     return () => unsubscribe();
-  }, [bookingId]);
+  }, [bookingId, user?.id]);
 
   useEffect(() => {
     if (booking?.quoteId) {
@@ -91,12 +91,12 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
       const data = await BookingService.getBookingRequest(bookingId);
       setBooking(data);
 
-      if (user?.uid) {
-        await BookingService.markMessagesAsRead(bookingId, user.uid);
+      if (user?.id) {
+        await BookingService.markMessagesAsRead(bookingId, user.id);
       }
     } catch (error) {
       console.error('Errore caricamento prenotazione:', error);
-      Alert.alert('Errore', 'Impossibile caricare la prenotazione');
+      showAlert('Errore', 'Impossibile caricare la prenotazione');
     } finally {
       setLoading(false);
     }
@@ -117,16 +117,16 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
     try {
       setSendingMessage(true);
       await BookingService.addMessage(bookingId, {
-        senderId: user.uid,
-        senderName: user.displayName || 'Utente',
-        senderType: 'user',
+        senderId: user.id,
+        senderName: user.name || 'Utente',
+        senderType: user.isMechanic ? 'mechanic' : 'user',
         message: message.trim(),
       });
       setMessage('');
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (error) {
       console.error('Errore invio messaggio:', error);
-      Alert.alert('Errore', 'Impossibile inviare il messaggio');
+      showAlert('Errore', 'Impossibile inviare il messaggio');
     } finally {
       setSendingMessage(false);
     }
@@ -136,17 +136,17 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
     try {
       setLoading(true);
       await BookingService.acceptProposal(bookingId, proposalId);
-      Alert.alert('Successo', 'Proposta accettata! La prenotazione è ora confermata.');
+      showAlert('Successo', 'Proposta accettata! La prenotazione è ora confermata.');
     } catch (error) {
       console.error('Errore accettazione proposta:', error);
-      Alert.alert('Errore', 'Impossibile accettare la proposta');
+      showAlert('Errore', 'Impossibile accettare la proposta');
     } finally {
       setLoading(false);
     }
   };
 
   const handleRejectProposal = async (proposalId: string) => {
-    Alert.alert(
+    showAlert(
       'Rifiuta Proposta',
       'Vuoi proporre una data alternativa?',
       [
@@ -155,13 +155,10 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
           onPress: async () => {
             try {
               setLoading(true);
-              await BookingService.counterPropose(bookingId, proposalId, {
-                proposedBy: 'user',
-                proposedDate: new Date(),
-                message: 'Proposta rifiutata',
-              });
+              await BookingService.rejectProposal(bookingId, proposalId);
             } catch (error) {
               console.error('Errore:', error);
+              showAlert('Errore', 'Impossibile rifiutare la proposta');
             } finally {
               setLoading(false);
             }
@@ -181,18 +178,23 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
     const lastProposal = booking.proposals[booking.proposals.length - 1];
     if (!lastProposal) return;
 
+    if (proposedDate.getTime() <= Date.now()) {
+      showAlert('Data non valida', 'Scegli una data e un orario futuri');
+      return;
+    }
+
     try {
       setLoading(true);
       await BookingService.counterPropose(bookingId, lastProposal.id, {
-        proposedBy: 'user',
+        proposedBy: myRole,
         proposedDate,
         message: `Ho proposto una data alternativa: ${proposedDate.toLocaleDateString('it-IT')}`,
       });
       setShowProposalForm(false);
-      Alert.alert('Successo', 'Controproposta inviata!');
+      showAlert('Successo', 'Controproposta inviata!');
     } catch (error) {
       console.error('Errore:', error);
-      Alert.alert('Errore', 'Impossibile inviare la controproposta');
+      showAlert('Errore', 'Impossibile inviare la controproposta');
     } finally {
       setLoading(false);
     }
@@ -201,7 +203,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
   const handleApproveQuote = async () => {
     if (!quote) return;
 
-    Alert.alert(
+    showAlert(
       'Approva Preventivo',
       `Confermi di voler approvare il preventivo di €${quote.totalCost.toFixed(2)}?`,
       [
@@ -215,10 +217,10 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
               await BookingService.updateBookingStatus(bookingId, 'confirmed', {
                 quoteStatus: 'approved',
               });
-              Alert.alert('Successo', 'Preventivo approvato! La prenotazione è confermata.');
+              showAlert('Successo', 'Preventivo approvato! La prenotazione è confermata.');
             } catch (error) {
               console.error('Errore:', error);
-              Alert.alert('Errore', 'Impossibile approvare il preventivo');
+              showAlert('Errore', 'Impossibile approvare il preventivo');
             } finally {
               setLoading(false);
             }
@@ -231,7 +233,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
   const handleRejectQuote = async () => {
     if (!quote) return;
 
-    Alert.prompt(
+    showPrompt(
       'Rifiuta Preventivo',
       'Indica il motivo (opzionale)',
       async (reason) => {
@@ -241,7 +243,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
           await BookingService.updateBookingStatus(bookingId, 'pending', {
             quoteStatus: 'rejected',
           });
-          Alert.alert('Preventivo Rifiutato', 'Il meccanico verrà notificato.');
+          showAlert('Preventivo Rifiutato', 'Il meccanico verrà notificato.');
         } catch (error) {
           console.error('Errore:', error);
         } finally {
@@ -251,11 +253,117 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
     );
   };
 
+  const handleCancelBooking = () => {
+    showAlert('Annulla prenotazione', "L'officina vedrà che hai annullato la richiesta.", [
+      { text: 'Indietro', style: 'cancel' },
+      {
+        text: 'Annulla prenotazione',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setLoading(true);
+            await BookingService.cancelBooking(bookingId);
+            showAlert('Prenotazione annullata', "L'officina vede la richiesta come annullata.");
+          } catch (error) {
+            console.error('Errore annullamento prenotazione:', error);
+            showAlert('Errore', 'Impossibile annullare la prenotazione');
+          } finally {
+            setLoading(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleCollected = () => {
+    showAlert('Ritiro auto', "Confermi di aver ritirato l'auto?", [
+      { text: 'Annulla', style: 'cancel' },
+      {
+        text: 'Ho ritirato',
+        onPress: async () => {
+          try {
+            setLoading(true);
+            await BookingService.setWorkStatus(bookingId, 'completed');
+          } catch (error) {
+            console.error('Errore conferma ritiro:', error);
+            showAlert('Errore', 'Impossibile confermare il ritiro. Riprova.');
+          } finally {
+            setLoading(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const renderCompletion = () => {
+    if (!booking || (booking.status !== 'ready' && booking.status !== 'completed')) return null;
+
+    return (
+      <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          {booking.status === 'ready' ? 'La tua auto è pronta' : 'Lavoro concluso'}
+        </Text>
+        {typeof booking.actualCost === 'number' && (
+          <Text style={[styles.quoteTotalValueFinal, { color: theme.text }]}>
+            Totale €{booking.actualCost.toFixed(2)} IVA inclusa
+          </Text>
+        )}
+        {booking.maintenanceRecordId && myRole === 'user' && (
+          <TouchableOpacity
+            style={[styles.cancelButton, { borderColor: theme.border }]}
+            onPress={() => navigation.navigate('MaintenanceDetail', {
+              maintenanceId: booking.maintenanceRecordId,
+              carId: booking.vehicleId,
+            })}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.cancelButtonText, { color: theme.primary }]}>Vedi costi, ricambi e foto</Text>
+          </TouchableOpacity>
+        )}
+        {booking.status === 'ready' && myRole === 'user' && (
+          <TouchableOpacity
+            style={[styles.proposalButton, styles.collectButton, { backgroundColor: theme.primary }]}
+            onPress={handleCollected}
+            accessibilityRole="button"
+          >
+            <Check size={20} color={theme.onPrimary} />
+            <Text style={styles.proposalButtonText}>Ho ritirato l'auto</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  const renderProposalForm = () => {
+    if (!showProposalForm) return null;
+
+    return (
+      <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>{"Proponi un'altra data"}</Text>
+        <UniversalDatePicker label="Data e ora" mode="datetime" value={proposedDate} onChange={setProposedDate} minimumDate={new Date()} />
+        <View style={styles.proposalActions}>
+          <TouchableOpacity
+            style={[styles.proposalButton, { backgroundColor: theme.border }]}
+            onPress={() => setShowProposalForm(false)}
+          >
+            <Text style={[styles.proposalButtonText, { color: theme.text }]}>Annulla</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.proposalButton, { backgroundColor: theme.primary }]}
+            onPress={handleSubmitCounterProposal}
+          >
+            <Text style={styles.proposalButtonText}>Invia proposta</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   const renderBookingInfo = () => {
     if (!booking) return null;
 
     return (
-      <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+      <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Dettagli Prenotazione</Text>
 
         <View style={styles.infoRow}>
@@ -295,6 +403,27 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
           </View>
         )}
 
+        {!booking.selectedDate && booking.preferredDates?.length > 0 && (
+          <>
+            <View style={styles.divider} />
+            <Text style={[styles.problemTitle, { color: theme.text }]}>Date proposte dal cliente:</Text>
+            {booking.preferredDates.map((date) => (
+              <View key={new Date(date).getTime()} style={styles.infoRow}>
+                <Clock size={20} color={theme.primary} />
+                <Text style={[styles.infoText, { color: theme.text }]}>
+                  {new Date(date).toLocaleDateString('it-IT', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Text>
+              </View>
+            ))}
+          </>
+        )}
+
         <View style={styles.divider} />
 
         <Text style={[styles.problemTitle, { color: theme.text }]}>Descrizione Problema:</Text>
@@ -312,7 +441,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
     if (pendingProposals.length === 0) return null;
 
     return (
-      <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+      <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Proposte Date</Text>
 
         {pendingProposals.map((proposal) => (
@@ -345,12 +474,17 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
               </Text>
             )}
 
+            {proposal.proposedBy === myRole ? (
+              <Text style={[styles.proposalMessage, { color: theme.textSecondary }]}>
+                In attesa di risposta
+              </Text>
+            ) : (
             <View style={styles.proposalActions}>
               <TouchableOpacity
                 style={[styles.proposalButton, { backgroundColor: theme.success }]}
                 onPress={() => handleAcceptProposal(proposal.id)}
               >
-                <Check size={20} color="#fff" />
+                <Check size={20} color={theme.onPrimary} />
                 <Text style={styles.proposalButtonText}>Accetta</Text>
               </TouchableOpacity>
 
@@ -358,10 +492,11 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
                 style={[styles.proposalButton, { backgroundColor: theme.error }]}
                 onPress={() => handleRejectProposal(proposal.id)}
               >
-                <X size={20} color="#fff" />
+                <X size={20} color={theme.onPrimary} />
                 <Text style={styles.proposalButtonText}>Rifiuta</Text>
               </TouchableOpacity>
             </View>
+            )}
           </View>
         ))}
       </View>
@@ -374,7 +509,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
     const isExpired = QuoteService.isQuoteExpired(quote);
 
     return (
-      <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+      <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={styles.quoteHeader}>
           <FileText size={24} color={theme.primary} />
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Preventivo</Text>
@@ -451,13 +586,13 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
         </View>
 
         {/* Actions */}
-        {quote.status === 'sent' && !isExpired && (
+        {quote.status === 'sent' && !isExpired && myRole === 'user' && (
           <View style={styles.quoteActions}>
             <TouchableOpacity
               style={[styles.quoteButton, { backgroundColor: theme.success }]}
               onPress={handleApproveQuote}
             >
-              <Check size={20} color="#fff" />
+              <Check size={20} color={theme.onPrimary} />
               <Text style={styles.quoteButtonText}>Approva Preventivo</Text>
             </TouchableOpacity>
 
@@ -465,7 +600,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
               style={[styles.quoteButton, { backgroundColor: theme.error }]}
               onPress={handleRejectQuote}
             >
-              <X size={20} color="#fff" />
+              <X size={20} color={theme.onPrimary} />
               <Text style={styles.quoteButtonText}>Rifiuta</Text>
             </TouchableOpacity>
           </View>
@@ -487,7 +622,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
     if (!booking) return null;
 
     return (
-      <View style={[styles.section, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+      <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={styles.chatHeader}>
           <MessageCircle size={20} color={theme.primary} />
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Chat</Text>
@@ -505,13 +640,13 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
                   { backgroundColor: isUser ? theme.primary : theme.border },
                 ]}
               >
-                <Text style={[styles.messageSender, { color: isUser ? '#fff' : theme.text }]}>
+                <Text style={[styles.messageSender, { color: isUser ? theme.onPrimary : theme.text }]}>
                   {msg.senderName}
                 </Text>
-                <Text style={[styles.messageText, { color: isUser ? '#fff' : theme.text }]}>
+                <Text style={[styles.messageText, { color: isUser ? theme.onPrimary : theme.text }]}>
                   {msg.message}
                 </Text>
-                <Text style={[styles.messageTime, { color: isUser ? '#e0e7ff' : theme.textSecondary }]}>
+                <Text style={[styles.messageTime, { color: isUser ? theme.textSecondary : theme.textSecondary }]}>
                   {new Date(msg.createdAt).toLocaleTimeString('it-IT', {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -539,18 +674,13 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Header */}
-      <LinearGradient
-        colors={darkMode ? ['#1f2937', '#111827'] : ['#3b82f6', '#2563eb']}
-        style={styles.header}
-      >
-        <Text style={styles.headerTitle}>Dettaglio Prenotazione</Text>
-        {booking && (
-          <Text style={styles.headerSubtitle}>
-            ID: {booking.id.substring(0, 8).toUpperCase()}
-          </Text>
-        )}
-      </LinearGradient>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.surface }}>
+        <MechanicHeader
+          title="Dettaglio Prenotazione"
+          subtitle={booking ? getBookingStatusLabel(booking) : undefined}
+          onBack={() => navigation.goBack()}
+        />
+      </SafeAreaView>
 
       <ScrollView
         ref={scrollViewRef}
@@ -558,15 +688,26 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {renderCompletion()}
         {renderBookingInfo()}
         {renderProposals()}
+        {renderProposalForm()}
         {renderQuote()}
         {renderChat()}
+        {booking && myRole === 'user' && canCancelBooking(booking) && (
+          <TouchableOpacity
+            style={[styles.cancelButton, { borderColor: theme.border }]}
+            onPress={handleCancelBooking}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.cancelButtonText, { color: theme.error }]}>Annulla prenotazione</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Message Input */}
       {booking && booking.status !== 'completed' && booking.status !== 'cancelled' && (
-        <View style={[styles.messageInput, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+        <View style={[styles.messageInput, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <TextInput
             style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
             placeholder="Scrivi un messaggio..."
@@ -581,7 +722,7 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
             onPress={handleSendMessage}
             disabled={!message.trim() || sendingMessage}
           >
-            <Send size={20} color="#fff" />
+            <Send size={20} color={theme.onPrimary} />
           </TouchableOpacity>
         </View>
       )}
@@ -590,22 +731,24 @@ export default function BookingDetailScreen({ navigation, route }: BookingDetail
 }
 
 const styles = StyleSheet.create({
+  collectButton: {
+    flex: 0,
+    minHeight: 44,
+    marginTop: 8,
+  },
+  cancelButton: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
-  },
-  header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#e0e7ff',
   },
   scrollView: {
     flex: 1,

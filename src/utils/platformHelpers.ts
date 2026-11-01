@@ -65,7 +65,15 @@ export const showPrompt = (
     });
     return;
   }
-  Alert.prompt(title, message, onSubmit);
+  if (isIOS) {
+    Alert.prompt(title, message, onSubmit);
+    return;
+  }
+  // Android non ha un prompt nativo: si conferma senza testo
+  Alert.alert(title, message, [
+    { text: 'Annulla', style: 'cancel' },
+    { text: 'OK', onPress: () => onSubmit('') },
+  ]);
 };
 
 export const confirmAction = (
